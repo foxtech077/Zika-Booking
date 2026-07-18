@@ -7,6 +7,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useFavourites } from "@/hooks/useFavourites";
 import dynamic from "next/dynamic";
 import ListingCard from "./ListingCard";
+import DateRangePicker from "./DateRangePicker";
 import type { PublicListingDetail } from "@/types";
 import { ActivityPromoBanner } from "./PromoBanner";
 import { isPromotionValid, type ActivePromotion } from "../utils/promo-utils";
@@ -1264,15 +1265,32 @@ export default function CategoryListingsClient({ category }: Props) {
 
             {/* Dates */}
             {!isCar ? (
-              <>
-                <StyledDateInput label="Check-in" value={checkIn} onChange={setCheckIn} min={today()} />
-                <StyledDateInput label="Check-out" value={checkOut} onChange={setCheckOut} min={checkIn || today()} />
-              </>
+              <div className="md:col-span-2">
+                <DateRangePicker
+                  label="Select Dates"
+                  startDate={checkIn}
+                  endDate={checkOut}
+                  onChange={(start, end) => {
+                    setCheckIn(start);
+                    setCheckOut(end);
+                  }}
+                  minDate={today()}
+                />
+              </div>
             ) : (
-              <>
-                <StyledDateInput label="Pickup Date" value={pickupDate} onChange={setPickupDate} min={today()} />
-                <StyledDateInput label="Return Date" value={returnDate} onChange={setReturnDate} min={pickupDate || today()} />
-              </>
+              <div className="md:col-span-2">
+                <DateRangePicker
+                  label="Select Rental Period"
+                  isCar
+                  startDate={pickupDate}
+                  endDate={returnDate}
+                  onChange={(start, end) => {
+                    setPickupDate(start);
+                    setReturnDate(end);
+                  }}
+                  minDate={today()}
+                />
+              </div>
             )}
 
             {/* Guests / Search */}

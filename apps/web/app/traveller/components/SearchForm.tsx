@@ -1,5 +1,5 @@
-"use client";
 import React from "react";
+import DateRangePicker from "./DateRangePicker";
 
 interface SearchFormProps {
   searchCategory: "hotel" | "apartment" | "car";
@@ -83,61 +83,32 @@ const SearchForm: React.FC<SearchFormProps> = ({
         </div>
 
         {/* Dates */}
-        {searchCategory !== "car" ? (
-          <>
-            <div>
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                Check-in
-              </label>
-              <input
-                type="date"
-                min={getTodayString()}
-                value={searchCheckIn}
-                onChange={(e) => setSearchCheckIn(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#0B1E3F]"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                Check-out
-              </label>
-              <input
-                type="date"
-                min={searchCheckIn || getTodayString()}
-                value={searchCheckOut}
-                onChange={(e) => setSearchCheckOut(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#0B1E3F]"
-              />
-            </div>
-          </>
-        ) : (
-          <>
-            <div>
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                Pickup date
-              </label>
-              <input
-                type="date"
-                min={getTodayString()}
-                value={searchPickupDate}
-                onChange={(e) => setSearchPickupDate(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#0B1E3F]"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                Return date
-              </label>
-              <input
-                type="date"
-                min={searchPickupDate || getTodayString()}
-                value={searchReturnDate}
-                onChange={(e) => setSearchReturnDate(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#0B1E3F]"
-              />
-            </div>
-          </>
-        )}
+        <div className="md:col-span-2">
+          {searchCategory !== "car" ? (
+            <DateRangePicker
+              label="Select Dates"
+              startDate={searchCheckIn}
+              endDate={searchCheckOut}
+              onChange={(start, end) => {
+                setSearchCheckIn(start);
+                setSearchCheckOut(end);
+              }}
+              minDate={getTodayString()}
+            />
+          ) : (
+            <DateRangePicker
+              label="Select Rental Period"
+              isCar
+              startDate={searchPickupDate}
+              endDate={searchReturnDate}
+              onChange={(start, end) => {
+                setSearchPickupDate(start);
+                setSearchReturnDate(end);
+              }}
+              minDate={getTodayString()}
+            />
+          )}
+        </div>
 
         {/* Guests + submit */}
         <div className="flex flex-col justify-between">

@@ -17,6 +17,8 @@ import { useUnreadNotificationCount } from "../../hooks/notifications";
 import { useLocation } from "../../hooks/useLocation";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 import { useCallback } from "react";
+import DateRangePickerModal from "../../components/ui/DateRangePickerModal";
+
 
 const { width: W } = Dimensions.get("window");
 
@@ -855,7 +857,7 @@ export default function HomeScreen() {
   const [checkIn, setCheckIn] = useState<Date | null>(null);
   const [checkOut, setCheckOut] = useState<Date | null>(null);
   const [guests, setGuests] = useState(2);
-  const [datePicker, setDatePicker] = useState<"checkIn" | "checkOut" | null>(null);
+  const [showRangePicker, setShowRangePicker] = useState(false);
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
@@ -1146,19 +1148,15 @@ export default function HomeScreen() {
             </View>
             <View style={s.searchDivider} />
             <View style={s.datesGuestsRow}>
-              <TouchableOpacity style={s.dateChip} onPress={() => setDatePicker("checkIn")} activeOpacity={0.75}>
+              <TouchableOpacity style={s.dateChip} onPress={() => setShowRangePicker(true)} activeOpacity={0.75}>
                 <Ionicons name="calendar-outline" size={14} color={K.colors.accent} />
-                <View>
-                  <Text style={s.chipLabel}>Check-in</Text>
-                  <Text style={[s.chipValue, !checkIn && s.chipPlaceholder]}>{checkIn ? fmtDate(checkIn) : "Add date"}</Text>
-                </View>
-              </TouchableOpacity>
-              <View style={s.chipDivider} />
-              <TouchableOpacity style={s.dateChip} onPress={() => setDatePicker("checkOut")} activeOpacity={0.75}>
-                <Ionicons name="calendar-outline" size={14} color={K.colors.accent} />
-                <View>
-                  <Text style={s.chipLabel}>Check-out</Text>
-                  <Text style={[s.chipValue, !checkOut && s.chipPlaceholder]}>{checkOut ? fmtDate(checkOut) : "Add date"}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.chipLabel}>Dates</Text>
+                  <Text style={[s.chipValue, (!checkIn || !checkOut) && s.chipPlaceholder]} numberOfLines={1}>
+                    {checkIn && checkOut
+                      ? `${fmtShortDate(formatLocalDate(checkIn))} – ${fmtShortDate(formatLocalDate(checkOut))} (${Math.max(1, Math.round((checkOut.getTime() - checkIn.getTime()) / 86400000))} night${Math.max(1, Math.round((checkOut.getTime() - checkIn.getTime()) / 86400000)) !== 1 ? "s" : ""})`
+                      : "Add dates"}
+                  </Text>
                 </View>
               </TouchableOpacity>
               <View style={s.chipDivider} />
@@ -1185,19 +1183,16 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Date pickers */}
-        <DatePickerModal
-          visible={datePicker === "checkIn"}
-          title="Select Check-in Date"
-          onSelect={d => { setCheckIn(d); if (checkOut && d >= checkOut) setCheckOut(null); }}
-          onClose={() => setDatePicker(null)}
-        />
-        <DatePickerModal
-          visible={datePicker === "checkOut"}
-          title="Select Check-out Date"
-          minDate={checkIn ?? undefined}
-          onSelect={d => setCheckOut(d)}
-          onClose={() => setDatePicker(null)}
+        {/* Date range picker */}
+        <DateRangePickerModal
+          visible={showRangePicker}
+          initialStartDate={checkIn ? formatLocalDate(checkIn) : null}
+          initialEndDate={checkOut ? formatLocalDate(checkOut) : null}
+          onConfirm={(start, end) => {
+            setCheckIn(new Date(start + "T00:00:00"));
+            setCheckOut(new Date(end + "T00:00:00"));
+          }}
+          onClose={() => setShowRangePicker(false)}
         />
 
         {/* ── Promo Banner Carousel ── */}

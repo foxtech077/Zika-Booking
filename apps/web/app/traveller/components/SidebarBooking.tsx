@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import type { PublicListingDetail } from "@/types";
+import DateRangePicker from "./DateRangePicker";
 
 interface SidebarBookingProps {
   listing: PublicListingDetail;
@@ -113,33 +114,34 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
       )}
 
       {/* Date inputs */}
-      <div className="border border-slate-300 rounded-xl overflow-hidden divide-y divide-slate-300">
+      <div className="space-y-3">
         {isCar ? (
-          <div className="grid grid-cols-2 divide-x divide-slate-300">
-            <div className="p-3">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pickup</p>
-              <input type="date" min={getTodayString()} value={searchPickupDate} onChange={(e) => setSearchPickupDate(e.target.value)} className="w-full mt-1 text-sm bg-transparent outline-none" />
-            </div>
-            <div className="p-3">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Return</p>
-              <input type="date" min={searchPickupDate || getTodayString()} value={searchReturnDate} onChange={(e) => setSearchReturnDate(e.target.value)} className="w-full mt-1 text-sm bg-transparent outline-none" />
-            </div>
-          </div>
+          <DateRangePicker
+            label="Rental Dates"
+            isCar
+            startDate={searchPickupDate}
+            endDate={searchReturnDate}
+            onChange={(start, end) => {
+              setSearchPickupDate(start);
+              setSearchReturnDate(end);
+            }}
+            minDate={getTodayString()}
+          />
         ) : (
           <>
-            <div className="grid grid-cols-2 divide-x divide-slate-300">
-              <div className="p-3">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Check-in</p>
-                <input type="date" min={getTodayString()} value={searchCheckIn} onChange={(e) => setSearchCheckIn(e.target.value)} className="w-full mt-1 text-sm bg-transparent outline-none" />
-              </div>
-              <div className="p-3">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Check-out</p>
-                <input type="date" min={searchCheckIn || getTodayString()} value={searchCheckOut} onChange={(e) => setSearchCheckOut(e.target.value)} className="w-full mt-1 text-sm bg-transparent outline-none" />
-              </div>
-            </div>
-            <div className="p-3">
+            <DateRangePicker
+              label="Check-in – Check-out"
+              startDate={searchCheckIn}
+              endDate={searchCheckOut}
+              onChange={(start, end) => {
+                setSearchCheckIn(start);
+                setSearchCheckOut(end);
+              }}
+              minDate={getTodayString()}
+            />
+            <div className="border border-slate-200 rounded-xl p-3 bg-slate-50">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Guests</p>
-              <select value={searchGuests} onChange={(e) => setSearchGuests(Number(e.target.value))} className="w-full mt-1 text-sm bg-transparent outline-none">
+              <select value={searchGuests} onChange={(e) => setSearchGuests(Number(e.target.value))} className="w-full mt-1 text-sm bg-transparent outline-none font-bold text-slate-700">
                 {[1, 2, 3, 4, 5, 6].map((n) => (
                   <option key={n} value={n}>{n} guest{n > 1 ? "s" : ""}</option>
                 ))}

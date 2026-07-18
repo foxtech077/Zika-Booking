@@ -69,7 +69,9 @@ function getListingCoordinates(
   };
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+import DateRangePickerModal, { calcNights } from "../components/ui/DateRangePickerModal";
+
+// ─── Constants & Types ────────────────────────────────────────────────────────────────
 
 const PRIMARY = "#1B5E20";
 const DANGER = "#dc2626";
@@ -188,10 +190,10 @@ const CATEGORY_TABS: {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
 }[] = [
-  { key: "hotel", label: "Hotels", icon: "business-outline" },
-  { key: "apartment", label: "Homes", icon: "home-outline" },
-  { key: "car", label: "Cars", icon: "car-outline" },
-];
+    { key: "hotel", label: "Hotels", icon: "business-outline" },
+    { key: "apartment", label: "Homes", icon: "home-outline" },
+    { key: "car", label: "Cars", icon: "car-outline" },
+  ];
 
 // ─── Sort options ─────────────────────────────────────────────────────────────
 
@@ -328,14 +330,14 @@ const ResultCard = memo(function ResultCard({
 
   const effectivePromo: ActivePromotion | null = item.promoBadge && promoPercentFromBadge > 0
     ? {
-        activity: isCar ? "car" : category === "apartment" ? "apartment" : "hotel",
-        discountType: "percentage",
-        discountValue: String(promoPercentFromBadge),
-        labelText: item.promoBadge.labelText,
-        bannerTitle: item.promoBadge.labelText,
-        status: "active",
-        applyToBooking: true,
-      }
+      activity: isCar ? "car" : category === "apartment" ? "apartment" : "hotel",
+      discountType: "percentage",
+      discountValue: String(promoPercentFromBadge),
+      labelText: item.promoBadge.labelText,
+      bannerTitle: item.promoBadge.labelText,
+      status: "active",
+      applyToBooking: true,
+    }
     : promotion ?? null;
 
   const promoted = applyPromotion(price, effectivePromo);
@@ -717,6 +719,13 @@ export default function SearchScreen() {
   // instead of having to navigate back and re-enter with a different category.
   const [category, setCategory] = useState(initialCategory);
 
+  // Date Range state
+  const [localCheckIn, setLocalCheckIn] = useState<string | undefined>(checkIn);
+  const [localCheckOut, setLocalCheckOut] = useState<string | undefined>(checkOut);
+  const [localPickup, setLocalPickup] = useState<string | undefined>(pickupDatetime);
+  const [localReturn, setLocalReturn] = useState<string | undefined>(returnDatetime);
+  const [showRangePicker, setShowRangePicker] = useState(false);
+
   // IP-based detected location — used as default when user hasn't typed a place
   const detectedLoc = useLocationStore((s) => s.location);
   const fallbackLat = rawDetectedLat
@@ -934,11 +943,11 @@ export default function SearchScreen() {
     geo?.lat ?? fallbackLat,
     geo?.lng ?? fallbackLng,
     sort,
-    checkIn,
-    checkOut,
+    localCheckIn,
+    localCheckOut,
     guests,
-    pickupDatetime,
-    returnDatetime,
+    localPickup,
+    localReturn,
     cursor,
     priceMin,
     priceMax,
@@ -1015,12 +1024,12 @@ export default function SearchScreen() {
       }
 
       if (category === "hotel" || category === "apartment") {
-        if (checkIn) qp.set("check_in", checkIn);
-        if (checkOut) qp.set("check_out", checkOut);
+        if (localCheckIn) qp.set("check_in", localCheckIn);
+        if (localCheckOut) qp.set("check_out", localCheckOut);
         if (guests) qp.set("guests", guests);
       } else if (category === "car") {
-        if (pickupDatetime) qp.set("pickup_datetime", pickupDatetime);
-        if (returnDatetime) qp.set("return_datetime", returnDatetime);
+        if (localPickup) qp.set("pickup_datetime", localPickup);
+        if (localReturn) qp.set("return_datetime", localReturn);
       }
 
       if (cursor) qp.set("cursor", cursor);
@@ -1450,6 +1459,39 @@ export default function SearchScreen() {
         })}
       </View>
 
+      {/* ── Date Range Bar ── */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 2 }}>
+        <TouchableOpacity
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            backgroundColor: "#F3F4F6",
+            borderRadius: 12,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            borderWidth: 1,
+            borderColor: "#E5E7EB",
+          }}
+          onPress={() => setShowRangePicker(true)}
+          activeOpacity={0.8}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+            <Ionicons name="calendar-outline" size={16} color={PRIMARY} />
+            <Text style={{ fontSize: 13, fontWeight: "700", color: TEXT }} numberOfLines={1}>
+              {category !== "car"
+                ? (localCheckIn && localCheckOut
+                  ? `${localCheckIn} – ${localCheckOut} (${calcNights(localCheckIn, localCheckOut)} night${calcNights(localCheckIn, localCheckOut) !== 1 ? "s" : ""})`
+                  : "Select Dates (Min 1 night)")
+                : (localPickup && localReturn
+                  ? `${localPickup.slice(0, 10)} – ${localReturn.slice(0, 10)}`
+                  : "Select Rental Dates")}
+            </Text>
+          </View>
+          <Ionicons name="chevron-down" size={16} color={MUTED} />
+        </TouchableOpacity>
+      </View>
+
       {/* ── Sort bar ── */}
       <View style={styles.sortBar}>
         <ScrollView
@@ -1538,14 +1580,14 @@ export default function SearchScreen() {
           </View>
           {(activePromotion.discountPercent != null ||
             activePromotion.discountAmount != null) && (
-            <View style={promoBannerStyles.discBadge}>
-              <Text style={promoBannerStyles.discText}>
-                {activePromotion.discountPercent != null
-                  ? `-${activePromotion.discountPercent}%`
-                  : `-${activePromotion.discountAmount}`}
-              </Text>
-            </View>
-          )}
+              <View style={promoBannerStyles.discBadge}>
+                <Text style={promoBannerStyles.discText}>
+                  {activePromotion.discountPercent != null
+                    ? `-${activePromotion.discountPercent}%`
+                    : `-${activePromotion.discountAmount}`}
+                </Text>
+              </View>
+            )}
         </View>
       )}
 
@@ -1810,6 +1852,25 @@ export default function SearchScreen() {
         </TouchableOpacity>
       )}
 
+      {/* ─── Date Range Picker Modal ─── */}
+      <DateRangePickerModal
+        visible={showRangePicker}
+        isCar={category === "car"}
+        initialStartDate={category !== "car" ? localCheckIn : (localPickup ? localPickup.slice(0, 10) : null)}
+        initialEndDate={category !== "car" ? localCheckOut : (localReturn ? localReturn.slice(0, 10) : null)}
+        onConfirm={(start, end) => {
+          if (category !== "car") {
+            setLocalCheckIn(start);
+            setLocalCheckOut(end);
+          } else {
+            setLocalPickup(start);
+            setLocalReturn(end);
+          }
+          setCursor(null);
+        }}
+        onClose={() => setShowRangePicker(false)}
+      />
+
       {/* ─── Premium Filter Sheet Modal ─── */}
       <Modal
         visible={filterVisible}
@@ -1878,7 +1939,7 @@ export default function SearchScreen() {
                     style={[
                       filterStyles.chipText,
                       cancellationPolicy === policy &&
-                        filterStyles.chipTextActive,
+                      filterStyles.chipTextActive,
                     ]}
                   >
                     {policy === null
@@ -1992,7 +2053,7 @@ export default function SearchScreen() {
                         style={[
                           filterStyles.chipText,
                           starRating.includes(star) &&
-                            filterStyles.chipTextActive,
+                          filterStyles.chipTextActive,
                         ]}
                       >
                         {star} Star
@@ -2133,7 +2194,7 @@ export default function SearchScreen() {
                         style={[
                           filterStyles.chipText,
                           carCategory === catOption &&
-                            filterStyles.chipTextActive,
+                          filterStyles.chipTextActive,
                         ]}
                       >
                         {catOption}
@@ -2184,7 +2245,7 @@ export default function SearchScreen() {
                         style={[
                           filterStyles.chipText,
                           mileagePolicy === policy &&
-                            filterStyles.chipTextActive,
+                          filterStyles.chipTextActive,
                         ]}
                       >
                         {policy === null
