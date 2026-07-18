@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -10,6 +10,8 @@ import { useAuthStore } from "@/stores/auth";
 import { FormField } from "@/components/ui/FormField";
 import { CountryCombobox } from "@/components/ui/CountryCombobox";
 import type { ApiResponse, AuthResponse } from "@zika/types";
+import { Select } from "@/components/ui/Input";
+import { ALL_COUNTRIES } from "@/lib/countries";
 
 type UserType = "guest" | "provider";
 type FieldErrors = Record<string, string | undefined> & { general?: string };
@@ -30,7 +32,30 @@ export default function RegisterPage() {
     firstName: "", lastName: "", email: "",
     password: "", confirmPassword: "",
     businessName: "", country: "", phone: "",
+    dob: "",
   });
+
+  const [phoneCountryCode, setPhoneCountryCode] = useState("+254");
+
+  const countryDialOptions = useMemo(() => {
+    return ALL_COUNTRIES.map((c) => ({
+      value: c.dialCode,
+      label: `${c.flag} ${c.dialCode}`,
+    }));
+  }, []);
+
+  const is18OrOver = useMemo(() => {
+    if (!form.dob) return false;
+    const birthDate = new Date(form.dob);
+    if (isNaN(birthDate.getTime())) return false;
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age >= 18;
+  }, [form.dob]);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -48,6 +73,7 @@ export default function RegisterPage() {
       const payload = {
         ...form,
         userType,
+        phone: userType === "provider" ? (form.phone ? `${phoneCountryCode}${form.phone.replace(/^0+/, "").replace(/[^0-9]/g, "")}` : undefined) : undefined,
         businessName: userType === "provider" ? form.businessName : undefined,
         country: userType === "provider" ? form.country || undefined : undefined,
         agreedToTerms: true,
@@ -78,6 +104,7 @@ export default function RegisterPage() {
     const payload = {
       ...form,
       userType,
+      phone: userType === "provider" ? (form.phone ? `${phoneCountryCode}${form.phone.replace(/^0+/, "").replace(/[^0-9]/g, "")}` : undefined) : undefined,
       businessName: userType === "provider" ? form.businessName : undefined,
       country: userType === "provider" ? form.country || undefined : undefined,
     };
@@ -176,7 +203,8 @@ export default function RegisterPage() {
         </div>
 
         {/* ── Right Panel: Form ── */}
-        <div className="flex-1 bg-white flex flex-col justify-start px-8 py-6 md:px-12 rounded-r-3xl rounded-l-3xl md:rounded-l-none overflow-y-auto">
+        {/* Outer panel: fixed height (inherited from parent), flex-col, no outer scroll */}
+        <div className="flex-1 bg-white flex flex-col justify-start px-8 py-6 md:px-12 rounded-r-3xl rounded-l-3xl md:rounded-l-none overflow-hidden">
 
           {/* Logo */}
           {/* <div className="flex flex-col items-center mb-3">
@@ -184,292 +212,330 @@ export default function RegisterPage() {
             <span className="font-bold text-xs text-primary tracking-widest">KAINOOK</span>
           </div> */}
 
-          <h1 className="text-xl font-bold text-center text-gray-900 mb-4">
-            <span className="text-primary">Create</span> your account
-          </h1>
+          {/* ── Fixed header: title + account type tabs (never scroll) ── */}
+          <div className="shrink-0">
+            <h1 className="text-xl font-bold text-center text-gray-900 mb-4">
+              <span className="text-primary">Create</span> your account
+            </h1>
 
-          {/* Account type tabs */}
-          <div className="flex rounded-xl overflow-hidden mb-4 bg-gray-100 p-1 gap-1">
-            {(["guest", "provider"] as UserType[]).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => { setUserType(t); setErrors({}); }}
-                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${
-                  userType === t
+            {/* Account type tabs */}
+            <div className="flex rounded-xl overflow-hidden mb-4 bg-gray-100 p-1 gap-1">
+              {(["guest", "provider"] as UserType[]).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => { setUserType(t); setErrors({}); }}
+                  className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${userType === t
                     ? "bg-primary text-white shadow-sm"
                     : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                {t === "guest" ? "🧳  Traveller" : "🏨  Provider / Host"}
-              </button>
-            ))}
+                    }`}
+                >
+                  {t === "guest" ? "🧳  Traveller" : "🏨  Provider / Host"}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <form onSubmit={handleSubmit} noValidate>
-            {/* Name row */}
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label htmlFor="reg-firstname" className="block text-xs font-medium text-gray-700 mb-1.5">First name</label>
-                <div className="relative">
-                  <InputIcon>
-                    <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                    </svg>
-                  </InputIcon>
-                  <input
-                    id="reg-firstname"
-                    value={form.firstName}
-                    onChange={set("firstName")}
-                    placeholder="Ada"
-                    autoComplete="given-name"
-                    className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.firstName ? "border-red-400" : "border-gray-200"}`}
-                  />
-                  {errors.firstName && <p className="text-xs text-red-500 mt-1">{errors.firstName}</p>}
-                </div>
-              </div>
-              <div>
-                <label htmlFor="reg-lastname" className="block text-xs font-medium text-gray-700 mb-1.5">Last name</label>
-                <div className="relative">
-                  <InputIcon>
-                    <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                    </svg>
-                  </InputIcon>
-                  <input
-                    id="reg-lastname"
-                    value={form.lastName}
-                    onChange={set("lastName")}
-                    placeholder="Okafor"
-                    autoComplete="family-name"
-                    className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.lastName ? "border-red-400" : "border-gray-200"}`}
-                  />
-                  {errors.lastName && <p className="text-xs text-red-500 mt-1">{errors.lastName}</p>}
-                </div>
-              </div>
-            </div>
-
-            {/* Email */}
-            <div className="mb-3">
-              <label htmlFor="reg-email" className="block text-xs font-medium text-gray-700 mb-1.5">Email address</label>
-              <div className="relative">
-                <InputIcon>
-                  <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                  </svg>
-                </InputIcon>
-                <input
-                  id="reg-email"
-                  type="email"
-                  value={form.email}
-                  onChange={set("email")}
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  className={`w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.email ? "border-red-400" : "border-gray-200"}`}
-                />
-                {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
-              </div>
-            </div>
-
-            {/* Provider-only fields */}
-            {userType === "provider" && (
+          {/* ── Scrollable content: form + sign-in link ── */}
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+            <form onSubmit={handleSubmit} noValidate>
+              {/* Name row */}
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label htmlFor="reg-business" className="block text-xs font-medium text-gray-700 mb-1.5">Business name</label>
+                  <label htmlFor="reg-firstname" className="block text-xs font-medium text-gray-700 mb-1.5">First name</label>
                   <div className="relative">
                     <InputIcon>
                       <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
                       </svg>
                     </InputIcon>
                     <input
-                      id="reg-business"
-                      value={form.businessName}
-                      onChange={set("businessName")}
-                      placeholder="Serena Hotels Ltd."
-                      className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.businessName ? "border-red-400" : "border-gray-200"}`}
+                      id="reg-firstname"
+                      value={form.firstName}
+                      onChange={set("firstName")}
+                      placeholder="Ada"
+                      autoComplete="given-name"
+                      className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.firstName ? "border-red-400" : "border-gray-200"}`}
                     />
-                    {errors.businessName && <p className="text-xs text-red-500 mt-1">{errors.businessName}</p>}
+                    {errors.firstName && <p className="text-xs text-red-500 mt-1">{errors.firstName}</p>}
                   </div>
                 </div>
                 <div>
-                  <CountryCombobox
-                    label="Country"
-                    value={form.country}
-                    onChange={(code) => {
-                      setForm((p) => ({ ...p, country: code }));
-                      setErrors((p) => ({ ...p, country: undefined }));
-                    }}
-                    error={errors.country}
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label htmlFor="reg-phone" className="block text-xs font-medium text-gray-700 mb-1.5">Phone number</label>
+                  <label htmlFor="reg-lastname" className="block text-xs font-medium text-gray-700 mb-1.5">Last name</label>
                   <div className="relative">
                     <InputIcon>
                       <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
                       </svg>
                     </InputIcon>
                     <input
-                      id="reg-phone"
-                      value={form.phone}
-                      onChange={(e) => {
-                        const cleaned = e.target.value.replace(/[^+\d\s-]/g, "");
-                        setForm((p) => ({ ...p, phone: cleaned }));
-                        setErrors((p) => ({ ...p, phone: undefined }));
-                      }}
-                      placeholder="+254 712 345 678"
-                      type="tel"
-                      className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.phone ? "border-red-400" : "border-gray-200"}`}
+                      id="reg-lastname"
+                      value={form.lastName}
+                      onChange={set("lastName")}
+                      placeholder="Okafor"
+                      autoComplete="family-name"
+                      className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.lastName ? "border-red-400" : "border-gray-200"}`}
                     />
+                    {errors.lastName && <p className="text-xs text-red-500 mt-1">{errors.lastName}</p>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Email */}
+              <div className="mb-3">
+                <label htmlFor="reg-email" className="block text-xs font-medium text-gray-700 mb-1.5">Email address</label>
+                <div className="relative">
+                  <InputIcon>
+                    <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                    </svg>
+                  </InputIcon>
+                  <input
+                    id="reg-email"
+                    type="email"
+                    value={form.email}
+                    onChange={set("email")}
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                    className={`w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.email ? "border-red-400" : "border-gray-200"}`}
+                  />
+                  {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
+                </div>
+              </div>
+
+              {/* Date of Birth (Guest/Traveller only) */}
+              {userType === "guest" && (
+                <div className="mb-3">
+                  <label htmlFor="reg-dob" className="block text-xs font-medium text-gray-700 mb-1.5">Date of Birth</label>
+                  <div className="relative">
+                    <InputIcon>
+                      <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                      </svg>
+                    </InputIcon>
+                    <input
+                      id="reg-dob"
+                      type="date"
+                      value={form.dob}
+                      onChange={set("dob")}
+                      className={`w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.dob ? "border-red-400" : "border-gray-200"}`}
+                    />
+                    {errors.dob && <p className="text-xs text-red-500 mt-1">{errors.dob}</p>}
+                    {form.dob && !is18OrOver && (
+                      <p className="text-xs text-red-500 mt-1">You must be 18 years or older to register.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Provider-only fields */}
+              {userType === "provider" && (
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label htmlFor="reg-business" className="block text-xs font-medium text-gray-700 mb-1.5">Business name</label>
+                    <div className="relative">
+                      <InputIcon>
+                        <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+                        </svg>
+                      </InputIcon>
+                      <input
+                        id="reg-business"
+                        value={form.businessName}
+                        onChange={set("businessName")}
+                        placeholder="Serena Hotels Ltd."
+                        className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.businessName ? "border-red-400" : "border-gray-200"}`}
+                      />
+                      {errors.businessName && <p className="text-xs text-red-500 mt-1">{errors.businessName}</p>}
+                    </div>
+                  </div>
+                  <div>
+                    <CountryCombobox
+                      label="Country"
+                      value={form.country}
+                      onChange={(code) => {
+                        setForm((p) => ({ ...p, country: code }));
+                        setErrors((p) => ({ ...p, country: undefined }));
+                      }}
+                      error={errors.country}
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label htmlFor="reg-phone" className="block text-xs font-medium text-gray-700 mb-1.5">Phone number</label>
+                    <div className="flex gap-2">
+                      <div className="w-[100px] shrink-0">
+                        <Select
+                          value={phoneCountryCode}
+                          onChange={(e) => {
+                            setPhoneCountryCode(e.target.value);
+                            setErrors((p) => ({ ...p, phone: undefined }));
+                          }}
+                          options={countryDialOptions}
+                          className="!h-[42px] !rounded-xl !bg-[#f6fdf8] !border-gray-200 focus:!ring-primary/30 focus:!border-primary"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <input
+                          id="reg-phone"
+                          value={form.phone}
+                          onChange={(e) => {
+                            const cleaned = e.target.value.replace(/[^0-9]/g, "");
+                            setForm((p) => ({ ...p, phone: cleaned }));
+                            setErrors((p) => ({ ...p, phone: undefined }));
+                          }}
+                          placeholder="712345678"
+                          type="tel"
+                          className={`w-full h-[42px] px-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.phone ? "border-red-400" : "border-gray-200"}`}
+                        />
+                      </div>
+                    </div>
                     {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Password row */}
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label htmlFor="reg-password" className="block text-xs font-medium text-gray-700 mb-1.5">Password</label>
-                <div className="relative">
-                  <InputIcon>
-                    <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                    </svg>
-                  </InputIcon>
-                  <input
-                    id="reg-password"
-                    type={showPassword ? "text" : "password"}
-                    value={form.password}
-                    onChange={set("password")}
-                    placeholder="Min. 8 chars"
-                    autoComplete="new-password"
-                    className={`w-full pl-9 pr-9 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.password ? "border-red-400" : "border-gray-200"}`}
-                  />
-                  <button type="button" tabIndex={-1} onClick={() => setShowPassword(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition">
-                    {showPassword ? (
-                      <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
-                    ) : (
-                      <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                    )}
-                  </button>
-                  {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password}</p>}
+              {/* Password row */}
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label htmlFor="reg-password" className="block text-xs font-medium text-gray-700 mb-1.5">Password</label>
+                  <div className="relative">
+                    <InputIcon>
+                      <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                      </svg>
+                    </InputIcon>
+                    <input
+                      id="reg-password"
+                      type={showPassword ? "text" : "password"}
+                      value={form.password}
+                      onChange={set("password")}
+                      placeholder="Min. 8 chars"
+                      autoComplete="new-password"
+                      className={`w-full pl-9 pr-9 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.password ? "border-red-400" : "border-gray-200"}`}
+                    />
+                    <button type="button" tabIndex={-1} onClick={() => setShowPassword(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition">
+                      {showPassword ? (
+                        <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
+                      ) : (
+                        <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                      )}
+                    </button>
+                    {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password}</p>}
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="reg-confirm-password" className="block text-xs font-medium text-gray-700 mb-1.5">Confirm password</label>
+                  <div className="relative">
+                    <InputIcon>
+                      <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </InputIcon>
+                    <input
+                      id="reg-confirm-password"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={form.confirmPassword}
+                      onChange={set("confirmPassword")}
+                      placeholder="Repeat password"
+                      autoComplete="new-password"
+                      className={`w-full pl-9 pr-9 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.confirmPassword ? "border-red-400" : "border-gray-200"}`}
+                    />
+                    <button type="button" tabIndex={-1} onClick={() => setShowConfirmPassword(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition">
+                      {showConfirmPassword ? (
+                        <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
+                      ) : (
+                        <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                      )}
+                    </button>
+                    {errors.confirmPassword && <p className="text-xs text-red-500 mt-1">{errors.confirmPassword}</p>}
+                  </div>
                 </div>
               </div>
-              <div>
-                <label htmlFor="reg-confirm-password" className="block text-xs font-medium text-gray-700 mb-1.5">Confirm password</label>
-                <div className="relative">
-                  <InputIcon>
-                    <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </InputIcon>
-                  <input
-                    id="reg-confirm-password"
-                    type={showConfirmPassword ? "text" : "password"}
-                    value={form.confirmPassword}
-                    onChange={set("confirmPassword")}
-                    placeholder="Repeat password"
-                    autoComplete="new-password"
-                    className={`w-full pl-9 pr-9 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.confirmPassword ? "border-red-400" : "border-gray-200"}`}
-                  />
-                  <button type="button" tabIndex={-1} onClick={() => setShowConfirmPassword(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition">
-                    {showConfirmPassword ? (
-                      <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
-                    ) : (
-                      <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                    )}
-                  </button>
-                  {errors.confirmPassword && <p className="text-xs text-red-500 mt-1">{errors.confirmPassword}</p>}
+
+              {/* General error */}
+              {errors.general && (
+                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
+                  <p className="text-red-600 text-sm">{errors.general}</p>
                 </div>
+              )}
+
+              {/* Compliance checkboxes */}
+              <div className="mb-4 space-y-2.5">
+                <label className="flex items-start gap-2.5 cursor-pointer group">
+                  <input
+                    id="agree-terms"
+                    type="checkbox"
+                    checked={agreedToTerms}
+                    onChange={(e) => {
+                      setAgreedToTerms(e.target.checked);
+                      setErrors((p) => ({ ...p, general: undefined }));
+                    }}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary accent-primary cursor-pointer"
+                  />
+                  <span className="text-xs text-gray-600 leading-relaxed">
+                    I agree to the{" "}
+                    <Link
+                      href="/legal/terms"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary font-semibold hover:underline"
+                    >
+                      Terms of Service
+                    </Link>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2.5 cursor-pointer group">
+                  <input
+                    id="agree-privacy"
+                    type="checkbox"
+                    checked={agreedToPrivacy}
+                    onChange={(e) => {
+                      setAgreedToPrivacy(e.target.checked);
+                      setErrors((p) => ({ ...p, general: undefined }));
+                    }}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary accent-primary cursor-pointer"
+                  />
+                  <span className="text-xs text-gray-600 leading-relaxed">
+                    I have read and accept the{" "}
+                    <Link
+                      href="/legal/privacy"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary font-semibold hover:underline"
+                    >
+                      Privacy Policy
+                    </Link>
+                  </span>
+                </label>
               </div>
-            </div>
 
-            {/* General error */}
-            {errors.general && (
-              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
-                <p className="text-red-600 text-sm">{errors.general}</p>
-              </div>
-            )}
+              {/* Submit */}
+              <button
+                id="register-submit-btn"
+                type="submit"
+                disabled={mutation.isPending || !agreedToTerms || !agreedToPrivacy || (userType === "guest" && !is18OrOver)}
+                className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+              >
+                {mutation.isPending ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                    Creating Account…
+                  </>
+                ) : "Create Account"}
+              </button>
+            </form>
 
-            {/* Compliance checkboxes */}
-            <div className="mb-4 space-y-2.5">
-              <label className="flex items-start gap-2.5 cursor-pointer group">
-                <input
-                  id="agree-terms"
-                  type="checkbox"
-                  checked={agreedToTerms}
-                  onChange={(e) => {
-                    setAgreedToTerms(e.target.checked);
-                    setErrors((p) => ({ ...p, general: undefined }));
-                  }}
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary accent-primary cursor-pointer"
-                />
-                <span className="text-xs text-gray-600 leading-relaxed">
-                  I agree to the{" "}
-                  <Link
-                    href="/legal/terms"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary font-semibold hover:underline"
-                  >
-                    Terms of Service
-                  </Link>
-                </span>
-              </label>
-              <label className="flex items-start gap-2.5 cursor-pointer group">
-                <input
-                  id="agree-privacy"
-                  type="checkbox"
-                  checked={agreedToPrivacy}
-                  onChange={(e) => {
-                    setAgreedToPrivacy(e.target.checked);
-                    setErrors((p) => ({ ...p, general: undefined }));
-                  }}
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary accent-primary cursor-pointer"
-                />
-                <span className="text-xs text-gray-600 leading-relaxed">
-                  I have read and accept the{" "}
-                  <Link
-                    href="/legal/privacy"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary font-semibold hover:underline"
-                  >
-                    Privacy Policy
-                  </Link>
-                </span>
-              </label>
-            </div>
-
-            {/* Submit */}
-            <button
-              id="register-submit-btn"
-              type="submit"
-              disabled={mutation.isPending || !agreedToTerms || !agreedToPrivacy}
-              className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
-            >
-              {mutation.isPending ? (
-                <>
-                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                  </svg>
-                  Creating Account…
-                </>
-              ) : "Create Account"}
-            </button>
-          </form>
-
-          {/* Sign in link */}
-          <p className="text-center text-sm text-gray-500 mt-4">
-            Already have an account?{" "}
-            <Link href="/auth/login" className="text-primary font-semibold hover:underline">
-              Sign In
-            </Link>
-          </p>
+            {/* Sign in link */}
+            <p className="text-center text-sm text-gray-500 mt-4 mb-1">
+              Already have an account?{" "}
+              <Link href="/auth/login" className="text-primary font-semibold hover:underline">
+                Sign In
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>

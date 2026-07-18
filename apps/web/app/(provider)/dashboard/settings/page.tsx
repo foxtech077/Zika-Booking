@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, useEffect, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import {
   Bell,
@@ -34,7 +35,9 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { CurrencyCombobox } from "@/components/ui/CurrencyCombobox";
+import { CountryCombobox } from "@/components/ui/CountryCombobox";
 import { cn } from "@/lib/utils";
+import { ALL_COUNTRIES, parsePhoneNumber } from "@/lib/countries";
 
 type SettingsTab =
   | "profile"
@@ -57,18 +60,7 @@ interface SectionFeedback {
   text: string;
 }
 
-const countries = [
-  { value: "AE", label: "United Arab Emirates" },
-  { value: "KE", label: "Kenya" },
-  { value: "NG", label: "Nigeria" },
-  { value: "GH", label: "Ghana" },
-  { value: "TZ", label: "Tanzania" },
-  { value: "ZA", label: "South Africa" },
-  { value: "US", label: "United States" },
-  { value: "GB", label: "United Kingdom" },
-  { value: "IN", label: "India" },
-  { value: "PK", label: "Pakistan" },
-];
+
 
 const tabs: Array<{ key: SettingsTab; label: string; icon: ReactNode; keywords: string }> = [
   { key: "profile", label: "Profile", icon: <User />, keywords: "photo name email phone bio business address visibility" },
@@ -193,7 +185,8 @@ function PasswordStrength({ password }: { password: string }) {
 }
 
 export default function SettingsPage() {
-  const { user, updateUser } = useAuthStore();
+  const router = useRouter();
+  const { user, updateUser, clearSession } = useAuthStore();
   const [tab, setTab] = useState<SettingsTab>("profile");
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -210,6 +203,36 @@ export default function SettingsPage() {
     country: user?.country ?? "",
     visible: true,
   });
+
+  const [phoneCountryCode, setPhoneCountryCode] = useState("+254");
+  const [phoneLocalNumber, setPhoneLocalNumber] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (user) {
+      setProfileForm({
+        firstName: user.firstName ?? "",
+        lastName: user.lastName ?? "",
+        email: user.email ?? "",
+        phone: user.phone ?? "",
+        bio: "",
+        businessName: user.businessName ?? "",
+        address: "",
+        country: user.country ?? "",
+        visible: true,
+      });
+      const parsed = parsePhoneNumber(user.phone ?? "");
+      setPhoneCountryCode(parsed.countryCode || "+254");
+      setPhoneLocalNumber(parsed.localNumber);
+    }
+  }, [user]);
+
+  const countryDialOptions = useMemo(() => {
+    return ALL_COUNTRIES.map((c) => ({
+      value: c.dialCode,
+      label: `${c.flag} ${c.dialCode}`,
+    }));
+  }, []);
 
   const [accountForm, setAccountForm] = useState({
     timezone: "Asia/Kolkata",
@@ -274,23 +297,59 @@ export default function SettingsPage() {
   const name = `${profileForm.firstName} ${profileForm.lastName}`.trim() || "Provider";
 
   const profileMutation = useMutation({
-    mutationFn: () =>
-      api.patch("/auth/profile", {
+    mutationFn: () => {
+      const combinedPhone = phoneLocalNumber ? `${phoneCountryCode}${phoneLocalNumber}` : "";
+      if (!combinedPhone) {
+        throw new Error("Phone number is required");
+      }
+      return api.patch("/auth/profile", {
         firstName: profileForm.firstName,
         lastName: profileForm.lastName,
         businessName: profileForm.businessName,
         country: profileForm.country,
-        phone: profileForm.phone || undefined,
-      }),
+        phone: combinedPhone,
+      });
+    },
     onSuccess: (res) => {
       const updated = res.data?.data?.user ?? res.data?.user;
-      if (updated) updateUser(updated);
+      if (updated) {
+        updateUser(updated);
+        setProfileForm((f) => ({
+          ...f,
+          firstName: updated.firstName ?? "",
+          lastName: updated.lastName ?? "",
+          email: updated.email ?? "",
+          phone: updated.phone ?? "",
+          businessName: updated.businessName ?? "",
+          country: updated.country ?? "",
+        }));
+        const parsed = parsePhoneNumber(updated.phone ?? "");
+        setPhoneCountryCode(parsed.countryCode || "+254");
+        setPhoneLocalNumber(parsed.localNumber);
+      }
       setNotice({ type: "success", text: "Profile settings saved." });
       setSectionFeedback((current) => ({ ...current, profile: { type: "success", text: "Profile settings saved." } }));
+      setFieldErrors({});
     },
-    onError: () => {
-      setNotice({ type: "error", text: "Profile update failed. Please try again." });
-      setSectionFeedback((current) => ({ ...current, profile: { type: "error", text: "Profile update failed. Please try again." } }));
+    onError: (err: any) => {
+      if (err.message === "Phone number is required") {
+        setFieldErrors({ phone: "Phone number is required" });
+        setNotice({ type: "error", text: "Phone number is required" });
+        setSectionFeedback((current) => ({ ...current, profile: { type: "error", text: "Phone number is required" } }));
+        return;
+      }
+      const responseData = err.response?.data;
+      const fields = responseData?.error?.fields;
+      const errorMessage = responseData?.error?.message || "Profile update failed. Please try again.";
+      
+      if (fields) {
+        setFieldErrors(fields);
+      } else {
+        setFieldErrors({});
+      }
+      
+      setNotice({ type: "error", text: errorMessage });
+      setSectionFeedback((current) => ({ ...current, profile: { type: "error", text: errorMessage } }));
     },
   });
 
@@ -303,8 +362,12 @@ export default function SettingsPage() {
       }),
     onSuccess: () => {
       setPwdForm((form) => ({ ...form, currentPassword: "", newPassword: "", confirmPassword: "" }));
-      setNotice({ type: "success", text: "Password updated successfully." });
-      setSectionFeedback((current) => ({ ...current, security: { type: "success", text: "Password updated successfully." } }));
+      setNotice({ type: "success", text: "Password updated successfully. Logging out..." });
+      setSectionFeedback((current) => ({ ...current, security: { type: "success", text: "Password updated successfully. Logging out..." } }));
+      setTimeout(() => {
+        clearSession();
+        router.push("/auth/login");
+      }, 1500);
     },
     onError: () => {
       setNotice({ type: "error", text: "Password update failed. Please verify your current password." });
@@ -325,6 +388,23 @@ export default function SettingsPage() {
   });
 
   const resetSection = () => {
+    if (tab === "profile" && user) {
+      setProfileForm({
+        firstName: user.firstName ?? "",
+        lastName: user.lastName ?? "",
+        email: user.email ?? "",
+        phone: user.phone ?? "",
+        bio: "",
+        businessName: user.businessName ?? "",
+        address: "",
+        country: user.country ?? "",
+        visible: true,
+      });
+      const parsed = parsePhoneNumber(user.phone ?? "");
+      setPhoneCountryCode(parsed.countryCode || "+254");
+      setPhoneLocalNumber(parsed.localNumber);
+      setFieldErrors({});
+    }
     setNotice({ type: "success", text: "Section changes reset." });
     setSectionFeedback((current) => ({ ...current, [tab]: { type: "success", text: "Section changes reset." } }));
   };
@@ -441,13 +521,49 @@ export default function SettingsPage() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <Input label="First name" value={profileForm.firstName} onChange={(e) => setProfileForm((f) => ({ ...f, firstName: e.target.value }))} leftIcon={<User />} />
-                <Input label="Last name" value={profileForm.lastName} onChange={(e) => setProfileForm((f) => ({ ...f, lastName: e.target.value }))} />
+                <Input label="First name" value={profileForm.firstName} onChange={(e) => setProfileForm((f) => ({ ...f, firstName: e.target.value }))} leftIcon={<User />} error={fieldErrors.firstName} />
+                <Input label="Last name" value={profileForm.lastName} onChange={(e) => setProfileForm((f) => ({ ...f, lastName: e.target.value }))} error={fieldErrors.lastName} />
                 <Input label="Email address" type="email" value={profileForm.email} disabled leftIcon={<Mail />} hint="Contact support to change your email." />
-                <Input label="Phone number" value={profileForm.phone} onChange={(e) => setProfileForm((f) => ({ ...f, phone: e.target.value }))} leftIcon={<Smartphone />} />
-                <Input label="Business / provider name" value={profileForm.businessName} onChange={(e) => setProfileForm((f) => ({ ...f, businessName: e.target.value }))} leftIcon={<Building2 />} />
-                <Select label="Country" value={profileForm.country} onChange={(e) => setProfileForm((f) => ({ ...f, country: e.target.value }))} options={countries} placeholder="Select country" />
-                <Input label="Address / location" value={profileForm.address} onChange={(e) => setProfileForm((f) => ({ ...f, address: e.target.value }))} leftIcon={<MapPin />} className="md:col-span-2" />
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Phone number <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="w-[100px] shrink-0">
+                      <Select
+                        value={phoneCountryCode}
+                        onChange={(e) => {
+                          setPhoneCountryCode(e.target.value);
+                          setFieldErrors((prev) => ({ ...prev, phone: "" }));
+                        }}
+                        options={countryDialOptions}
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <Input
+                        value={phoneLocalNumber}
+                        onChange={(e) => {
+                          const cleaned = e.target.value.replace(/[^0-9]/g, "");
+                          setPhoneLocalNumber(cleaned);
+                          setFieldErrors((prev) => ({ ...prev, phone: "" }));
+                        }}
+                        placeholder="e.g. 712345678"
+                        error={fieldErrors.phone}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <Input label="Business / provider name" value={profileForm.businessName} onChange={(e) => setProfileForm((f) => ({ ...f, businessName: e.target.value }))} leftIcon={<Building2 />} error={fieldErrors.businessName} />
+                <CountryCombobox
+                  label="Country"
+                  value={profileForm.country}
+                  onChange={(code) => {
+                    setProfileForm((f) => ({ ...f, country: code }));
+                    setFieldErrors((prev) => ({ ...prev, country: "" }));
+                  }}
+                  error={fieldErrors.country}
+                />
+                <Input label="Address / location" value={profileForm.address} onChange={(e) => setProfileForm((f) => ({ ...f, address: e.target.value }))} leftIcon={<MapPin />} error={fieldErrors.address} className="md:col-span-2" />
               </div>
               <div className="mt-4">
                 <label className="mb-1.5 block text-sm font-medium text-slate-700">Bio / About</label>
@@ -493,10 +609,10 @@ export default function SettingsPage() {
             <div className="space-y-5">
               <SettingsCard title="Password Management" subtitle="Use a strong, unique password for your provider account." icon={<KeyRound />} feedback={sectionFeedback.security} footer={<><Button loading={passwordMutation.isPending} onClick={savePassword}>Update Password</Button><Button variant="outline" onClick={resetSection}>Cancel</Button></>}>
                 <div className="grid gap-4">
-                  <Input label="Current password" type="password" value={pwdForm.currentPassword} onChange={(e) => setPwdForm((f) => ({ ...f, currentPassword: e.target.value }))} />
-                  <Input label="New password" type="password" value={pwdForm.newPassword} onChange={(e) => setPwdForm((f) => ({ ...f, newPassword: e.target.value }))} />
+                  <Input label="Current password" type="password" autoComplete="new-password" value={pwdForm.currentPassword} onChange={(e) => setPwdForm((f) => ({ ...f, currentPassword: e.target.value }))} />
+                  <Input label="New password" type="password" autoComplete="new-password" value={pwdForm.newPassword} onChange={(e) => setPwdForm((f) => ({ ...f, newPassword: e.target.value }))} />
                   <PasswordStrength password={pwdForm.newPassword} />
-                  <Input label="Confirm new password" type="password" value={pwdForm.confirmPassword} onChange={(e) => setPwdForm((f) => ({ ...f, confirmPassword: e.target.value }))} error={pwdForm.confirmPassword && pwdForm.confirmPassword !== pwdForm.newPassword ? "Passwords do not match" : undefined} />
+                  <Input label="Confirm new password" type="password" autoComplete="new-password" value={pwdForm.confirmPassword} onChange={(e) => setPwdForm((f) => ({ ...f, confirmPassword: e.target.value }))} error={pwdForm.confirmPassword && pwdForm.confirmPassword !== pwdForm.newPassword ? "Passwords do not match" : undefined} />
                 </div>
               </SettingsCard>
               <SettingsCard title="Login & Security" subtitle="Manage account protection and active sessions." icon={<Shield />} feedback={sectionFeedback.security} footer={<SectionActions loading={fakeSaveMutation.isPending} onSave={() => fakeSaveMutation.mutate("Security")} onReset={resetSection} />}>
