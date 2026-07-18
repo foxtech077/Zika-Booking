@@ -255,7 +255,7 @@ export default function TravellerDashboard() {
   const [detailCheckOut, setDetailCheckOut] = useState<string>("");
   const [detailPickupDate, setDetailPickupDate] = useState<string>("");
   const [detailReturnDate, setDetailReturnDate] = useState<string>("");
-  const [searchAdults, setSearchAdults] = useState(1);
+  const [searchAdults, setSearchAdults] = useState(2);
   const [searchChildren, setSearchChildren] = useState(0);
   const [searchRooms, setSearchRooms] = useState(1);
   const [showGuestPicker, setShowGuestPicker] = useState(false);
