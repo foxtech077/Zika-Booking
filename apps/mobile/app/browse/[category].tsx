@@ -12,6 +12,7 @@ import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
 import { useActivePromotion, ActivePromotion, applyPromotion } from "../../lib/promotions";
+import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const GREEN = "#1B5E20";
@@ -273,10 +274,10 @@ export default function BrowseCategoryScreen() {
     },
     // Keep the previous page visible while a new sort / load-more is in flight.
     placeholderData: (previousData) => previousData,
-    // Avoid a network hit on every remount when we already have fresh cache.
-    refetchOnMount: false,
-    staleTime: 30_000,
+    staleTime: 0,
   });
+
+  useRefreshOnFocus(refetch);
 
   // ── Sync React Query data → accumulated local list ────────────────────────
   // Moving this logic out of queryFn means cache hits (where queryFn is never

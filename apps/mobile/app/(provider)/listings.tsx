@@ -21,6 +21,7 @@ import { listingApi } from "../../lib/listing-api";
 import { K } from "../../constants/theme";
 import { useAuthStore } from "../../store/auth";
 import { formatCurrency, getCurrencyForCountry } from "../../lib/currency";
+import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -259,6 +260,12 @@ export default function ListingsScreen() {
     },
     enabled: !!user,
   });
+
+  useRefreshOnFocus(useCallback(() => {
+    void listingsQ.refetch();
+    void summaryQ.refetch();
+    void dashQ.refetch();
+  }, [listingsQ, summaryQ, dashQ]));
 
   // Mutations
   const deactivateMut = useMutation({

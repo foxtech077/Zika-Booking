@@ -18,6 +18,7 @@ import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
 import { K } from "../../constants/theme";
 import { useActivePromotion, ActivePromotion, applyPromotion } from "../../lib/promotions";
+import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -228,6 +229,8 @@ export default function SavedScreen() {
       return res.data;
     },
   });
+
+  useRefreshOnFocus(refetch);
 
   async function loadMore() {
     if (!cursor || loadingMore) return;

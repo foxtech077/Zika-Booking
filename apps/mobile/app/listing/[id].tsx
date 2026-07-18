@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, FlatList, TextInput,
   ActivityIndicator, Alert, StyleSheet, Dimensions,
@@ -14,6 +14,7 @@ import { ListingImage } from "../../components/ListingImage";
 import { ActivePromotion, applyPromotion } from "../../lib/promotions";
 import { RoomTypeSelector } from "../../components/listing/RoomTypeSelector";
 import type { RoomType } from "../../components/listing/RoomTypeCard";
+import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 
 let MapView: any = null;
 let Marker: any = null;
@@ -575,7 +576,7 @@ export default function ListingDetailScreen() {
   const [selectedRoomTypeId, setSelectedRoomTypeId] = useState<string | null>(null);
 
   // ── Data ──
-  const { data: listing, isLoading, isError } = useQuery<PublicListing>({
+  const { data: listing, isLoading, isError, refetch: refetchListing } = useQuery<PublicListing>({
     queryKey: ["listing-full", id],
     queryFn: async () => {
       const res = await listingApi.get<{ data: PublicListing }>(`/listings/${id}/public`);
@@ -584,7 +585,7 @@ export default function ListingDetailScreen() {
     enabled: !!id, staleTime: 0, gcTime: 5 * 60_000,
   });
 
-  const { data: availability } = useQuery({
+  const { data: availability, refetch: refetchAvailability } = useQuery({
     queryKey: ["availability", id],
     queryFn: async () => {
       const res = await listingApi.get<{ data: { unavailableRanges: { start: string; end: string }[] } }>(`/listings/${id}/availability`);
@@ -593,7 +594,7 @@ export default function ListingDetailScreen() {
     enabled: !!id,
   });
 
-  const { data: reviewsData } = useQuery<ReviewsData>({
+  const { data: reviewsData, refetch: refetchReviews } = useQuery<ReviewsData>({
     queryKey: ["reviews", "listing", id, 3],
     queryFn: async () => {
       const res = await listingApi.get<{ data: ReviewsData }>(`/listings/${id}/reviews?page=1&limit=3`);
@@ -601,6 +602,12 @@ export default function ListingDetailScreen() {
     },
     enabled: !!id,
   });
+
+  useRefreshOnFocus(useCallback(() => {
+    void refetchListing();
+    void refetchAvailability();
+    void refetchReviews();
+  }, [refetchListing, refetchAvailability, refetchReviews]));
 
   // Active promotions filtered by this listing's category (hotel / apartment / car)
   const { data: activePromotions } = useQuery<Promotion[]>({

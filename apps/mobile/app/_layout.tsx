@@ -96,18 +96,48 @@ const REVOKED_CODES = new Set([
   "NO_TOKEN",
 ]);
 
+function isTokenExpired(token: string | null): boolean {
+  if (!token) return true;
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return true;
+    const base64 = parts[1]!.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    const payload = JSON.parse(jsonPayload);
+    if (!payload.exp || typeof payload.exp !== "number") return false;
+    // Consider expired if less than 60 seconds remaining
+    return Date.now() / 1000 >= payload.exp - 60;
+  } catch {
+    return false; // On parse failure, rely on 401 response interceptors
+  }
+}
+
 async function verifySession(): Promise<"ok" | "revoked" | "network_error"> {
   const { accessToken, user } = useAuthStore.getState();
   if (!accessToken || !user) return "ok"; // not logged in — nothing to check
 
+  // Only call refresh API if access token is actually expired
+  if (!isTokenExpired(accessToken)) {
+    return "ok";
+  }
+
   const apiUrl =
     process.env["EXPO_PUBLIC_API_URL"] ?? "https://api.kainook.com/auth";
   try {
-    await axios.post(
+    const res = await axios.post(
       `${apiUrl}/auth/refresh`,
       {},
       { withCredentials: true, timeout: 8_000 },
     );
+    const newToken = (res.data as any)?.data?.tokens?.accessToken;
+    if (newToken) {
+      await useAuthStore.getState().setAuth(user, newToken);
+    }
     return "ok";
   } catch (err: unknown) {
     const res = (err as any)?.response;
@@ -144,40 +174,19 @@ export default function RootLayout() {
 function RootLayoutContent() {
   useLocationBootstrap();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    async function runCheck() {
+    async function checkSession() {
       const result = await verifySession();
       if (result === "revoked") {
         await useAuthStore.getState().clearAuth();
-        // clearAuth sets user → null.
-        // The (provider)/_layout.tsx guard sees null and redirects to login.
       }
     }
 
-    function startInterval() {
-      if (intervalRef.current) return;
-      // Poll every 30 s while app is in foreground
-      intervalRef.current = setInterval(() => {
-        runCheck().catch(() => {});
-      }, 30_000);
-    }
+    // Check on mount
+    checkSession().catch(() => {});
 
-    function stopInterval() {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    }
-
-    // Run immediately on mount
-    runCheck().catch(() => {});
-
-    // Start the polling interval
-    startInterval();
-
-    // Pause polling when app backgrounds, resume on foreground
+    // Check when app resumes from background
     const sub = AppState.addEventListener(
       "change",
       (nextState: AppStateStatus) => {
@@ -185,17 +194,13 @@ function RootLayoutContent() {
         appStateRef.current = nextState;
 
         if (nextState === "active" && prev !== "active") {
-          runCheck().catch(() => {}); // immediate check on foreground
-          startInterval(); // restart interval
-        } else if (nextState === "background" || nextState === "inactive") {
-          stopInterval(); // no polling while backgrounded
+          checkSession().catch(() => {});
         }
       },
     );
 
     return () => {
       sub.remove();
-      stopInterval();
     };
   }, []);
 

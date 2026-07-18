@@ -8,14 +8,8 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      staleTime: 30_000,
-      // Keep unused cache entries alive for 10 min (RQ default is 5 min).
-      // This lets paginated list data survive typical tab-switch / back-navigation
-      // round-trips without triggering a fresh network request.
+      staleTime: 0,
       gcTime: 10 * 60_000,
-      // Do not automatically refetch when the app comes back to the foreground.
-      // Lists are already kept fresh through staleTime-driven background refetches
-      // initiated when the component re-subscribes.
       refetchOnWindowFocus: false,
     },
   },

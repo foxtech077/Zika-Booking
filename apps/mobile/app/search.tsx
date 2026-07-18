@@ -34,6 +34,7 @@ import { useAuthStore } from "../store/auth";
 import { ListingImage } from "../components/ListingImage";
 import { ActivePromotion, applyPromotion } from "../lib/promotions";
 import { useLocationStore } from "../store/location";
+import { useRefreshOnFocus } from "../hooks/useRefreshOnFocus";
 
 // Deterministic coordinates calculator from search center + distance
 function getListingCoordinates(
@@ -1018,14 +1019,12 @@ export default function SearchScreen() {
     // This prevents the blank-screen flash when the user switches categories
     // or changes filters — they continue to see the last visible list.
     placeholderData: (previousData) => previousData,
-    // Do not re-fetch on component mount when data already exists in cache.
-    // The user will see cached data instantly; a background refetch will
-    // happen only once the staleTime window has elapsed.
-    refetchOnMount: false,
     enabled: true,
     retry: 1,
-    staleTime: 30_000,
+    staleTime: 0,
   });
+
+  useRefreshOnFocus(retrySearch);
 
   // ── Sync React Query data → accumulated local state ──────────────────────────
   // This useEffect replaces the old setAllResults() calls that lived inside

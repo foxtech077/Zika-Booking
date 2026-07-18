@@ -15,6 +15,8 @@ import { ActivePromotion, applyPromotion } from "../../lib/promotions";
 import { useLoyaltyProfile } from "../../hooks/loyalty";
 import { useUnreadNotificationCount } from "../../hooks/notifications";
 import { useLocation } from "../../hooks/useLocation";
+import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
+import { useCallback } from "react";
 
 const { width: W } = Dimensions.get("window");
 
@@ -571,9 +573,9 @@ const pbn = StyleSheet.create({
 // ── Promo Slider ──────────────────────────────────────────────────────────────
 
 const PROMO_BG_IMAGES: Record<string, any> = {
-  hotel:     require("../../assets/promotionimgs/hotel.png"),
+  hotel: require("../../assets/promotionimgs/hotel.png"),
   apartment: require("../../assets/promotionimgs/apartement.png"),
-  car:       require("../../assets/promotionimgs/car.png"),
+  car: require("../../assets/promotionimgs/car.png"),
 };
 
 const PROMO_PALETTES = [
@@ -623,7 +625,7 @@ const PromoSlider = memo(function PromoSlider({ promos, onPress }: {
           const bgImage = p.activity ? PROMO_BG_IMAGES[p.activity] ?? null : null;
           const eyebrowText = (p as any).labelText ?? "EXCLUSIVE DEAL";
           const bannerTitle = (p as any).bannerTitle ?? p.title;
-          const discNum  = discPct != null ? `${discPct}%` : discAmt != null ? `${discAmt}` : null;
+          const discNum = discPct != null ? `${discPct}%` : discAmt != null ? `${discAmt}` : null;
           const discUnit = discPct != null ? "OFF" : discAmt != null ? "SAVE" : null;
           return (
             <TouchableOpacity
@@ -818,7 +820,7 @@ export default function HomeScreen() {
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
-  const { data: hotelsData, isLoading: hotelsLoading } = useQuery<SearchResult[]>({
+  const { data: hotelsData, isLoading: hotelsLoading, refetch: refetchHotels } = useQuery<SearchResult[]>({
     queryKey: ["home-hotels", homeLat, homeLng],
     queryFn: async () => {
       const res = await listingApi.get<SearchResponse>(
@@ -826,10 +828,10 @@ export default function HomeScreen() {
       );
       return res.data.data.results ?? [];
     },
-    staleTime: 120_000,
+    staleTime: 0,
   });
 
-  const { data: apartmentsData, isLoading: aptsLoading } = useQuery<SearchResult[]>({
+  const { data: apartmentsData, isLoading: aptsLoading, refetch: refetchApts } = useQuery<SearchResult[]>({
     queryKey: ["home-apartments", homeLat, homeLng],
     queryFn: async () => {
       const res = await listingApi.get<SearchResponse>(
@@ -837,10 +839,10 @@ export default function HomeScreen() {
       );
       return res.data.data.results ?? [];
     },
-    staleTime: 120_000,
+    staleTime: 0,
   });
 
-  const { data: carsData } = useQuery<SearchResult[]>({
+  const { data: carsData, refetch: refetchCars } = useQuery<SearchResult[]>({
     queryKey: ["home-cars", homeLat, homeLng],
     queryFn: async () => {
       const res = await listingApi.get<SearchResponse>(
@@ -848,7 +850,7 @@ export default function HomeScreen() {
       );
       return res.data.data.results ?? [];
     },
-    staleTime: 120_000,
+    staleTime: 0,
   });
 
   const { data: promotions } = useQuery<Promotion[]>({
@@ -899,7 +901,7 @@ export default function HomeScreen() {
     retry: false,
   });
 
-  const { data: recentlyViewed } = useQuery<SearchResult[]>({
+  const { data: recentlyViewed, refetch: refetchRecentlyViewed } = useQuery<SearchResult[]>({
     queryKey: ["recently-viewed"],
     queryFn: async () => {
       try {
@@ -907,7 +909,7 @@ export default function HomeScreen() {
         return res.data.data.listings ?? [];
       } catch { return []; }
     },
-    staleTime: 30_000,
+    staleTime: 0,
     enabled: !!user,
     retry: false,
   });
@@ -929,7 +931,7 @@ export default function HomeScreen() {
   const { data: notifData } = useUnreadNotificationCount();
   const notifCount = notifData?.count ?? 0;
 
-  const { data: recentBookings } = useQuery<RecentBooking[]>({
+  const { data: recentBookings, refetch: refetchRecentBookings } = useQuery<RecentBooking[]>({
     queryKey: ["bookings-home"],
     queryFn: async () => {
       try {
@@ -940,20 +942,28 @@ export default function HomeScreen() {
           .slice(0, 5);
       } catch { return []; }
     },
-    staleTime: 60_000,
+    staleTime: 0,
     enabled: !!user,
     retry: false,
   });
 
+  useRefreshOnFocus(useCallback(() => {
+    void refetchHotels();
+    void refetchApts();
+    void refetchCars();
+    void refetchRecentlyViewed();
+    void refetchRecentBookings();
+  }, [refetchHotels, refetchApts, refetchCars, refetchRecentlyViewed, refetchRecentBookings]));
+
   // ── Derived data ───────────────────────────────────────────────────────────
 
   const popularHotels = useMemo(() => (hotelsData ?? []).slice(0, 10), [hotelsData]);
-  const popularApts   = useMemo(() => (apartmentsData ?? []).slice(0, 8), [apartmentsData]);
-  const popularCars   = useMemo(() => (carsData ?? []).slice(0, 8), [carsData]);
+  const popularApts = useMemo(() => (apartmentsData ?? []).slice(0, 8), [apartmentsData]);
+  const popularCars = useMemo(() => (carsData ?? []).slice(0, 8), [carsData]);
 
   const hotelPromo = (hotelPromotions?.[0] ?? null) as unknown as ActivePromotion | null;
-  const aptPromo   = (aptPromotions?.[0]   ?? null) as unknown as ActivePromotion | null;
-  const carPromo   = (carPromotions?.[0]   ?? null) as unknown as ActivePromotion | null;
+  const aptPromo = (aptPromotions?.[0] ?? null) as unknown as ActivePromotion | null;
+  const carPromo = (carPromotions?.[0] ?? null) as unknown as ActivePromotion | null;
 
   function promoFor(item: SearchResult): ActivePromotion | null {
     if (item.listingType === "hotel") return hotelPromo;
@@ -1022,18 +1032,18 @@ export default function HomeScreen() {
 
   const isLoading = hotelsLoading || aptsLoading;
   const loyaltyPoints = loyalty?.loyaltyPoints ?? 0;
-  const loyaltyTier   = loyalty?.currentTier ?? "";
+  const loyaltyTier = loyalty?.currentTier ?? "";
   const nextTierTarget = loyalty?.pointsToNextTier ?? null;
-  const nextTierName   = loyalty?.nextTier ?? null;
+  const nextTierName = loyalty?.nextTier ?? null;
 
   // Tier-based card palette
   // shimmerTop/shimmerBot are used to fake a gradient without LinearGradient
   const TIER_CARD: Record<string, { bg: string; fg: string; fgMuted: string; btnBg: string; shimmerTop: string; shimmerBot: string }> = {
-    bronze:   { bg: "#C97C3A", fg: "#1e0a00", fgMuted: "rgba(30,10,0,0.50)",   btnBg: "#1e0a00", shimmerTop: "rgba(255,200,130,0.22)", shimmerBot: "rgba(80,30,0,0.18)" },
-    silver:   { bg: "#9EAAB5", fg: "#111827", fgMuted: "rgba(17,24,39,0.50)",   btnBg: "#111827", shimmerTop: "rgba(255,255,255,0.22)", shimmerBot: "rgba(30,40,60,0.18)" },
-    gold:     { bg: "#E8A020", fg: "#1c0f00", fgMuted: "rgba(28,15,0,0.52)",    btnBg: "#1c0f00", shimmerTop: "rgba(255,235,100,0.28)", shimmerBot: "rgba(120,55,0,0.20)" },
-    diamond:  { bg: "#5B8DEF", fg: "#04174a", fgMuted: "rgba(4,23,74,0.52)",    btnBg: "#04174a", shimmerTop: "rgba(200,220,255,0.28)", shimmerBot: "rgba(10,30,100,0.18)" },
-    platinum: { bg: "#DCD5C8", fg: "#1a1a1a", fgMuted: "rgba(26,26,26,0.50)",  btnBg: "#1a1a1a", shimmerTop: "rgba(255,255,255,0.30)", shimmerBot: "rgba(80,70,60,0.15)" },
+    bronze: { bg: "#C97C3A", fg: "#1e0a00", fgMuted: "rgba(30,10,0,0.50)", btnBg: "#1e0a00", shimmerTop: "rgba(255,200,130,0.22)", shimmerBot: "rgba(80,30,0,0.18)" },
+    silver: { bg: "#9EAAB5", fg: "#111827", fgMuted: "rgba(17,24,39,0.50)", btnBg: "#111827", shimmerTop: "rgba(255,255,255,0.22)", shimmerBot: "rgba(30,40,60,0.18)" },
+    gold: { bg: "#E8A020", fg: "#1c0f00", fgMuted: "rgba(28,15,0,0.52)", btnBg: "#1c0f00", shimmerTop: "rgba(255,235,100,0.28)", shimmerBot: "rgba(120,55,0,0.20)" },
+    diamond: { bg: "#5B8DEF", fg: "#04174a", fgMuted: "rgba(4,23,74,0.52)", btnBg: "#04174a", shimmerTop: "rgba(200,220,255,0.28)", shimmerBot: "rgba(10,30,100,0.18)" },
+    platinum: { bg: "#DCD5C8", fg: "#1a1a1a", fgMuted: "rgba(26,26,26,0.50)", btnBg: "#1a1a1a", shimmerTop: "rgba(255,255,255,0.30)", shimmerBot: "rgba(80,70,60,0.15)" },
   };
   const tierKey = loyaltyTier.toLowerCase();
   const tierPalette = TIER_CARD[tierKey] ?? null;
@@ -1159,8 +1169,8 @@ export default function HomeScreen() {
               onPress={p => {
                 const route = p.ctaRoute ?? (
                   p.activity === "hotel" ? "/browse/hotels" :
-                  p.activity === "apartment" ? "/browse/apartments" :
-                  p.activity === "car" ? "/browse/cars" : "/search"
+                    p.activity === "apartment" ? "/browse/apartments" :
+                      p.activity === "car" ? "/browse/cars" : "/search"
                 );
                 router.push(route as any);
               }}
@@ -1439,8 +1449,8 @@ export default function HomeScreen() {
                 const p = promotions[0];
                 const route = p.ctaRoute ?? (
                   p.activity === "hotel" ? "/browse/hotels" :
-                  p.activity === "apartment" ? "/browse/apartments" :
-                  p.activity === "car" ? "/browse/cars" : "/search"
+                    p.activity === "apartment" ? "/browse/apartments" :
+                      p.activity === "car" ? "/browse/cars" : "/search"
                 );
                 router.push(route as any);
               }}
@@ -1452,14 +1462,14 @@ export default function HomeScreen() {
         <View style={s.section}>
           <View style={{ paddingHorizontal: K.spacing.screen }}>
             {user && loyalty ? (() => {
-              const fg         = tierPalette?.fg         ?? K.colors.goldDark;
-              const fgMuted    = tierPalette?.fgMuted    ?? "rgba(176,125,14,0.60)";
-              const btnBg      = tierPalette?.btnBg      ?? K.colors.goldDark;
-              const cardBg     = tierPalette?.bg         ?? K.colors.goldTint;
-              const shimTop    = tierPalette?.shimmerTop ?? "rgba(255,230,80,0.20)";
-              const shimBot    = tierPalette?.shimmerBot ?? "rgba(120,60,0,0.14)";
-              const borderCol  = tierPalette ? "transparent" : K.colors.gold;
-              const remaining  = nextTierTarget != null ? Math.max(0, nextTierTarget - loyaltyPoints) : null;
+              const fg = tierPalette?.fg ?? K.colors.goldDark;
+              const fgMuted = tierPalette?.fgMuted ?? "rgba(176,125,14,0.60)";
+              const btnBg = tierPalette?.btnBg ?? K.colors.goldDark;
+              const cardBg = tierPalette?.bg ?? K.colors.goldTint;
+              const shimTop = tierPalette?.shimmerTop ?? "rgba(255,230,80,0.20)";
+              const shimBot = tierPalette?.shimmerBot ?? "rgba(120,60,0,0.14)";
+              const borderCol = tierPalette ? "transparent" : K.colors.gold;
+              const remaining = nextTierTarget != null ? Math.max(0, nextTierTarget - loyaltyPoints) : null;
               const pct = nextTierTarget && nextTierTarget > 0
                 ? Math.min(100, Math.round((loyaltyPoints / nextTierTarget) * 100))
                 : 0;
