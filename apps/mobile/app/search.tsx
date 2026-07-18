@@ -320,7 +320,25 @@ const ResultCard = memo(function ResultCard({
   const isCar = category === "car";
   const price = isCar ? item.dailyRate : item.nightlyRate;
   const priceLabel = isCar ? "/day" : "/night";
-  const promoted = applyPromotion(price, promotion ?? null);
+
+  // Derive promotion: item.promoBadge takes priority over global active promotion
+  const promoPercentFromBadge = item.promoBadge?.labelText
+    ? parseFloat(item.promoBadge.labelText.replace(/[^0-9.]/g, ""))
+    : 0;
+
+  const effectivePromo: ActivePromotion | null = item.promoBadge && promoPercentFromBadge > 0
+    ? {
+        activity: isCar ? "car" : category === "apartment" ? "apartment" : "hotel",
+        discountType: "percentage",
+        discountValue: String(promoPercentFromBadge),
+        labelText: item.promoBadge.labelText,
+        bannerTitle: item.promoBadge.labelText,
+        status: "active",
+        applyToBooking: true,
+      }
+    : promotion ?? null;
+
+  const promoted = applyPromotion(price, effectivePromo);
 
   function handlePress() {
     const params: Record<string, string> = {};

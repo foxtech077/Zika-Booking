@@ -232,7 +232,24 @@ const ListingCard = memo(function ListingCard({ item, onPress, width = 240, badg
   const cardTitle = isCar && item.carMake
     ? `${item.carMake} ${item.carModel ?? ""} ${item.carYear ?? ""}`.trim()
     : item.title;
-  const promoted = applyPromotion(rate, promotion ?? null);
+
+  const promoPercentFromBadge = item.promoBadge?.labelText
+    ? parseFloat(item.promoBadge.labelText.replace(/[^0-9.]/g, ""))
+    : 0;
+
+  const effectivePromo: ActivePromotion | null = item.promoBadge && promoPercentFromBadge > 0
+    ? {
+        activity: isCar ? "car" : isApt ? "apartment" : "hotel",
+        discountType: "percentage",
+        discountValue: String(promoPercentFromBadge),
+        labelText: item.promoBadge.labelText,
+        bannerTitle: item.promoBadge.labelText,
+        status: "active",
+        applyToBooking: true,
+      }
+    : promotion ?? null;
+
+  const promoted = applyPromotion(rate, effectivePromo);
   return (
     <TouchableOpacity style={[lc.card, { width }]} onPress={onPress} activeOpacity={0.88}>
       <View style={lc.imgWrap}>
@@ -317,7 +334,24 @@ const EliteCard = memo(function EliteCard({ item, onPress, badgeLabel, badgeColo
   const cardTitle = isCar && item.carMake
     ? `${item.carMake} ${item.carModel ?? ""} ${item.carYear ?? ""}`.trim()
     : item.title;
-  const promoted = applyPromotion(rate, promotion ?? null);
+
+  const promoPercentFromBadge = item.promoBadge?.labelText
+    ? parseFloat(item.promoBadge.labelText.replace(/[^0-9.]/g, ""))
+    : 0;
+
+  const effectivePromo: ActivePromotion | null = item.promoBadge && promoPercentFromBadge > 0
+    ? {
+        activity: isCar ? "car" : isApt ? "apartment" : "hotel",
+        discountType: "percentage",
+        discountValue: String(promoPercentFromBadge),
+        labelText: item.promoBadge.labelText,
+        bannerTitle: item.promoBadge.labelText,
+        status: "active",
+        applyToBooking: true,
+      }
+    : promotion ?? null;
+
+  const promoted = applyPromotion(rate, effectivePromo);
   return (
     <TouchableOpacity style={ec.card} onPress={onPress} activeOpacity={0.88}>
       <View style={ec.imgWrap}>

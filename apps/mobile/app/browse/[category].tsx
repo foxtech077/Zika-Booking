@@ -100,7 +100,24 @@ function ListingCard({ item, apiCategory, onPress, signedPhotoUrl, promotion }: 
   const isCar = apiCategory === "car";
   const price = isCar ? item.dailyRate : item.nightlyRate;
   const unit = isCar ? "/day" : "/night";
-  const promoted = applyPromotion(price, promotion ?? null);
+
+  const promoPercentFromBadge = item.promoBadge?.labelText
+    ? parseFloat(item.promoBadge.labelText.replace(/[^0-9.]/g, ""))
+    : 0;
+
+  const effectivePromo: ActivePromotion | null = item.promoBadge && promoPercentFromBadge > 0
+    ? {
+        activity: apiCategory,
+        discountType: "percentage",
+        discountValue: String(promoPercentFromBadge),
+        labelText: item.promoBadge.labelText,
+        bannerTitle: item.promoBadge.labelText,
+        status: "active",
+        applyToBooking: true,
+      }
+    : promotion ?? null;
+
+  const promoted = applyPromotion(price, effectivePromo);
 
   return (
     <TouchableOpacity style={card.wrap} onPress={onPress} activeOpacity={0.88}>
