@@ -137,6 +137,7 @@ type CarState = {
   deliveryEnabled: boolean;
   deliveryRadiusKm: string;
   deliveryFee: string;
+  allowPreBooking: boolean;
   roadsideAssistance: boolean;
   crossBorderAllowed: boolean;
   airportPickup: boolean;
@@ -235,6 +236,7 @@ function initState(l: Listing): CarState {
     deliveryEnabled: a.deliveryEnabled ?? false,
     deliveryRadiusKm: a.deliveryRadiusKm != null ? String(a.deliveryRadiusKm) : "",
     deliveryFee: a.deliveryFee != null ? String(a.deliveryFee) : "",
+    allowPreBooking: a.allowPreBooking ?? false,
     roadsideAssistance: a.roadsideAssistance ?? false,
     crossBorderAllowed: a.crossBorderAllowed ?? false,
     airportPickup: a.airportPickup ?? false,
@@ -309,6 +311,7 @@ function buildPayload(s: CarState): Record<string, unknown> {
   const deposit = toNullableNumber(s.securityDeposit);
   p.securityDeposit = deposit !== null && deposit >= 0 ? deposit : null;
 
+  p.allowPreBooking = s.allowPreBooking;
   p.deliveryEnabled = s.deliveryEnabled;
   if (s.deliveryEnabled) {
     const radius = toNullableInt(s.deliveryRadiusKm);
@@ -920,6 +923,20 @@ export function CarForm({ listingId, listing }: Props) {
                       />
                     </div>
                   )}
+                </div>
+
+                {/* Pre-booking messages */}
+                <div className="border-t border-border pt-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Pre-Booking Messages</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Allow guests to message you before making a reservation.</p>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input type="checkbox" checked={s.allowPreBooking} onChange={(e) => set("allowPreBooking", e.target.checked)} className="rounded border-slate-300 text-primary focus:ring-primary" />
+                      <span className="text-sm font-semibold text-slate-700">Enabled</span>
+                    </label>
+                  </div>
                 </div>
               </div>
             )}
