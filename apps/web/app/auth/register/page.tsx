@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -30,7 +30,21 @@ export default function RegisterPage() {
     firstName: "", lastName: "", email: "",
     password: "", confirmPassword: "",
     businessName: "", country: "", phone: "",
+    dob: "",
   });
+
+  const is18OrOver = useMemo(() => {
+    if (!form.dob) return false;
+    const birthDate = new Date(form.dob);
+    if (isNaN(birthDate.getTime())) return false;
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age >= 18;
+  }, [form.dob]);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -195,11 +209,10 @@ export default function RegisterPage() {
                 key={t}
                 type="button"
                 onClick={() => { setUserType(t); setErrors({}); }}
-                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${
-                  userType === t
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${userType === t
                     ? "bg-primary text-white shadow-sm"
                     : "text-gray-500 hover:text-gray-700"
-                }`}
+                  }`}
               >
                 {t === "guest" ? "🧳  Traveller" : "🏨  Provider / Host"}
               </button>
@@ -268,6 +281,29 @@ export default function RegisterPage() {
                   className={`w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.email ? "border-red-400" : "border-gray-200"}`}
                 />
                 {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
+              </div>
+            </div>
+
+            {/* Date of Birth */}
+            <div className="mb-3">
+              <label htmlFor="reg-dob" className="block text-xs font-medium text-gray-700 mb-1.5">Date of Birth</label>
+              <div className="relative">
+                <InputIcon>
+                  <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                  </svg>
+                </InputIcon>
+                <input
+                  id="reg-dob"
+                  type="date"
+                  value={form.dob}
+                  onChange={set("dob")}
+                  className={`w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.dob ? "border-red-400" : "border-gray-200"}`}
+                />
+                {errors.dob && <p className="text-xs text-red-500 mt-1">{errors.dob}</p>}
+                {form.dob && !is18OrOver && (
+                  <p className="text-xs text-red-500 mt-1">You must be 18 years or older to register.</p>
+                )}
               </div>
             </div>
 
@@ -448,7 +484,7 @@ export default function RegisterPage() {
             <button
               id="register-submit-btn"
               type="submit"
-              disabled={mutation.isPending || !agreedToTerms || !agreedToPrivacy}
+              disabled={mutation.isPending || !agreedToTerms || !agreedToPrivacy || !is18OrOver}
               className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
             >
               {mutation.isPending ? (

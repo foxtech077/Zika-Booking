@@ -1017,6 +1017,107 @@ export async function authRoutes(app: FastifyInstance) {
       return sendError(reply, 400, "RESET_FAILED", "Password reset could not be completed. Please request a new reset link.");
     }
   });
+
+  const changePasswordSchema = z
+    .object({
+      currentPassword: z.string().min(1, "Current password is required"),
+      newPassword: z
+        .string()
+        .min(8, "Password must be at least 8 characters")
+        .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+        .regex(/[0-9]/, "Password must contain at least one number")
+        .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
+      confirmPassword: z.string(),
+    })
+    .superRefine((data, ctx) => {
+      if (data.newPassword !== data.confirmPassword) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "New password and confirmation do not match",
+          path: ["confirmPassword"],
+        });
+      }
+    });
+
+  // ── POST /auth/change-password  (UC-1.8) ───────────────────────────────────
+  app.post(
+    "/auth/change-password",
+    {
+      schema: {
+        tags: ["User Auth"],
+        summary: "Change user password when logged in",
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: "object",
+          required: ["currentPassword", "newPassword", "confirmPassword"],
+          properties: {
+            currentPassword: { type: "string" },
+            newPassword: { type: "string" },
+            confirmPassword: { type: "string" },
+          },
+        },
+      },
+      preHandler: [requireAuth],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const parsed = changePasswordSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return sendError(
+          reply,
+          422,
+          "VALIDATION_ERROR",
+          "Validation failed",
+          zodFieldErrors(parsed.error.issues)
+        );
+      }
+
+      const { currentPassword, newPassword } = parsed.data;
+      const userId = (req as FastifyRequest & { userId: string }).userId;
+
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+        });
+
+        if (!user) {
+          return sendError(reply, 404, "USER_NOT_FOUND", "User account not found.");
+        }
+
+        // Verify current password
+        const passwordOk = user.passwordHash
+          ? await verifyPassword(currentPassword, user.passwordHash)
+          : false;
+
+        if (!passwordOk) {
+          return sendError(
+            reply,
+            400,
+            "INVALID_CREDENTIALS",
+            "Incorrect current password."
+          );
+        }
+
+        // Hash new password and save it
+        const passwordHash = await hashPassword(newPassword);
+        await prisma.user.update({
+          where: { id: userId },
+          data: { passwordHash },
+        });
+
+        return sendSuccess(reply, 200, {
+          message: "Password updated successfully.",
+        });
+      } catch (err) {
+        return sendError(
+          reply,
+          500,
+          "CHANGE_PASSWORD_FAILED",
+          "An error occurred while changing password."
+        );
+      }
+    }
+  );
+
   // ── GET /auth/profile  (Get profile details with dynamic payment methods) ──
   app.get(
     "/auth/profile",
