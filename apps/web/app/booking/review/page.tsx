@@ -544,7 +544,8 @@ export default function BookingReviewPage() {
   }
 
   const isCar = ctx.listingCategory === "car";
-  const hasTara = TARA_COUNTRIES.has(phoneCountry);
+  // TODO: Handle currency conversion once implemented — currently only XAF is supported for mobile-money
+  const hasTara = TARA_COUNTRIES.has(phoneCountry) && ctx.currency === "XAF";
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
