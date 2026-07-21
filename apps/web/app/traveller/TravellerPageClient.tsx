@@ -715,7 +715,8 @@ export default function TravellerDashboard() {
   useEffect(() => {
     if (!detailListing) return;
     const country = detailListing.country || detailListing.town || "";
-    setPaymentProvider(AFRICAN_COUNTRIES.has(country) ? "tara" : "stripe");
+    // TODO: Handle currency conversion once implemented — currently only XAF is supported for mobile-money
+    setPaymentProvider(AFRICAN_COUNTRIES.has(country) && detailListing.currency === "XAF" ? "tara" : "stripe");
   }, [detailListing?.id]);
 
   // Clean up payment poll on unmount

@@ -182,6 +182,11 @@ export async function paymentRoutes(app: FastifyInstance) {
     const amount = Number(booking["totalAmount"]);
     const currency = (booking["currency"] as string).toLowerCase();
 
+    // TODO: Handle currency conversion once implemented — currently only XAF is supported for mobile-money
+    if (currency !== "xaf") {
+      return sendError(reply, 400, "UNSUPPORTED_CURRENCY", "Mobile money payments are currently only supported for XAF (Central African CFA Franc). Please use card payment instead.");
+    }
+
     // Step 1: Create payment record
     await prisma.payment.create({
       data: {
@@ -255,6 +260,12 @@ export async function paymentRoutes(app: FastifyInstance) {
     }
 
     const bookingCurrency = (booking["currency"] as string).toUpperCase();
+
+    // TODO: Handle currency conversion once implemented — currently only XAF is supported for mobile-money
+    if (bookingCurrency !== "XAF") {
+      return sendError(reply, 400, "UNSUPPORTED_CURRENCY", "Mobile money payments are currently only supported for XAF (Central African CFA Franc). Please use card payment instead.");
+    }
+
     const expectedCurrency = getCurrencyForCountry(phoneCountry);
 
     if (!expectedCurrency) {
@@ -681,6 +692,15 @@ export async function paymentRoutes(app: FastifyInstance) {
 
       // ── 7. Tara flow ──────────────────────────────────────────────────────
       if (paymentProvider === "tara") {
+        // TODO: Handle currency conversion once implemented — currently only XAF is supported for mobile-money
+        if (currency !== "xaf") {
+          await prisma.payment.update({
+            where: { id: payment.id },
+            data: { status: "failed", failureCode: "UNSUPPORTED_CURRENCY", failureMessage: "Mobile money payments are currently only supported for XAF (Central African CFA Franc)." }
+          });
+          return sendError(reply, 400, "UNSUPPORTED_CURRENCY", "Mobile money payments are currently only supported for XAF (Central African CFA Franc). Please use card payment instead.");
+        }
+
         if (!mobileNumber) {
           await prisma.payment.update({
             where: { id: payment.id },
