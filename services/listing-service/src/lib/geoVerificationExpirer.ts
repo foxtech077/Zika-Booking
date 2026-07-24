@@ -5,23 +5,15 @@ export async function expireStaleGeoVerifications(): Promise<void> {
   const now = new Date();
 
   try {
-    const stale = await prisma.listing.findMany({
-      where: {
-        category: "apartment",
-        temporaryActivation: true,
-        geoVerificationDueAt: { lte: now },
-        status: "active",
-        OR: [
-          { lat: null },
-          { lng: null },
-        ],
-      },
-      select: {
-        id: true,
-        providerId: true,
-        name: true,
-      },
-    });
+    const stale = await prisma.$queryRaw<Array<{ id: string; providerId: string; name: string | null }>>`
+      SELECT id, provider_id AS "providerId", name
+      FROM listing.listings
+      WHERE category = 'apartment'
+        AND temporary_activation = true
+        AND geo_verification_due_at <= ${now}
+        AND status = 'active'
+        AND location IS NULL
+    `;
 
     if (stale.length === 0) return;
 
