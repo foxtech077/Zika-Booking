@@ -1,15 +1,11 @@
 services:
   db:
     container_name: zika_booking
-    image: docker.io/postgres:18-alpine
+    image: postgis/postgis:18-3.6-alpine
     environment:
-      # POSTGRES_USER: postgres
-      # POSTGRES_PASSWORD: ultrasonicboom
-      # POSTGRES_DB: zika_db_local
       POSTGRES_USER: zika_user
       POSTGRES_PASSWORD: aakopass123
       POSTGRES_DB: zika_booking
-      TZ: Asia/Kolkata
     ports:
       - "5434:5432"
     volumes:

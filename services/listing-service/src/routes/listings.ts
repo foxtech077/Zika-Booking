@@ -549,6 +549,10 @@ export async function listingRoutes(app: FastifyInstance) {
         year,
         category,
         pricePerDay,
+        // lat/lng are still accepted from the frontend (manual pin drag)
+        // but stored as a PostGIS geography point instead of decimal columns
+        lat,
+        lng,
         ...fields
       } = parsed.data;
 
@@ -573,22 +577,33 @@ export async function listingRoutes(app: FastifyInstance) {
         dbFields.carCategory = category;
       }
 
+      // Track location as a PostGIS geography point (separate from dbFields since
+      // Prisma cannot natively write to a geography column)
+      let locationLat: number | null = null;
+      let locationLng: number | null = null;
+
       // Geocoding Rules (Requirement 5)
       // Address selection MUST auto-fill: lat, lng, town, neighborhood, country.
       // Manual pin drag updates ONLY lat/lng.
       if (parsed.data.address && parsed.data.address !== listing.address) {
         const geo = await geocodeAddress(parsed.data.address);
         if (geo) {
-          dbFields.lat = geo.lat;
-          dbFields.lng = geo.lng;
+          locationLat = geo.lat;
+          locationLng = geo.lng;
           dbFields.town = geo.town;
           dbFields.neighborhood = geo.neighborhood;
           dbFields.country = geo.country;
         }
       }
 
-      // If lat/lng are now provided for an apartment, clear temporary activation
-      if (listing.category === "apartment" && dbFields.lat && dbFields.lng) {
+      // Manual pin drag overrides geocoded location
+      if (lat != null && lng != null) {
+        locationLat = lat;
+        locationLng = lng;
+      }
+
+      // If location is now provided for an apartment, clear temporary activation
+      if (listing.category === "apartment" && locationLat != null && locationLng != null) {
         dbFields.temporaryActivation = false;
         dbFields.geoVerificationDueAt = null;
       }
@@ -612,6 +627,15 @@ export async function listingRoutes(app: FastifyInstance) {
             allowPreBooking: dbFields.allowPreBooking ?? undefined,
           },
         });
+
+        // Write PostGIS geography point
+        if (locationLat != null && locationLng != null) {
+          await tx.$executeRaw`
+            UPDATE listing.listings
+            SET location = ST_SetSRID(ST_MakePoint(${locationLng}, ${locationLat}), 4326)::geography
+            WHERE id = ${id}
+          `;
+        }
 
         if (amenities !== undefined) {
           await tx.listingAmenity.deleteMany({ where: { listingId: id } });
@@ -950,7 +974,10 @@ export async function listingRoutes(app: FastifyInstance) {
         return sendError(reply, 422, "VALIDATION_ERROR", failures.join(" "), { failures });
       }
 
-      const needsGeo = listing.category === "apartment" && (!listing.lat || !listing.lng);
+      const hasLocation = await prisma.$queryRaw<Array<{ has_location: boolean }>>`
+        SELECT location IS NOT NULL AS has_location FROM listing.listings WHERE id = ${id}
+      `;
+      const needsGeo = listing.category === "apartment" && !hasLocation[0]?.has_location;
 
       await prisma.listing.update({
         where: { id },
@@ -1091,12 +1118,18 @@ export async function listingRoutes(app: FastifyInstance) {
       if (listing.category === "apartment" || listing.category === "car") {
         const failures: string[] = [];
 
+        // Check PostGIS location availability (replaces old lat/lng column checks)
+        const locResult = await prisma.$queryRaw<Array<{ has_location: boolean }>>`
+          SELECT location IS NOT NULL AS has_location FROM listing.listings WHERE id = ${id}
+        `;
+        const hasLocation = locResult[0]?.has_location ?? false;
+
         // apartment rules
         if (listing.category === "apartment") {
           if (!listing.name?.trim()) failures.push("Apartment name is required.");
           if (!listing.description?.trim()) failures.push("Description is required.");
           if (listing.description && listing.description.length > 1000) failures.push("Description cannot exceed 1000 characters.");
-          if (!listing.address || !listing.lat || !listing.lng) failures.push("Address with geocoded location is required.");
+          if (!listing.address || !hasLocation) failures.push("Address with geocoded location is required.");
           if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
           if (listing.bedrooms === null || listing.bedrooms === undefined || listing.bedrooms < 0) failures.push("Number of bedrooms is required.");
           if (listing.bathrooms === null || listing.bathrooms === undefined || listing.bathrooms < 0) failures.push("Number of bathrooms is required.");
