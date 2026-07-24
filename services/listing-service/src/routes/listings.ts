@@ -632,7 +632,7 @@ export async function listingRoutes(app: FastifyInstance) {
         if (locationLat != null && locationLng != null) {
           await tx.$executeRaw`
             UPDATE listing.listings
-            SET location = ST_SetSRID(ST_MakePoint(${locationLng}, ${locationLat}), 4326)::geography
+            SET location = ST_SetSRID(ST_MakePoint(${locationLng}, ${locationLat}), 4326)::public.geography
             WHERE id = ${id}
           `;
         }
