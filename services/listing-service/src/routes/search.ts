@@ -204,10 +204,10 @@ export async function searchRoutes(app: FastifyInstance) {
     if (candidateIds.length > 0) {
       const geoResults = await prisma.$queryRaw<Array<{ id: string; distance_km: number }>>`
         SELECT l.id,
-          COALESCE(ST_Distance(l.location, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::public.geography) / 1000, 0) AS distance_km
+          COALESCE(ST_Distance(l.location, ST_SetSRID(ST_MakePoint(${lng}::double precision, ${lat}::double precision), 4326)::public.geography) / 1000, 0) AS distance_km
         FROM listing.listings l
         WHERE l.id = ANY(${candidateIds})
-          AND (l.location IS NULL OR ST_DWithin(l.location, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::public.geography, ${radiusKm * 1000}))
+          AND (l.location IS NULL OR ST_DWithin(l.location, ST_SetSRID(ST_MakePoint(${lng}::double precision, ${lat}::double precision), 4326)::public.geography, ${radiusKm * 1000}::double precision))
       `;
       distanceMap = new Map(geoResults.map((r) => [r.id, Number(r.distance_km)]));
     }
