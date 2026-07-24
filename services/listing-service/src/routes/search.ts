@@ -5,21 +5,6 @@ import { requireProvider, optionalGuest, type GuestRequest } from "../middleware
 
 import { DriveType, FuelType } from "../generated/index.js";
 
-// ── Geo helper ────────────────────────────────────────────────────────────────
-
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 // ── Availability check ────────────────────────────────────────────────────────
 
 async function getBookedListingIds(
@@ -213,20 +198,27 @@ export async function searchRoutes(app: FastifyInstance) {
       take: 500,
     });
 
-    // Geo filter
+    // PostGIS geo filter — replaces in-memory Haversine
+    const candidateIds = candidates.map((l) => l.id) as string[];
+    let distanceMap = new Map<string, number>();
+    if (candidateIds.length > 0) {
+      const geoResults = await prisma.$queryRaw<Array<{ id: string; distance_km: number }>>`
+        SELECT l.id,
+          COALESCE(ST_Distance(l.location, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography) / 1000, 0) AS distance_km
+        FROM listing.listings l
+        WHERE l.id = ANY(${candidateIds})
+          AND (l.location IS NULL OR ST_DWithin(l.location, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography, ${radiusKm * 1000}))
+      `;
+      distanceMap = new Map(geoResults.map((r) => [r.id, Number(r.distance_km)]));
+    }
     const withDistance = candidates
-      .map((l) => ({
-        ...l,
-        distanceKm: l.lat != null && l.lng != null
-          ? haversineKm(lat, lng, Number(l.lat), Number(l.lng))
-          : 0,
-      }))
-      .filter((l) => l.lat == null || l.lng == null || l.distanceKm <= radiusKm);
+      .filter((l) => distanceMap.has(l.id))
+      .map((l) => ({ ...l, distanceKm: distanceMap.get(l.id) ?? 0 }));
 
     // Availability filter (when dates provided)
-    const candidateIds = withDistance.map((l) => l.id);
+    const availIds = withDistance.map((l) => l.id);
     const bookedIds = await getBookedListingIds(
-      candidateIds, checkIn, checkOut, pickupDatetime, returnDatetime,
+      availIds, checkIn, checkOut, pickupDatetime, returnDatetime,
     );
     let available = withDistance.filter((l) => !bookedIds.has(l.id));
 
