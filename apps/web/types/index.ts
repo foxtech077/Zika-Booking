@@ -46,8 +46,8 @@ export interface PublicListingDetail {
   checkoutTime: string;
   cancellationPolicy: "flexible" | "moderate" | "strict" | "non_refundable";
   address: string;
-  lat: number;
-  lng: number;
+  lat?: number;
+  lng?: number;
   town: string;
   neighborhood?: string | null;
   country: string;
