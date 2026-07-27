@@ -2183,7 +2183,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             : { country: { in: admin.countryScope } })
           : (country ? { country } : {}),
         geoPending === "true" ? { temporaryActivation: true, category: "apartment" as const } : {},
-        geoPending === "false" ? { OR: [{ temporaryActivation: false }, { temporaryActivation: null }, { category: { not: "apartment" as const } }] } : {},
+        geoPending === "false" ? { NOT: { temporaryActivation: true } } : {},
       ],
     };
 
