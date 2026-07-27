@@ -68,11 +68,11 @@ interface BookingsResponse {
 
 type ListItem =
   | { _type: "section_header"; title: string; liveNow?: boolean }
-  | { _type: "active_card";    booking: BookingSummary }
-  | { _type: "upcoming_card";  booking: BookingSummary }
-  | { _type: "compact_card";   booking: BookingSummary }
-  | { _type: "empty";          chipKey: ChipKey }
-  | { _type: "shimmer";        key: string };
+  | { _type: "active_card"; booking: BookingSummary }
+  | { _type: "upcoming_card"; booking: BookingSummary }
+  | { _type: "compact_card"; booking: BookingSummary }
+  | { _type: "empty"; chipKey: ChipKey }
+  | { _type: "shimmer"; key: string };
 
 // ── Photo resolution via /listings/{id}/public ────────────────────────────────
 
@@ -153,19 +153,19 @@ function nightsLabel(n: number, type: string): string {
 }
 function statusCfg(status: BookingStatus) {
   switch (status) {
-    case "confirmed":       return { label: "Confirmed",  ...K.colors.confirmed  };
-    case "pending_payment": return { label: "Pending",    ...K.colors.pending    };
-    case "completed":       return { label: "Completed",  ...K.colors.completed  };
-    case "refunded":        return { label: "Refunded",   bg: "#f0fdf4", text: "#16a34a", dot: "#16a34a", stripe: "#16a34a" };
-    default:                return { label: "Cancelled",  ...K.colors.cancelled  };
+    case "confirmed": return { label: "Confirmed", ...K.colors.confirmed };
+    case "pending_payment": return { label: "Pending", ...K.colors.pending };
+    case "completed": return { label: "Completed", ...K.colors.completed };
+    case "refunded": return { label: "Refunded", bg: "#f0fdf4", text: "#16a34a", dot: "#16a34a", stripe: "#16a34a" };
+    default: return { label: "Cancelled", ...K.colors.cancelled };
   }
 }
 
 // Check if a booking's dates straddle today (guest is currently staying / car is active)
 function isCurrentlyStaying(b: BookingSummary): boolean {
-  const now      = Date.now();
+  const now = Date.now();
   const startIso = b.checkIn ?? b.pickupDatetime;
-  const endIso   = b.checkOut ?? b.returnDatetime;
+  const endIso = b.checkOut ?? b.returnDatetime;
   if (!startIso || !endIso) return false;
   return new Date(startIso).getTime() <= now && new Date(endIso).getTime() >= now;
 }
@@ -175,9 +175,9 @@ function locationLabel(b: BookingSummary): string {
   return "";
 }
 function typeLabel(type: string): string {
-  if (type === "hotel")     return "Hotel";
+  if (type === "hotel") return "Hotel";
   if (type === "apartment") return "Apartment";
-  if (type === "car")       return "Car";
+  if (type === "car") return "Car";
   return type.charAt(0).toUpperCase() + type.slice(1);
 }
 function typeIcon(type: string): string {
@@ -194,7 +194,7 @@ function useShimmer() {
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, { toValue: 0.85, duration: 700, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.4,  duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.4, duration: 700, useNativeDriver: true }),
       ])
     );
     loop.start();
@@ -263,10 +263,10 @@ function SectionHeader({ title, liveNow }: { title: string; liveNow?: boolean })
 // ── Active Stay Card ──────────────────────────────────────────────────────────
 
 const ActiveStayCard = memo(function ActiveStayCard({ booking }: { booking: BookingSummary }) {
-  const router    = useRouter();
-  const photoUrl  = useListingPhoto(booking);
+  const router = useRouter();
+  const photoUrl = useListingPhoto(booking);
   const remaining = remainingNights(booking.checkOut);
-  const loc   = locationLabel(booking);
+  const loc = locationLabel(booking);
   const badge = loc ? loc.split(",")[0].toUpperCase() : typeLabel(booking.listingType).toUpperCase();
 
   return (
@@ -320,12 +320,12 @@ const ActiveStayCard = memo(function ActiveStayCard({ booking }: { booking: Book
 // ── Upcoming Trip Card ────────────────────────────────────────────────────────
 
 const UpcomingCard = memo(function UpcomingCard({ booking }: { booking: BookingSummary }) {
-  const router    = useRouter();
-  const photoUrl  = useListingPhoto(booking);
-  const cfg       = statusCfg(booking.status);
+  const router = useRouter();
+  const photoUrl = useListingPhoto(booking);
+  const cfg = statusCfg(booking.status);
   const [isMessaging, setIsMessaging] = useState(false);
-  const days      = daysUntil(booking.checkIn);
-  const loc       = locationLabel(booking);
+  const days = daysUntil(booking.checkIn);
+  const loc = locationLabel(booking);
   const checkDate = booking.checkIn ? fmtDate(booking.checkIn) : booking.pickupDatetime ? fmtDate(booking.pickupDatetime) : "";
   const checkoutDate = booking.checkOut ?? booking.returnDatetime;
   const confirmedDate = booking.confirmedAt ? fmtShort(booking.confirmedAt) : booking.createdAt ? fmtShort(booking.createdAt) : "";
@@ -432,14 +432,14 @@ const UpcomingCard = memo(function UpcomingCard({ booking }: { booking: BookingS
 // ── Compact Card (Completed / Cancelled) ──────────────────────────────────────
 
 const CompactCard = memo(function CompactCard({ booking }: { booking: BookingSummary }) {
-  const router   = useRouter();
+  const router = useRouter();
   const photoUrl = useListingPhoto(booking);
-  const cfg      = statusCfg(booking.status);
+  const cfg = statusCfg(booking.status);
   const dateRange = booking.checkIn && booking.checkOut
     ? `${fmtShort(booking.checkIn)} – ${fmtShort(booking.checkOut)}`
     : booking.pickupDatetime && booking.returnDatetime
-    ? `${fmtShort(booking.pickupDatetime)} – ${fmtShort(booking.returnDatetime)}`
-    : "";
+      ? `${fmtShort(booking.pickupDatetime)} – ${fmtShort(booking.returnDatetime)}`
+      : "";
 
   return (
     <TouchableOpacity
@@ -487,10 +487,10 @@ const CompactCard = memo(function CompactCard({ booking }: { booking: BookingSum
 function EmptyTripsState({ chipKey }: { chipKey: ChipKey }) {
   const router = useRouter();
   const cfg: Record<ChipKey, { icon: string; title: string; sub: string }> = {
-    all:       { icon: "airplane-outline",         title: "No trips yet",          sub: "Your bookings will appear here once you make your first reservation." },
-    upcoming:  { icon: "calendar-outline",         title: "No upcoming trips",     sub: "Book a stay or car rental to see it here." },
-    completed: { icon: "checkmark-circle-outline", title: "No completed trips",    sub: "Your past journeys will appear here." },
-    cancelled: { icon: "close-circle-outline",     title: "No cancelled bookings", sub: "Cancelled bookings would appear here." },
+    all: { icon: "airplane-outline", title: "No trips yet", sub: "Your bookings will appear here once you make your first reservation." },
+    upcoming: { icon: "calendar-outline", title: "No upcoming trips", sub: "Book a stay or car rental to see it here." },
+    completed: { icon: "checkmark-circle-outline", title: "No completed trips", sub: "Your past journeys will appear here." },
+    cancelled: { icon: "close-circle-outline", title: "No cancelled bookings", sub: "Cancelled bookings would appear here." },
   };
   const c = cfg[chipKey];
 
@@ -525,8 +525,8 @@ interface HeaderProps {
 }
 
 const CHIPS: { key: ChipKey; label: string }[] = [
-  { key: "all",       label: "All"       },
-  { key: "upcoming",  label: "Upcoming"  },
+  { key: "all", label: "All" },
+  { key: "upcoming", label: "Upcoming" },
   { key: "completed", label: "Completed" },
   { key: "cancelled", label: "Cancelled" },
 ];
@@ -543,9 +543,9 @@ function ListHeader({ stats, search, onSearchChange, activeChip, onChipChange }:
         <View style={h.center}>
           <Text style={h.title}>My Trips</Text>
         </View>
-        <TouchableOpacity style={h.iconBtn} activeOpacity={0.7}>
+        {/* <TouchableOpacity style={h.iconBtn} activeOpacity={0.7}>
           <Ionicons name="options-outline" size={22} color={K.colors.textDark} />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </View>
 
       <Text style={h.subtitle}>Manage your upcoming and past journeys.</Text>
@@ -615,8 +615,8 @@ export default function BookingsScreen() {
 
   // "upcoming" is the only valid API filter for future/current bookings — split by date client-side
   const { data: upcomingResult, isLoading: loadUpcoming, refetch: refetchUpcoming } = useQuery(qOpts("upcoming"));
-  const { data: completedResult, refetch: refetchCompleted                         } = useQuery(qOpts("completed"));
-  const { data: cancelledResult, refetch: refetchCancelled                         } = useQuery(qOpts("cancelled"));
+  const { data: completedResult, refetch: refetchCompleted } = useQuery(qOpts("completed"));
+  const { data: cancelledResult, refetch: refetchCancelled } = useQuery(qOpts("cancelled"));
 
   // Infinite query for specific filter chips (not "all")
   const [refreshing, setRefreshing] = useState(false);
@@ -652,16 +652,16 @@ export default function BookingsScreen() {
   }, [refetchUpcoming, refetchCompleted, refetchCancelled, refetchPaged, activeChip]));
 
   const stats = {
-    upcoming:  upcomingResult?.total  ?? 0,
+    upcoming: upcomingResult?.total ?? 0,
     completed: completedResult?.total ?? 0,
     cancelled: cancelledResult?.total ?? 0,
   };
 
   // Split the "upcoming" API response by date: past-checkin = currently staying, future = upcoming
-  const allUpcoming     = upcomingResult?.bookings ?? [];
+  const allUpcoming = upcomingResult?.bookings ?? [];
   const currentlyStaying = allUpcoming.filter(isCurrentlyStaying);
   const upcomingBookings = allUpcoming.filter((b) => !isCurrentlyStaying(b));
-  const pagedBookings    = pagedData?.pages.flatMap((p) => p.bookings) ?? [];
+  const pagedBookings = pagedData?.pages.flatMap((p) => p.bookings) ?? [];
 
   const isLoading = activeChip === "all" ? loadUpcoming : loadPaged;
 
@@ -689,7 +689,7 @@ export default function BookingsScreen() {
     const items: ListItem[] = [];
 
     if (activeChip === "all") {
-      const visStaying  = applySearch(currentlyStaying);
+      const visStaying = applySearch(currentlyStaying);
       const visUpcoming = applySearch(upcomingBookings);
 
       if (visStaying.length > 0) {
@@ -711,7 +711,7 @@ export default function BookingsScreen() {
       visible.forEach((b) => {
         // Upcoming: hero card layout; completed/cancelled: compact horizontal card
         if (activeChip === "upcoming") items.push({ _type: "upcoming_card", booking: b });
-        else                           items.push({ _type: "compact_card",  booking: b });
+        else items.push({ _type: "compact_card", booking: b });
       });
 
       if (visible.length === 0 && !loadPaged) {
@@ -720,7 +720,7 @@ export default function BookingsScreen() {
     }
 
     return items;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeChip, search, currentlyStaying, upcomingBookings, pagedBookings, isLoading, loadPaged]);
 
   const handleEndReached = useCallback(() => {
@@ -803,10 +803,10 @@ export default function BookingsScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: K.colors.bgApp },
+  container: { flex: 1, backgroundColor: K.colors.bgApp },
   listContent: { paddingBottom: 24 },
   sectionWrap: { paddingHorizontal: K.spacing.screen, paddingTop: K.spacing.xl, paddingBottom: K.spacing.md },
-  cardWrap:    { paddingHorizontal: K.spacing.screen, marginBottom: K.spacing.md },
+  cardWrap: { paddingHorizontal: K.spacing.screen, marginBottom: K.spacing.md },
   footerLoader: { alignItems: "center", paddingVertical: 20 },
   footerLoaderDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: K.colors.accent, opacity: 0.6 },
   footerHint: { textAlign: "center", fontSize: K.font.sm, color: K.colors.textMuted, fontStyle: "italic", paddingVertical: 16 },
@@ -868,7 +868,7 @@ const h = StyleSheet.create({
     backgroundColor: K.colors.darkGreen,
     borderColor: K.colors.darkGreen,
   },
-  chipText:       { fontSize: K.font.sm, fontWeight: "600", color: K.colors.textMid },
+  chipText: { fontSize: K.font.sm, fontWeight: "600", color: K.colors.textMid },
   chipTextActive: { color: "#fff" },
 });
 
@@ -881,9 +881,9 @@ const st = StyleSheet.create({
     paddingVertical: 20,
     ...K.shadow.md,
   },
-  col:     { flex: 1, alignItems: "center", gap: 4 },
-  num:     { fontSize: K.font.xxxl, fontWeight: "900", color: "#fff", letterSpacing: -1 },
-  label:   { fontSize: 10, fontWeight: "700", color: "rgba(255,255,255,0.65)", letterSpacing: 1.2 },
+  col: { flex: 1, alignItems: "center", gap: 4 },
+  num: { fontSize: K.font.xxxl, fontWeight: "900", color: "#fff", letterSpacing: -1 },
+  label: { fontSize: 10, fontWeight: "700", color: "rgba(255,255,255,0.65)", letterSpacing: 1.2 },
   divider: { width: 1, backgroundColor: "rgba(255,255,255,0.15)", marginVertical: 6 },
 });
 
@@ -917,7 +917,7 @@ const ac = StyleSheet.create({
   badgeText: { fontSize: 11, fontWeight: "800", color: K.colors.textDark, letterSpacing: 1.4 },
   body: { padding: 16 },
   title: { fontSize: K.font.lg, fontWeight: "700", color: K.colors.textDark, marginBottom: 3 },
-  ref:   { fontSize: 11, color: K.colors.textMuted, marginBottom: 14 },
+  ref: { fontSize: 11, color: K.colors.textMuted, marginBottom: 14 },
   statsRow: {
     flexDirection: "row",
     borderWidth: 1,
@@ -1006,7 +1006,7 @@ const uc = StyleSheet.create({
   infoColDivider: { width: 1, backgroundColor: K.colors.border },
   infoLabel: { fontSize: 10, fontWeight: "700", color: K.colors.textMuted, letterSpacing: 0.8 },
   infoValue: { fontSize: K.font.base, fontWeight: "700", color: K.colors.textDark },
-  infoSub:   { fontSize: 11, color: K.colors.textMuted },
+  infoSub: { fontSize: 11, color: K.colors.textMuted },
   primaryBtn: {
     backgroundColor: K.colors.darkGreen,
     borderRadius: K.radius.button,
@@ -1038,7 +1038,7 @@ const uc = StyleSheet.create({
   paymentIconWrap: { width: 32, height: 32, borderRadius: 16, backgroundColor: K.colors.bgTint, alignItems: "center", justifyContent: "center" },
   paymentText: { flex: 1 },
   paymentTitle: { fontSize: K.font.sm, fontWeight: "700", color: K.colors.textDark },
-  paymentSub:   { fontSize: 11, color: K.colors.textMuted, marginTop: 2 },
+  paymentSub: { fontSize: 11, color: K.colors.textMuted, marginTop: 2 },
 });
 
 // Compact Card styles
@@ -1053,7 +1053,7 @@ const cc = StyleSheet.create({
     ...K.shadow.xs,
   },
   stripe: { width: 4 },
-  thumb:  { width: 90, height: 110, position: "relative", backgroundColor: K.colors.bgSubtle },
+  thumb: { width: 90, height: 110, position: "relative", backgroundColor: K.colors.bgSubtle },
   thumbFallback: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   typeTag: {
     position: "absolute",
@@ -1067,11 +1067,11 @@ const cc = StyleSheet.create({
   typeTagText: { fontSize: 9, fontWeight: "700", color: "#fff", letterSpacing: 0.5 },
   content: { flex: 1, padding: 12, justifyContent: "space-between" },
   topRow: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginBottom: 3 },
-  title:  { flex: 1, fontSize: K.font.base, fontWeight: "700", color: K.colors.textDark },
+  title: { flex: 1, fontSize: K.font.base, fontWeight: "700", color: K.colors.textDark },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: K.radius.full },
-  statusText:  { fontSize: 10, fontWeight: "700" },
-  ref:    { fontSize: 10, color: K.colors.textMuted, marginBottom: 4 },
-  dates:  { fontSize: 11, color: K.colors.textMid, marginBottom: 6 },
+  statusText: { fontSize: 10, fontWeight: "700" },
+  ref: { fontSize: 10, color: K.colors.textMuted, marginBottom: 4 },
+  dates: { fontSize: 11, color: K.colors.textMid, marginBottom: 6 },
   footer: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   amount: { fontSize: K.font.base, fontWeight: "800", color: K.colors.textDark },
   nights: { fontSize: 11, color: K.colors.textMuted },
