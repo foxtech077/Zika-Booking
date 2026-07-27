@@ -459,7 +459,7 @@ export default function RegisterScreen() {
 
             {/* Legal notice */}
             <Text style={ss.legalNotice}>
-              By signing up, you acknowledge that you have read Kainook's{" "}
+              By signing up, you acknowledge that you have read and agree to Kainook's{" "}
               {" "}
               <Text
                 style={[ss.legalLink, { color: btnColor }]}
