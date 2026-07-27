@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, ChevronDown, Building2, ShieldOff, ShieldCheck, ChevronRight, Star, Hotel, Car, Home, Edit } from "lucide-react";
+import { Search, ChevronDown, Building2, ShieldOff, ShieldCheck, ChevronRight, Star, Hotel, Car, Home, Edit, Clock } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -41,6 +41,7 @@ export default function ListingsPage() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
+  const [geoPendingOnly, setGeoPendingOnly] = useState(false);
   const [country, setCountry] = useState("");
 
   const [isCountryOpen, setIsCountryOpen] = useState(false);
@@ -79,9 +80,11 @@ export default function ListingsPage() {
   const [newStar, setNewStar] = useState("3");
   const [starReason, setStarReason] = useState("");
  
-  const params = { q, status, category, country, page: String(page), limit: String(limit) };
+  const params = Object.fromEntries(
+    Object.entries({ q, status, category, country, geoPending: geoPendingOnly ? "true" : "", page: String(page), limit: String(limit) }).filter(([, v]) => v)
+  );
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-listings", page, limit, q, status, category, country],
+    queryKey: ["admin-listings", page, limit, q, status, category, country, geoPendingOnly],
     queryFn: () => fetchListings(params),
     enabled: !!token && _hasHydrated,
   });
@@ -156,7 +159,16 @@ export default function ListingsPage() {
     {
       key: "status",
       label: "Status",
-      render: (l) => <Badge label={l.status} status={l.status} />,
+      render: (l) => (
+        <div className="flex items-center gap-1.5">
+          <Badge label={l.status} status={l.status} />
+          {l.temporaryActivation && l.category === "apartment" && (
+            <span title={`Geo verification pending — due by ${formatDate(l.geoVerificationDueAt)}`}>
+              <Clock className="h-3.5 w-3.5 text-amber-500" />
+            </span>
+          )}
+        </div>
+      ),
     },
     {
       key: "stars",
@@ -287,7 +299,17 @@ export default function ListingsPage() {
           ]}
           limit={limit}
           onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
-        />
+        >
+          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={geoPendingOnly}
+              onChange={(e) => { setGeoPendingOnly(e.target.checked); setPage(1); }}
+              className="rounded border-slate-300 text-amber-500 focus:ring-amber-400"
+            />
+            Awaiting Geo-Verification
+          </label>
+        </FilterBar>
         <DataTable
           columns={columns}
           data={listings}
@@ -341,6 +363,9 @@ export default function ListingsPage() {
               ["Star Rating", selected.starRating ?? "—"],
               ["Claimed Stars", selected.claimedStarRating ?? "—"],
               ["Price/Night", selected.pricePerNight ? formatCurrency(Number(selected.pricePerNight), selected.currency ?? "USD") : "—"],
+              ["Geo Verification", selected.temporaryActivation
+                ? "Temporary activation"
+                : selected.category === "apartment" ? "Verified" : "—"],
               ["Submissions", selected.submissionCount],
               ["Provider ID", selected.providerId],
               ["Approved", formatDate(selected.approvedAt)],

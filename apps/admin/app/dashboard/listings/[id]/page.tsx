@@ -39,6 +39,8 @@ interface ListingDetail {
   petsAllowed: boolean;
   submissionCount: number;
   submittedAt: string | null;
+  temporaryActivation: boolean;
+  geoVerificationDueAt: string | null;
   // apartment-specific
   bedrooms: number | null;
   bathrooms: number | null;
@@ -371,6 +373,20 @@ export default function ListingReviewPage() {
         </div>
       )}
 
+      {listing.temporaryActivation && listing.geoVerificationDueAt && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 flex items-start gap-3">
+          <span className="text-amber-600 font-bold text-sm shrink-0 mt-0.5">⚠</span>
+          <div className="text-sm text-amber-800">
+            <p className="font-semibold">Temporary activation — geolocation pending</p>
+            <p className="text-amber-700 mt-0.5">
+              This apartment was activated without a verified location. Geolocation verification is due by{" "}
+              <span className="font-semibold">{formatDate(listing.geoVerificationDueAt)}</span>.{" "}
+              If not verified, the listing will be auto-suspended.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* LEFT — Listing details */}
         <div className="space-y-5">
@@ -399,6 +415,12 @@ export default function ListingReviewPage() {
                 <Row label="Pets" value={listing.petsAllowed ? "Yes" : "No"} />
                 {listing.longStayEnabled && (
                   <Row label="Long-stay discount" value={`${listing.longStayDiscountValue}${listing.longStayDiscountType === "percentage" ? "%" : ""} on ${listing.longStayMinNights}+ nights`} />
+                )}
+                {listing.category === "apartment" && (
+                  <Row
+                    label="Geo verification"
+                    value={listing.temporaryActivation ? "Temporary activation" : "Verified"}
+                  />
                 )}
               </>
             )}

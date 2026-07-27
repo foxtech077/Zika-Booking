@@ -109,6 +109,8 @@ export interface Listing {
   approvedAt: string | null;
   rejectedAt: string | null;
   suspendedAt: string | null;
+  temporaryActivation: boolean;
+  geoVerificationDueAt: string | null;
   updatedAt: string;
   createdAt: string;
   photos?: ListingPhoto[];

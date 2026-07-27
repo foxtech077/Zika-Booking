@@ -184,11 +184,13 @@ export async function adminListingRoutes(app: FastifyInstance) {
                       town: { type: "string", nullable: true },
                       claimedStarRating: { type: "integer", nullable: true },
                       submissionCount: { type: "integer" },
-                      submittedAt: { type: "string", format: "date-time", nullable: true },
-                      providerId: { type: "string" },
-                      category: { type: "string" },
-                      photos: { type: "array", items: PhotoSchema },
-                    },
+                  submittedAt: { type: "string", format: "date-time", nullable: true },
+                  providerId: { type: "string" },
+                  approvedAt: { type: "string", format: "date-time", nullable: true },
+                  temporaryActivation: { type: "boolean" },
+                  geoVerificationDueAt: { type: "string", format: "date-time", nullable: true },
+                  photos: { type: "array", items: PhotoSchema },
+                },
                   },
                 },
               },
@@ -394,6 +396,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
               },
                         },
             reviewTasks: { type: "array", items: { type: "object" } },
+            temporaryActivation: { type: "boolean" },
+            geoVerificationDueAt: { type: "string", format: "date-time", nullable: true },
             
             // ── ADD THESE NEW SCHEMA PROPERTIES HERE: ──
             description: { type: "string", nullable: true },
@@ -2104,6 +2108,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
           status: { type: "string", description: "Filter by listing status" },
           category: { type: "string", description: "Filter by category (hotel, apartment, car)" },
           country: { type: "string", description: "Filter by country code" },
+          geoPending: { type: "string", enum: ["true", "false"], description: "Filter by geo verification pending status" },
           ...PageQuery,
         },
       },
@@ -2129,6 +2134,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
                   submissionCount: { type: "integer" },
                   providerId: { type: "string" },
                   approvedAt: { type: "string", format: "date-time", nullable: true },
+                  temporaryActivation: { type: "boolean" },
+                  geoVerificationDueAt: { type: "string", format: "date-time", nullable: true },
                   photos: { type: "array", items: PhotoSchema },
                 },
               },
@@ -2144,7 +2151,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!checkAdminRole(req, reply)) return;
-    const { q = "", status, category, country, page = "1", limit = "20" } = req.query as Record<string, string>;
+    const { q = "", status, category, country, geoPending, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
     const admin = req as AdminRequest;
@@ -2175,6 +2182,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
               : { country: { in: [] } })
             : { country: { in: admin.countryScope } })
           : (country ? { country } : {}),
+        geoPending === "true" ? { temporaryActivation: true, category: "apartment" as const } : {},
+        geoPending === "false" ? { OR: [{ temporaryActivation: false }, { temporaryActivation: null }, { category: { not: "apartment" as const } }] } : {},
       ],
     };
 
@@ -2198,6 +2207,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
             submissionCount: true,
             providerId: true,
             approvedAt: true,
+            temporaryActivation: true,
+            geoVerificationDueAt: true,
             photos: {
               where: { deletedAt: null },
               orderBy: { position: "asc" },
