@@ -37,23 +37,23 @@ const TIER_THRESHOLDS: Record<LoyaltyTier, number> = { bronze: 0, silver: 1000, 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function tierProgress(points: number, tier: LoyaltyTier): { pct: number; needed: number | null; nextLabel: string | null } {
-  const idx     = TIER_ORDER.indexOf(tier);
-  const next    = TIER_ORDER[idx + 1] as LoyaltyTier | undefined;
+  const idx = TIER_ORDER.indexOf(tier);
+  const next = TIER_ORDER[idx + 1] as LoyaltyTier | undefined;
   if (!next) return { pct: 1, needed: null, nextLabel: null };
-  const floor   = TIER_THRESHOLDS[tier];
-  const ceil    = TIER_THRESHOLDS[next];
-  const pct     = Math.max(0, Math.min((points - floor) / (ceil - floor), 1));
+  const floor = TIER_THRESHOLDS[tier];
+  const ceil = TIER_THRESHOLDS[next];
+  const pct = Math.max(0, Math.min((points - floor) / (ceil - floor), 1));
   return { pct, needed: Math.max(0, ceil - points), nextLabel: next.charAt(0).toUpperCase() + next.slice(1) };
 }
 
 function txTypeColor(type: string): string {
   switch (type) {
-    case "earned":   return K.colors.success;
+    case "earned": return K.colors.success;
     case "redeemed": return "#7c3aed";
     case "reversed": return K.colors.error;
     case "refunded": return K.colors.info;
-    case "expired":  return K.colors.textMuted;
-    default:         return K.colors.textMid;
+    case "expired": return K.colors.textMuted;
+    default: return K.colors.textMid;
   }
 }
 
@@ -79,15 +79,15 @@ function WalletCard({ tier, points }: { tier: LoyaltyTier; points: number }) {
   const progressText = isTopTier
     ? "✦ Maximum tier reached"
     : needed != null && nextLabel
-    ? `–${needed.toLocaleString()} pts to ${nextLabel}`
-    : "";
+      ? `${needed.toLocaleString()} pts to ${nextLabel}`
+      : "";
 
   const cardShadow = {
-    shadowColor:   cfg.shadowColor,
-    shadowOffset:  { width: 0, height: 10 },
+    shadowColor: cfg.shadowColor,
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.38,
-    shadowRadius:  22,
-    elevation:     12,
+    shadowRadius: 22,
+    elevation: 12,
   };
 
   return (
@@ -116,7 +116,7 @@ function WalletCard({ tier, points }: { tier: LoyaltyTier; points: number }) {
       {/* Diamond prismatic border strip */}
       {tier === "diamond" && (
         <View style={mc.prismaticStrip}>
-          {["#FF9999","#FFCC88","#FFFF88","#AAFFAA","#88CCFF","#CC88FF"].map((c, i) => (
+          {["#FF9999", "#FFCC88", "#FFFF88", "#AAFFAA", "#88CCFF", "#CC88FF"].map((c, i) => (
             <View key={i} style={[mc.prismaticSegment, { backgroundColor: c }]} />
           ))}
         </View>
@@ -156,16 +156,16 @@ function WalletCard({ tier, points }: { tier: LoyaltyTier; points: number }) {
 
         {/* Row 3: Progress + CTA */}
         <View style={mc.footer}>
-          <Text style={[mc.progressText, { color: cfg.textMuted }]} numberOfLines={1}>
+          {/* <Text style={[mc.progressText, { color: cfg.textMuted }]} numberOfLines={1}>
             {progressText}
-          </Text>
-          <TouchableOpacity
+          </Text> */}
+          {/* <TouchableOpacity
             style={[mc.viewBtn, { backgroundColor: cfg.btnBg }]}
             activeOpacity={0.82}
             onPress={() => router.push("/loyalty/benefits" as any)}
           >
             <Text style={[mc.viewBtnText, { color: cfg.btnText }]}>View Benefits</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       </View>
     </View>
@@ -267,9 +267,9 @@ const mc = StyleSheet.create({
     letterSpacing: 1.3,
     marginBottom: 5,
   },
-  pointsRow:   { flexDirection: "row", alignItems: "baseline" },
+  pointsRow: { flexDirection: "row", alignItems: "baseline" },
   pointsValue: { fontSize: 44, fontWeight: "900", letterSpacing: -1.5 },
-  pointsSuffix:{ fontSize: 19, fontWeight: "600" },
+  pointsSuffix: { fontSize: 19, fontWeight: "600" },
 
   // Footer
   separator: { height: 1, marginBottom: 14 },
@@ -297,14 +297,14 @@ function TierRoadmap({ currentTier }: { currentTier: LoyaltyTier }) {
       <Text style={s.sectionTitle}>Tier Roadmap</Text>
       <View style={s.roadmapRow}>
         {TIER_ORDER.map((t, i) => {
-          const done    = i <= currentIdx;
+          const done = i <= currentIdx;
           const current = i === currentIdx;
-          const color   = TIER_COLORS[t];
+          const color = TIER_COLORS[t];
           return (
             <View key={t} style={s.roadmapStep}>
               <View style={[
                 s.roadmapDot,
-                done    && { backgroundColor: color, borderColor: color },
+                done && { backgroundColor: color, borderColor: color },
                 current && { borderWidth: 3 },
               ]}>
                 {done
@@ -330,7 +330,7 @@ function TierRoadmap({ currentTier }: { currentTier: LoyaltyTier }) {
 
 function TransactionRow({ tx }: { tx: PointsTransaction }) {
   const color = txTypeColor(tx.type);
-  const sign  = txSign(tx.type);
+  const sign = txSign(tx.type);
   const iconMap: Record<string, string> = {
     earned: "arrow-up-circle", redeemed: "arrow-down-circle",
     refunded: "refresh-circle", reversed: "close-circle",
@@ -504,8 +504,8 @@ function BenefitsCard({ tier }: { tier: LoyaltyTier }) {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function LoyaltyScreen() {
-  const router     = useRouter();
-  const storeUser  = useAuthStore((s) => s.user);
+  const router = useRouter();
+  const storeUser = useAuthStore((s) => s.user);
 
   const { data: profile, isLoading: profileLoading, isError: profileError, refetch: refetchProfile, isFetching: profileFetching } = useLoyaltyProfile();
   const { data: historyPages, isLoading: historyLoading, isError: historyError, refetch: refetchHistory } = usePointsHistoryInfinite();
@@ -516,10 +516,10 @@ export default function LoyaltyScreen() {
     isLoading: vouchersLoading, isError: vouchersError, refetch: refetchVouchers,
   } = useMergedVouchers();
 
-  const tier      = (profile?.currentTier ?? storeUser?.currentTier ?? "bronze") as LoyaltyTier;
-  const points    = profile?.loyaltyPoints ?? storeUser?.loyaltyPoints ?? 0;
+  const tier = (profile?.currentTier ?? storeUser?.currentTier ?? "bronze") as LoyaltyTier;
+  const points = profile?.loyaltyPoints ?? storeUser?.loyaltyPoints ?? 0;
   const recentTxs = historyPages?.pages[0]?.transactions.slice(0, 5) ?? [];
-  const summary   = historyPages?.pages[0];
+  const summary = historyPages?.pages[0];
 
   const showEmptyVoucherState = !vouchersLoading && !vouchersError && bestVoucher == null && otherVouchers.length === 0;
 
@@ -731,10 +731,10 @@ export default function LoyaltyScreen() {
         <View style={s.howSection}>
           <Text style={s.sectionTitle}>How AfriPoints Works</Text>
           {[
-            { icon: "cart-outline",        title: "Book & Earn",       body: "Earn 1 point for every $1 you spend on any booking."           },
-            { icon: "trending-up-outline", title: "Tier Up",           body: "Reach higher tiers to unlock multipliers and exclusive perks." },
-            { icon: "gift-outline",        title: "Redeem at Checkout",body: "Use your points to reduce the cost of future bookings."        },
-            { icon: "refresh-outline",     title: "Auto-Refund",       body: "Points are automatically refunded if you cancel a confirmed booking." },
+            { icon: "cart-outline", title: "Book & Earn", body: "Earn 1 point for every $1 you spend on any booking." },
+            { icon: "trending-up-outline", title: "Tier Up", body: "Reach higher tiers to unlock multipliers and exclusive perks." },
+            { icon: "gift-outline", title: "Redeem at Checkout", body: "Use your points to reduce the cost of future bookings." },
+            { icon: "refresh-outline", title: "Auto-Refund", body: "Points are automatically refunded if you cancel a confirmed booking." },
           ].map(({ icon, title, body }) => (
             <View key={title} style={s.howRow}>
               <View style={s.howIconWrap}>
@@ -756,11 +756,11 @@ export default function LoyaltyScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: K.colors.bgApp },
-  scroll:    { paddingBottom: 60, gap: 16 },
+  scroll: { paddingBottom: 60, gap: 16 },
 
-  header:      { paddingHorizontal: K.spacing.screen, paddingTop: 8, paddingBottom: 4 },
+  header: { paddingHorizontal: K.spacing.screen, paddingTop: 8, paddingBottom: 4 },
   headerTitle: { fontSize: K.font.xxl, fontWeight: "800", color: K.colors.textDark, letterSpacing: -0.5 },
-  headerSub:   { fontSize: K.font.sm, color: K.colors.textMuted, marginTop: 3 },
+  headerSub: { fontSize: K.font.sm, color: K.colors.textMuted, marginTop: 3 },
 
   skeletonCard: {
     backgroundColor: "#B07010",
@@ -784,8 +784,8 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: K.colors.border,
   },
-  errorText:    { fontSize: K.font.sm, color: K.colors.textMuted, textAlign: "center" },
-  retryBtn:     { backgroundColor: K.colors.darkGreen, borderRadius: K.radius.button, paddingHorizontal: 20, paddingVertical: 10 },
+  errorText: { fontSize: K.font.sm, color: K.colors.textMuted, textAlign: "center" },
+  retryBtn: { backgroundColor: K.colors.darkGreen, borderRadius: K.radius.button, paddingHorizontal: 20, paddingVertical: 10 },
   retryBtnText: { color: "#fff", fontWeight: "700", fontSize: K.font.sm },
 
   summaryRow: {
@@ -799,9 +799,9 @@ const s = StyleSheet.create({
     borderColor: K.colors.border,
     ...K.shadow.xs,
   },
-  summaryCell:  { flex: 1, alignItems: "center" },
-  summarySep:   { width: 1, height: 36, backgroundColor: K.colors.border },
-  summaryStat:  { fontSize: K.font.xl, fontWeight: "800", marginBottom: 3 },
+  summaryCell: { flex: 1, alignItems: "center" },
+  summarySep: { width: 1, height: 36, backgroundColor: K.colors.border },
+  summaryStat: { fontSize: K.font.xl, fontWeight: "800", marginBottom: 3 },
   summaryLabel: { fontSize: 11, color: K.colors.textMuted, fontWeight: "500" },
 
   benefitsCard: {
@@ -815,8 +815,8 @@ const s = StyleSheet.create({
   },
   benefitsHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
   benefitsIconWrap: { width: 36, height: 36, borderRadius: K.radius.full, alignItems: "center", justifyContent: "center" },
-  benefitRow:   { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
-  benefitText:  { fontSize: K.font.sm, color: K.colors.textMid, flex: 1 },
+  benefitRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
+  benefitText: { fontSize: K.font.sm, color: K.colors.textMid, flex: 1 },
 
   vouchersSection: { backgroundColor: K.colors.bgCard, borderRadius: K.radius.xl, padding: 18, marginHorizontal: K.spacing.screen, borderWidth: 1, borderColor: K.colors.border, ...K.shadow.xs },
   bestOfferTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -825,9 +825,9 @@ const s = StyleSheet.create({
   voucherSkeleton: { backgroundColor: K.colors.bgSubtle, borderRadius: K.radius.xl, padding: 18 },
   noMoreCoupons: { fontSize: K.font.sm, color: K.colors.textMuted, textAlign: "center", paddingVertical: 12 },
 
-  roadmap:    { backgroundColor: K.colors.bgCard, borderRadius: K.radius.xl, padding: 18, marginHorizontal: K.spacing.screen, borderWidth: 1, borderColor: K.colors.border, ...K.shadow.xs },
+  roadmap: { backgroundColor: K.colors.bgCard, borderRadius: K.radius.xl, padding: 18, marginHorizontal: K.spacing.screen, borderWidth: 1, borderColor: K.colors.border, ...K.shadow.xs },
   roadmapRow: { flexDirection: "row", marginTop: 14, paddingHorizontal: 8 },
-  roadmapStep:  { flex: 1, alignItems: "center", position: "relative" },
+  roadmapStep: { flex: 1, alignItems: "center", position: "relative" },
   roadmapDot: {
     width: 30, height: 30, borderRadius: 15,
     borderWidth: 2, borderColor: K.colors.border,
@@ -836,8 +836,8 @@ const s = StyleSheet.create({
     marginBottom: 8, zIndex: 1,
   },
   roadmapDotInner: { width: 10, height: 10, borderRadius: 5 },
-  roadmapLabel:    { fontSize: 11, color: K.colors.textMuted, textAlign: "center" },
-  roadmapPts:      { fontSize: 10, color: K.colors.textMuted, textAlign: "center" },
+  roadmapLabel: { fontSize: 11, color: K.colors.textMuted, textAlign: "center" },
+  roadmapPts: { fontSize: 10, color: K.colors.textMuted, textAlign: "center" },
   roadmapLine: {
     position: "absolute",
     top: 14, left: "50%", right: "-50%",
@@ -847,33 +847,33 @@ const s = StyleSheet.create({
   sectionTitle: { fontSize: K.font.base, fontWeight: "700", color: K.colors.textDark, marginBottom: 12 },
 
   recentSection: { backgroundColor: K.colors.bgCard, borderRadius: K.radius.xl, padding: 18, marginHorizontal: K.spacing.screen, borderWidth: 1, borderColor: K.colors.border, ...K.shadow.xs },
-  recentHeader:  { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
-  viewAll:       { fontSize: K.font.sm, color: K.colors.accent, fontWeight: "700" },
+  recentHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
+  viewAll: { fontSize: K.font.sm, color: K.colors.accent, fontWeight: "700" },
 
-  txRow:    { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: K.colors.bgSubtle },
+  txRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: K.colors.bgSubtle },
   txIconWrap: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", marginRight: 12 },
-  txMeta:   { flex: 1, marginRight: 8 },
-  txDesc:   { fontSize: K.font.sm, fontWeight: "600", color: K.colors.textDark },
-  txRef:    { fontSize: 11, color: K.colors.textMuted, marginTop: 2 },
-  txRight:  { alignItems: "flex-end" },
+  txMeta: { flex: 1, marginRight: 8 },
+  txDesc: { fontSize: K.font.sm, fontWeight: "600", color: K.colors.textDark },
+  txRef: { fontSize: 11, color: K.colors.textMuted, marginTop: 2 },
+  txRight: { alignItems: "flex-end" },
   txPoints: { fontSize: K.font.base, fontWeight: "800" },
   txTypeLabel: { fontSize: 10, color: K.colors.textMuted, marginTop: 2, textTransform: "uppercase", letterSpacing: 0.3 },
-  txSkRow:  { flexDirection: "row", alignItems: "center", paddingVertical: 12 },
+  txSkRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12 },
 
   viewAllBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingTop: 16, marginTop: 4, gap: 6 },
   viewAllBtnText: { fontSize: K.font.sm, color: K.colors.accent, fontWeight: "700" },
 
   howSection: { backgroundColor: K.colors.bgCard, borderRadius: K.radius.xl, padding: 18, marginHorizontal: K.spacing.screen, borderWidth: 1, borderColor: K.colors.border, ...K.shadow.xs },
-  howRow:     { flexDirection: "row", alignItems: "flex-start", marginBottom: 16 },
+  howRow: { flexDirection: "row", alignItems: "flex-start", marginBottom: 16 },
   howIconWrap: { width: 40, height: 40, borderRadius: K.radius.full, backgroundColor: K.colors.bgTint, alignItems: "center", justifyContent: "center", marginRight: 14 },
-  howTitle:   { fontSize: K.font.sm, fontWeight: "700", color: K.colors.textDark, marginBottom: 3 },
-  howBody:    { fontSize: 12, color: K.colors.textMuted, lineHeight: 18 },
+  howTitle: { fontSize: K.font.sm, fontWeight: "700", color: K.colors.textDark, marginBottom: 3 },
+  howBody: { fontSize: 12, color: K.colors.textMuted, lineHeight: 18 },
 
   errorInline: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 16 },
   errorInlineText: { fontSize: K.font.sm, color: K.colors.textMuted },
-  retryLink:   { fontSize: K.font.sm, color: K.colors.accent, fontWeight: "600" },
+  retryLink: { fontSize: K.font.sm, color: K.colors.accent, fontWeight: "600" },
 
   emptyState: { alignItems: "center", paddingVertical: 32, gap: 8 },
   emptyTitle: { fontSize: K.font.lg, fontWeight: "700", color: K.colors.textMid },
-  emptyBody:  { fontSize: K.font.sm, color: K.colors.textMuted, textAlign: "center", lineHeight: 20 },
+  emptyBody: { fontSize: K.font.sm, color: K.colors.textMuted, textAlign: "center", lineHeight: 20 },
 });

@@ -13,6 +13,7 @@ import { ListingImage } from "../../components/ListingImage";
 import { K } from "../../constants/theme";
 import { ActivePromotion, applyPromotion } from "../../lib/promotions";
 import { useLoyaltyProfile } from "../../hooks/loyalty";
+import { computeTierProgress } from "../../constants/loyaltyTiers";
 import { useUnreadNotificationCount } from "../../hooks/notifications";
 import { useLocation } from "../../hooks/useLocation";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
@@ -1073,8 +1074,8 @@ export default function HomeScreen() {
   }
 
   const isLoading = hotelsLoading || aptsLoading;
-  const loyaltyPoints = loyalty?.loyaltyPoints ?? 0;
-  const loyaltyTier = loyalty?.currentTier ?? "";
+  const loyaltyPoints = loyalty?.loyaltyPoints ?? (user as any)?.loyaltyPoints ?? 0;
+  const loyaltyTier = loyalty?.currentTier ?? (user as any)?.currentTier ?? "";
   const nextTierTarget = loyalty?.pointsToNextTier ?? null;
   const nextTierName = loyalty?.nextTier ?? null;
 
@@ -1487,7 +1488,7 @@ export default function HomeScreen() {
         {/* ── Kainook Elite ── */}
         <View style={s.section}>
           <View style={{ paddingHorizontal: K.spacing.screen }}>
-            {user && loyalty ? (() => {
+            {user ? (() => {
               const fg = tierPalette?.fg ?? K.colors.goldDark;
               const fgMuted = tierPalette?.fgMuted ?? "rgba(176,125,14,0.60)";
               const btnBg = tierPalette?.btnBg ?? K.colors.goldDark;
@@ -1495,10 +1496,8 @@ export default function HomeScreen() {
               const shimTop = tierPalette?.shimmerTop ?? "rgba(255,230,80,0.20)";
               const shimBot = tierPalette?.shimmerBot ?? "rgba(120,60,0,0.14)";
               const borderCol = tierPalette ? "transparent" : K.colors.gold;
-              const remaining = nextTierTarget != null ? Math.max(0, nextTierTarget - loyaltyPoints) : null;
-              const pct = nextTierTarget && nextTierTarget > 0
-                ? Math.min(100, Math.round((loyaltyPoints / nextTierTarget) * 100))
-                : 0;
+              const { pct, isMaxTier } = computeTierProgress(loyaltyPoints, nextTierTarget);
+              const pctWidth = Math.round(pct * 100);
               return (
                 <TouchableOpacity
                   style={[ly.card, { backgroundColor: cardBg, borderColor: borderCol }]}
@@ -1530,13 +1529,13 @@ export default function HomeScreen() {
                   </View>
 
                   {/* ── Progress bar ── */}
-                  {remaining != null && nextTierName ? (
+                  {!isMaxTier && nextTierTarget != null && nextTierName ? (
                     <View style={ly.progressSection}>
                       <View style={[ly.progressBg, { backgroundColor: "rgba(0,0,0,0.15)" }]}>
-                        <View style={[ly.progressFill, { width: `${pct}%`, backgroundColor: btnBg }]} />
+                        <View style={[ly.progressFill, { width: `${pctWidth}%`, backgroundColor: btnBg }]} />
                       </View>
                       <Text style={[ly.progressLabel, { color: fgMuted }]}>
-                        -{remaining.toLocaleString()} pts to {nextTierName}
+                        {nextTierTarget.toLocaleString()} pts to {nextTierName}
                       </Text>
                     </View>
                   ) : null}
@@ -1548,7 +1547,7 @@ export default function HomeScreen() {
                       style={[ly.benefitsBtn, { backgroundColor: btnBg }]}
                       onPress={() => router.push("/loyalty" as any)}
                     >
-                      <Text style={[ly.benefitsBtnText, { color: cardBg }]}>View Benefits</Text>
+                      <Text style={[ly.benefitsBtnText, { color: cardBg }]}>View Offers</Text>
                     </TouchableOpacity>
                   </View>
                 </TouchableOpacity>
@@ -1578,7 +1577,7 @@ export default function HomeScreen() {
         {/* ── Upcoming Trips ── */}
         {recentBookings && recentBookings.length > 0 && (
           <View style={[s.section, { marginBottom: 0 }]}>
-            <SectionHead title="Upcoming Trips" onViewAll={() => router.push("/bookings" as any)} />
+            <SectionHead title="Upcoming Bookings" onViewAll={() => router.push("/bookings" as any)} />
             <FlatList
               horizontal
               showsHorizontalScrollIndicator={false}
