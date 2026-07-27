@@ -68,22 +68,36 @@ export function handleRoleAndStatusRedirect(user: PublicUser) {
 let _GoogleSignin:
   | (typeof import("@react-native-google-signin/google-signin"))["GoogleSignin"]
   | null = null;
+let _statusCodes: any = null;
+
 try {
-  _GoogleSignin =
-    require("@react-native-google-signin/google-signin").GoogleSignin;
+  const GoogleModule = require("@react-native-google-signin/google-signin");
+  _GoogleSignin = GoogleModule.GoogleSignin;
+  _statusCodes = GoogleModule.statusCodes;
+
   // Configure once at module load — client IDs are public, not secrets
-  if (_GoogleSignin) {
-    _GoogleSignin.configure({
-      webClientId:
-        "1022728776661-50ctighki9jm25ig10b39matcr0ihslr.apps.googleusercontent.com",
-      iosClientId:
-        "1022728776661-6aucvg2l0r7suuogj2m9lgcjodetb2rn.apps.googleusercontent.com",
-      offlineAccess: false,
-    });
-  }
+  _GoogleSignin?.configure({
+    webClientId:
+      "1022728776661-50ctighki9jm25ig10b39matcr0ihslr.apps.googleusercontent.com",
+    iosClientId:
+      "1022728776661-6aucvg2l0r7suuogj2m9lgcjodetb2rn.apps.googleusercontent.com",
+    offlineAccess: false,
+  });
 } catch {
   /* Expo Go or module not available */
 }
+
+// Android GMS mints an ID token only if the certificate the running APK is signed with has a
+// matching Android OAuth client for the package name. Each distribution channel signs with a
+// different cert, so all three fingerprints must be registered against com.kainook.app.
+const DEVELOPER_ERROR_HELP =
+  "[GOOGLE-AUTH] DEVELOPER_ERROR — the running app's signing certificate has no matching\n" +
+  "Android OAuth client for com.kainook.app. Each channel signs with a different cert:\n" +
+  "  expo run:android -> 5E:8F:16:06:...  (android/app/debug.keystore, committed)\n" +
+  "  EAS, sideloaded  -> 76:D2:10:0F:...  (EAS managed upload keystore)\n" +
+  "  Google Play      -> 09:EC:08:B5:...  (Play App Signing re-signs the AAB)\n" +
+  "Register missing ones in Firebase > kainook-cd1d2 > Android app, re-download\n" +
+  "google-services.json, then verify with ./scripts/verify-google-signin.sh";
 
 export function GoogleSignInButton({
   onError,
@@ -93,19 +107,40 @@ export function GoogleSignInButton({
   const setAuth = useAuthStore((s) => s.setAuth);
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!_GoogleSignin)
+      if (!_GoogleSignin) {
         throw Object.assign(new Error("Expo Go"), { code: "EXPO_GO" });
+      }
 
       await _GoogleSignin.hasPlayServices({
         showPlayServicesUpdateDialog: true,
       });
 
       const result = await _GoogleSignin.signIn();
+
+      // v13 resolves (rather than throws) on cancellation. On Android this is frequently a
+      // disguised DEVELOPER_ERROR: the native ErrorDto rewrites any ApiException whose
+      // Status.isCanceled is true to SIGN_IN_CANCELLED, discarding the real code 10, which the
+      // JS layer then converts into { type: "cancelled" }. The two are indistinguishable here,
+      // so log the checklist and let onError stay silent as it would for a real cancellation.
+      if ((result as any)?.type === "cancelled") {
+        if (Platform.OS === "android") {
+          console.warn(
+            "[GOOGLE-AUTH] signIn() returned `cancelled`. If the picker was not dismissed by the\n" +
+            "user, this is a masked DEVELOPER_ERROR — https://issuetracker.google.com/issues/424210681",
+          );
+          console.warn(DEVELOPER_ERROR_HELP);
+        }
+        throw Object.assign(new Error("Google sign-in cancelled"), {
+          code: "SIGN_IN_CANCELLED",
+        });
+      }
+
       const idToken = (result as any).data?.idToken ?? (result as any).idToken;
-      if (!idToken)
+      if (!idToken) {
         throw Object.assign(new Error("No ID token returned from Google"), {
           code: "NO_ID_TOKEN",
         });
+      }
 
       const res = await api.post("auth/oauth/google", { idToken });
       return (res.data as { data: AuthResponse }).data;
@@ -116,33 +151,81 @@ export function GoogleSignInButton({
       handleRoleAndStatusRedirect(data.user);
     },
     onError: (err: unknown) => {
-      const code = String((err as any)?.code ?? "");
+      const errObj = err as any;
+      const code = String(errObj?.code ?? "");
+      const message = String(errObj?.message ?? errObj ?? "");
+      console.error("[GOOGLE-AUTH] Google Sign-In Error Captured:", {
+        code,
+        message,
+        errorRaw: errObj,
+        statusCodes: _statusCodes,
+      });
+
       // User cancelled — silent
-      if (code === "SIGN_IN_CANCELLED" || code === "12501") return;
-      // Sign-in already in progress — silent
-      if (code === "IN_PROGRESS" || code === "10") return;
-      // Expo Go — not supported
-      if (code === "EXPO_GO") {
-        Alert.alert(
-          "Not Supported",
-          "Google Sign-In requires a development build, not Expo Go.",
-        );
+      if (
+        code === "SIGN_IN_CANCELLED" ||
+        code === "12501" ||
+        (_statusCodes && code === String(_statusCodes.SIGN_IN_CANCELLED))
+      ) {
+        console.log("[GOOGLE-AUTH] User cancelled the Google sign-in dialog.");
         return;
       }
+
+      // Sign-in already in progress — silent
+      if (
+        code === "IN_PROGRESS" ||
+        code === "12502" ||
+        code === "ASYNC_OP_IN_PROGRESS" ||
+        (_statusCodes && code === String(_statusCodes.IN_PROGRESS))
+      ) {
+        console.log("[GOOGLE-AUTH] Google sign-in is already in progress.");
+        return;
+      }
+
+      // Code 10 is DEVELOPER_ERROR on Android (SHA-1 / Package Name / Client ID mismatch)
+      if (
+        code === "10" ||
+        code === "DEVELOPER_ERROR" ||
+        (_statusCodes && code === String(_statusCodes.DEVELOPER_ERROR))
+      ) {
+        console.error("[GOOGLE-AUTH] DEVELOPER_ERROR (Code 10) encountered!");
+        console.error(
+          "[GOOGLE-AUTH] Android Developer Error (Code 10) Troubleshooting Checklist:\n" +
+          " 1. SHA-1 Fingerprint: Verify your debug keystore SHA-1 is added under Android Client ID in Google Cloud Console.\n" +
+          " 2. Package Name: Verify package name in Google Cloud Console matches 'com.kainook.app'.\n" +
+          " 3. Web Client ID: Verify webClientId in configure() matches the Web Application Client ID in Google Cloud Console."
+        );
+        onError("Google Sign-In configuration error (Code 10). See console logs.");
+        return;
+      }
+
       // Play Services unavailable
-      if (code === "PLAY_SERVICES_NOT_AVAILABLE" || code === "2") {
+      if (
+        code === "PLAY_SERVICES_NOT_AVAILABLE" ||
+        code === "2" ||
+        (_statusCodes && code === String(_statusCodes.PLAY_SERVICES_NOT_AVAILABLE))
+      ) {
+        console.error("[GOOGLE-AUTH] Google Play Services is missing or outdated.");
         onError("Google Play Services is not available on this device.");
         return;
       }
+
       // No ID token — usually misconfiguration
       if (code === "NO_ID_TOKEN") {
+        console.error("[GOOGLE-AUTH] No ID token returned.");
         onError(
-          "Google Sign-In configuration error. Please try again or use email & password.",
+          "Google Sign-In configuration error (No ID token). Please try again or use email & password.",
         );
         return;
       }
+
+      console.error("[GOOGLE-AUTH] Unhandled error:", message);
+      Alert.alert(
+        "Google Sign-In Failed",
+        `Error: ${message || code || "Unknown error"}`,
+      );
       onError(
-        "Google Sign-In failed. Please try again or use email & password.",
+        `Google Sign-In failed (${code || "Error"}). Please try again or use email & password.`,
       );
     },
   });
