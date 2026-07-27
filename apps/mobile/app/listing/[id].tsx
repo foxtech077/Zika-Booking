@@ -1482,7 +1482,7 @@ export default function ListingDetailScreen() {
       />
 
       {/* ══ STICKY BOTTOM BAR ══ */}
-      <View style={s.stickyBar}>
+      <View style={[s.stickyBar, { paddingBottom: Math.max(insets.bottom + 10, 18) }]}>
         <View style={{ flex: 1, paddingRight: 12 }}>
           {hasDates && pricingBreakout ? (
             <>
@@ -1622,7 +1622,7 @@ const s = StyleSheet.create({
     position: "absolute", bottom: 0, left: 0, right: 0,
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: BORDER,
-    paddingHorizontal: 20, paddingTop: 14, paddingBottom: Platform.OS === "ios" ? 30 : 18,
+    paddingHorizontal: 20, paddingTop: 14, paddingBottom: 18,
     shadowColor: "#000", shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 8,
   },
   stickyOriginal: { fontSize: 12, color: MUTED, textDecorationLine: "line-through" },
