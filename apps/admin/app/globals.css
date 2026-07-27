@@ -126,3 +126,59 @@
   /* Number formatting */
   .tabular { font-variant-numeric: tabular-nums; }
 }
+
+/* ── Print Styles ───────────────────────────────────────────────────────────── */
+@page {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+@media print {
+  /* Hide sidebar, topbar */
+  aside, header {
+    display: none !important;
+  }
+
+  /* Override the Shell layout */
+  #app-shell {
+    display: block !important;
+    overflow: visible !important;
+    height: auto !important;
+    transform: scale(0.78);
+    transform-origin: top left;
+    width: 128%;
+  }
+
+  #app-shell > div {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Make main content full width */
+  main {
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0.5rem !important;
+    overflow: visible !important;
+  }
+
+  /* Compact cards and stat rows */
+  .grid {
+    gap: 0.5rem !important;
+  }
+
+  /* Smaller table text */
+  table {
+    font-size: 0.7rem !important;
+  }
+
+  table th, table td {
+    padding: 0.25rem 0.5rem !important;
+  }
+
+  /* Compact section spacing */
+  .space-y-6 > * + * {
+    margin-top: 0.75rem !important;
+  }
+}

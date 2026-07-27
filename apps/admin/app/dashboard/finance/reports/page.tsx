@@ -516,12 +516,19 @@ export default function FinancialReportsPage() {
 
       {/* Printing layout header */}
       <div className="hidden print:block mb-6 border-b border-slate-300 pb-4">
-        <h1 className="text-2xl font-bold text-slate-900">Zika Booking Platform</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Kainook Booking Platform</h1>
         <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold mt-1">
           Financial Report: {activeReport.toUpperCase()} Reports
         </p>
         <p className="text-xs text-slate-400 mt-0.5">
-          Generated on {new Date().toLocaleDateString()} · Filter: {countryFilter || "Global Countries Scope"}
+          Filter: {countryFilter || "Global Countries Scope"}
+        </p>
+      </div>
+
+      {/* Print timestamp footer */}
+      <div className="hidden print:block mt-8 pt-4 border-t border-slate-300 text-center">
+        <p className="text-[10px] text-slate-400">
+          Generated on {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })} at {new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })}
         </p>
       </div>
 
