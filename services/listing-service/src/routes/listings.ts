@@ -279,6 +279,7 @@ export async function listingRoutes(app: FastifyInstance) {
         type: "object",
         properties: {
           status: { type: "string" },
+          geoPending: { type: "string", enum: ["true", "false"], description: "Filter by geo verification pending status" },
           page: { type: "string", pattern: "^[0-9]+$" },
           limit: { type: "string", pattern: "^[0-9]+$" }
         }
@@ -309,7 +310,7 @@ export async function listingRoutes(app: FastifyInstance) {
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { providerId } = req as ProviderRequest;
-      const { status, page = "1", limit = "20" } = req.query as Record<string, string>;
+      const { status, geoPending, page = "1", limit = "20" } = req.query as Record<string, string>;
 
       const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
       const take = Math.min(parseInt(limit, 10), 50);
@@ -318,6 +319,8 @@ export async function listingRoutes(app: FastifyInstance) {
         providerId,
         deletedAt: null,
         ...(status && status !== "all" ? { status: status as "draft" } : {}),
+        ...(geoPending === "true" ? { temporaryActivation: true, category: "apartment" as const } : {}),
+        ...(geoPending === "false" ? { OR: [{ temporaryActivation: false }, { temporaryActivation: null }, { category: { not: "apartment" as const } }] } : {}),
       };
 
       const [total, listings] = await Promise.all([
@@ -343,6 +346,8 @@ export async function listingRoutes(app: FastifyInstance) {
             rejectionNote: true,
             createdAt: true,
             updatedAt: true,
+            temporaryActivation: true,
+            geoVerificationDueAt: true,
             photos: {
               where: { deletedAt: null, position: 1 },
               select: { s3Key: true, cdnUrl: true },

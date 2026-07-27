@@ -33,6 +33,8 @@ export interface Listing {
   activatedAt?: string | null;
   rejectedAt?: string | null;
   suspendedAt?: string | null;
+  temporaryActivation?: boolean;
+  geoVerificationDueAt?: string | null;
   rejectionReasons: string[];
   rejectionNote: string | null;
   createdAt: string;
