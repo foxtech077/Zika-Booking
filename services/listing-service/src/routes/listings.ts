@@ -320,7 +320,7 @@ export async function listingRoutes(app: FastifyInstance) {
         deletedAt: null,
         ...(status && status !== "all" ? { status: status as "draft" } : {}),
         ...(geoPending === "true" ? { temporaryActivation: true, category: "apartment" as const } : {}),
-        ...(geoPending === "false" ? { OR: [{ temporaryActivation: false }, { temporaryActivation: null }, { category: { not: "apartment" as const } }] } : {}),
+        ...(geoPending === "false" ? { NOT: { temporaryActivation: true } } : {}),
       };
 
       const [total, listings] = await Promise.all([
