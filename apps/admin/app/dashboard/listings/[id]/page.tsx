@@ -37,6 +37,7 @@ interface ListingDetail {
   cancellationPolicy: string | null;
   smokingAllowed: boolean;
   petsAllowed: boolean;
+  minStayNights: number;
   submissionCount: number;
   submittedAt: string | null;
   temporaryActivation: boolean;
@@ -394,6 +395,7 @@ export default function ListingReviewPage() {
           <Section title="Basic Information">
             <Row label="Price" value={(listing.pricePerNight ?? listing.pricePerDay) ? `${listing.currency} ${listing.pricePerNight ?? listing.pricePerDay}/${listing.category === "car" ? "day" : "night"}` : "—"} />
             <Row label="Cancellation policy" value={listing.cancellationPolicy ?? "—"} />
+            {listing.category !== "car" && <Row label="Minimum stay" value={`${listing.minStayNights ?? 1} night${(listing.minStayNights ?? 1) > 1 ? "s" : ""}`} />}
 
             {listing.category === "hotel" && (
               <>
