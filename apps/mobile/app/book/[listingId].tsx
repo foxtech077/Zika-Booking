@@ -206,7 +206,7 @@ export default function BookingFlowScreen() {
   const [email, setEmail] = useState(user?.email ?? "");
   const [phone, setPhone] = useState("");
   // Hotels/apartments
-  const [adults, setAdults] = useState(parseInt(guests ?? "1", 10) || 1);
+  const [adults, setAdults] = useState(parseInt(guests ?? "2", 10) || 2);
   const [children, setChildren] = useState(0);
   const [specialRequests, setSpecialRequests] = useState("");
   // Cars

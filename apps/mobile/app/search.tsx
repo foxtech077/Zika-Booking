@@ -12,6 +12,7 @@ import {
   Modal,
   Alert,
   Dimensions,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -259,32 +260,69 @@ const badgeStyles = StyleSheet.create({
 // ─── Skeleton card ────────────────────────────────────────────────────────────
 
 function SkeletonCard() {
+  const pulseAnim = useRef(new Animated.Value(0.35)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.85,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0.35,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pulseAnim]);
+
   return (
     <View style={cardStyles.card}>
-      <View style={[cardStyles.photo, skStyles.rect]} />
+      <View style={cardStyles.photoWrapper}>
+        <Animated.View style={[cardStyles.photo, skStyles.bone, { opacity: pulseAnim }]} />
+        <View style={cardStyles.badgeOverlayContainer}>
+          <Animated.View style={[skStyles.bone, { width: 75, height: 22, borderRadius: 6, opacity: pulseAnim }]} />
+        </View>
+      </View>
       <View style={cardStyles.body}>
-        <View
+        <Animated.View
           style={[
-            skStyles.rect,
-            { height: 14, width: "70%", borderRadius: 4, marginBottom: 8 },
+            skStyles.bone,
+            { height: 16, width: "75%", borderRadius: 4, marginBottom: 8, opacity: pulseAnim },
           ]}
         />
-        <View
+        <Animated.View
           style={[
-            skStyles.rect,
-            { height: 12, width: "45%", borderRadius: 4, marginBottom: 8 },
+            skStyles.bone,
+            { height: 12, width: "48%", borderRadius: 4, marginBottom: 12, opacity: pulseAnim },
           ]}
         />
-        <View
-          style={[skStyles.rect, { height: 12, width: "55%", borderRadius: 4 }]}
-        />
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <Animated.View
+            style={[
+              skStyles.bone,
+              { height: 12, width: "32%", borderRadius: 4, opacity: pulseAnim },
+            ]}
+          />
+          <Animated.View
+            style={[
+              skStyles.bone,
+              { height: 22, width: "35%", borderRadius: 6, opacity: pulseAnim },
+            ]}
+          />
+        </View>
       </View>
     </View>
   );
 }
 
 const skStyles = StyleSheet.create({
-  rect: { backgroundColor: "#e5e7eb" },
+  bone: { backgroundColor: "#E5E7EB" },
 });
 
 // ─── Result card ──────────────────────────────────────────────────────────────
@@ -848,6 +886,8 @@ export default function SearchScreen() {
     setAirConditioning(false);
     setSeatsMin(null);
     setDriverAge("");
+    setCursor(null);
+    setAllResults([]);
     // Scroll to the top immediately so the user sees the new category's
     // results from the beginning rather than from a mid-list position.
     flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
@@ -1156,9 +1196,18 @@ export default function SearchScreen() {
     setRefreshing(false);
   }
 
+  // Derived effective results: if on page 1 (!cursor), use searchData.results directly
+  // if available to avoid 1-frame useEffect sync delay. Otherwise use accumulated allResults.
+  const effectiveResults = useMemo(() => {
+    if (!cursor && searchData?.results && !isPlaceholderData) {
+      return searchData.results;
+    }
+    return allResults;
+  }, [cursor, searchData, isPlaceholderData, allResults]);
+
   // ── Active filter badges (shown above results, each individually removable) ──
-  const currencyPrefix = allResults[0]?.currency
-    ? `${allResults[0].currency} `
+  const currencyPrefix = effectiveResults[0]?.currency
+    ? `${effectiveResults[0].currency} `
     : "";
   interface FilterBadge {
     key: string;
@@ -1323,8 +1372,8 @@ export default function SearchScreen() {
 
   // Geo is optional — if unavailable, search falls back to global (lat=0,lng=0,radius=20000)
 
-  const isFirstLoad = searchLoading && allResults.length === 0;
-  const isLoadingMore = searchFetching && allResults.length > 0;
+  const isFirstLoad = (searchLoading || searchFetching || isPlaceholderData) && effectiveResults.length === 0;
+  const isLoadingMore = searchFetching && effectiveResults.length > 0;
   const hasNextPage = !!searchData?.nextCursor;
   const totalCount = searchData?.totalCount ?? 0;
 
@@ -1355,8 +1404,8 @@ export default function SearchScreen() {
 
   // Fetch signed photo URLs for all search results via /listings/:id/public
   const searchResultIds = useMemo(
-    () => allResults.map((r) => r.id),
-    [allResults],
+    () => effectiveResults.map((r) => r.id),
+    [effectiveResults],
   );
   const signedPhotoQueries = useQueries({
     queries: searchResultIds.map((id) => ({
@@ -1533,12 +1582,12 @@ export default function SearchScreen() {
       </View>
 
       {/* ── Result count ── */}
-      {!isFirstLoad && !searchError && (
+      {!isFirstLoad && !searchFetching && !searchError && (
         <View style={styles.resultCount}>
           <Ionicons name="search" size={13} color={MUTED} />
           <Text style={styles.resultCountText}>
             {totalCount > 0
-              ? `${allResults.length.toLocaleString()} listing${allResults.length !== 1 ? "s" : ""} ${geo ? `near ${geo.town}` : placeName ? `matching "${placeName}"` : "found"}`
+              ? `${effectiveResults.length.toLocaleString()} listing${effectiveResults.length !== 1 ? "s" : ""} ${geo ? `near ${geo.town}` : placeName ? `matching "${placeName}"` : "found"}`
               : `No listings found${geo ? ` near ${geo.town}` : placeName ? ` for "${placeName}"` : ""}`}
           </Text>
         </View>
@@ -1662,7 +1711,7 @@ export default function SearchScreen() {
                   )}
 
                   {/* Listings Markers */}
-                  {allResults.map((item) => {
+                  {effectiveResults.map((item) => {
                     const coords = getListingCoordinates(
                       item,
                       geo ? Number(geo.lat) : -1.286389,
@@ -1765,7 +1814,7 @@ export default function SearchScreen() {
         ) : (
           <FlatList
             ref={flatListRef}
-            data={allResults}
+            data={effectiveResults}
             keyExtractor={(item) => item.id}
             style={styles.list}
             contentContainerStyle={styles.listContent}
@@ -1799,23 +1848,31 @@ export default function SearchScreen() {
               />
             )}
             ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <Ionicons name="home-outline" size={52} color={BORDER} />
-                <Text style={styles.emptyTitle}>No listings found</Text>
-                <Text style={styles.emptySub}>
-                  No listings match your filter criteria or search radius. Try
-                  resetting filters.
-                </Text>
-                <TouchableOpacity
-                  style={styles.backBtn}
-                  onPress={handleResetFilters}
-                >
-                  <Text style={styles.backBtnText}>Reset all filters</Text>
-                </TouchableOpacity>
-              </View>
+              (searchLoading || searchFetching || isPlaceholderData) ? (
+                <View style={{ paddingTop: 12 }}>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <SkeletonCard key={i} />
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.emptyState}>
+                  <Ionicons name="home-outline" size={52} color={BORDER} />
+                  <Text style={styles.emptyTitle}>No listings found</Text>
+                  <Text style={styles.emptySub}>
+                    No listings match your filter criteria or search radius. Try
+                    resetting filters.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.backBtn}
+                    onPress={handleResetFilters}
+                  >
+                    <Text style={styles.backBtnText}>Reset all filters</Text>
+                  </TouchableOpacity>
+                </View>
+              )
             }
             ListFooterComponent={
-              allResults.length > 0 ? (
+              effectiveResults.length > 0 ? (
                 <View style={styles.footer}>
                   {isLoadingMore && (
                     <ActivityIndicator
@@ -1832,7 +1889,7 @@ export default function SearchScreen() {
                       <Text style={styles.loadMoreText}>Load more</Text>
                     </TouchableOpacity>
                   )}
-                  {!hasNextPage && allResults.length > 0 && (
+                  {!hasNextPage && effectiveResults.length > 0 && (
                     <Text style={styles.endText}>All listings loaded</Text>
                   )}
                 </View>
