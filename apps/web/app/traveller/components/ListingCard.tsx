@@ -130,7 +130,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             className="w-full h-full object-cover group-hover:scale-105 transition duration-700"
             fallbackNode={<NoImage category={listing.category} />}
           />
-          {(listing.isAccredited || listing.instantBooking || promoBadge) && (
+          {(listing.isAccredited || listing.instantBooking || promoBadge || (listing.category !== "car" && listing.minStayNights > 1)) && (
             <div className="absolute top-3 left-3 z-10 flex flex-col gap-1">
               {listing.isAccredited && (
                 <span className="bg-[#1D8D2B]/90 backdrop-blur-sm text-white text-[9px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1">
@@ -143,6 +143,11 @@ export const ListingCard: React.FC<ListingCardProps> = ({
               {promoBadge && (
                 <span className="backdrop-blur-sm text-white text-[9px] font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: promoBadge.colour }}>
                   {promoBadge.label}
+                </span>
+              )}
+              {listing.category !== "car" && listing.minStayNights > 1 && (
+                <span className="bg-slate-800/80 backdrop-blur-sm text-white text-[9px] font-semibold px-2.5 py-1 rounded-full">
+                  Min {listing.minStayNights} nights
                 </span>
               )}
             </div>
@@ -236,6 +241,11 @@ export const ListingCard: React.FC<ListingCardProps> = ({
           {promoBadge && (
             <span className="backdrop-blur-sm text-white text-[9px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: promoBadge.colour }}>
               {promoBadge.label}
+            </span>
+          )}
+          {listing.category !== "car" && listing.minStayNights > 1 && (
+            <span className="bg-slate-800/80 backdrop-blur-sm text-white text-[9px] font-semibold px-2 py-0.5 rounded-full">
+              Min {listing.minStayNights} nights
             </span>
           )}
         </div>

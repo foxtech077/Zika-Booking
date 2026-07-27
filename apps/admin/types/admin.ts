@@ -105,6 +105,7 @@ export interface Listing {
   currency: string | null;
   starRating: number | null;
   claimedStarRating: number | null;
+  minStayNights: number | null;
   submissionCount: number;
   approvedAt: string | null;
   rejectedAt: string | null;

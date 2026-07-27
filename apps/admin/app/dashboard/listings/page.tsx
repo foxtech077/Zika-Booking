@@ -363,6 +363,7 @@ export default function ListingsPage() {
               ["Star Rating", selected.starRating ?? "—"],
               ["Claimed Stars", selected.claimedStarRating ?? "—"],
               ["Price/Night", selected.pricePerNight ? formatCurrency(Number(selected.pricePerNight), selected.currency ?? "USD") : "—"],
+              ["Min Stay", selected.category !== "car" ? `${selected.minStayNights ?? 1} night${(selected.minStayNights ?? 1) > 1 ? "s" : ""}` : "—"],
               ["Geo Verification", selected.temporaryActivation
                 ? "Temporary activation"
                 : selected.category === "apartment" ? "Verified" : "—"],
