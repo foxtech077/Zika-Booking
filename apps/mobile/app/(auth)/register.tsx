@@ -75,7 +75,6 @@ export default function RegisterScreen() {
   const [countryModalVisible, setCountryModalVisible] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
   const [selectedCountry, setSelectedCountry] = useState<CountryData | null>(null);
-  const [privacyAccepted, setPrivacyAccepted] = useState(false);
 
   const set = (key: keyof typeof form) => (v: string) =>
     setForm((prev) => ({ ...prev, [key]: v }));
@@ -170,10 +169,6 @@ export default function RegisterScreen() {
   }
 
   function handleSubmit() {
-    if (!privacyAccepted) {
-      setErrors({ general: "Please accept the Terms of Use and Privacy Policy to continue." });
-      return;
-    }
     try {
       if (validate()) registerMutation.mutate();
     } catch {
@@ -421,26 +416,6 @@ export default function RegisterScreen() {
               {errors.confirmPassword ? <Text style={ss.fieldErr}>{errors.confirmPassword}</Text> : null}
             </View>
 
-            {/* Terms & Privacy Policy checkbox */}
-            <TouchableOpacity
-              style={ss.checkRow}
-              onPress={() => setPrivacyAccepted((v) => !v)}
-              activeOpacity={0.75}
-            >
-              <View style={[ss.checkbox, privacyAccepted && { backgroundColor: btnColor, borderColor: btnColor }]}>
-                {privacyAccepted && <Ionicons name="checkmark" size={13} color="#fff" />}
-              </View>
-              <Text style={ss.checkLabel}>
-                I have read and agree to the{" "}
-                <Text
-                  style={[ss.checkLink, { color: btnColor }]}
-                  onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "privacy" } } as any)}
-                >
-                  Privacy Policy
-                </Text>
-              </Text>
-            </TouchableOpacity>
-
             {/* General error */}
             {errors.general ? (
               <View style={ss.errBox}>
@@ -451,9 +426,9 @@ export default function RegisterScreen() {
 
             {/* Submit button */}
             <TouchableOpacity
-              style={[ss.btn, { backgroundColor: btnColor }, (registerMutation.isPending || !privacyAccepted) && ss.btnDim]}
+              style={[ss.btn, { backgroundColor: btnColor }, registerMutation.isPending && ss.btnDim]}
               onPress={handleSubmit}
-              disabled={registerMutation.isPending || !privacyAccepted}
+              disabled={registerMutation.isPending}
               activeOpacity={0.85}
             >
               {registerMutation.isPending ? (
@@ -476,9 +451,24 @@ export default function RegisterScreen() {
                   <Text style={ss.divTxt}>or</Text>
                   <View style={ss.divLine} />
                 </View>
-                <GoogleSignInButton onError={(msg) => setErrors({ general: msg })} />
+                <GoogleSignInButton
+                  onError={(msg) => setErrors({ general: msg })}
+                />
               </>
             )}
+
+            {/* Legal notice */}
+            <Text style={ss.legalNotice}>
+              By signing up, you acknowledge that you have read Kainook's{" "}
+              {" "}
+              <Text
+                style={[ss.legalLink, { color: btnColor }]}
+                onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "privacy" } } as any)}
+              >
+                Privacy Policy
+              </Text>
+              .
+            </Text>
 
             {/* Sign in link */}
             <View style={ss.linkRow}>
@@ -673,28 +663,20 @@ const ss = StyleSheet.create({
   },
   errTxt: { flex: 1, color: "#DC2626", fontSize: 13, lineHeight: 18 },
 
-  // Privacy checkbox
-  checkRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 14,
-    paddingVertical: 2,
+  // Legal notice
+  legalNotice: {
+    textAlign: "center",
+    fontSize: 12,
+    color: MUTED,
+    lineHeight: 18,
+    marginTop: 18,
+    marginBottom: 6,
+    paddingHorizontal: 8,
   },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: BORDER,
-    backgroundColor: INPUT_BG,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-    marginTop: 1,
+  legalLink: {
+    fontWeight: "700",
+    textDecorationLine: "underline",
   },
-  checkLabel: { flex: 1, fontSize: 13, color: TEXT, lineHeight: 20 },
-  checkLink: { fontWeight: "700", textDecorationLine: "underline" },
 
   // Button
   btn: {

@@ -49,7 +49,7 @@ export function formatLogsForSharing(
 
   const lines: string[] = [
     "══════════════════════════════════════",
-    "  ZIKA MOBILE — PAYMENT DIAGNOSTIC",
+    "  KAINOOK MOBILE — PAYMENT DIAGNOSTIC",
     "══════════════════════════════════════",
     `Generated : ${new Date().toISOString()}`,
     `Booking ID: ${bookingId}`,

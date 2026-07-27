@@ -107,7 +107,7 @@ export const FAQ_SECTIONS: FAQSection[] = [
       },
       {
         q: "What is the booking reference number?",
-        a: "Every confirmed booking is assigned a unique reference in the format ZIKA-XXXX-CC (where CC is the two-letter country code). Use this reference for all correspondence with Kainook support or the Provider.",
+        a: "Every confirmed booking is assigned a unique reference in the format KAIN-XXXX-CC (where CC is the two-letter country code). Use this reference for all correspondence with Kainook support or the Provider.",
       },
       {
         q: "How far in advance can I book?",

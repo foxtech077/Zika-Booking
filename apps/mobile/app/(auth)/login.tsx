@@ -101,8 +101,10 @@ const DEVELOPER_ERROR_HELP =
 
 export function GoogleSignInButton({
   onError,
+  disabled,
 }: {
   onError: (m: string) => void;
+  disabled?: boolean;
 }) {
   const setAuth = useAuthStore((s) => s.setAuth);
   const mutation = useMutation({
@@ -232,9 +234,9 @@ export function GoogleSignInButton({
 
   return (
     <TouchableOpacity
-      style={[ss.socialBtn, mutation.isPending && { opacity: 0.6 }]}
+      style={[ss.socialBtn, (mutation.isPending || disabled) && { opacity: 0.5 }]}
       onPress={() => mutation.mutate()}
-      disabled={mutation.isPending}
+      disabled={mutation.isPending || disabled}
       activeOpacity={0.8}
     >
       {mutation.isPending ? (
