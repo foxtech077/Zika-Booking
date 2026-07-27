@@ -1288,15 +1288,7 @@ export default function BookingFlowScreen() {
                   onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "terms" } } as any)}
                 >
                   Terms of Use
-                </Text>{" "}
-                and{" "}
-                <Text
-                  style={styles.termsLink}
-                  onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "privacy" } } as any)}
-                >
-                  Privacy Policy
-                </Text>
-                .
+                </Text>.
               </Text>
             </TouchableOpacity>
 
