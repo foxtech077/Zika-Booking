@@ -525,7 +525,7 @@ interface HeaderProps {
 }
 
 const CHIPS: { key: ChipKey; label: string }[] = [
-  { key: "all", label: "All" },
+  { key: "all", label: "Currently Staying" },
   { key: "upcoming", label: "Upcoming" },
   { key: "completed", label: "Completed" },
   { key: "cancelled", label: "Cancelled" },
@@ -780,13 +780,7 @@ export default function BookingsScreen() {
             <View style={s.footerLoader}>
               <View style={s.footerLoaderDot} />
             </View>
-          ) : (
-            <View style={{ height: 40 }}>
-              {!isLoading && allUpcoming.length > 0 && (
-                <Text style={s.footerHint}>Explore more destinations for your next trip</Text>
-              )}
-            </View>
-          )
+          ) : null
         }
         refreshControl={
           <RefreshControl
