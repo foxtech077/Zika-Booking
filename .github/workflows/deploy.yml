@@ -73,6 +73,7 @@ jobs:
           timeout: 60s
           proxy_timeout: 60s
           script: |
+            set -euo pipefail
             cd /home/ubuntu/Zika-Booking
             git fetch origin dev
             git switch dev
