@@ -58,7 +58,6 @@ jobs:
           tags: ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
           cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
           cache-to: type=inline
-          no-cache: true
           build-args: ${{ matrix.build_args }}
 
   deploy:
