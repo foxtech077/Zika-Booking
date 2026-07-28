@@ -105,10 +105,13 @@ export interface Listing {
   currency: string | null;
   starRating: number | null;
   claimedStarRating: number | null;
+  minStayNights: number | null;
   submissionCount: number;
   approvedAt: string | null;
   rejectedAt: string | null;
   suspendedAt: string | null;
+  temporaryActivation: boolean;
+  geoVerificationDueAt: string | null;
   updatedAt: string;
   createdAt: string;
   photos?: ListingPhoto[];
@@ -281,6 +284,55 @@ export interface Voucher {
   applicableTiers?: string[];
   autoAssign?: boolean;
   status?: string;
+}
+
+// ── Voucher with Financial Metrics ────────────────────────────────────────────
+
+export interface VoucherWithFinancials extends Voucher {
+  totalDiscountGiven: number;
+  avgDiscountPerRedemption: number;
+  totalBookingValue: number;
+}
+
+// ── Financial Reports ─────────────────────────────────────────────────────────
+
+export interface FinancialTransaction {
+  id: string;
+  reference: string;
+  listingName: string;
+  listingType: "hotel" | "apartment" | "car";
+  travellerName: string;
+  travellerEmail: string;
+  providerId: string;
+  subtotal: number;
+  voucherCode: string | null;
+  voucherDiscount: number;
+  amount: number;
+  currency: string;
+  commissionRate: number;
+  commissionAmount: number;
+  providerPayout: number;
+  paymentStatus: string | null;
+  paymentGateway: string | null;
+  date: string;
+  country: string | null;
+}
+
+export interface FinancialSummary {
+  grossRevenue: number;
+  totalVoucherDiscounts: number;
+  netRevenue: number;
+  totalCommission: number;
+  totalPayout: number;
+  totalBookings: number;
+}
+
+export interface FinancialReportsResponse {
+  transactions: FinancialTransaction[];
+  summary: FinancialSummary;
+  total: number;
+  page: number;
+  limit: number;
 }
 
 // ── Reviews ───────────────────────────────────────────────────────────────────

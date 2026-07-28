@@ -5,21 +5,6 @@ import { requireProvider, optionalGuest, type GuestRequest } from "../middleware
 
 import { DriveType, FuelType } from "../generated/index.js";
 
-// ── Geo helper ────────────────────────────────────────────────────────────────
-
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 // ── Availability check ────────────────────────────────────────────────────────
 
 async function getBookedListingIds(
@@ -213,20 +198,27 @@ export async function searchRoutes(app: FastifyInstance) {
       take: 500,
     });
 
-    // Geo filter
+    // PostGIS geo filter — replaces in-memory Haversine
+    const candidateIds = candidates.map((l) => l.id) as string[];
+    let distanceMap = new Map<string, number>();
+    if (candidateIds.length > 0) {
+      const geoResults = await prisma.$queryRaw<Array<{ id: string; distance_km: number }>>`
+        SELECT l.id,
+          COALESCE(public.ST_Distance(l.location, public.ST_SetSRID(public.ST_MakePoint(${lng}::double precision, ${lat}::double precision), 4326)::public.geography) / 1000, 999999) AS distance_km
+        FROM listing.listings l
+        WHERE l.id = ANY(${candidateIds})
+          AND (l.location IS NULL OR public.ST_DWithin(l.location, public.ST_SetSRID(public.ST_MakePoint(${lng}::double precision, ${lat}::double precision), 4326)::public.geography, ${radiusKm * 1000}::double precision))
+      `;
+      distanceMap = new Map(geoResults.map((r) => [r.id, Number(r.distance_km)]));
+    }
     const withDistance = candidates
-      .map((l) => ({
-        ...l,
-        distanceKm: l.lat != null && l.lng != null
-          ? haversineKm(lat, lng, Number(l.lat), Number(l.lng))
-          : 0,
-      }))
-      .filter((l) => l.lat == null || l.lng == null || l.distanceKm <= radiusKm);
+      .filter((l) => distanceMap.has(l.id))
+      .map((l) => ({ ...l, distanceKm: distanceMap.get(l.id) ?? 0 }));
 
     // Availability filter (when dates provided)
-    const candidateIds = withDistance.map((l) => l.id);
+    const availIds = withDistance.map((l) => l.id);
     const bookedIds = await getBookedListingIds(
-      candidateIds, checkIn, checkOut, pickupDatetime, returnDatetime,
+      availIds, checkIn, checkOut, pickupDatetime, returnDatetime,
     );
     let available = withDistance.filter((l) => !bookedIds.has(l.id));
 
@@ -623,7 +615,7 @@ export async function searchRoutes(app: FastifyInstance) {
         }[]>(`
           SELECT room_type_id, check_in, check_out, pickup_datetime, return_datetime
           FROM bookings
-          WHERE listing_id = ANY($1)
+          WHERE listing_id = $1
             AND room_type_id IS NOT NULL
             AND (
               status = 'confirmed'
@@ -634,7 +626,7 @@ export async function searchRoutes(app: FastifyInstance) {
               (check_in IS NOT NULL AND check_in < $3 AND check_out > $2)
               OR (pickup_datetime IS NOT NULL AND pickup_datetime < $3 AND return_datetime > $2)
             )
-        `, roomTypeIds, rangeStart, rangeEnd, pendingExpiry);
+        `, id, rangeStart, rangeEnd, pendingExpiry);
 
         // Fetch iCal blocked dates (affects ALL room types)
         const blockedDates = await prisma.icalBlockedDate.findMany({

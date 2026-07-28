@@ -169,8 +169,8 @@ function mapListing(l: any): PublicListingDetail {
     checkoutTime: l.checkoutTime || "",
     cancellationPolicy: l.cancellationPolicy || "flexible",
     address: l.address || (town ? `${town}, ${country}` : ""),
-    lat: l.lat || 0,
-    lng: l.lng || 0,
+    lat: l.lat ?? undefined,
+    lng: l.lng ?? undefined,
     town,
     neighborhood: l.neighborhood,
     country,
@@ -846,19 +846,12 @@ export default function CategoryListingsClient({ category }: Props) {
 
     // Use destOverride when provided (e.g. Load More must stay scoped to the active query)
     const dest = typeof destOverride === "string" ? destOverride : destination.trim();
-    const isGlobal = !dest;
 
-    // When a text search is active:
-    //   - Use a global radius (20 000 km) so name/hotel/car searches return matches from anywhere,
-    //     not just within a fixed radius around a geocoded point.
-    //   - Geocoding is only used to seed the lat/lng the API requires; it is NOT the primary
-    //     matching mechanism — the `q` param and client-side filter handle text relevance.
-    // When browsing (no text): use a default Nairobi anchor with global radius.
     const { lat, lng } = dest
       ? await geocodeDestination(dest)
       : { lat: -1.2921, lng: 36.8219 };
 
-    // Always fetch a large batch so the client-side text filter has enough candidates.
+    // Fetch a large batch for destination-based searches.
     const effectiveLimit = dest ? 100 : PAGE_SIZE;
 
     const params: Record<string, any> = {
@@ -915,38 +908,11 @@ export default function CategoryListingsClient({ category }: Props) {
 
       const mapped = results.map(mapListing);
 
-      // Client-side text filter — the definitive gate that ensures ONLY matching listings
-      // are rendered, regardless of what the geo-radius API returned.
-      // Fields matched (any field containing the search term wins):
-      //   Hotels / Apartments: name, town, country, address, description
-      //   Cars:                name, town, country, address, description, carMake, carModel
-      let displayListings = mapped;
-      if (dest) {
-        const term = dest.toLowerCase().trim();
-        displayListings = mapped.filter((listing) => {
-          const fields: (string | undefined | null)[] = [
-            listing.name,
-            listing.town,
-            listing.country,
-            listing.address,
-            listing.description,
-          ];
-          if (category === "car") {
-            fields.push(listing.carMake, listing.carModel);
-          }
-          return fields.some((f) => f && String(f).toLowerCase().includes(term));
-        });
-      }
+      console.log("[Search] Final rendered count:", mapped.length);
 
-      console.log("[Search] Final rendered count after client filter:", displayListings.length);
-
-      // When a text search is active, report the filtered count as the total so the
-      // heading and Load More logic reflect exactly what the user sees.
-      const total = dest
-        ? displayListings.length
-        : (data.totalCount ?? data.availableCount ?? results.length + newOffset);
+      const total = data.totalCount ?? data.availableCount ?? mapped.length + newOffset;
       setTotalCount(total);
-      setListings((prev) => (append ? [...prev, ...displayListings] : displayListings));
+      setListings((prev) => (append ? [...prev, ...mapped] : mapped));
       setOffset(newOffset);
     } catch (err: any) {
       setError(err?.response?.data?.error?.message ?? err?.message ?? "Failed to load listings.");
@@ -1068,7 +1034,7 @@ export default function CategoryListingsClient({ category }: Props) {
     setSuggestions([]);
     setShowSuggestions(false);
     router.replace(buildUrl(), { scroll: false });
-    // Reload default category inventory (no text filter)
+    // Reload default category inventory
     fetchListings(0, false, "");
   }
 

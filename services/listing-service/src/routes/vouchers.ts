@@ -1253,11 +1253,15 @@ async function updatePromotionStatuses(prisma: any): Promise<void> {
         prisma.voucher.count({ where }),
       ]);
 
-      // Fetch redemption counts per voucher; fall back to 0 if table unavailable
+      // Fetch redemption counts and financial metrics per voucher; fall back to 0 if table unavailable
       const redemptionCountMap = new Map<string, number>();
+      const totalDiscountMap = new Map<string, number>();
+      const totalBookingValueMap = new Map<string, number>();
+      
       try {
         const voucherIds = vouchers.map((v) => v.id);
         if (voucherIds.length > 0) {
+          // Get redemption counts
           const counts = await prisma.voucherRedemption.groupBy({
             by: ["voucherId"],
             where: { voucherId: { in: voucherIds } },
@@ -1266,35 +1270,84 @@ async function updatePromotionStatuses(prisma: any): Promise<void> {
           for (const c of counts) {
             redemptionCountMap.set(c.voucherId, c._count.voucherId);
           }
+
+          // Get total discount given per voucher
+          const discountAgg = await prisma.voucherRedemption.groupBy({
+            by: ["voucherId"],
+            where: { voucherId: { in: voucherIds } },
+            _sum: { discount: true },
+          });
+          for (const d of discountAgg) {
+            totalDiscountMap.set(d.voucherId, Number(d._sum.discount ?? 0));
+          }
+
+          // Get total booking value for vouchers (sum of totalAmount from bookings where voucher was used)
+          const bookingAgg = await prisma.voucherRedemption.groupBy({
+            by: ["voucherId"],
+            where: { voucherId: { in: voucherIds } },
+            _sum: { discount: true },
+          });
+          
+          // Fetch booking totalAmount for each redemption
+          const redemptions = await prisma.voucherRedemption.findMany({
+            where: { voucherId: { in: voucherIds } },
+            select: { voucherId: true, bookingId: true, discount: true },
+          });
+          
+          // Batch fetch bookings
+          const bookingIds = redemptions.map((r) => r.bookingId);
+          if (bookingIds.length > 0) {
+            const bookings = await prisma.booking.findMany({
+              where: { id: { in: bookingIds } },
+              select: { id: true, totalAmount: true },
+            });
+            const bookingAmountMap = new Map(bookings.map((b) => [b.id, Number(b.totalAmount)]));
+            
+            // Aggregate total booking value per voucher
+            for (const r of redemptions) {
+              const current = totalBookingValueMap.get(r.voucherId) ?? 0;
+              const bookingAmount = bookingAmountMap.get(r.bookingId) ?? 0;
+              totalBookingValueMap.set(r.voucherId, current + bookingAmount);
+            }
+          }
         }
       } catch {
         // voucher_redemptions table not yet available on this environment — default to 0
       }
 
       return sendSuccess(reply, 200, {
-        vouchers: vouchers.map((v) => ({
-          id:              v.id,
-          code:            v.code,
-          title:           (v as any).title ?? "",
-          activityScope:   (v as any).activityScope ?? "universal",
-          discountType:    v.discountType,
-          discountValue:   Number(v.discountValue),
-          minOrderValue:   v.minOrderValue ? Number(v.minOrderValue) : null,
-          maxDiscount:     v.maxDiscount ? Number(v.maxDiscount) : null,
-          usageLimit:      v.usageLimit,
-          usageLimitPerGuest: (v as any).usageLimitPerGuest ?? 1,
-          usageCount:      v.usageCount,
-          status:          (v as any).status ?? (v.isActive ? "active" : "paused"),
-          applicableTiers: (v as any).applicableTiers ?? [],
-          countryScope:    (v as any).countryScope ?? null,
-          autoAssign:      (v as any).autoAssign ?? false,
-          redemptionCount: redemptionCountMap.get(v.id) ?? 0,
-          validFrom:       v.validFrom.toISOString(),
-          validUntil:      v.validUntil.toISOString(),
-          isActive:        v.isActive,
-          createdBy:       v.createdBy,
-          createdAt:       v.createdAt.toISOString(),
-        })),
+        vouchers: vouchers.map((v) => {
+          const redemptionCount = redemptionCountMap.get(v.id) ?? 0;
+          const totalDiscountGiven = totalDiscountMap.get(v.id) ?? 0;
+          const totalBookingValue = totalBookingValueMap.get(v.id) ?? 0;
+          
+          return {
+            id:              v.id,
+            code:            v.code,
+            title:           (v as any).title ?? "",
+            activityScope:   (v as any).activityScope ?? "universal",
+            discountType:    v.discountType,
+            discountValue:   Number(v.discountValue),
+            minOrderValue:   v.minOrderValue ? Number(v.minOrderValue) : null,
+            maxDiscount:     v.maxDiscount ? Number(v.maxDiscount) : null,
+            usageLimit:      v.usageLimit,
+            usageLimitPerGuest: (v as any).usageLimitPerGuest ?? 1,
+            usageCount:      v.usageCount,
+            status:          (v as any).status ?? (v.isActive ? "active" : "paused"),
+            applicableTiers: (v as any).applicableTiers ?? [],
+            countryScope:    (v as any).countryScope ?? null,
+            autoAssign:      (v as any).autoAssign ?? false,
+            redemptionCount,
+            totalDiscountGiven,
+            avgDiscountPerRedemption: redemptionCount > 0 ? totalDiscountGiven / redemptionCount : 0,
+            totalBookingValue,
+            validFrom:       v.validFrom.toISOString(),
+            validUntil:      v.validUntil.toISOString(),
+            isActive:        v.isActive,
+            createdBy:       v.createdBy,
+            createdAt:       v.createdAt.toISOString(),
+          };
+        }),
         pagination: {
           total,
           page,

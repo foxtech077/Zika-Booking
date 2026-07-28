@@ -520,8 +520,8 @@ export default function TravellerDashboard() {
           customAmenities: [],
           description: "",
           address: v.listing.city ?? "",
-          lat: 0,
-          lng: 0,
+          lat: undefined,
+          lng: undefined,
           town: v.listing.city ?? "",
           country: "",
           minStayNights: 1,
@@ -571,8 +571,8 @@ export default function TravellerDashboard() {
       checkoutTime: l.checkoutTime || "",
       cancellationPolicy: l.cancellationPolicy || "flexible",
       address: l.address || (town ? `${town}, ${country}` : ""),
-      lat: l.lat || 0,
-      lng: l.lng || 0,
+      lat: l.lat ?? undefined,
+      lng: l.lng ?? undefined,
       town,
       neighborhood: l.neighborhood,
       country,
@@ -715,7 +715,8 @@ export default function TravellerDashboard() {
   useEffect(() => {
     if (!detailListing) return;
     const country = detailListing.country || detailListing.town || "";
-    setPaymentProvider(AFRICAN_COUNTRIES.has(country) ? "tara" : "stripe");
+    // TODO: Handle currency conversion once implemented — currently only XAF is supported for mobile-money
+    setPaymentProvider(AFRICAN_COUNTRIES.has(country) && detailListing.currency === "XAF" ? "tara" : "stripe");
   }, [detailListing?.id]);
 
   // Clean up payment poll on unmount

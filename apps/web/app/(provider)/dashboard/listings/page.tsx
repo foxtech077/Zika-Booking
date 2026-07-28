@@ -435,6 +435,21 @@ function ViewListingModal({
             ) : (
               <div className="p-5 space-y-5">
 
+                {/* ── Geo Verification Warning ── */}
+                {l.category === "apartment" && (l as any).temporaryActivation && (l as any).geoVerificationDueAt && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+                    <span className="text-amber-600 font-bold text-sm shrink-0 mt-0.5">⚠</span>
+                    <div className="text-sm text-amber-800">
+                      <p className="font-semibold">Temporary activation — geolocation pending</p>
+                      <p className="text-amber-700 mt-0.5">
+                        Your apartment is live but the location has not yet been verified. Geolocation verification is due by{" "}
+                        <span className="font-semibold">{formatDate((l as any).geoVerificationDueAt)}</span>.{" "}
+                        If not verified, the listing will be auto-suspended. Please update your address or contact support.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* ── Room Types Section ── */}
                 {l.category === "hotel" && (
                   <div className="rounded-2xl border border-border/60 bg-slate-50 p-5 space-y-4">
@@ -550,6 +565,11 @@ function ViewListingModal({
                       <InfoField label="Max Guests" value={l.maxGuests ?? undefined} icon={<Users className="w-3 h-3" />} />
                       <InfoField label="Bedrooms" value={l.bedrooms ?? undefined} icon={<BedDouble className="w-3 h-3" />} />
                       <InfoField label="Bathrooms" value={l.bathrooms ?? undefined} icon={<Bath className="w-3 h-3" />} />
+                      <InfoField
+                        label="Geo verification"
+                        value={(l as any).temporaryActivation ? "Temporary activation" : "Verified"}
+                        icon={<MapPin className="w-3 h-3" />}
+                      />
                       {l.longStayEnabled && (
                         <>
                           <SectionDivider title="Long Stay" />
@@ -802,6 +822,7 @@ export default function ListingsPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
+  const [geoPendingOnly, setGeoPendingOnly] = useState(false);
   const [offset, setOffset] = useState(0);
   const [pageSize, setPageSize] = useState<number>(5);
   const [selected, setSelected] = useState<Listing | null>(null);
@@ -812,10 +833,10 @@ export default function ListingsPage() {
     if (token && typeof window !== "undefined") sessionStorage.setItem(TOKEN_KEY, token);
   }, [token]);
 
-  const hasClientFilters = Boolean(search.trim() || category);
+  const hasClientFilters = Boolean(search.trim() || category || geoPendingOnly);
   const limit = hasClientFilters ? 50 : pageSize;
   const page = Math.floor(offset / limit) + 1;
-  const params = { status, page: String(page), limit: String(limit) };
+  const params = { status, geoPending: geoPendingOnly ? "true" : "", page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
     queryKey: ["provider-listings", params, Boolean(getAuthToken(token))],
     queryFn:  () => fetchListings(params, token),
@@ -938,7 +959,16 @@ export default function ListingsPage() {
     {
       key: "status",
       label: "Status",
-      render: (l) => <Badge label={l.status} status={l.status} dot />,
+      render: (l) => (
+        <div className="flex items-center gap-1.5">
+          <Badge label={l.status} status={l.status} dot />
+          {l.category === "apartment" && (l as any).temporaryActivation && (
+            <span title={`Geo verification pending — due by ${formatDate((l as any).geoVerificationDueAt)}`}>
+              <Clock className="h-3.5 w-3.5 text-amber-500" />
+            </span>
+          )}
+        </div>
+      ),
     },
     {
       key: "price",
@@ -1108,6 +1138,15 @@ export default function ListingsPage() {
               </div>
             }
           />
+          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={geoPendingOnly}
+              onChange={(e) => { setGeoPendingOnly(e.target.checked); setOffset(0); }}
+              className="rounded border-slate-300 text-amber-500 focus:ring-amber-400"
+            />
+            Awaiting Geo-Verification
+          </label>
         </div>
 
         <DataTable

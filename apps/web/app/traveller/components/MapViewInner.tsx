@@ -50,7 +50,7 @@ function makePriceIcon(listing: PublicListingDetail, isHovered: boolean) {
 }
 
 export default function MapViewInner({ listings, hoveredId, onHover, onSelect }: Props) {
-  const pinnable = listings.filter((l) => l.lat && l.lng && l.lat !== 0 && l.lng !== 0);
+  const pinnable = listings.filter((l): l is typeof l & { lat: number; lng: number } => !!l.lat && !!l.lng);
   const center: [number, number] =
     pinnable.length > 0 ? [pinnable[0]!.lat, pinnable[0]!.lng] : [-1.2921, 36.8219];
 
