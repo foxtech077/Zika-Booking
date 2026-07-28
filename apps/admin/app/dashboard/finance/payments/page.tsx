@@ -91,9 +91,9 @@ export default function BookingPaymentsPage() {
 
   const columns: Column<any>[] = [
     {
-      key: "id",
+      key: "displayId",
       label: "Payment ID",
-      render: (t) => <span className="font-mono text-xs text-slate-400 font-semibold">{t.id}</span>,
+      render: (t) => <span className="font-mono text-xs text-slate-400 font-semibold">{t.displayId ?? t.id}</span>,
     },
     {
       key: "bookingId",
@@ -297,6 +297,18 @@ export default function BookingPaymentsPage() {
               <div>
                 <dt className="text-xs text-slate-400">Gateway Provider</dt>
                 <dd className="font-semibold text-slate-900 mt-0.5 capitalize">{selectedTx.paymentProvider}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">Payment ID</dt>
+                <dd className="font-semibold text-slate-900 mt-0.5 font-mono truncate max-w-[170px]" title={selectedTx.displayId ?? selectedTx.id}>
+                  {selectedTx.displayId ?? selectedTx.id}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">Internal ID</dt>
+                <dd className="font-semibold text-slate-900 mt-0.5 font-mono truncate max-w-[170px]" title={selectedTx.id}>
+                  {selectedTx.id}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Provider Payment ID</dt>

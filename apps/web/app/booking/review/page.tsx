@@ -78,6 +78,7 @@ interface ConfirmedBooking {
   totalAmount: number;
   currency: string;
   paymentId: string;
+  displayId?: string;
   paymentMethod: string;
   transactionId?: string;
   baseAmount: number;
@@ -341,6 +342,7 @@ export default function BookingReviewPage() {
           clearInterval(pollRef.current!);
           pollRef.current = null;
           const txId = res.data?.data?.transactionId ?? res.data?.data?.transaction_id ?? pmId;
+          const displayId = res.data?.data?.displayId as string | undefined;
           storeLatestReviewContext({
             bookingId: reviewBookingId,
             listingId: ctx!.listingId,
@@ -352,7 +354,7 @@ export default function BookingReviewPage() {
             bookingId: reviewBookingId,
             totalAmount: total,
             currency: ctx!.currency,
-            paymentId: pmId, paymentMethod: method, transactionId: txId,
+            paymentId: pmId, displayId, paymentMethod: method, transactionId: txId,
             baseAmount: base, serviceFee: fee, taxes: tax, discount: disc,
             commissionRate, taxRate,
           });
@@ -1233,7 +1235,7 @@ function ConfirmedView({
         <h3 className="font-bold text-slate-800 mb-4">Payment Information</h3>
         <div className="grid grid-cols-2 gap-4 text-sm">
           <InfoRow label="Payment Method" value={confirmed.paymentMethod} />
-          <InfoRow label="Transaction ID" value={confirmed.transactionId ?? confirmed.paymentId} />
+          <InfoRow label="Transaction ID" value={confirmed.displayId ?? confirmed.transactionId ?? confirmed.paymentId} />
         </div>
       </div>
 
@@ -1337,7 +1339,7 @@ function VoucherLayout({
       {/* Payment Info */}
       <VoucherSection title="Payment Information">
         <VoucherRow label="Payment Method" value={confirmed.paymentMethod} />
-        <VoucherRow label="Transaction ID" value={confirmed.transactionId ?? confirmed.paymentId} />
+        <VoucherRow label="Transaction ID" value={confirmed.displayId ?? confirmed.transactionId ?? confirmed.paymentId} />
       </VoucherSection>
 
       {/* Cancellation Policy */}

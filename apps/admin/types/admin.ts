@@ -298,6 +298,7 @@ export interface VoucherWithFinancials extends Voucher {
 
 export interface FinancialTransaction {
   id: string;
+  displayId: string | null;
   reference: string;
   listingName: string;
   listingType: "hotel" | "apartment" | "car";

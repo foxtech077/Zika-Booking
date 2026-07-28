@@ -18,6 +18,7 @@ import type { ProviderBooking } from "@/types/provider";
 type Booking = ProviderBooking & {
     paymentStatus: string;
     transactionId?: string;
+    displayId?: string;
     paymentMethod?: string;
     guestCount?: number;
     notes?: string;
@@ -1396,10 +1397,10 @@ export default function BookingsPage() {
                                                     <NetCurrency amount={selectedBooking.providerPayout || selectedBooking.totalAmount * 0.95} currency={selectedBooking.currency} />
                                                 </span>
                                             </div>
-                                            {selectedBooking.transactionId && (
+                                            {(selectedBooking.displayId || selectedBooking.transactionId) && (
                                                 <div className="text-xs text-gray-600 pt-2">
                                                     <span className="font-medium">Transaction ID: </span>
-                                                    <span className="font-mono text-gray-500">{selectedBooking.transactionId}</span>
+                                                    <span className="font-mono text-gray-500">{selectedBooking.displayId ?? selectedBooking.transactionId}</span>
                                                 </div>
                                             )}
                                         </div>
