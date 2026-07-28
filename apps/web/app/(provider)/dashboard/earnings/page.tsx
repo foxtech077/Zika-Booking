@@ -53,6 +53,7 @@ interface MonthlyPoint {
 interface Transaction {
   id: string;
   transactionId: string;
+  displayId?: string;
   bookingReference: string;
   guestName: string;
   listingName: string;
@@ -165,6 +166,7 @@ function normalizeTransaction(raw: unknown): Transaction {
   return {
     id,
     transactionId: readString(item.transactionId ?? item.reference ?? id, id),
+    displayId: readString(item.displayId, undefined) as string | undefined,
     bookingReference: readString(item.bookingReference ?? item.bookingId ?? booking.reference ?? booking.id, "N/A"),
     guestName: readString(item.guestName ?? item.customerName ?? booking.guestName, "Guest"),
     listingName: readString(item.listingName ?? item.propertyName ?? listing.name ?? listing.title, "Listing"),
@@ -371,7 +373,7 @@ export default function EarningsPage() {
       .filter((item) => revenueType === "all" || item.revenueType === revenueType)
       .filter((item) => {
         if (!text) return true;
-        return `${item.bookingReference} ${item.transactionId} ${item.guestName} ${item.listingName}`.toLowerCase().includes(text);
+        return `${item.bookingReference} ${item.displayId ?? item.transactionId} ${item.guestName} ${item.listingName}`.toLowerCase().includes(text);
       });
   }, [data.transactions, listingFilter, payoutStatus, revenueType, search]);
 
@@ -612,7 +614,7 @@ export default function EarningsPage() {
               <tbody className="divide-y divide-border">
                 {pageTransactions.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600">{item.transactionId}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-slate-600">{item.displayId ?? item.transactionId}</td>
                     <td className="px-4 py-3 text-slate-700">{item.bookingReference}</td>
                     <td className="px-4 py-3 text-slate-700">{item.guestName}</td>
                     <td className="px-4 py-3">

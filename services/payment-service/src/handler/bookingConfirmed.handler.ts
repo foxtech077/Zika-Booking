@@ -177,9 +177,9 @@ export async function bookingConfirmedHandler(payment: any) {
     throw new Error(`Booking ${bookingId} has unexpected status: ${booking.status}`);
   }
 
-  // Override transactionId with the internal payment record ID
+  // Override transactionId with the payment displayId (human-readable) or internal ID
   // (booking.paymentId is null at fetch time, set only after confirm)
-  booking.transactionId = payment.id;
+  booking.transactionId = dbPayment.displayId ?? payment.id;
 
   // Generate invoice
   const invoice = buildInvoice(booking);

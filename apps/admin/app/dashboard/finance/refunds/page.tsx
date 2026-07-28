@@ -312,7 +312,7 @@ export default function RefundManagementPage() {
               <div>
                 <dt className="text-xs text-slate-400">Traveller / Claimant</dt>
                 <dd className="font-semibold text-slate-900 mt-0.5">Guest</dd>
-                <dd className="text-xs text-slate-500 font-mono">Payment ID: {selectedRefund.paymentId}</dd>
+                <dd className="text-xs text-slate-500 font-mono">Payment ID: {selectedRefund.displayId ?? selectedRefund.paymentId}</dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Linked Booking ID</dt>

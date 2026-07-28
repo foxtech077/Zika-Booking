@@ -11,6 +11,7 @@ import { initiateTaraPayment, initiateTaraReversal } from "../lib/tara.js";
 import { getCurrencyForCountry } from "../lib/countryCurrency.js";
 import { sendPaymentLinkEmail } from "../services/email.services.js";
 import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
+import { extractCountryCode, generateDisplayId } from "../lib/paymentReference.js";
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"];
 
@@ -128,8 +129,11 @@ export async function paymentRoutes(app: FastifyInstance) {
     }
 
     //  Create payment record
+    const cc = extractCountryCode((booking["reference"] as string) ?? "");
+    const displayId = await generateDisplayId(cc);
     await prisma.payment.create({
       data: {
+        displayId,
         bookingId,
         paymentProvider: "stripe",
         status: "initiated",
@@ -188,8 +192,11 @@ export async function paymentRoutes(app: FastifyInstance) {
     }
 
     // Step 1: Create payment record
+    const cc = extractCountryCode((booking["reference"] as string) ?? "");
+    const displayId = await generateDisplayId(cc);
     await prisma.payment.create({
       data: {
+        displayId,
         bookingId,
         paymentProvider: "tara",
         status: "initiated",
@@ -413,8 +420,11 @@ export async function paymentRoutes(app: FastifyInstance) {
     }
 
     // ── 4. Create payment record ────────────────────────────────────────────
+    const bookingRef = (booking["reference"] as string) ?? "";
+    const displayId = await generateDisplayId(extractCountryCode(bookingRef));
     const payment = await prisma.payment.create({
       data: {
+        displayId,
         bookingId,
         paymentProvider: "stripe",
         status: "initiated",
@@ -444,6 +454,7 @@ export async function paymentRoutes(app: FastifyInstance) {
 
     return sendSuccess(reply, 200, {
       paymentId: payment.id,
+      displayId: payment.displayId,
       clientSecret: intent.client_secret,
       publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
     });
@@ -590,8 +601,11 @@ export async function paymentRoutes(app: FastifyInstance) {
     const idempotencyKey = `pay-${bookingId}-${attemptNumber}`;
 
     // ── 5. Create payment record ──────────────────────────────────────────
+    const bookingRef = (booking["reference"] as string) ?? "";
+    const displayId = await generateDisplayId(extractCountryCode(bookingRef));
     const payment = await prisma.payment.create({
       data: {
+        displayId,
         bookingId,
         paymentProvider,
         status: "initiated",
@@ -666,6 +680,7 @@ export async function paymentRoutes(app: FastifyInstance) {
               requiresAction: true,
               clientSecret: paymentIntent?.client_secret,
               paymentId: payment.id,
+              displayId: payment.displayId,
             });
           }
           throw err;
@@ -687,7 +702,7 @@ export async function paymentRoutes(app: FastifyInstance) {
           console.error("[payments/initiate] bookingConfirmedHandler failed:", err);
         });
 
-        return sendSuccess(reply, 201, { paymentId: payment.id });
+        return sendSuccess(reply, 201, { paymentId: payment.id, displayId: payment.displayId });
       }
 
       // ── 7. Tara flow ──────────────────────────────────────────────────────
@@ -733,6 +748,7 @@ export async function paymentRoutes(app: FastifyInstance) {
 
         return sendSuccess(reply, 201, {
           paymentId: payment.id,
+          displayId: payment.displayId,
           taraReference: taraResult.taraReference,
           message: "STK push sent. Please approve on your handset within 60 seconds.",
         });
@@ -784,6 +800,7 @@ export async function paymentRoutes(app: FastifyInstance) {
 
     return sendSuccess(reply, 200, {
       id: payment.id,
+      displayId: payment.displayId,
       status: payment.status,
       bookingId: payment.bookingId,
       amount: Number(payment.amount),

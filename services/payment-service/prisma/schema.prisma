@@ -60,6 +60,7 @@ enum RefundStatus {
 
 model Payment {
   id                  String          @id @default(uuid())
+  displayId           String?         @unique
   bookingId           String
   paymentProvider     PaymentProvider
   status              PaymentStatus   @default(initiated)

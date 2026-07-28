@@ -240,7 +240,7 @@ export default function FinancialReportsPage() {
           reference: t.reference,
           traveller: t.travellerName,
           gateway: t.paymentGateway ?? "Unknown",
-          transactionId: t.id,
+          transactionId: t.displayId ?? t.id,
           voucherCode: t.voucherCode,
           voucherDiscount: t.voucherDiscount,
           amount: t.amount,
