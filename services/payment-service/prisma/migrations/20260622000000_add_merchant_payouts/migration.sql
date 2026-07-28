@@ -2,7 +2,7 @@
 CREATE TYPE "payments"."MerchantPayoutMethod" AS ENUM ('stripe_connect', 'mobile_money', 'bank_transfer', 'manual');
 
 -- CreateEnum
-CREATE TYPE "payments"."PayoutStatus" AS ENUM ('scheduled', 'processing', 'paid', 'failed', 'cancelled');
+CREATE TYPE "payments"."PayoutStatus" AS ENUM ('pending', 'scheduled', 'processing', 'paid', 'failed', 'cancelled');
 
 -- CreateTable
 CREATE TABLE "payments"."Merchant" (
