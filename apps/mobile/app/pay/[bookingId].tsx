@@ -1311,8 +1311,8 @@ export default function PaymentScreen() {
               style={styles.termsLink}
               onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "terms" } } as any)}
             >
-              Terms &amp; Conditions
-            </Text>
+              Terms of Use
+            </Text>.
           </Text>
         </TouchableOpacity>
 

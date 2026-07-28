@@ -22,6 +22,7 @@ import { getEnvStripePublishableKey } from "../lib/stripe-config";
 import { useAuthStore } from "../store/auth";
 import { useLocationBootstrap } from "../hooks/useLocation";
 import { queryClient } from "../lib/query-client";
+import { useFcmNotifications } from "../hooks/useFcmNotifications";
 
 const screenOptionsByName: Record<string, object> = {
   "pending-approval": { headerShown: false },
@@ -173,6 +174,7 @@ export default function RootLayout() {
 
 function RootLayoutContent() {
   useLocationBootstrap();
+  useFcmNotifications();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   useEffect(() => {

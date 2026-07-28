@@ -2,7 +2,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, TextInput, Dimensions,
+  ActivityIndicator, TextInput, Dimensions, Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -241,14 +241,35 @@ const card = StyleSheet.create({
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 function Skeleton() {
+  const pulseAnim = useRef(new Animated.Value(0.35)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.85,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0.35,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pulseAnim]);
+
   return (
     <View style={[card.wrap, { overflow: "hidden" }]}>
-      <View style={[card.photo, { backgroundColor: "#E5E7EB" }]} />
+      <Animated.View style={[card.photo, { backgroundColor: "#E5E7EB", opacity: pulseAnim }]} />
       <View style={{ padding: 14, gap: 8 }}>
-        <View style={{ height: 13, width: "40%", backgroundColor: "#E5E7EB", borderRadius: 4 }} />
-        <View style={{ height: 15, width: "80%", backgroundColor: "#E5E7EB", borderRadius: 4 }} />
-        <View style={{ height: 13, width: "55%", backgroundColor: "#E5E7EB", borderRadius: 4 }} />
-        <View style={{ height: 16, width: "35%", backgroundColor: "#E5E7EB", borderRadius: 4 }} />
+        <Animated.View style={{ height: 13, width: "40%", backgroundColor: "#E5E7EB", borderRadius: 4, opacity: pulseAnim }} />
+        <Animated.View style={{ height: 15, width: "80%", backgroundColor: "#E5E7EB", borderRadius: 4, opacity: pulseAnim }} />
+        <Animated.View style={{ height: 13, width: "55%", backgroundColor: "#E5E7EB", borderRadius: 4, opacity: pulseAnim }} />
+        <Animated.View style={{ height: 16, width: "35%", backgroundColor: "#E5E7EB", borderRadius: 4, opacity: pulseAnim }} />
       </View>
     </View>
   );
@@ -324,7 +345,7 @@ export default function BrowseCategoryScreen() {
   const totalFromApi = data?.totalCount ?? 0;
   const hasNextPage = !!data?.nextCursor;
   const isLoadingMore = isFetching && cursor > 0;
-  const isFirstLoad = isLoading && cursor === 0;
+  const isFirstLoad = (isLoading || isFetching) && allResults.length === 0;
 
   // Fetch signed photo URLs for all loaded listings via /listings/:id/public
   const listingIds = useMemo(() => allResults.map((r) => r.id), [allResults]);

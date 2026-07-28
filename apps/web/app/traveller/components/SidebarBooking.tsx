@@ -1,6 +1,6 @@
 "use client";
-import React from "react";
 import type { PublicListingDetail } from "@/types";
+import React from "react";
 import DateRangePicker from "./DateRangePicker";
 
 interface SidebarBookingProps {
@@ -161,11 +161,6 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
       {availabilityStatus === "unavailable" && (
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs font-semibold text-red-700">
           These dates are not available. Please choose different dates.
-        </div>
-      )}
-      {availabilityStatus === "available" && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-xs font-semibold text-emerald-700">
-          Dates are available — reserve now!
         </div>
       )}
 

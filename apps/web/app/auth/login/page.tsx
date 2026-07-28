@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -145,8 +145,8 @@ export default function LoginPage() {
   }
 
   return (
-   <div className="h-screen w-full flex items-center justify-center p-4 overflow-hidden bg-gradient-to-br from-[#07543f] via-[#128055] to-[#2ac98a]">
-      <div className="w-full max-w-5xl flex rounded-3xl overflow-hidden shadow-2xl" style={{ height: "min(600px, calc(100vh - 2rem))" }}>
+    <div className="min-h-screen min-h-[100dvh] w-full flex items-center justify-center p-3 sm:p-4 md:p-6 bg-gradient-to-br from-[#07543f] via-[#128055] to-[#2ac98a] py-6 sm:py-10">
+      <div className="w-full max-w-5xl flex rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-white md:h-[min(600px,calc(100vh-2rem))]">
 
         {/* ── Left Panel: Image ── */}
         <div className="relative hidden md:flex md:w-[45%] flex-col justify-between overflow-hidden rounded-l-3xl">
@@ -194,17 +194,23 @@ export default function LoginPage() {
         </div>
 
         {/* ── Right Panel: Form ── */}
-        <div className="flex-1 bg-white flex flex-col justify-center px-8 py-6 md:px-12 rounded-r-3xl rounded-l-3xl md:rounded-l-none overflow-y-auto">
-          {/* Logo */}
-          {/* <div className="flex flex-col items-center mb-4">
-            <Image src="/images/kainook-logo.jpeg" alt="Kainook Logo" width={52} height={52} className="rounded-full mb-1" />
-            <span className="font-bold text-sm text-primary tracking-widest">KAINOOK</span>
-          </div> */}
+        <div className="flex-1 bg-white flex flex-col justify-center px-4 py-6 sm:px-8 md:px-12 rounded-2xl md:rounded-l-none md:rounded-r-3xl overflow-y-auto">
+          {/* Mobile Logo */}
+          <div className="flex md:hidden items-center justify-center gap-2 mb-4">
+            <Image
+              src="/images/kainook-logo.jpeg"
+              alt="Kainook Logo"
+              width={40}
+              height={40}
+              className="rounded-xl"
+            />
+            <span className="font-bold text-lg text-primary tracking-wide">KAINOOK</span>
+          </div>
 
           <h1 className="text-xl font-bold text-center text-gray-900 mb-5">
             <span className="text-primary">Sign in</span> to your account
           </h1>
-          <div className="mr-10 ml-10">
+          <div className="w-full max-w-md mx-auto">
           <form onSubmit={handleSubmit} noValidate className="space-y-3">
             {/* Email */}
             <div>

@@ -155,8 +155,8 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="h-screen w-full flex items-center justify-center p-4 overflow-hidden bg-gradient-to-br from-[#07543f] via-[#128055] to-[#2ac98a]">
-      <div className="w-full max-w-5xl flex rounded-3xl overflow-hidden shadow-2xl" style={{ height: "min(680px, calc(100vh - 2rem))" }}>
+    <div className="min-h-screen min-h-[100dvh] w-full flex items-center justify-center p-3 sm:p-4 md:p-6 bg-gradient-to-br from-[#07543f] via-[#128055] to-[#2ac98a] py-6 sm:py-10">
+      <div className="w-full max-w-5xl flex rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-white md:h-[min(680px,calc(100vh-2rem))]">
 
         {/* ── Left Panel: Image ── */}
         <div className="relative hidden md:flex md:w-[45%] flex-col justify-between overflow-hidden rounded-l-3xl">
@@ -203,17 +203,22 @@ export default function RegisterPage() {
         </div>
 
         {/* ── Right Panel: Form ── */}
-        {/* Outer panel: fixed height (inherited from parent), flex-col, no outer scroll */}
-        <div className="flex-1 bg-white flex flex-col justify-start px-8 py-6 md:px-12 rounded-r-3xl rounded-l-3xl md:rounded-l-none overflow-hidden">
-
-          {/* Logo */}
-          {/* <div className="flex flex-col items-center mb-3">
-            <Image src="/images/kainook-logo.jpeg" alt="Kainook Logo" width={48} height={48} className="rounded-full mb-1" />
-            <span className="font-bold text-xs text-primary tracking-widest">KAINOOK</span>
-          </div> */}
+        <div className="flex-1 bg-white flex flex-col justify-start px-4 py-6 sm:px-8 md:px-12 rounded-2xl md:rounded-l-none md:rounded-r-3xl overflow-hidden">
 
           {/* ── Fixed header: title + account type tabs (never scroll) ── */}
           <div className="shrink-0">
+            {/* Mobile Logo */}
+            <div className="flex md:hidden items-center justify-center gap-2 mb-3">
+              <Image
+                src="/images/kainook-logo.jpeg"
+                alt="Kainook Logo"
+                width={40}
+                height={40}
+                className="rounded-xl"
+              />
+              <span className="font-bold text-lg text-primary tracking-wide">KAINOOK</span>
+            </div>
+
             <h1 className="text-xl font-bold text-center text-gray-900 mb-4">
               <span className="text-primary">Create</span> your account
             </h1>
@@ -239,45 +244,45 @@ export default function RegisterPage() {
           {/* ── Scrollable content: form + sign-in link ── */}
           <div className="flex-1 min-h-0 overflow-y-auto pr-1">
             <form onSubmit={handleSubmit} noValidate>
-              {/* Name row */}
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div>
-                  <label htmlFor="reg-firstname" className="block text-xs font-medium text-gray-700 mb-1.5">First name</label>
-                  <div className="relative">
-                    <InputIcon>
-                      <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                      </svg>
-                    </InputIcon>
-                    <input
-                      id="reg-firstname"
-                      value={form.firstName}
-                      onChange={set("firstName")}
-                      placeholder="Ada"
-                      autoComplete="given-name"
-                      className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.firstName ? "border-red-400" : "border-gray-200"}`}
-                    />
-                    {errors.firstName && <p className="text-xs text-red-500 mt-1">{errors.firstName}</p>}
-                  </div>
+              {/* First name */}
+              <div className="mb-3">
+                <label htmlFor="reg-firstname" className="block text-xs font-medium text-gray-700 mb-1.5">First name</label>
+                <div className="relative">
+                  <InputIcon>
+                    <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                    </svg>
+                  </InputIcon>
+                  <input
+                    id="reg-firstname"
+                    value={form.firstName}
+                    onChange={set("firstName")}
+                    placeholder="Ada"
+                    autoComplete="given-name"
+                    className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.firstName ? "border-red-400" : "border-gray-200"}`}
+                  />
+                  {errors.firstName && <p className="text-xs text-red-500 mt-1">{errors.firstName}</p>}
                 </div>
-                <div>
-                  <label htmlFor="reg-lastname" className="block text-xs font-medium text-gray-700 mb-1.5">Last name</label>
-                  <div className="relative">
-                    <InputIcon>
-                      <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                      </svg>
-                    </InputIcon>
-                    <input
-                      id="reg-lastname"
-                      value={form.lastName}
-                      onChange={set("lastName")}
-                      placeholder="Okafor"
-                      autoComplete="family-name"
-                      className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.lastName ? "border-red-400" : "border-gray-200"}`}
-                    />
-                    {errors.lastName && <p className="text-xs text-red-500 mt-1">{errors.lastName}</p>}
-                  </div>
+              </div>
+
+              {/* Last name */}
+              <div className="mb-3">
+                <label htmlFor="reg-lastname" className="block text-xs font-medium text-gray-700 mb-1.5">Last name</label>
+                <div className="relative">
+                  <InputIcon>
+                    <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                    </svg>
+                  </InputIcon>
+                  <input
+                    id="reg-lastname"
+                    value={form.lastName}
+                    onChange={set("lastName")}
+                    placeholder="Okafor"
+                    autoComplete="family-name"
+                    className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.lastName ? "border-red-400" : "border-gray-200"}`}
+                  />
+                  {errors.lastName && <p className="text-xs text-red-500 mt-1">{errors.lastName}</p>}
                 </div>
               </div>
 
@@ -330,7 +335,7 @@ export default function RegisterPage() {
 
               {/* Provider-only fields */}
               {userType === "provider" && (
-                <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="space-y-3 mb-3">
                   <div>
                     <label htmlFor="reg-business" className="block text-xs font-medium text-gray-700 mb-1.5">Business name</label>
                     <div className="relative">
@@ -360,7 +365,7 @@ export default function RegisterPage() {
                       error={errors.country}
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div>
                     <label htmlFor="reg-phone" className="block text-xs font-medium text-gray-700 mb-1.5">Phone number</label>
                     <div className="flex gap-2">
                       <div className="w-[100px] shrink-0">
@@ -394,61 +399,61 @@ export default function RegisterPage() {
                 </div>
               )}
 
-              {/* Password row */}
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div>
-                  <label htmlFor="reg-password" className="block text-xs font-medium text-gray-700 mb-1.5">Password</label>
-                  <div className="relative">
-                    <InputIcon>
-                      <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                      </svg>
-                    </InputIcon>
-                    <input
-                      id="reg-password"
-                      type={showPassword ? "text" : "password"}
-                      value={form.password}
-                      onChange={set("password")}
-                      placeholder="Min. 8 chars"
-                      autoComplete="new-password"
-                      className={`w-full pl-9 pr-9 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.password ? "border-red-400" : "border-gray-200"}`}
-                    />
-                    <button type="button" tabIndex={-1} onClick={() => setShowPassword(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition">
-                      {showPassword ? (
-                        <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
-                      ) : (
-                        <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                      )}
-                    </button>
-                    {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password}</p>}
-                  </div>
+              {/* Password */}
+              <div className="mb-3">
+                <label htmlFor="reg-password" className="block text-xs font-medium text-gray-700 mb-1.5">Password</label>
+                <div className="relative">
+                  <InputIcon>
+                    <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                    </svg>
+                  </InputIcon>
+                  <input
+                    id="reg-password"
+                    type={showPassword ? "text" : "password"}
+                    value={form.password}
+                    onChange={set("password")}
+                    placeholder="Min. 8 chars"
+                    autoComplete="new-password"
+                    className={`w-full pl-9 pr-9 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.password ? "border-red-400" : "border-gray-200"}`}
+                  />
+                  <button type="button" tabIndex={-1} onClick={() => setShowPassword(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition">
+                    {showPassword ? (
+                      <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
+                    ) : (
+                      <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                    )}
+                  </button>
+                  {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password}</p>}
                 </div>
-                <div>
-                  <label htmlFor="reg-confirm-password" className="block text-xs font-medium text-gray-700 mb-1.5">Confirm password</label>
-                  <div className="relative">
-                    <InputIcon>
-                      <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </InputIcon>
-                    <input
-                      id="reg-confirm-password"
-                      type={showConfirmPassword ? "text" : "password"}
-                      value={form.confirmPassword}
-                      onChange={set("confirmPassword")}
-                      placeholder="Repeat password"
-                      autoComplete="new-password"
-                      className={`w-full pl-9 pr-9 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.confirmPassword ? "border-red-400" : "border-gray-200"}`}
-                    />
-                    <button type="button" tabIndex={-1} onClick={() => setShowConfirmPassword(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition">
-                      {showConfirmPassword ? (
-                        <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
-                      ) : (
-                        <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                      )}
-                    </button>
-                    {errors.confirmPassword && <p className="text-xs text-red-500 mt-1">{errors.confirmPassword}</p>}
-                  </div>
+              </div>
+
+              {/* Confirm password */}
+              <div className="mb-3">
+                <label htmlFor="reg-confirm-password" className="block text-xs font-medium text-gray-700 mb-1.5">Confirm password</label>
+                <div className="relative">
+                  <InputIcon>
+                    <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </InputIcon>
+                  <input
+                    id="reg-confirm-password"
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={form.confirmPassword}
+                    onChange={set("confirmPassword")}
+                    placeholder="Repeat password"
+                    autoComplete="new-password"
+                    className={`w-full pl-9 pr-9 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.confirmPassword ? "border-red-400" : "border-gray-200"}`}
+                  />
+                  <button type="button" tabIndex={-1} onClick={() => setShowConfirmPassword(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition">
+                    {showConfirmPassword ? (
+                      <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
+                    ) : (
+                      <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                    )}
+                  </button>
+                  {errors.confirmPassword && <p className="text-xs text-red-500 mt-1">{errors.confirmPassword}</p>}
                 </div>
               </div>
 

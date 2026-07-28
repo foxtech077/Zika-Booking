@@ -107,13 +107,29 @@ export function useMarkAllNotificationsRead() {
   });
 }
 
-// Device registration hooks — ready for use once expo-notifications is installed.
-// Call useRegisterDevice().mutate({ token, platform }) after login.
-// Call useUnregisterDevice().mutate() on logout.
+// Device registration hooks & FCM setup
+import { initializeFcm, getFcmToken } from "../services/fcm";
+import { DeviceTokenService } from "../services/deviceTokenService";
+import { useFcmNotifications } from "./useFcmNotifications";
+
+export { useFcmNotifications, DeviceTokenService };
+
+export function useFcmSetup() {
+  const registerDevice = useRegisterDevice();
+
+  return {
+    initialize: async () => {
+      const token = await initializeFcm();
+      return token;
+    },
+    getToken: getFcmToken,
+    registerDevice,
+  };
+}
 
 export function useRegisterDevice() {
   return useMutation({
-    mutationFn: async ({ token, platform }: { token: string; platform: "ios" | "android" }) => {
+    mutationFn: async ({ token, platform }: { token: string; platform: "ios" | "android" | "fcm" | "apns" }) => {
       await listingApi.post("/notifications/register-device", { token, platform });
     },
   });
@@ -126,3 +142,4 @@ export function useUnregisterDevice() {
     },
   });
 }
+

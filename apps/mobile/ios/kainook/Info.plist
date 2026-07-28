@@ -36,13 +36,13 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>exp+kainook</string>
+          <string>com.googleusercontent.apps.1022728776661-6aucvg2l0r7suuogj2m9lgcjodetb2rn</string>
         </array>
       </dict>
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>com.googleusercontent.apps.1022728776661-6aucvg2l0r7suuogj2m9lgcjodetb2rn</string>
+          <string>exp+kainook</string>
         </array>
       </dict>
     </array>
@@ -73,6 +73,11 @@
     </array>
     <key>RCTNewArchEnabled</key>
     <true/>
+    <key>UIBackgroundModes</key>
+    <array>
+      <string>fetch</string>
+      <string>remote-notification</string>
+    </array>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
     <key>UIRequiredDeviceCapabilities</key>

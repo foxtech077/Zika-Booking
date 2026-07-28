@@ -459,7 +459,7 @@ export default function ConversationScreen() {
               <Ionicons name="call-outline" size={20} color={K.colors.textDark} />
             </TouchableOpacity>
           )} */}
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={s.headerBtn}
             activeOpacity={0.7}
             onPress={() =>
@@ -470,7 +470,7 @@ export default function ConversationScreen() {
             }
           >
             <Ionicons name="ellipsis-vertical" size={20} color={isInactive ? K.colors.textMuted : K.colors.textDark} />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       </View>
 

@@ -15,8 +15,16 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kainook.app",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "buildNumber": "1",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "fetch",
+          "remote-notification"
+        ]
+      },
       "entitlements": {
+        "aps-environment": "development",
         "com.apple.developer.applesignin": [
           "Default"
         ]
@@ -33,6 +41,12 @@
       },
       "package": "com.kainook.app",
       "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.WAKE_LOCK"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -62,6 +76,14 @@
       ]
     },
     "plugins": [
+      "@react-native-firebase/app",
+      [
+        "@react-native-firebase/messaging",
+        {
+          "androidDefaultNotificationChannelId": "default",
+          "androidDefaultNotificationColor": "#024622"
+        }
+      ],
       "expo-router",
       "expo-secure-store",
       [
