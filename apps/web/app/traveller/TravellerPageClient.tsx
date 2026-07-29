@@ -2427,19 +2427,30 @@ export default function TravellerDashboard() {
                                     <span>−{detailListing.currency} {sidebarDiscount.toLocaleString()}</span>
                                   </div>
                                 )}
-                                {isCar && detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && (
-                                  <div className="flex justify-between text-slate-600">
-                                    <span>Security deposit</span>
-                                    <span>{detailListing.currency} {detailListing.securityDeposit.toLocaleString()}</span>
-                                  </div>
-                                )}
-                                <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
-                                  <span>Estimated total</span>
-                                  <span>{detailListing.currency} {(baseTotal - sidebarDiscount + (isCar && detailListing.securityDeposit ? detailListing.securityDeposit : 0)).toLocaleString()}</span>
-                                </div>
-                                <div className="flex justify-between text-slate-400 text-xs">
-                                  <span>Log in for full breakdown including fees & taxes</span>
-                                </div>
+                                {(() => {
+                                  const afterDiscount = Math.max(0, baseTotal - sidebarDiscount);
+                                  const serviceFee = Math.ceil(afterDiscount * 0.05 * 100) / 100;
+                                  const securityDeposit = isCar && detailListing.securityDeposit ? detailListing.securityDeposit : 0;
+                                  const estimatedTotal = afterDiscount + serviceFee + securityDeposit;
+                                  return (
+                                    <>
+                                      <div className="flex justify-between">
+                                        <span>Service fee (5%)</span>
+                                        <span>{detailListing.currency} {serviceFee.toLocaleString()}</span>
+                                      </div>
+                                      {securityDeposit > 0 && (
+                                        <div className="flex justify-between text-slate-600">
+                                          <span>Security deposit</span>
+                                          <span>{detailListing.currency} {securityDeposit.toLocaleString()}</span>
+                                        </div>
+                                      )}
+                                      <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
+                                        <span>Estimated total</span>
+                                        <span>{detailListing.currency} {estimatedTotal.toLocaleString()}</span>
+                                      </div>
+                                    </>
+                                  );
+                                })()}
                               </div>
                             )
                           )}
