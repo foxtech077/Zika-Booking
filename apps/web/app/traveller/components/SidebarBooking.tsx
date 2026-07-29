@@ -55,7 +55,7 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
     : 0;
 
   const hasPromoBadge = promoPercentFromBadge > 0;
-  const promoRate = hasPromoBadge ? Math.round(rawRate * (1 - promoPercentFromBadge / 100)) : rawRate;
+  const promoRate = hasPromoBadge ? Number((rawRate * (1 - promoPercentFromBadge / 100)).toFixed(2)) : rawRate;
   const mrpPrice = hasPromoBadge ? rawRate : (listing.mrpPrice && listing.mrpPrice > rawRate) ? listing.mrpPrice : null;
   const effectiveRate = hasPromoBadge ? promoRate : rawRate;
 
@@ -66,7 +66,7 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
 
   const originalSubtotal = effectiveRate * days;
   const longStayDiscountAmount = longStayApplies
-    ? Math.round(listing.longStayDiscountType === "percentage" ? originalSubtotal * (longStayVal / 100) : longStayVal * days)
+    ? Number((listing.longStayDiscountType === "percentage" ? originalSubtotal * (longStayVal / 100) : longStayVal * days).toFixed(2))
     : 0;
 
   const subtotalAfterDiscount = Math.max(0, originalSubtotal - longStayDiscountAmount);

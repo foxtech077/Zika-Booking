@@ -337,7 +337,6 @@ export default function TravellerDashboard() {
   const [checkoutStep, setCheckoutStep] = useState<"review" | "details" | "stripe_card" | "polling">("review");
   const [pricingPreview, setPricingPreview] = useState<any>(null);
   const [estimatedPricing, setEstimatedPricing] = useState<any>(null);
-  const [estimatingPricing, setEstimatingPricing] = useState(false);
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [stripeClientSecret, setStripeClientSecret] = useState("");
   const [stripeInstance, setStripeInstance] = useState<any>(null);
@@ -742,30 +741,28 @@ export default function TravellerDashboard() {
       const start = isCar ? detailPickupDate : detailCheckIn;
       const end = isCar ? detailReturnDate : detailCheckOut;
       const days = calcDays(start, end);
-      const baseTotal = pricePerNight * days;
-      const discountedTotal = Math.max(0, baseTotal - bestDiscount);
-      // Country-specific rate from GET /listings/:id/public — never a hardcoded guess.
-      const serviceFee = days > 0
-        ? Math.ceil(discountedTotal * (detailListing.commissionRate ?? 0) * 100) / 100
-        : 0;
-      const taxRate = TAX_RATES[detailListing.country] ?? 0;
-      const taxAmount = Math.ceil(baseTotal * taxRate);
-      const grandTotal = Math.max(0, baseTotal + serviceFee + taxAmount - bestDiscount);
 
-      console.log("[ZikaSearch] Discount/Price calculation details:", {
-        listingName: detailListing.name,
-        days,
-        baseTotal,
-        serviceFee,
-        taxAmount,
-        promotionDiscount,
-        voucherDiscount,
-        effectiveDiscountSource,
-        bestDiscountApplied: bestDiscount,
-        finalPrice: grandTotal,
-      });
+      if (estimatedPricing) {
+        console.log("[ZikaSearch] Pricing (server):", {
+          listingName: detailListing.name,
+          days,
+          baseAmount: estimatedPricing.baseAmount,
+          serviceFee: estimatedPricing.serviceFee,
+          commissionRate: estimatedPricing.commissionRate,
+          taxAmount: estimatedPricing.taxAmount,
+          promotionDiscount: estimatedPricing.promotionDiscount,
+          totalAmount: estimatedPricing.totalAmount,
+        });
+      } else {
+        const baseTotal = pricePerNight * days;
+        console.log("[ZikaSearch] Pricing (client fallback, awaiting API):", {
+          listingName: detailListing.name,
+          days,
+          baseTotal,
+        });
+      }
     }
-  }, [detailListing?.id, detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, bestDiscount, voucherApplied, voucherDiscount, promotionDiscount, selectedRoomTypeId]);
+  }, [detailListing?.id, detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, estimatedPricing, selectedRoomTypeId]);
 
   // Reusable Voucher dropdown & Manual entry component
   function renderVoucherSelector() {
@@ -1143,7 +1140,6 @@ export default function TravellerDashboard() {
     setVoucherDiscount(0);
     setVoucherCode("");
     setVoucherError("");
-    setActivePromotion(null);
     setPromotionDiscount(0);
     setApplicableVouchers([]);
     setWalletVouchers([]);
@@ -1301,18 +1297,16 @@ export default function TravellerDashboard() {
     const isCar = detailListing.category === "car";
     const start = isCar ? detailPickupDate : detailCheckIn;
     const end = isCar ? detailReturnDate : detailCheckOut;
-    if (!start || !end || !detailListing.id) { setEstimatedPricing(null); setEstimatingPricing(false); return; }
+    if (!start || !end || !detailListing.id) { setEstimatedPricing(null); return; }
 
-    setEstimatedPricing(null);
-    setEstimatingPricing(true);
     try {
       const res = await listingApi.post<any>("/bookings/pricing-estimate", {
         listingId: detailListing.id,
         roomTypeId: selectedRoomTypeId || undefined,
         checkIn: isCar ? undefined : detailCheckIn || undefined,
         checkOut: isCar ? undefined : detailCheckOut || undefined,
-        pickupDatetime: isCar ? detailPickupDate || undefined : undefined,
-        returnDatetime: isCar ? detailReturnDate || undefined : undefined,
+        pickupDatetime: isCar ? toIsoDatetime(detailPickupDate) || undefined : undefined,
+        returnDatetime: isCar ? toIsoDatetime(detailReturnDate) || undefined : undefined,
         guests: searchAdults + searchChildren,
       });
       if (res.data?.success && res.data.data?.pricingPreview) {
@@ -1322,8 +1316,6 @@ export default function TravellerDashboard() {
       }
     } catch {
       setEstimatedPricing(null);
-    } finally {
-      setEstimatingPricing(false);
     }
   }
 
@@ -1357,8 +1349,8 @@ export default function TravellerDashboard() {
 
     const base = pricePerNight * days;
     const pDiscount = activePromotion.discountType === "percentage"
-      ? Math.round(base * activePromotion.discountValue / 100)
-      : Math.round(activePromotion.discountValue);
+      ? Number((base * activePromotion.discountValue / 100).toFixed(2))
+      : Number(Number(activePromotion.discountValue).toFixed(2));
     setPromotionDiscount(pDiscount);
   }, [activePromotion, detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id, selectedRoomTypeId]);
 
@@ -2156,11 +2148,11 @@ export default function TravellerDashboard() {
 
                       if (isValidPromo) {
                         const promoDiscount = activePromotion.discountType === "percentage"
-                          ? Math.round(basePrice * (Number(activePromotion.discountValue) / 100))
-                          : Math.round(Number(activePromotion.discountValue));
+                          ? Number((basePrice * (Number(activePromotion.discountValue) / 100)).toFixed(2))
+                          : Number(Number(activePromotion.discountValue).toFixed(2));
                         displayPrice = Math.max(0, basePrice - promoDiscount);
                       } else if (hasLongStay) {
-                        displayPrice = Math.round(basePrice * (1 - longStayPct / 100));
+                        displayPrice = Number((basePrice * (1 - longStayPct / 100)).toFixed(2));
                       }
 
                       return (
@@ -2295,11 +2287,11 @@ export default function TravellerDashboard() {
 
                                     if (isValidPromo) {
                                       const promoDiscount = activePromotion.discountType === "percentage"
-                                        ? Math.round(baseRtPrice * (Number(activePromotion.discountValue) / 100))
-                                        : Math.round(Number(activePromotion.discountValue));
+                                        ? Number((baseRtPrice * (Number(activePromotion.discountValue) / 100)).toFixed(2))
+                                        : Number(Number(activePromotion.discountValue).toFixed(2));
                                       displayRtPrice = Math.max(0, baseRtPrice - promoDiscount);
                                     } else if (hasLongStay) {
-                                      displayRtPrice = Math.round(baseRtPrice * (1 - longStayPct / 100));
+                                      displayRtPrice = Number((baseRtPrice * (1 - longStayPct / 100)).toFixed(2));
                                     }
 
                                     return (
@@ -2376,29 +2368,35 @@ export default function TravellerDashboard() {
 
                           {/* Dynamic price breakdown */}
                           {days > 0 && (
-                            estimatingPricing && !estimatedPricing ? (
+                            !estimatedPricing ? (
                               <div className="space-y-3 pt-2 border-t border-slate-100 animate-pulse">
                                 <div className="h-4 bg-slate-200 rounded w-3/4" />
                                 <div className="h-4 bg-slate-200 rounded w-1/2" />
                                 <div className="h-4 bg-slate-200 rounded w-5/6" />
                                 <div className="h-5 bg-slate-200 rounded w-2/3 mt-2" />
                               </div>
-                            ) : estimatedPricing ? (
+                            ) : (
                               <div className="space-y-2 pt-2 border-t border-slate-100 text-sm text-slate-600">
                                 <div className="flex justify-between">
                                   <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
                                   <span>{detailListing.currency} {estimatedPricing.baseAmount.toLocaleString()}</span>
                                 </div>
+                                {effectiveDiscountSource === "promotion" && estimatedPricing.promotionDiscount > 0 && (
+                                  <div className="flex justify-between text-emerald-600 font-semibold">
+                                    <span>Promotion discount ({activePromotion?.discountValue}%)</span>
+                                    <span>−{detailListing.currency} {estimatedPricing.promotionDiscount.toLocaleString()}</span>
+                                  </div>
+                                )}
+                                {effectiveDiscountSource === "voucher" && bestDiscount > 0 && (
+                                  <div className="flex justify-between text-emerald-600 font-semibold">
+                                    <span>Voucher discount</span>
+                                    <span>−{detailListing.currency} {bestDiscount.toLocaleString()}</span>
+                                  </div>
+                                )}
                                 <div className="flex justify-between">
                                   <span>Service fee{estimatedPricing.commissionRate ? ` (${Math.round(estimatedPricing.commissionRate * 100)}%)` : ''}</span>
                                   <span>{detailListing.currency} {estimatedPricing.serviceFee.toLocaleString()}</span>
                                 </div>
-                                {sidebarDiscount > 0 && (
-                                  <div className="flex justify-between text-emerald-600 font-semibold">
-                                    <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
-                                    <span>−{detailListing.currency} {sidebarDiscount.toLocaleString()}</span>
-                                  </div>
-                                )}
                                 {estimatedPricing.taxAmount > 0 && (
                                   <div className="flex justify-between text-slate-500">
                                     <span>Taxes{estimatedPricing.taxRate ? ` (${Math.round(estimatedPricing.taxRate * 100)}%)` : ''}</span>
@@ -2415,52 +2413,6 @@ export default function TravellerDashboard() {
                                   <span>Total</span>
                                   <span>{detailListing.currency} {estimatedPricing.totalAmount.toLocaleString()}</span>
                                 </div>
-                              </div>
-                            ) : days > 0 && (
-                              <div className="space-y-2 pt-2 border-t border-slate-100 text-sm text-slate-600">
-                                {(() => {
-                                  // Compute discount inline (same logic as price header) to avoid React effect timing issues
-                                  const promo = activePromotion && isPromotionValid(activePromotion) && activePromotion.activity === detailListing.category ? activePromotion : null;
-                                  const promoAmt = promo
-                                    ? (promo.discountType === "percentage"
-                                        ? Number((baseTotal * Number(promo.discountValue) / 100).toFixed(2))
-                                        : Number(Number(promo.discountValue).toFixed(2)))
-                                    : 0;
-                                  const afterDiscount = Math.max(0, baseTotal - promoAmt);
-                                  const serviceFee = Math.ceil(afterDiscount * 0.10 * 100) / 100;
-                                  const securityDeposit = isCar && detailListing.securityDeposit ? detailListing.securityDeposit : 0;
-                                  const estimatedTotal = afterDiscount + serviceFee + securityDeposit;
-                                  // Round for display to match /booking/review page (uses fmt with maxFractionDigits: 0)
-                                  const disp = (n: number) => Math.round(n).toLocaleString();
-                                  return (
-                                    <>
-                                      <div className="flex justify-between">
-                                        <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
-                                        <span>{detailListing.currency} {disp(baseTotal)}</span>
-                                      </div>
-                                      {promoAmt > 0 && promo && (
-                                        <div className="flex justify-between text-emerald-600 font-semibold">
-                                          <span>Promotion discount ({promo.discountValue}%)</span>
-                                          <span>−{detailListing.currency} {disp(promoAmt)}</span>
-                                        </div>
-                                      )}
-                                      <div className="flex justify-between">
-                                        <span>Service fee (10%)</span>
-                                        <span>{detailListing.currency} {disp(serviceFee)}</span>
-                                      </div>
-                                      {securityDeposit > 0 && (
-                                        <div className="flex justify-between text-slate-600">
-                                          <span>Security deposit</span>
-                                          <span>{detailListing.currency} {disp(securityDeposit)}</span>
-                                        </div>
-                                      )}
-                                      <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
-                                        <span>Estimated total</span>
-                                        <span>{detailListing.currency} {disp(estimatedTotal)}</span>
-                                      </div>
-                                    </>
-                                  );
-                                })()}
                               </div>
                             )
                           )}
@@ -2519,20 +2471,16 @@ export default function TravellerDashboard() {
                           const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
                           const start = isCar ? detailPickupDate : detailCheckIn;
                           const end = isCar ? detailReturnDate : detailCheckOut;
-                          const days = pricingPreview ? pricingPreview.units : calcDays(start, end);
-                          const base = pricingPreview ? pricingPreview.baseAmount : pricePerNight * days;
-                          const discount = pricingPreview
-                            ? (pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0))
-                            : bestDiscount;
+                          if (!pricingPreview) return null;
+                          const days = pricingPreview.units;
+                          const base = pricingPreview.baseAmount;
+                          const discount = pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0);
                           const subtotal = base - discount;
-                          const serviceFee = pricingPreview
-                            ? pricingPreview.serviceFee
-                            : Math.ceil(subtotal * (detailListing.commissionRate ?? 0) * 100) / 100;
-                          const taxAmount = pricingPreview ? pricingPreview.taxAmount : 0;
-                          const securityDeposit = isCar && pricingPreview ? (pricingPreview.securityDeposit ?? 0) : 0;
-                          const grandTotal = pricingPreview
-                            ? base - discount + serviceFee + taxAmount + (pricingPreview.deliveryFee ?? 0) + securityDeposit
-                            : Math.max(0, base + serviceFee + taxAmount - bestDiscount);
+                          const serviceFee = pricingPreview.serviceFee;
+                          const taxAmount = pricingPreview.taxAmount;
+                          const securityDeposit = isCar ? (pricingPreview.securityDeposit ?? 0) : 0;
+                          const deliveryFee = pricingPreview.deliveryFee ?? 0;
+                          const grandTotal = pricingPreview.totalAmount;
                           const fmt = (d: string | null | undefined) =>
                             d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
                           return (
@@ -2579,6 +2527,12 @@ export default function TravellerDashboard() {
                                   <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days !== 1 ? "s" : ""}</span>
                                   <span>{detailListing.currency} {base.toLocaleString()}</span>
                                 </div>
+                                {discount > 0 && (
+                                  <div className="flex justify-between text-emerald-600 font-semibold">
+                                    <span>{effectiveDiscountSource === "promotion" ? `Promotion discount (${activePromotion?.discountValue}%)` : "Voucher discount"}</span>
+                                    <span>−{detailListing.currency} {discount.toLocaleString()}</span>
+                                  </div>
+                                )}
                                 <div className="flex justify-between text-slate-500">
                                   <span>Service fee{pricingPreview?.commissionRate ? ` (${Math.round(pricingPreview.commissionRate * 100)}%)` : ''}</span>
                                   <span>{detailListing.currency} {serviceFee.toLocaleString()}</span>
@@ -2587,12 +2541,6 @@ export default function TravellerDashboard() {
                                   <div className="flex justify-between text-slate-500">
                                     <span>Taxes & VAT{pricingPreview?.taxRate ? ` (${Math.round(pricingPreview.taxRate * 100)}%)` : ''}</span>
                                     <span>{detailListing.currency} {taxAmount.toLocaleString()}</span>
-                                  </div>
-                                )}
-                                {discount > 0 && (
-                                  <div className="flex justify-between text-emerald-600 font-semibold">
-                                    <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
-                                    <span>−{detailListing.currency} {discount.toLocaleString()}</span>
                                   </div>
                                 )}
 
@@ -2677,30 +2625,33 @@ export default function TravellerDashboard() {
                             const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
                             const start = isCar ? detailPickupDate : detailCheckIn;
                             const end = isCar ? detailReturnDate : detailCheckOut;
-                            const days = pricingPreview ? pricingPreview.units : calcDays(start, end);
-                            const baseTotal = pricingPreview ? pricingPreview.baseAmount : pricePerNight * days;
-                            const discount = pricingPreview
-                              ? (pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0))
-                              : bestDiscount;
+                            if (!pricingPreview) return null;
+                            const days = pricingPreview.units;
+                            const baseTotal = pricingPreview.baseAmount;
+                            const discount = pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0);
                             const subtotal = baseTotal - discount;
-                            const serviceFee = pricingPreview
-                            ? pricingPreview.serviceFee
-                            : Math.ceil(subtotal * (detailListing.commissionRate ?? 0) * 100) / 100;
-                            const securityDeposit = isCar && pricingPreview ? (pricingPreview.securityDeposit ?? 0) : 0;
-                            const grandTotal = pricingPreview
-                              ? baseTotal - discount + serviceFee + (pricingPreview.deliveryFee ?? 0) + securityDeposit
-                              : Math.max(0, baseTotal + serviceFee - bestDiscount);
+                            const serviceFee = pricingPreview.serviceFee;
+                            const taxAmount = pricingPreview.taxAmount ?? 0;
+                            const securityDeposit = isCar ? (pricingPreview.securityDeposit ?? 0) : 0;
+                            const deliveryFee = pricingPreview.deliveryFee ?? 0;
+                            const grandTotal = pricingPreview.totalAmount;
                             return (
                               <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
                                 <div className="flex justify-between">
                                   <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
                                   <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
                                 </div>
-                                <div className="flex justify-between"><span>Service fee{pricingPreview?.commissionRate ? ` (${Math.round(pricingPreview.commissionRate * 100)}%)` : ''}</span><span>{detailListing.currency} {serviceFee.toLocaleString()}</span></div>
                                 {discount > 0 && (
                                   <div className="flex justify-between text-emerald-600 font-semibold">
-                                    <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
+                                    <span>{effectiveDiscountSource === "promotion" ? `Promotion discount (${activePromotion?.discountValue}%)` : "Voucher discount"}</span>
                                     <span>−{detailListing.currency} {discount.toLocaleString()}</span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between"><span>Service fee{pricingPreview?.commissionRate ? ` (${Math.round(pricingPreview.commissionRate * 100)}%)` : ''}</span><span>{detailListing.currency} {serviceFee.toLocaleString()}</span></div>
+                                {taxAmount > 0 && (
+                                  <div className="flex justify-between text-slate-500">
+                                    <span>Taxes{pricingPreview?.taxRate ? ` (${Math.round(pricingPreview.taxRate * 100)}%)` : ''}</span>
+                                    <span>{detailListing.currency} {taxAmount.toLocaleString()}</span>
                                   </div>
                                 )}
                                 {isCar && securityDeposit > 0 && (

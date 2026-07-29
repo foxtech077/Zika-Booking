@@ -116,7 +116,7 @@ const TARA_COUNTRIES = new Set([
 
 function fmt(n: number) {
   if (typeof n !== "number" || isNaN(n)) return "0";
-  return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // Fallback used only when /bookings/initiate returned no pricingPreview.
@@ -129,7 +129,7 @@ function calcPricing(ctx: CheckoutCtx) {
   const commissionRate = ctx.pricingPreview?.commissionRate ?? ctx.commissionRate ?? 0;
   const serviceFee = Math.ceil(subtotal * commissionRate * 100) / 100;
   const taxRate = TAX_RATES[ctx.listingCountry] ?? 0;
-  const taxes = Math.round(subtotal * taxRate);
+  const taxes = Math.ceil(subtotal * taxRate * 100) / 100;
   const total = subtotal + serviceFee + taxes;
   return { base, discount, subtotal, serviceFee, taxes, total };
 }
@@ -770,7 +770,7 @@ export default function BookingReviewPage() {
                         <div className="space-y-3">
                           <p className="text-sm text-emerald-700 font-semibold flex items-center gap-1.5">
                             <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                            Promotion applied — saves {ctx.currency} {fmt(ctx.voucherDiscount ?? 0)}
+                            Promotion applied — saves {ctx.currency} {fmt(pricing.discount)}
                           </p>
                           <p className="text-xs text-slate-500">Have a voucher that saves more? Select or enter it below:</p>
 
