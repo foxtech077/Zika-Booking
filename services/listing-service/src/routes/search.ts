@@ -314,6 +314,8 @@ export async function searchRoutes(app: FastifyInstance) {
         dailyRate: l.category === "car" && l.pricePerDay ? Number(l.pricePerDay) : null,
         currency: l.currency,
         cancellationPolicy: l.cancellationPolicy,
+        // Stays (hotel + apartment) — clients badge this when > 1 night
+        minStayNights: l.category === "car" ? null : l.minStayNights,
         // Hotel
         starRating: l.starRating,
         isAccredited: !!l.approvedAt,

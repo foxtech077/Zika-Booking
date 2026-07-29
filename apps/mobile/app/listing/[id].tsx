@@ -882,7 +882,10 @@ export default function ListingDetailScreen() {
       if (listing.checkoutTime) rows.push({ icon: "log-out-outline", label: "Check-out by", value: listing.checkoutTime });
       rows.push({ icon: "flame-outline", label: "Smoking", value: listing.smokingAllowed ? "Allowed" : "Not allowed" });
       rows.push({ icon: "paw-outline", label: "Pets", value: listing.petsAllowed ? "Allowed" : "Not allowed" });
-      if (isApartment && listing.minStayNights) rows.push({ icon: "moon-outline", label: "Min stay", value: `${listing.minStayNights} night${listing.minStayNights !== 1 ? "s" : ""}` });
+      // Applies to hotels as well as homes — a hotel minimum was previously
+      // invisible in the app while the web listing card and detail page both
+      // showed it. Only surfaced above 1 night, matching web.
+      if (listing.minStayNights && listing.minStayNights > 1) rows.push({ icon: "moon-outline", label: "Min stay", value: `${listing.minStayNights} night${listing.minStayNights !== 1 ? "s" : ""}` });
       if (isApartment && listing.longStayEnabled && listing.longStayMinNights && listing.longStayDiscountValue) {
         rows.push({ icon: "pricetag-outline", label: "Long-stay discount", value: `${listing.longStayDiscountType === "percentage" ? `${listing.longStayDiscountValue}% off` : `${listing.currency} ${listing.longStayDiscountValue} off`} for ${listing.longStayMinNights}+ nights` });
       }
