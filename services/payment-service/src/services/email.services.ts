@@ -91,7 +91,7 @@ export async function sendGuestEmail(
     attachments: [
       {
         content: pdf.pdfBuffer.toString("base64"),
-        filename: `KAINOOK-${booking.code}.pdf`,
+        filename: `KAIN-${booking.code}.pdf`,
         type: "application/pdf",
         disposition: "attachment",
       },
