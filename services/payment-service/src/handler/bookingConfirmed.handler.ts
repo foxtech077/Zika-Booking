@@ -3,7 +3,7 @@ import { generateVoucherPDF } from "../services/pdf.services.js";
 import { sendGuestEmail, sendAdminAlert } from "../services/email.services.js";
 import { sendHostEmail } from "../services/hostemail.service.js";
 import { prisma } from "../lib/prisma.js";
-import { cdnUrl, downloadBuffer } from "../lib/s3.js";
+import { getPublicUrl, downloadBuffer } from "../lib/s3.js";
 import { createPendingPayout } from "../services/payout.service.js";
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
@@ -201,7 +201,7 @@ export async function bookingConfirmedHandler(payment: any) {
     console.log(`[webhook] Voucher already generated. Skipping PDF generation and S3 upload.`);
     // Recovery behavior: reconstruct metadata and download the voucher PDF from S3
     const s3Key = `invoice/${booking.id}/KAIN-${booking.code}.pdf`;
-    const pdfUrl = cdnUrl(s3Key);
+    const pdfUrl = await getPublicUrl(s3Key);
     const fileName = `KAIN-${booking.code}.pdf`;
     
     const pdfBuffer = await downloadBuffer(s3Key);
