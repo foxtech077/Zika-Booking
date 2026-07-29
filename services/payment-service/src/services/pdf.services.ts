@@ -8,7 +8,7 @@ import os from "os";
 const BOOKING_BASE_URL = process.env["BOOKING_PUBLIC_URL"] ?? "https://kainook.com/bookings";
 
 export async function generateVoucherPDF(booking: any, invoice: any) {
-  const fileName = `KAINOOK-${booking.code}.pdf`;
+  const fileName = `KAIN-${booking.code}.pdf`;
   const filePath = path.join(os.tmpdir(), fileName);
 
   const bookingUrl = `${BOOKING_BASE_URL}/${booking.code}`;

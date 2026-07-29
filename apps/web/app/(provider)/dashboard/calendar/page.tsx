@@ -149,7 +149,7 @@ function normalizeBookingRange(raw: unknown): BookingRange | null {
   if (!start) return null;
   return {
     id: readString(item.id, crypto.randomUUID()),
-    reference: readString(item.reference, "ZIKA-XXXX-CC"),
+    reference: readString(item.reference, "KAIN-XXXX-CC"),
     start,
     end: toISODate(readString(item.end, start)),
     status: readString(item.status, "confirmed") === "pending_payment" ? "pending_payment" : "confirmed",

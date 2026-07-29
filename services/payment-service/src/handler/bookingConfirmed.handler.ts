@@ -202,7 +202,7 @@ export async function bookingConfirmedHandler(payment: any) {
     // Recovery behavior: reconstruct metadata and download the voucher PDF from S3
     const s3Key = `vouchers/${booking.code}.pdf`;
     const pdfUrl = cdnUrl(s3Key);
-    const fileName = `KAINOOK-${booking.code}.pdf`;
+    const fileName = `KAIN-${booking.code}.pdf`;
     
     const pdfBuffer = await downloadBuffer(s3Key);
     voucher = { fileName, pdfUrl, pdfBuffer };

@@ -59,7 +59,7 @@ ZikaBooking never stores raw card data. Stripe tokenises card details client-sid
 | **BR-7.3** | **Idempotency:** Every charge attempt carries an idempotency key of the form `pay-{booking_id}-{attempt_number}`. Stripe's idempotency key mechanism and Tara's deduplication header use this value. If a network timeout occurs and the guest retries, the same idempotency key ensures no double charge. |
 | **BR-7.4** | **Retry limit:** A guest may attempt payment for a given booking at most **3 times**. After the 3rd failure, the booking is set to `cancelled_by_system` and the guest must start a new booking. The `payments` table records all attempts. |
 | **BR-7.5** | **Payment window:** The booking record's `status = 'pending_payment'` expires after 10 minutes (BR-6.16). If a payment is not captured within 10 minutes of booking creation, the Scheduler cancels the booking (regardless of any in-flight payment attempt). |
-| **BR-7.6** | **Stripe PaymentIntent:** For Stripe payments, the Payment Service creates a PaymentIntent server-side with `amount` (in smallest currency unit, e.g. cents / kobo), `currency`, `capture_method = 'automatic'`, `metadata = { booking_id, booking_reference }`, and `statement_descriptor_suffix = 'ZIKA-{reference}'`. The client secret is returned to the client to complete payment client-side using Stripe.js or the Stripe React Native SDK. |
+| **BR-7.6** | **Stripe PaymentIntent:** For Stripe payments, the Payment Service creates a PaymentIntent server-side with `amount` (in smallest currency unit, e.g. cents / kobo), `currency`, `capture_method = 'automatic'`, `metadata = { booking_id, booking_reference }`, and `statement_descriptor_suffix = 'KAIN-{reference}'`. The client secret is returned to the client to complete payment client-side using Stripe.js or the Stripe React Native SDK. |
 | **BR-7.7** | **Stripe 3DS / SCA:** When Stripe requires additional authentication (3DS), the Stripe SDK handles the redirect / challenge natively. The Payment Service does not need to manage 3DS state; it awaits the `payment_intent.succeeded` webhook event. |
 | **BR-7.8** | **Tara STK push:** For Tara payments, the Payment Service calls the Tara `initiate_payment` API with `{ amount, currency, mobile_number, reference: booking_reference, description: "ZikaBooking – {listing_title}" }`. Tara pushes a payment prompt to the guest's handset. The guest enters their Tara PIN on their phone to authorise. The Payment Service awaits a Tara webhook (or polls the Tara status API as a fallback — BR-7.11). |
 | **BR-7.9** | **Tara timeout:** If no Tara webhook or successful poll result is received within **90 seconds** of STK push initiation, the Payment Service marks the attempt as timed out. A timed-out attempt counts toward the 3-attempt limit. The guest is shown a "Mobile money request timed out" message and may retry. |
@@ -440,7 +440,7 @@ CREATE TABLE payments (
     status                  payment_status  NOT NULL DEFAULT 'initiated',
     attempt_number          SMALLINT        NOT NULL DEFAULT 1,
     idempotency_key         VARCHAR(100)    UNIQUE NOT NULL,
-    -- ZIKA-internal: 'pay-{booking_id}-{attempt_number}'
+    -- KAIN-internal: 'pay-{booking_id}-{attempt_number}'
 
     -- Provider references
     provider_payment_id     TEXT,           -- Stripe: pi_xxx  |  Tara: tara_txn_id
