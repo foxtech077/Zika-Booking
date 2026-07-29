@@ -2429,13 +2429,13 @@ export default function TravellerDashboard() {
                                 )}
                                 {(() => {
                                   const afterDiscount = Math.max(0, baseTotal - sidebarDiscount);
-                                  const serviceFee = Math.ceil(afterDiscount * 0.05 * 100) / 100;
+                                  const serviceFee = Math.ceil(afterDiscount * 0.10 * 100) / 100;
                                   const securityDeposit = isCar && detailListing.securityDeposit ? detailListing.securityDeposit : 0;
                                   const estimatedTotal = afterDiscount + serviceFee + securityDeposit;
                                   return (
                                     <>
                                       <div className="flex justify-between">
-                                        <span>Service fee (5%)</span>
+                                        <span>Service fee (10%)</span>
                                         <span>{detailListing.currency} {serviceFee.toLocaleString()}</span>
                                       </div>
                                       {securityDeposit > 0 && (
