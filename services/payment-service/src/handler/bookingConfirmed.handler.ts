@@ -200,7 +200,7 @@ export async function bookingConfirmedHandler(payment: any) {
   } else {
     console.log(`[webhook] Voucher already generated. Skipping PDF generation and S3 upload.`);
     // Recovery behavior: reconstruct metadata and download the voucher PDF from S3
-    const s3Key = `vouchers/${booking.code}.pdf`;
+    const s3Key = `invoice/${booking.id}/KAIN-${booking.code}.pdf`;
     const pdfUrl = cdnUrl(s3Key);
     const fileName = `KAIN-${booking.code}.pdf`;
     

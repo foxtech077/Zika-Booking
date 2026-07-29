@@ -86,7 +86,7 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
 
   const pdfBuffer = fs.readFileSync(filePath);
 
-  const s3Key = `vouchers/${booking.code}.pdf`;
+  const s3Key = `invoice/${booking.id}/KAIN-${booking.code}.pdf`;
   await uploadBuffer(s3Key, pdfBuffer, "application/pdf");
   const pdfUrl = cdnUrl(s3Key);
 
