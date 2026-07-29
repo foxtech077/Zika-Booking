@@ -2396,6 +2396,12 @@ export default function TravellerDashboard() {
                                     <span>{detailListing.currency} {estimatedPricing.taxAmount.toLocaleString()}</span>
                                   </div>
                                 )}
+                                {isCar && estimatedPricing.securityDeposit != null && estimatedPricing.securityDeposit > 0 && (
+                                  <div className="flex justify-between text-slate-600">
+                                    <span>Security deposit</span>
+                                    <span>{detailListing.currency} {estimatedPricing.securityDeposit.toLocaleString()}</span>
+                                  </div>
+                                )}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 mt-1">
                                   <span>Total</span>
                                   <span>{detailListing.currency} {estimatedPricing.totalAmount.toLocaleString()}</span>

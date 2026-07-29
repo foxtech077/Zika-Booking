@@ -69,6 +69,7 @@ export interface Listing {
   doors?: number | null;
   mileagePolicy?: string | null;
   mileageLimitKm?: number | null;
+  securityDeposit?: number | null;
   hotelRoomTypes?: HotelRoomType[];
 }
 

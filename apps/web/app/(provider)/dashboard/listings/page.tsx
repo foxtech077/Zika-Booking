@@ -602,6 +602,9 @@ function ViewListingModal({
                       {l.mileageLimitKm != null && (
                         <InfoField label="Mileage Limit" value={`${l.mileageLimitKm} km`} />
                       )}
+                      {l.securityDeposit != null && l.securityDeposit > 0 && (
+                        <InfoField label="Security Deposit" value={`${l.currency ?? "USD"} ${Number(l.securityDeposit).toLocaleString()}`} />
+                      )}
                     </>
                   )}
 
