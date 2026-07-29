@@ -110,6 +110,9 @@ const InfoSection: React.FC<InfoSectionProps> = ({ listing, reviews = [] }) => {
           {listing.fuelType && <div><span className="text-slate-400 block text-[10px] uppercase font-bold">Fuel</span>{listing.fuelType}</div>}
           {listing.mileagePolicy && <div><span className="text-slate-400 block text-[10px] uppercase font-bold">Mileage</span>{listing.mileagePolicy}</div>}
           {listing.transmission && <div><span className="text-slate-400 block text-[10px] uppercase font-bold">Transmission</span><span className="capitalize">{listing.transmission}</span></div>}
+          {listing.securityDeposit != null && listing.securityDeposit > 0 && (
+            <div><span className="text-slate-400 block text-[10px] uppercase font-bold">Security Deposit</span>{listing.currency} {listing.securityDeposit.toLocaleString()}</div>
+          )}
         </div>
       )}
 

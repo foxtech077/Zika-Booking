@@ -80,6 +80,7 @@ export interface BookingDetail {
   serviceFee?: number;
   taxAmount?: number;
   deliveryFee?: number;
+  securityDeposit?: number;
   totalAmount: number;
   currency: string;
   cancellationPolicy?: string;
@@ -136,6 +137,7 @@ export interface ReceiptTotals {
   discountAmount: number;
   deliveryFee: number;
   voucherDiscount: number;
+  securityDeposit: number;
   total: number;
   currency: string;
 }
@@ -265,6 +267,7 @@ export interface PricingPreview {
   serviceFee?: number;
   taxAmount?: number;
   deliveryFee?: number;
+  securityDeposit?: number;
   total: number;
   currency: string;
   cancellationPolicyName?: string;

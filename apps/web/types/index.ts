@@ -59,6 +59,7 @@ export interface PublicListingDetail {
   fuelType?: string;
   seats?: number;
   mileagePolicy?: string;
+  securityDeposit?: number;
   primaryPhotoUrl?: string | null;
   photos: ListingPhoto[];
   amenities: ListingAmenity[];

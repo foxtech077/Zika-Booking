@@ -68,6 +68,7 @@ interface BookingDetail {
   serviceFee?: number;
   taxAmount?: number;
   deliveryFee?: number;
+  securityDeposit?: number;
   totalAmount: number;
   currency: string;
   cancellationPolicy?: string;
@@ -593,6 +594,12 @@ export default function BookingDetailScreen() {
                 <View style={styles.priceRow}>
                   <Text style={styles.priceLabel}>Delivery fee</Text>
                   <Text style={styles.priceValue}>+ {formatCurrency(booking.deliveryFee, booking.currency)}</Text>
+                </View>
+              )}
+              {booking.securityDeposit != null && booking.securityDeposit > 0 && (
+                <View style={styles.priceRow}>
+                  <Text style={styles.priceLabel}>Security deposit</Text>
+                  <Text style={styles.priceValue}>+ {formatCurrency(booking.securityDeposit, booking.currency)}</Text>
                 </View>
               )}
               {booking.pointsDiscount != null && booking.pointsDiscount > 0 && (

@@ -58,7 +58,12 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
   doc.text(`Discount: ${invoice.discount}`, 40, y); y += 15;
   doc.text(`Subtotal: ${invoice.subtotal}`, 40, y); y += 15;
   doc.text(`Service Fee: ${invoice.serviceFee}`, 40, y); y += 15;
-  doc.text(`Tax: ${invoice.tax}`, 40, y); y += 18;
+  doc.text(`Tax: ${invoice.tax}`, 40, y); y += 15;
+  if (invoice.securityDeposit && invoice.securityDeposit > 0) {
+    doc.text(`Security Deposit: ${invoice.securityDeposit}`, 40, y); y += 18;
+  } else {
+    y += 3;
+  }
   doc.fontSize(14).text(`TOTAL PAID: ${invoice.total}`, 40, y); y += 24;
 
   // ── PAYMENT INFORMATION ─────────────────────────────────────────────────

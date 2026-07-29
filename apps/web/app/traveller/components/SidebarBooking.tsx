@@ -71,7 +71,8 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
 
   const subtotalAfterDiscount = Math.max(0, originalSubtotal - longStayDiscountAmount);
   const serviceFee = days > 0 ? Math.round(subtotalAfterDiscount * 0.1) : 0;
-  const grandTotal = subtotalAfterDiscount + serviceFee;
+  const securityDeposit = isCar ? Number(listing.securityDeposit ?? 0) : 0;
+  const grandTotal = subtotalAfterDiscount + serviceFee + securityDeposit;
 
   return (
     <div className="bg-white border border-slate-200 shadow-xl rounded-2xl p-6 text-left space-y-5">
@@ -203,6 +204,12 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
             <span>Service fee (10%)</span>
             <span>{listing.currency} {serviceFee.toLocaleString()}</span>
           </div>
+          {isCar && securityDeposit > 0 && (
+            <div className="flex justify-between text-slate-600">
+              <span>Security deposit</span>
+              <span>{listing.currency} {securityDeposit.toLocaleString()}</span>
+            </div>
+          )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 text-base">
             <span>Total</span>
             <span className="text-emerald-700">{listing.currency} {grandTotal.toLocaleString()}</span>
