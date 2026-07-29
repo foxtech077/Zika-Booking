@@ -2417,23 +2417,30 @@ export default function TravellerDashboard() {
                               </div>
                             ) : days > 0 && (
                               <div className="space-y-2 pt-2 border-t border-slate-100 text-sm text-slate-600">
-                                <div className="flex justify-between">
-                                  <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
-                                  <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
-                                </div>
-                                {sidebarDiscount > 0 && (
-                                  <div className="flex justify-between text-emerald-600 font-semibold">
-                                    <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Discount"}</span>
-                                    <span>−{detailListing.currency} {sidebarDiscount.toLocaleString()}</span>
-                                  </div>
-                                )}
                                 {(() => {
-                                  const afterDiscount = Math.max(0, baseTotal - sidebarDiscount);
+                                  // Compute discount inline (same logic as price header) to avoid React effect timing issues
+                                  const promo = activePromotion && isPromotionValid(activePromotion) && activePromotion.activity === detailListing.category ? activePromotion : null;
+                                  const promoAmt = promo
+                                    ? (promo.discountType === "percentage"
+                                        ? Math.round(baseTotal * Number(activePromotion.discountValue) / 100)
+                                        : Math.round(Number(activePromotion.discountValue)))
+                                    : 0;
+                                  const afterDiscount = Math.max(0, baseTotal - promoAmt);
                                   const serviceFee = Math.ceil(afterDiscount * 0.10 * 100) / 100;
                                   const securityDeposit = isCar && detailListing.securityDeposit ? detailListing.securityDeposit : 0;
                                   const estimatedTotal = afterDiscount + serviceFee + securityDeposit;
                                   return (
                                     <>
+                                      <div className="flex justify-between">
+                                        <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
+                                        <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
+                                      </div>
+                                      {promoAmt > 0 && (
+                                        <div className="flex justify-between text-emerald-600 font-semibold">
+                                          <span>Promotion discount ({promo.discountValue}%)</span>
+                                          <span>−{detailListing.currency} {promoAmt.toLocaleString()}</span>
+                                        </div>
+                                      )}
                                       <div className="flex justify-between">
                                         <span>Service fee (10%)</span>
                                         <span>{detailListing.currency} {serviceFee.toLocaleString()}</span>
