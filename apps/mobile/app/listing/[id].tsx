@@ -59,6 +59,9 @@ interface PublicListing {
   pricePerNight: number | null; pricePerDay: number | null; currency: string | null;
   nightlyRate?: number | null; dailyRate?: number | null;
   cancellationPolicy: string | null; minStayNights: number | null;
+  /** Service-fee rate for this listing's country, as a decimal fraction (0.05 = 5%).
+   *  Served by GET /listings/:id/public — the same value the booking flow charges. */
+  commissionRate?: number | null;
   checkinTime: string | null; checkoutTime: string | null;
   smokingAllowed: boolean | null; petsAllowed: boolean | null;
   starRating: number | null; roomType: string | null; unitCount: number | null;
@@ -794,9 +797,13 @@ export default function ListingDetailScreen() {
     const totalDiscount = promoDiscount + longStayDiscount;
     const discountedSubtotal = Math.max(0, originalSubtotal - totalDiscount);
 
-    // Service fee (10% of discounted subtotal)
-    const serviceFeePercent = 10;
-    const serviceFee = Math.round(discountedSubtotal * (serviceFeePercent / 100));
+    // Service fee — rate comes from the API (country-specific commission), so the
+    // figure quoted here matches what /bookings/initiate will actually charge.
+    // Previously hardcoded to 10% while checkout used the real rate, so the
+    // listing page and the payment screen could disagree.
+    const commissionRate = listing.commissionRate ?? 0;
+    const serviceFeePercent = Math.round(commissionRate * 1000) / 10;
+    const serviceFee = Math.ceil(discountedSubtotal * commissionRate * 100) / 100;
     const delivery = isCar && listing.deliveryAvailable && listing.deliveryFee ? Number(listing.deliveryFee) : 0;
     const total = discountedSubtotal + serviceFee + delivery;
 
@@ -1205,10 +1212,12 @@ export default function ListingDetailScreen() {
                   <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.delivery).toLocaleString()}</Text>
                 </View>
               )}
-              <View style={s.breakRow}>
-                <Text style={s.breakLabel}>Service fee ({pricingBreakout.serviceFeePercent}%)</Text>
-                <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.serviceFee).toLocaleString()}</Text>
-              </View>
+              {pricingBreakout.serviceFeePercent > 0 && (
+                <View style={s.breakRow}>
+                  <Text style={s.breakLabel}>Service fee ({pricingBreakout.serviceFeePercent}%)</Text>
+                  <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.serviceFee).toLocaleString()}</Text>
+                </View>
+              )}
               <View style={[s.breakRow, { borderTopWidth: 1, borderTopColor: BORDER, marginTop: 4, paddingTop: 12 }]}>
                 <Text style={s.breakTotal}>Total</Text>
                 <Text style={s.breakTotalVal}>{curr} {Math.round(pricingBreakout.total).toLocaleString()}</Text>

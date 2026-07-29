@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, optionalGuest, type GuestRequest } from "../middleware/auth.js";
+import { getCommissionRate } from "./bookings.js";
 
 import { DriveType, FuelType } from "../generated/index.js";
 
@@ -489,9 +490,12 @@ export async function searchRoutes(app: FastifyInstance) {
         if (promo) promoBadge = { labelText: promo.labelText, labelColour: promo.labelColour };
       } catch { /* non-critical */ }
 
+      const commissionRate = await getCommissionRate(listing.country ?? null);
+
       // Strip sensitive car fields pre-booking
       const data: any = {
         ...listing,
+        commissionRate,
         photos: listingPhotos,
         licencePlate: undefined,
         isFavourited: guestId ? isFavourited : undefined,

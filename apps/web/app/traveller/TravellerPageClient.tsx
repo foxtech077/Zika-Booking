@@ -744,7 +744,10 @@ export default function TravellerDashboard() {
       const days = calcDays(start, end);
       const baseTotal = pricePerNight * days;
       const discountedTotal = Math.max(0, baseTotal - bestDiscount);
-      const serviceFee = days > 0 ? Math.ceil(discountedTotal * 0.05) : 0;
+      // Country-specific rate from GET /listings/:id/public — never a hardcoded guess.
+      const serviceFee = days > 0
+        ? Math.ceil(discountedTotal * (detailListing.commissionRate ?? 0) * 100) / 100
+        : 0;
       const taxRate = TAX_RATES[detailListing.country] ?? 0;
       const taxAmount = Math.ceil(baseTotal * taxRate);
       const grandTotal = Math.max(0, baseTotal + serviceFee + taxAmount - bestDiscount);
@@ -1849,6 +1852,9 @@ export default function TravellerDashboard() {
       roomTypeName: selectedRt ? selectedRt.name : undefined,
       roomType: selectedRt ? selectedRt.roomType : undefined,
       pricingPreview: pricingPreview ?? undefined,
+      // Carried through so checkout's no-preview fallback uses the same
+      // country rate the listing page quoted, instead of a hardcoded guess.
+      commissionRate: detailListing.commissionRate ?? undefined,
     };
     sessionStorage.setItem("zika:checkout", JSON.stringify(ctx));
     router.push("/booking/review");
@@ -2467,7 +2473,9 @@ export default function TravellerDashboard() {
                             ? (pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0))
                             : bestDiscount;
                           const subtotal = base - discount;
-                          const serviceFee = pricingPreview ? pricingPreview.serviceFee : Math.ceil(subtotal * 0.05);
+                          const serviceFee = pricingPreview
+                            ? pricingPreview.serviceFee
+                            : Math.ceil(subtotal * (detailListing.commissionRate ?? 0) * 100) / 100;
                           const taxAmount = pricingPreview ? pricingPreview.taxAmount : 0;
                           const grandTotal = pricingPreview
                             ? base - discount + serviceFee + taxAmount + (pricingPreview.deliveryFee ?? 0)
@@ -2615,7 +2623,9 @@ export default function TravellerDashboard() {
                               ? (pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0))
                               : bestDiscount;
                             const subtotal = baseTotal - discount;
-                            const serviceFee = pricingPreview ? pricingPreview.serviceFee : Math.ceil(subtotal * 0.05);
+                            const serviceFee = pricingPreview
+                            ? pricingPreview.serviceFee
+                            : Math.ceil(subtotal * (detailListing.commissionRate ?? 0) * 100) / 100;
                             const grandTotal = pricingPreview
                               ? baseTotal - discount + serviceFee + (pricingPreview.deliveryFee ?? 0)
                               : Math.max(0, baseTotal + serviceFee - bestDiscount);

@@ -13,6 +13,9 @@ export interface BookingCardData {
   guestLastName: string;
   status: string;
   totalAmount: number;
+  /** Actual payout stored on the booking, net of commission — as returned by
+   *  GET /provider/bookings. Prefer this over deriving from a rate. */
+  providerPayout?: number;
   netPayout?: number;
   currency: string;
   checkIn: string;
@@ -42,8 +45,9 @@ export const BookingCard = memo(function BookingCard({
   onMessage,
 }: {
   item: BookingCardData;
-  /** Pre-computed net payout (screen keeps the existing commission-fallback math) */
-  net: number;
+  /** Net payout as recorded on the booking. null when the API did not supply
+   *  one — rendered as "—" rather than guessing a commission rate. */
+  net: number | null;
   onPress: () => void;
   onMessage: () => void;
 }) {
@@ -103,7 +107,9 @@ export const BookingCard = memo(function BookingCard({
       <View style={c.footer}>
         <View style={c.payoutRow}>
           <Ionicons name="cash-outline" size={13} color={K.colors.accent} />
-          <Text style={c.payoutText}>{item.currency} {net.toLocaleString()}</Text>
+          <Text style={c.payoutText}>
+            {net != null ? `${item.currency} ${net.toLocaleString()}` : "—"}
+          </Text>
         </View>
         <TouchableOpacity style={c.viewBtn} onPress={onPress} activeOpacity={0.85}>
           <Text style={c.viewBtnText}>View Details</Text>

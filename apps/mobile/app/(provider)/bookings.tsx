@@ -36,13 +36,17 @@ const FILTER_TABS: FilterTab[] = [
   { key: "cancelled", label: "Cancelled", statusParam: "cancelled" },
 ];
 
-const COMMISSION_RATE = 0.05;
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function netPayout(b: ProviderBooking): number {
+// GET /provider/bookings returns the payout actually recorded on the booking
+// (net of that booking's own commission rate). This used to fall back to a
+// hardcoded 5% because it read `netPayout`, a field the API never sends — so
+// the guess fired on every row and misreported earnings wherever the country's
+// commission rate wasn't 5%.
+function netPayout(b: ProviderBooking): number | null {
+  if (b.providerPayout != null) return b.providerPayout;
   if (b.netPayout != null) return b.netPayout;
-  return Math.round(b.totalAmount * (1 - COMMISSION_RATE) * 100) / 100;
+  return null; // unknown — the card shows "—" rather than a fabricated figure
 }
 
 function isToday(iso: string) {
