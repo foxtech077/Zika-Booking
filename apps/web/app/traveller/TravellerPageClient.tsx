@@ -2649,8 +2649,9 @@ export default function TravellerDashboard() {
                             const serviceFee = pricingPreview
                             ? pricingPreview.serviceFee
                             : Math.ceil(subtotal * (detailListing.commissionRate ?? 0) * 100) / 100;
+                            const securityDeposit = isCar && pricingPreview ? (pricingPreview.securityDeposit ?? 0) : 0;
                             const grandTotal = pricingPreview
-                              ? baseTotal - discount + serviceFee + (pricingPreview.deliveryFee ?? 0)
+                              ? baseTotal - discount + serviceFee + (pricingPreview.deliveryFee ?? 0) + securityDeposit
                               : Math.max(0, baseTotal + serviceFee - bestDiscount);
                             return (
                               <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
@@ -2663,6 +2664,12 @@ export default function TravellerDashboard() {
                                   <div className="flex justify-between text-emerald-600 font-semibold">
                                     <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
                                     <span>−{detailListing.currency} {discount.toLocaleString()}</span>
+                                  </div>
+                                )}
+                                {isCar && securityDeposit > 0 && (
+                                  <div className="flex justify-between text-slate-600">
+                                    <span>Security deposit</span>
+                                    <span>{detailListing.currency} {securityDeposit.toLocaleString()}</span>
                                   </div>
                                 )}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
