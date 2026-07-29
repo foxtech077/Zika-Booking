@@ -1745,32 +1745,35 @@ export async function bookingRoutes(app: FastifyInstance) {
         }
 
         // Send confirmation email (non-blocking)
+        // NOTE: Guest confirmation email is sent by the payment service (includes PDF voucher).
+        // This listing-service email is disabled to avoid duplicate sends.
+        // If re-enabling, also ensure the admin-listings manual confirm still calls it.
         const confirmedListing = await prisma.listing.findUnique({
           where: { id: booking.listingId },
         });
-        sendBookingConfirmationEmail(
-          booking.guestEmail,
-          `${booking.guestFirstName} ${booking.guestLastName}`,
-          {
-            reference: booking.reference,
-            listingName: confirmedListing?.name ?? "Your listing",
-            listingType: booking.listingType,
-            checkIn: booking.checkIn?.toISOString(),
-            checkOut: booking.checkOut?.toISOString(),
-            pickupDatetime: booking.pickupDatetime?.toISOString(),
-            returnDatetime: booking.returnDatetime?.toISOString(),
-            nightsOrDays: booking.nightsOrDays,
-            nightlyRate: Number(booking.nightlyRate ?? booking.dailyRate ?? 0),
-            baseAmount: Number((Number(booking.subtotal) + Number(booking.discountAmount)).toFixed(2)),
-            discount: Number(booking.discountAmount),
-            serviceFee: Number(booking.serviceFee),
-            taxAmount: Number(booking.taxAmount),
-            deliveryFee: Number(booking.deliveryFee),
-            totalAmount: Number(booking.totalAmount),
-            commissionRate: Number(booking.commissionRate),
-            currency: booking.currency,
-          },
-        ).catch(() => { });
+        // sendBookingConfirmationEmail(
+        //   booking.guestEmail,
+        //   `${booking.guestFirstName} ${booking.guestLastName}`,
+        //   {
+        //     reference: booking.reference,
+        //     listingName: confirmedListing?.name ?? "Your listing",
+        //     listingType: booking.listingType,
+        //     checkIn: booking.checkIn?.toISOString(),
+        //     checkOut: booking.checkOut?.toISOString(),
+        //     pickupDatetime: booking.pickupDatetime?.toISOString(),
+        //     returnDatetime: booking.returnDatetime?.toISOString(),
+        //     nightsOrDays: booking.nightsOrDays,
+        //     nightlyRate: Number(booking.nightlyRate ?? booking.dailyRate ?? 0),
+        //     baseAmount: Number((Number(booking.subtotal) + Number(booking.discountAmount)).toFixed(2)),
+        //     discount: Number(booking.discountAmount),
+        //     serviceFee: Number(booking.serviceFee),
+        //     taxAmount: Number(booking.taxAmount),
+        //     deliveryFee: Number(booking.deliveryFee),
+        //     totalAmount: Number(booking.totalAmount),
+        //     commissionRate: Number(booking.commissionRate),
+        //     currency: booking.currency,
+        //   },
+        // ).catch(() => { });
 
         fireNotification(booking.guestId, {
           type: "booking_confirmed",

@@ -23,6 +23,7 @@ export async function uploadBuffer(
       Key: s3Key,
       Body: body,
       ContentType: contentType,
+      ACL: "public-read",
     }),
   );
 }
