@@ -288,6 +288,7 @@ export default function TravellerDashboard() {
   const [detailListing, setDetailListing] = useState<PublicListingDetail | null>(null);
   const [selectedRoomTypeId, setSelectedRoomTypeId] = useState<string | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [promotionsReady, setPromotionsReady] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [lockToken, setLockToken] = useState<string>("");
   const [lockingListing, setLockingListing] = useState(false);
@@ -1436,7 +1437,8 @@ export default function TravellerDashboard() {
         setCheckoutStep("review");
         setPaymentId(null);
         if (paymentPollRef.current) clearInterval(paymentPollRef.current);
-        fetchApplicableVouchers(detailListing.id, detailListing.category, detailListing.country);
+        const totalForVouchers = pricingPreview ? (pricingPreview.totalAmount ?? 0) : 0;
+        fetchApplicableVouchers(detailListing.id, detailListing.category, detailListing.country, totalForVouchers);
         fetchWalletVouchers();
       } else {
         const msg = res.data?.error?.message ?? (res.data as any)?.message ?? "Unable to hold these dates. Please try again.";
@@ -1552,17 +1554,19 @@ export default function TravellerDashboard() {
     } catch (err) {
       console.error("[ZikaSearch] fetchActivePromotion error:", err);
       setActivePromotion(null);
+    } finally {
+      setPromotionsReady(true);
     }
   }
 
   // Fetch auto-assigned vouchers applicable to the current booking context.
   // Guard removed: if a lock was obtained, the backend already confirmed the user is authenticated.
-  async function fetchApplicableVouchers(listingId: string, category: string, country: string) {
+  async function fetchApplicableVouchers(listingId: string, category: string, country: string, totalAmount?: number) {
     setLoadingApplicableVouchers(true);
     try {
-      console.log("[ZikaSearch] Fetching applicable vouchers for listing:", listingId, category, country);
+      console.log("[ZikaSearch] Fetching applicable vouchers for listing:", listingId, category, country, totalAmount);
       const res = await listingApi.get<any>("/vouchers/applicable", {
-        params: { listingId, category, country },
+        params: { listingId, category, country, totalAmount: totalAmount ?? 0 },
       });
       console.log("[ZikaSearch] Applicable vouchers API response:", res.data);
       if (res.data.success) {
@@ -2219,6 +2223,16 @@ export default function TravellerDashboard() {
                     </div>
 
                     {!lockToken ? (() => {
+                      // Wait until promotions are loaded before showing price details
+                      if (!promotionsReady) {
+                        return (
+                          <div className="space-y-3 pt-2">
+                            <div className="h-5 bg-slate-200 rounded-lg w-1/3 animate-pulse" />
+                            <div className="h-10 bg-slate-200 rounded-xl w-full animate-pulse" />
+                            <div className="h-16 bg-slate-200 rounded-xl w-full animate-pulse" />
+                          </div>
+                        );
+                      }
                       const isCar = detailListing.category === "car";
                       const isHotel = detailListing.category === "hotel";
                       const selectedRt = isHotel
