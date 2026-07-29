@@ -141,12 +141,13 @@ function getPricing(ctx: CheckoutCtx) {
     const serviceFee = pp.serviceFee ?? 0;
     const taxAmount = pp.taxAmount ?? 0;
     const deliveryFee = pp.deliveryFee ?? 0;
+    const securityDeposit = pp.securityDeposit ?? 0;
     const totalDiscount = ctx.discountSource === "voucher"
       ? (ctx.voucherDiscount ?? 0)
       : (pp.promotionDiscount ?? 0);
     const subtotal = Math.max(0, base - totalDiscount);
-    const total = subtotal + serviceFee + taxAmount + deliveryFee;
-    return { base, discount: totalDiscount, subtotal, serviceFee, taxes: taxAmount, total };
+    const total = subtotal + serviceFee + taxAmount + deliveryFee + securityDeposit;
+    return { base, discount: totalDiscount, subtotal, serviceFee, taxes: taxAmount, deliveryFee, securityDeposit, total };
   }
   return calcPricing(ctx);
 }
