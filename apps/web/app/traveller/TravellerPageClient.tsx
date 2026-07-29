@@ -2421,6 +2421,12 @@ export default function TravellerDashboard() {
                                   <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
                                   <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
                                 </div>
+                                {sidebarDiscount > 0 && (
+                                  <div className="flex justify-between text-emerald-600 font-semibold">
+                                    <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Discount"}</span>
+                                    <span>−{detailListing.currency} {sidebarDiscount.toLocaleString()}</span>
+                                  </div>
+                                )}
                                 {isCar && detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && (
                                   <div className="flex justify-between text-slate-600">
                                     <span>Security deposit</span>
@@ -2429,7 +2435,7 @@ export default function TravellerDashboard() {
                                 )}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
                                   <span>Estimated total</span>
-                                  <span>{detailListing.currency} {(baseTotal + (isCar && detailListing.securityDeposit ? detailListing.securityDeposit : 0)).toLocaleString()}</span>
+                                  <span>{detailListing.currency} {(baseTotal - sidebarDiscount + (isCar && detailListing.securityDeposit ? detailListing.securityDeposit : 0)).toLocaleString()}</span>
                                 </div>
                                 <div className="flex justify-between text-slate-400 text-xs">
                                   <span>Log in for full breakdown including fees & taxes</span>
