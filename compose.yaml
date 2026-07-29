@@ -69,6 +69,6 @@ services:
       - apps/admin/.env
     network_mode: host
 
-volumes:
+# volumes:
   # zika-redis-data:
   # db_data:
