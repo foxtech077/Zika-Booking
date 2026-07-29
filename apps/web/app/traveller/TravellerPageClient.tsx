@@ -2042,6 +2042,7 @@ export default function TravellerDashboard() {
                           {detailListing.seats && <><span>·</span><span>{detailListing.seats} seats</span></>}
                           {detailListing.transmission && <><span>·</span><span className="capitalize">{detailListing.transmission}</span></>}
                           {detailListing.fuelType && <><span>·</span><span className="capitalize">{detailListing.fuelType}</span></>}
+                          {detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && <><span>·</span><span>Deposit: {detailListing.currency} {detailListing.securityDeposit.toLocaleString()}</span></>}
                         </>
                       )}
                     </div>
@@ -2187,6 +2188,13 @@ export default function TravellerDashboard() {
                       );
                     })()}
 
+                    {/* Security deposit notice for car rentals */}
+                    {detailListing.category === "car" && detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && (
+                      <div className="flex items-center gap-2 text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-3">
+                        <span className="text-amber-600 font-bold">🔒</span>
+                        <span><strong>Security deposit:</strong> {detailListing.currency} {detailListing.securityDeposit.toLocaleString()} — collected at booking.</span>
+                      </div>
+                    )}
                     {/* Best Offer banner — shown when an active promotion exists */}
                     {activePromotion && (
                       <div className="mb-4 flex items-center gap-2.5 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
