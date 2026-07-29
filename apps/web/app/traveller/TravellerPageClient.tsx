@@ -288,7 +288,6 @@ export default function TravellerDashboard() {
   const [detailListing, setDetailListing] = useState<PublicListingDetail | null>(null);
   const [selectedRoomTypeId, setSelectedRoomTypeId] = useState<string | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [promotionsReady, setPromotionsReady] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [lockToken, setLockToken] = useState<string>("");
   const [lockingListing, setLockingListing] = useState(false);
@@ -1155,6 +1154,8 @@ export default function TravellerDashboard() {
 
     try {
       const res = await listingApi.get<any>(`/listings/${id}/public`);
+      // Start fetching promotion in parallel — don't await, it will update price when ready
+      fetchActivePromotion(res.data.data?.category).catch(() => {});
       if (res.data.success && res.data.data) {
         const item = res.data.data;
         const rawRoomTypes = item.hotelRoomTypes || item.roomTypes || [];
@@ -1224,7 +1225,6 @@ export default function TravellerDashboard() {
 
         addToRecentlyViewed(details);
         listingApi.post("/guests/me/recently-viewed", { listingId: id }).catch(() => { });
-        fetchActivePromotion(details.category);
         // Fetch wallet + applicable vouchers as soon as the listing opens so the
         // dropdown is populated in the details step (before the booking lock).
         if (hasAuthToken) {
@@ -1554,8 +1554,6 @@ export default function TravellerDashboard() {
     } catch (err) {
       console.error("[ZikaSearch] fetchActivePromotion error:", err);
       setActivePromotion(null);
-    } finally {
-      setPromotionsReady(true);
     }
   }
 
@@ -2223,16 +2221,6 @@ export default function TravellerDashboard() {
                     </div>
 
                     {!lockToken ? (() => {
-                      // Wait until promotions are loaded before showing price details
-                      if (!promotionsReady) {
-                        return (
-                          <div className="space-y-3 pt-2">
-                            <div className="h-5 bg-slate-200 rounded-lg w-1/3 animate-pulse" />
-                            <div className="h-10 bg-slate-200 rounded-xl w-full animate-pulse" />
-                            <div className="h-16 bg-slate-200 rounded-xl w-full animate-pulse" />
-                          </div>
-                        );
-                      }
                       const isCar = detailListing.category === "car";
                       const isHotel = detailListing.category === "hotel";
                       const selectedRt = isHotel
