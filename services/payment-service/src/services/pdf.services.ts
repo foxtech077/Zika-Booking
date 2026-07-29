@@ -2,7 +2,7 @@ import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
 import QRCode from "qrcode";
-import { uploadBuffer, cdnUrl } from "../lib/s3.js";
+import { uploadBuffer, getPublicUrl } from "../lib/s3.js";
 import os from "os";
 
 const BOOKING_BASE_URL = process.env["BOOKING_PUBLIC_URL"] ?? "https://kainook.com/bookings";
@@ -88,7 +88,7 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
 
   const s3Key = `invoice/${booking.id}/KAIN-${booking.code}.pdf`;
   await uploadBuffer(s3Key, pdfBuffer, "application/pdf");
-  const pdfUrl = cdnUrl(s3Key);
+  const pdfUrl = await getPublicUrl(s3Key);
 
   try {
     fs.unlinkSync(filePath);
