@@ -1154,8 +1154,6 @@ export default function TravellerDashboard() {
 
     try {
       const res = await listingApi.get<any>(`/listings/${id}/public`);
-      // Start fetching promotion in parallel — don't await, it will update price when ready
-      fetchActivePromotion(res.data.data?.category).catch(() => {});
       if (res.data.success && res.data.data) {
         const item = res.data.data;
         const rawRoomTypes = item.hotelRoomTypes || item.roomTypes || [];
@@ -1225,6 +1223,7 @@ export default function TravellerDashboard() {
 
         addToRecentlyViewed(details);
         listingApi.post("/guests/me/recently-viewed", { listingId: id }).catch(() => { });
+        fetchActivePromotion(details.category);
         // Fetch wallet + applicable vouchers as soon as the listing opens so the
         // dropdown is populated in the details step (before the booking lock).
         if (hasAuthToken) {
@@ -1529,7 +1528,7 @@ export default function TravellerDashboard() {
   async function fetchActivePromotion(category: string) {
     try {
       console.log("[ZikaSearch] Fetching active promotions for category:", category);
-      const res = await listingApi.get<any>("/promotions/active", { params: { category } });
+      const res = await listingApi.get<any>("/promotions/active", { params: { activity: category } });
       console.log("[ZikaSearch] Active promotions API response:", res.data);
       if (res.data.success) {
         const raw = res.data.data ?? [];
