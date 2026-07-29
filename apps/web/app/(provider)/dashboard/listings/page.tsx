@@ -517,6 +517,12 @@ function ViewListingModal({
 
                   {/* Policies */}
                   <SectionDivider title="Policies" />
+                  {l.category === "car" && (
+                    <InfoField label="Daily Rate" value={l.pricePerDay ? `${l.currency ?? "USD"} ${Number(l.pricePerDay).toLocaleString()}` : "—"} />
+                  )}
+                  {l.securityDeposit != null && l.securityDeposit > 0 && (
+                    <InfoField label="Security Deposit" value={`${l.currency ?? "USD"} ${Number(l.securityDeposit).toLocaleString()}`} />
+                  )}
                   {l.cancellationPolicy && (
                     <InfoField label="Cancellation" value={slugToLabel(l.cancellationPolicy)} />
                   )}
@@ -601,9 +607,6 @@ function ViewListingModal({
                       )}
                       {l.mileageLimitKm != null && (
                         <InfoField label="Mileage Limit" value={`${l.mileageLimitKm} km`} />
-                      )}
-                      {l.securityDeposit != null && l.securityDeposit > 0 && (
-                        <InfoField label="Security Deposit" value={`${l.currency ?? "USD"} ${Number(l.securityDeposit).toLocaleString()}`} />
                       )}
                     </>
                   )}
