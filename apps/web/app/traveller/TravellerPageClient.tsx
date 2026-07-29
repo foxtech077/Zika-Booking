@@ -2421,8 +2421,18 @@ export default function TravellerDashboard() {
                                   <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
                                   <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
                                 </div>
-                                <div className="flex justify-between text-slate-400 text-xs italic">
-                                  <span>Pricing estimate unavailable</span>
+                                {isCar && detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && (
+                                  <div className="flex justify-between text-slate-600">
+                                    <span>Security deposit</span>
+                                    <span>{detailListing.currency} {detailListing.securityDeposit.toLocaleString()}</span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
+                                  <span>Estimated total</span>
+                                  <span>{detailListing.currency} {(baseTotal + (isCar && detailListing.securityDeposit ? detailListing.securityDeposit : 0)).toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between text-slate-400 text-xs">
+                                  <span>Log in for full breakdown including fees & taxes</span>
                                 </div>
                               </div>
                             )
