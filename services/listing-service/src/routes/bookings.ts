@@ -362,6 +362,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           serviceFee: true,
           taxAmount: true,
           deliveryFee: true,
+          securityDeposit: true,
           nightsOrDays: true,
           voucherDiscount: true,
           voucherCode: true,
@@ -1334,7 +1335,12 @@ export async function bookingRoutes(app: FastifyInstance) {
           commissionRate,
         });
 
-        // 1b. PROMOTION LOGIC
+        // ── 1b. SECURITY DEPOSIT
+        const securityDeposit = listing.category === "car"
+          ? Number(listing.securityDeposit ?? 0)
+          : 0;
+
+        // 1c. PROMOTION LOGIC
         const now = new Date();
         const activePromo = await (prisma as any).activityPromotion.findFirst({
           where: {
@@ -1437,6 +1443,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           pointsDiscount,
           taxRate: getTaxRate(listing.country),
           commissionRate,
+          securityDeposit,
         });
 
 
@@ -1501,6 +1508,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             deliveryFee,
             serviceFee: finalBilling.serviceFee,
             taxAmount: finalBilling.taxAmount,
+            securityDeposit,
 
             currency: listing.currency ?? "USD",
 
@@ -2710,6 +2718,9 @@ export async function bookingRoutes(app: FastifyInstance) {
           subtotal: Number(booking.subtotal),
           discountAmount: Number(booking.discountAmount),
           deliveryFee: Number(booking.deliveryFee),
+          serviceFee: Number(booking.serviceFee),
+          taxAmount: Number(booking.taxAmount),
+          securityDeposit: Number(booking.securityDeposit ?? 0),
           voucherCode: booking.voucherCode ?? null,
           voucherDiscount: Number(booking.voucherDiscount),
           totalAmount: Number(booking.totalAmount),

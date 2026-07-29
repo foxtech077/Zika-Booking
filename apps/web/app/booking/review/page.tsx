@@ -21,6 +21,7 @@ interface PricingPreview {
   serviceFee: number;
   taxAmount: number;
   deliveryFee: number;
+  securityDeposit?: number;
   totalAmount: number;
   commissionRate?: number;
   taxRate?: number;
@@ -85,6 +86,7 @@ interface ConfirmedBooking {
   serviceFee: number;
   taxes: number;
   discount: number;
+  securityDeposit?: number;
   commissionRate?: number;
   taxRate?: number;
 }
@@ -322,6 +324,7 @@ export default function BookingReviewPage() {
     tax: number,
     disc: number,
     method: string,
+    securityDeposit?: number,
     commissionRate?: number,
     taxRate?: number,
   ) {
@@ -356,6 +359,7 @@ export default function BookingReviewPage() {
             currency: ctx!.currency,
             paymentId: pmId, displayId, paymentMethod: method, transactionId: txId,
             baseAmount: base, serviceFee: fee, taxes: tax, discount: disc,
+            securityDeposit,
             commissionRate, taxRate,
           });
           sessionStorage.removeItem("zika:checkout");
@@ -451,7 +455,7 @@ export default function BookingReviewPage() {
         pmId = payRes.data.data.paymentId as string;
         setPaymentId(pmId);
         setStep("polling");
-        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money", ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.taxRate);
+        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money", ctx.pricingPreview?.securityDeposit, ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.taxRate);
       }
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message ?? err?.response?.data?.message ?? err?.message ?? "Something went wrong.";
@@ -473,7 +477,7 @@ export default function BookingReviewPage() {
         setPayError(result.error.message ?? "Card payment failed. Please check your details.");
       } else {
         setStep("polling");
-        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Card", ctx!.pricingPreview?.commissionRate, ctx!.pricingPreview?.taxRate);
+        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Card", ctx!.pricingPreview?.securityDeposit, ctx!.pricingPreview?.commissionRate, ctx!.pricingPreview?.taxRate);
       }
     } catch (err: any) {
       setPayError(err?.message ?? "Card payment failed.");
@@ -1085,6 +1089,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: ReturnType<typeof calcPricing> }) {
   const isCar = ctx.listingCategory === "car";
+  const securityDeposit = isCar ? Number(ctx.pricingPreview?.securityDeposit ?? 0) : 0;
   return (
     <div className="lg:sticky lg:top-20 self-start">
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
@@ -1133,6 +1138,12 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: ReturnType<
             <div className="flex justify-between text-slate-600">
               <span>Taxes{ctx.pricingPreview?.taxRate ? ` (${Math.round(ctx.pricingPreview.taxRate * 100)}%)` : ''}</span>
               <span>{ctx.currency} {fmt(pricing.taxes)}</span>
+            </div>
+          )}
+          {isCar && securityDeposit > 0 && (
+            <div className="flex justify-between text-slate-600">
+              <span>Security deposit</span>
+              <span>{ctx.currency} {fmt(securityDeposit)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
@@ -1221,6 +1232,12 @@ function ConfirmedView({
             <div className="flex justify-between text-slate-600">
               <span>Taxes{confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}</span>
               <span>{confirmed.currency} {fmt(confirmed.taxes)}</span>
+            </div>
+          )}
+          {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && (
+            <div className="flex justify-between text-slate-600">
+              <span>Security deposit</span>
+              <span>{confirmed.currency} {fmt(confirmed.securityDeposit)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
@@ -1333,6 +1350,7 @@ function VoucherLayout({
         {confirmed.discount > 0 && <VoucherRow label="Discount" value={`−${confirmed.currency} ${fmt(confirmed.discount)}`} />}
         <VoucherRow label={`Service fee${confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}`} value={`${confirmed.currency} ${fmt(confirmed.serviceFee)}`} />
         {confirmed.taxes > 0 && <VoucherRow label={`Taxes${confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}`} value={`${confirmed.currency} ${fmt(confirmed.taxes)}`} />}
+        {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && <VoucherRow label="Security deposit" value={`${confirmed.currency} ${fmt(confirmed.securityDeposit)}`} />}
         <VoucherRow label="Total Paid" value={`${confirmed.currency} ${fmt(confirmed.totalAmount)}`} bold />
       </VoucherSection>
 

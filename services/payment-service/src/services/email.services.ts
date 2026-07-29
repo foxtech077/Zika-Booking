@@ -63,6 +63,7 @@ export async function sendGuestEmail(
         <tr><td style="padding:6px 8px;border-top:1px solid #e5e7eb;color:#6b7280">Subtotal</td><td style="padding:6px 8px;border-top:1px solid #e5e7eb;text-align:right">${currency} ${fmt(invoice.subtotal)}</td></tr>
         <tr><td style="padding:6px 8px;color:#6b7280">Service fee${commissionPct > 0 ? ` (${commissionPct}%)` : ''}</td><td style="padding:6px 8px;text-align:right">${currency} ${fmt(invoice.serviceFee)}</td></tr>
         ${Number(invoice.tax) > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Taxes</td><td style="padding:6px 8px;text-align:right">${currency} ${fmt(invoice.tax)}</td></tr>` : ''}
+        ${isCar && Number(invoice.securityDeposit) > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Security deposit</td><td style="padding:6px 8px;text-align:right">${currency} ${fmt(invoice.securityDeposit)}</td></tr>` : ''}
         <tr><td style="padding:8px;border-top:2px solid #1e293b;font-weight:bold;color:#1e293b">Total Paid</td><td style="padding:8px;border-top:2px solid #1e293b;font-weight:bold;text-align:right">${currency} ${fmt(invoice.total)}</td></tr>
       </table>
 
