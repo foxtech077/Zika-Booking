@@ -2422,38 +2422,40 @@ export default function TravellerDashboard() {
                                   const promo = activePromotion && isPromotionValid(activePromotion) && activePromotion.activity === detailListing.category ? activePromotion : null;
                                   const promoAmt = promo
                                     ? (promo.discountType === "percentage"
-                                        ? Math.round(baseTotal * Number(activePromotion.discountValue) / 100)
-                                        : Math.round(Number(activePromotion.discountValue)))
+                                        ? Number((baseTotal * Number(promo.discountValue) / 100).toFixed(2))
+                                        : Number(Number(promo.discountValue).toFixed(2)))
                                     : 0;
                                   const afterDiscount = Math.max(0, baseTotal - promoAmt);
                                   const serviceFee = Math.ceil(afterDiscount * 0.10 * 100) / 100;
                                   const securityDeposit = isCar && detailListing.securityDeposit ? detailListing.securityDeposit : 0;
                                   const estimatedTotal = afterDiscount + serviceFee + securityDeposit;
+                                  // Round for display to match /booking/review page (uses fmt with maxFractionDigits: 0)
+                                  const disp = (n: number) => Math.round(n).toLocaleString();
                                   return (
                                     <>
                                       <div className="flex justify-between">
                                         <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
-                                        <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
+                                        <span>{detailListing.currency} {disp(baseTotal)}</span>
                                       </div>
-                                      {promoAmt > 0 && (
+                                      {promoAmt > 0 && promo && (
                                         <div className="flex justify-between text-emerald-600 font-semibold">
                                           <span>Promotion discount ({promo.discountValue}%)</span>
-                                          <span>−{detailListing.currency} {promoAmt.toLocaleString()}</span>
+                                          <span>−{detailListing.currency} {disp(promoAmt)}</span>
                                         </div>
                                       )}
                                       <div className="flex justify-between">
                                         <span>Service fee (10%)</span>
-                                        <span>{detailListing.currency} {serviceFee.toLocaleString()}</span>
+                                        <span>{detailListing.currency} {disp(serviceFee)}</span>
                                       </div>
                                       {securityDeposit > 0 && (
                                         <div className="flex justify-between text-slate-600">
                                           <span>Security deposit</span>
-                                          <span>{detailListing.currency} {securityDeposit.toLocaleString()}</span>
+                                          <span>{detailListing.currency} {disp(securityDeposit)}</span>
                                         </div>
                                       )}
                                       <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
                                         <span>Estimated total</span>
-                                        <span>{detailListing.currency} {estimatedTotal.toLocaleString()}</span>
+                                        <span>{detailListing.currency} {disp(estimatedTotal)}</span>
                                       </div>
                                     </>
                                   );
