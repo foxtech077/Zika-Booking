@@ -1,4 +1,5 @@
 "use client";
+// TODO: This component appears to be unused (not imported anywhere). Verify and remove if dead code.
 import type { PublicListingDetail } from "@/types";
 import React from "react";
 import DateRangePicker from "./DateRangePicker";

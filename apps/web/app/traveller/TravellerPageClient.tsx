@@ -285,6 +285,7 @@ export default function TravellerDashboard() {
 
   // Details & Checkout context
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
+  const selectedListingIdRef = useRef<string | null>(null);
   const [detailListing, setDetailListing] = useState<PublicListingDetail | null>(null);
   const [selectedRoomTypeId, setSelectedRoomTypeId] = useState<string | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -306,7 +307,6 @@ export default function TravellerDashboard() {
 
   // Promotion state
   const [activePromotion, setActivePromotion] = useState<ActivePromotion | null>(null);
-  const [promotionDiscount, setPromotionDiscount] = useState<number>(0);
 
   // Auto-applicable vouchers (context-filtered, fetched after lock)
   const [applicableVouchers, setApplicableVouchers] = useState<ApplicableVoucher[]>([]);
@@ -337,6 +337,8 @@ export default function TravellerDashboard() {
   const [checkoutStep, setCheckoutStep] = useState<"review" | "details" | "stripe_card" | "polling">("review");
   const [pricingPreview, setPricingPreview] = useState<any>(null);
   const [estimatedPricing, setEstimatedPricing] = useState<any>(null);
+  const [pricingLoading, setPricingLoading] = useState(false);
+  const [pricingError, setPricingError] = useState("");
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [stripeClientSecret, setStripeClientSecret] = useState("");
   const [stripeInstance, setStripeInstance] = useState<any>(null);
@@ -471,13 +473,15 @@ export default function TravellerDashboard() {
 
   // Derived discount — explicit voucher selection always wins over auto-promotion.
   // Neither stacks with the other; we always pick the higher value.
+  // Promotion discount comes from the server-computed pricing estimate.
+  const serverPromotionDiscount = estimatedPricing?.promotionDiscount ?? 0;
   const effectiveDiscountSource: "voucher" | "promotion" | null =
     voucherApplied ? "voucher"
-      : promotionDiscount > 0 ? "promotion"
+      : serverPromotionDiscount > 0 ? "promotion"
         : null;
   const bestDiscount =
     effectiveDiscountSource === "voucher" ? voucherDiscount
-      : effectiveDiscountSource === "promotion" ? promotionDiscount
+      : effectiveDiscountSource === "promotion" ? serverPromotionDiscount
         : 0;
 
   // Red badge shown on every listing card when an active activity promotion matches the active tab
@@ -1134,15 +1138,18 @@ export default function TravellerDashboard() {
   async function handleSelectListing(id: string) {
     setLoadingDetail(true);
     setSelectedListingId(id);
+    selectedListingIdRef.current = id;
     setSecondsLeft(null);
     setLockToken("");
     setVoucherApplied(false);
     setVoucherDiscount(0);
     setVoucherCode("");
     setVoucherError("");
-    setPromotionDiscount(0);
     setApplicableVouchers([]);
     setWalletVouchers([]);
+    setEstimatedPricing(null);
+    setActivePromotion(null);
+    setPricingError("");
     setDetailCheckIn(searchCheckIn || "");
     setDetailCheckOut(searchCheckOut || "");
     setDetailPickupDate(searchPickupDate || "");
@@ -1219,13 +1226,9 @@ export default function TravellerDashboard() {
 
         addToRecentlyViewed(details);
         listingApi.post("/guests/me/recently-viewed", { listingId: id }).catch(() => { });
-        fetchActivePromotion(details.category);
-        // Fetch wallet + applicable vouchers as soon as the listing opens so the
-        // dropdown is populated in the details step (before the booking lock).
-        if (hasAuthToken) {
-          fetchWalletVouchers();
-          fetchApplicableVouchers(details.id, details.category, details.country);
-        }
+        // Fetch all pricing data atomically — promotions, pricing estimate, and vouchers.
+        // The UI will only show pricing after all calls succeed.
+        fetchAllPricing();
       } else {
         setDetailListing(null);
       }
@@ -1292,67 +1295,109 @@ export default function TravellerDashboard() {
     }
   }
 
-  async function fetchPricingEstimate() {
+  async function fetchAllPricing() {
     if (!detailListing || lockToken) return;
+
+    setPricingLoading(true);
+    setPricingError("");
+
     const isCar = detailListing.category === "car";
     const start = isCar ? detailPickupDate : detailCheckIn;
     const end = isCar ? detailReturnDate : detailCheckOut;
-    if (!start || !end || !detailListing.id) { setEstimatedPricing(null); return; }
+    const hasDates = !!start && !!end && !!detailListing.id;
+
+    // Always fetch promotion (needed for price header discount display).
+    const promotionPromise = listingApi.get<any>("/promotions/active", {
+      params: { activity: detailListing.category },
+    });
+
+    // Only fetch pricing estimate + vouchers when dates are selected.
+    const pricingPromise = hasDates
+      ? listingApi.post<any>("/bookings/pricing-estimate", {
+          listingId: detailListing.id,
+          roomTypeId: selectedRoomTypeId || undefined,
+          checkIn: isCar ? undefined : detailCheckIn || undefined,
+          checkOut: isCar ? undefined : detailCheckOut || undefined,
+          pickupDatetime: isCar ? toIsoDatetime(detailPickupDate) || undefined : undefined,
+          returnDatetime: isCar ? toIsoDatetime(detailReturnDate) || undefined : undefined,
+          guests: searchAdults + searchChildren,
+        })
+      : Promise.resolve(null);
+
+    const voucherPromises = hasDates && hasAuthToken
+      ? [
+          listingApi.get<any>("/vouchers/wallet"),
+          listingApi.get<any>("/vouchers/applicable", {
+            params: { listingId: detailListing.id, category: detailListing.category, country: detailListing.country, totalAmount: 0 },
+          }),
+        ]
+      : [];
 
     try {
-      const res = await listingApi.post<any>("/bookings/pricing-estimate", {
-        listingId: detailListing.id,
-        roomTypeId: selectedRoomTypeId || undefined,
-        checkIn: isCar ? undefined : detailCheckIn || undefined,
-        checkOut: isCar ? undefined : detailCheckOut || undefined,
-        pickupDatetime: isCar ? toIsoDatetime(detailPickupDate) || undefined : undefined,
-        returnDatetime: isCar ? toIsoDatetime(detailReturnDate) || undefined : undefined,
-        guests: searchAdults + searchChildren,
-      });
-      if (res.data?.success && res.data.data?.pricingPreview) {
-        setEstimatedPricing(res.data.data.pricingPreview);
+      const results = await Promise.all([promotionPromise, pricingPromise, ...voucherPromises]);
+
+      const promotionRes = results[0];
+      const pricingRes = results[1];
+      const walletRes = hasDates && hasAuthToken ? results[2] : null;
+      const applicableRes = hasDates && hasAuthToken ? results[3] : null;
+
+      // Active promotions
+      if (promotionRes.data?.success) {
+        const raw = promotionRes.data.data ?? [];
+        const promos: ActivePromotion[] = Array.isArray(raw) ? raw : (raw?.promotions ?? []);
+        const normalised = promos.map((p: any) => ({ ...p, discountValue: Number(p.discountValue) }));
+        const matched = normalised.filter((p: any) => p.activity === detailListing.category && isPromotionValid(p));
+        setActivePromotion(matched.length > 0 ? (matched[0] ?? null) : null);
+      } else {
+        setActivePromotion(null);
+      }
+
+      // Pricing estimate (null when no dates)
+      if (pricingRes) {
+        if (pricingRes.data?.success && pricingRes.data.data?.pricingPreview) {
+          setEstimatedPricing(pricingRes.data.data.pricingPreview);
+        } else {
+          setEstimatedPricing(null);
+          setPricingError("Service is currently unavailable. Please try again later.");
+        }
       } else {
         setEstimatedPricing(null);
       }
+
+      // Wallet vouchers
+      if (walletRes) {
+        if (walletRes.data?.success) {
+          setWalletVouchers(walletRes.data.data ?? []);
+        } else {
+          setWalletVouchers([]);
+        }
+      }
+
+      // Applicable vouchers
+      if (applicableRes) {
+        if (applicableRes.data?.success) {
+          setApplicableVouchers(applicableRes.data.data ?? []);
+        } else {
+          setApplicableVouchers([]);
+        }
+      }
     } catch {
       setEstimatedPricing(null);
+      setActivePromotion(null);
+      setPricingError("Service is currently unavailable. Please try again later.");
+    } finally {
+      setPricingLoading(false);
     }
   }
 
-  // Re-check availability + fetch pricing estimate whenever dates change.
+  // Re-check availability + fetch all pricing whenever dates/guests change.
   // GET /listings/:id/availability is PUBLIC — no auth guard needed.
   useEffect(() => {
     if (!detailListing || lockToken) return;
     setBookingError("");
     checkAvailability(detailListing.id, detailListing.category);
-    fetchPricingEstimate();
+    fetchAllPricing();
   }, [detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id, selectedRoomTypeId, searchAdults, searchChildren]);
-
-  // Recompute promotion discount whenever dates or active promotion changes.
-  // effectiveDiscountSource is derived — no state mutation needed here.
-  useEffect(() => {
-    if (!activePromotion || !detailListing || !isPromotionValid(activePromotion) || activePromotion.activity !== detailListing.category) {
-      setPromotionDiscount(0);
-      return;
-    }
-    const isCar = detailListing.category === "car";
-    const start = isCar ? detailPickupDate : detailCheckIn;
-    const end = isCar ? detailReturnDate : detailCheckOut;
-    const days = calcDays(start, end);
-    if (days <= 0) { setPromotionDiscount(0); return; }
-
-    const isHotel = detailListing.category === "hotel";
-    const selectedRt = isHotel
-      ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
-      : null;
-    const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
-
-    const base = pricePerNight * days;
-    const pDiscount = activePromotion.discountType === "percentage"
-      ? Number((base * activePromotion.discountValue / 100).toFixed(2))
-      : Number(Number(activePromotion.discountValue).toFixed(2));
-    setPromotionDiscount(pDiscount);
-  }, [activePromotion, detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id, selectedRoomTypeId]);
 
   // Helper: calculate nights/days between two date strings
   function calcDays(start: string, end: string): number {
@@ -1495,8 +1540,8 @@ export default function TravellerDashboard() {
         console.log("[ZikaSearch] Voucher discount amount computed:", vDiscount);
 
         // Promotion stacking guard — reject voucher if an active promotion gives more
-        if (activePromotion && promotionDiscount > vDiscount) {
-          console.log("[ZikaSearch] Voucher rejected: active promotion gives better discount", { promotionDiscount, voucherDiscount: vDiscount });
+        if (activePromotion && serverPromotionDiscount > vDiscount) {
+          console.log("[ZikaSearch] Voucher rejected: active promotion gives better discount", { promotionDiscount: serverPromotionDiscount, voucherDiscount: vDiscount });
           setVoucherError(`A better promotion (${activePromotion.name || "Category Discount"}) is active. Vouchers cannot be stacked with active promotions.`);
           return;
         }
@@ -1518,16 +1563,19 @@ export default function TravellerDashboard() {
 
   // Fetch active promotions for a listing category
   async function fetchActivePromotion(category: string) {
+    // Skip if a listing is open — fetchAllPricing() owns activePromotion in that case.
+    if (selectedListingIdRef.current) return;
     try {
       console.log("[ZikaSearch] Fetching active promotions for category:", category);
       const res = await listingApi.get<any>("/promotions/active", { params: { activity: category } });
       console.log("[ZikaSearch] Active promotions API response:", res.data);
+      // Guard again after await — a listing may have been opened while the request was in flight.
+      if (selectedListingIdRef.current) return;
       if (res.data.success) {
         const raw = res.data.data ?? [];
         const promos: ActivePromotion[] = Array.isArray(raw)
           ? raw
           : (raw?.promotions ?? []);
-        // Coerce discountValue to number — API may return it as a string
         const normalised = promos.map((p: any) => ({
           ...p,
           discountValue: Number(p.discountValue),
@@ -1544,7 +1592,7 @@ export default function TravellerDashboard() {
       }
     } catch (err) {
       console.error("[ZikaSearch] fetchActivePromotion error:", err);
-      setActivePromotion(null);
+      if (!selectedListingIdRef.current) setActivePromotion(null);
     }
   }
 
@@ -1963,7 +2011,7 @@ export default function TravellerDashboard() {
           <div className="max-w-7xl mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
             <button
               onClick={() => {
-                setSelectedListingId(null);
+                setSelectedListingId(null); selectedListingIdRef.current = null;
                 setDetailListing(null);
                 abandonLock();
               }}
@@ -2133,7 +2181,12 @@ export default function TravellerDashboard() {
                 <div className="lg:col-span-4 relative lg:sticky lg:top-28 top-4 self-start">
                   <div className="bg-white border border-slate-200 shadow-xl rounded-2xl p-6 text-left shadow-slate-200/50">
                     {/* Price header */}
-                    {(() => {
+                    {pricingLoading ? (
+                      <div className="mb-3 animate-pulse">
+                        <div className="h-8 bg-slate-200 rounded w-1/2 mb-2" />
+                        <div className="h-4 bg-slate-200 rounded w-1/4" />
+                      </div>
+                    ) : (() => {
                       const isHotel = detailListing.category === "hotel";
                       const selectedRt = isHotel
                         ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
@@ -2368,14 +2421,18 @@ export default function TravellerDashboard() {
 
                           {/* Dynamic price breakdown */}
                           {days > 0 && (
-                            !estimatedPricing ? (
+                            pricingLoading ? (
                               <div className="space-y-3 pt-2 border-t border-slate-100 animate-pulse">
                                 <div className="h-4 bg-slate-200 rounded w-3/4" />
                                 <div className="h-4 bg-slate-200 rounded w-1/2" />
                                 <div className="h-4 bg-slate-200 rounded w-5/6" />
                                 <div className="h-5 bg-slate-200 rounded w-2/3 mt-2" />
                               </div>
-                            ) : (
+                            ) : pricingError ? (
+                              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs font-semibold text-red-600">
+                                {pricingError}
+                              </div>
+                            ) : estimatedPricing ? (
                               <div className="space-y-2 pt-2 border-t border-slate-100 text-sm text-slate-600">
                                 <div className="flex justify-between">
                                   <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
@@ -2414,7 +2471,7 @@ export default function TravellerDashboard() {
                                   <span>{detailListing.currency} {estimatedPricing.totalAmount.toLocaleString()}</span>
                                 </div>
                               </div>
-                            )
+                            ) : null
                           )}
                         </div>
                       );
@@ -2599,7 +2656,7 @@ export default function TravellerDashboard() {
                           {/* Discount section — promotion badge + wallet vouchers + manual entry always visible */}
                           <div className="space-y-2">
                             {/* Promotion badge — always shown when a promotion exists */}
-                            {promotionDiscount > 0 && activePromotion && (
+                            {serverPromotionDiscount > 0 && activePromotion && (
                               <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
                                 <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
                                   <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
@@ -2608,7 +2665,7 @@ export default function TravellerDashboard() {
                                     <span className="text-slate-400 font-normal"> (voucher saves more)</span>
                                   )}
                                 </span>
-                                <span className="text-xs font-bold text-emerald-700">−{detailListing.currency} {promotionDiscount.toLocaleString()}</span>
+                                <span className="text-xs font-bold text-emerald-700">−{detailListing.currency} {serverPromotionDiscount.toLocaleString()}</span>
                               </div>
                             )}
 
@@ -2839,7 +2896,7 @@ export default function TravellerDashboard() {
                 <p className="text-lg font-semibold">Reservation details are unavailable.</p>
                 <p className="mt-2 text-sm">Please go back to search or select a different listing.</p>
                 <button
-                  onClick={() => { setSelectedListingId(null); setActiveTab("home"); }}
+                  onClick={() => { setSelectedListingId(null); selectedListingIdRef.current = null; setActiveTab("home"); }}
                   className="mt-6 inline-flex items-center justify-center rounded-full bg-[#0c2614] px-6 py-3 text-sm font-semibold text-white hover:bg-[#081b0d] transition"
                 >
                   Return to Search
@@ -3751,7 +3808,7 @@ export default function TravellerDashboard() {
                       </p>
                     </div>
                     <button
-                      onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
+                      onClick={() => { setActiveTab("home"); setSelectedListingId(null); selectedListingIdRef.current = null; }}
                       className="mt-2 px-6 py-2.5 bg-[#0c2614] text-white text-xs font-bold rounded-xl uppercase tracking-wider hover:bg-[#081b0d] transition"
                     >
                       Try a Different Search
@@ -3976,7 +4033,7 @@ export default function TravellerDashboard() {
                 </p>
                 {/* {reservationStatusFilter === "all" && (
                   <button
-                    onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
+                    onClick={() => { setActiveTab("home"); setSelectedListingId(null); selectedListingIdRef.current = null; }}
                     className="mt-6 inline-flex items-center gap-2 bg-[#0c2614] text-white text-sm font-semibold px-6 py-3 rounded-xl hover:bg-[#081b0d] transition shadow-md"
                   >
                     Explore Listings
@@ -4024,7 +4081,7 @@ export default function TravellerDashboard() {
             <nav className="flex flex-col gap-1 p-4 flex-1 overflow-y-auto">
               <TravellerWorkspaceNav orientation="stack" showHome={false} showAvatar={false} className="mb-3" />
               <button
-                onClick={() => { setSelectedListingId(null); setMobileNavOpen(false); router.push("/traveller"); }}
+                onClick={() => { setSelectedListingId(null); selectedListingIdRef.current = null; setMobileNavOpen(false); router.push("/traveller"); }}
                 className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "home" ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
               >
                 Destinations
@@ -4033,7 +4090,7 @@ export default function TravellerDashboard() {
                 <button
                   key={cat}
                   onClick={() => {
-                    setSelectedListingId(null);
+                    setSelectedListingId(null); selectedListingIdRef.current = null;
                     setMobileNavOpen(false);
                     router.push(cat === "hotel" ? "/traveller/hotels" : cat === "apartment" ? "/traveller/apartments" : "/traveller/cars");
                   }}
@@ -4044,7 +4101,7 @@ export default function TravellerDashboard() {
               ))}
               {user && (
                 <button
-                  onClick={() => { setSelectedListingId(null); setMobileNavOpen(false); router.push("/traveller?tab=bookings"); }}
+                  onClick={() => { setSelectedListingId(null); selectedListingIdRef.current = null; setMobileNavOpen(false); router.push("/traveller?tab=bookings"); }}
                   className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "bookings" ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
                 >
                   My Reservations
@@ -4264,7 +4321,7 @@ export default function TravellerDashboard() {
             <button
               onClick={() => {
                 setBookingSuccessModal(null);
-                setSelectedListingId(null);
+                setSelectedListingId(null); selectedListingIdRef.current = null;
                 setActiveTab("bookings");
                 fetchGuestBookings();
                 // Re-fetch 6s later in case webhook hasn't confirmed the booking yet
