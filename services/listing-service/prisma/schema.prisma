@@ -244,6 +244,7 @@ model Listing {
   colour                String?             @map("colour") @db.VarChar(30)
   securityDeposit       Decimal?            @map("security_deposit") @db.Decimal(10, 2)
   minimumDriverAge      Int?                @map("minimum_driver_age")
+  driverProvided        Boolean             @default(false) @map("driver_provided")
   minimumRentalDays     Int?                @map("minimum_rental_days")
   fuelPolicy            FuelPolicy?         @map("fuel_policy")
   extraKmRate           Decimal?            @map("extra_km_rate") @db.Decimal(10, 2)

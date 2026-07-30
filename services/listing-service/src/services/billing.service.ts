@@ -12,6 +12,7 @@ export type BillingInput = {
   taxRate: number;
   commissionRate: number;
   securityDeposit?: number;
+  driverProvided?: boolean;
 };
 
 export type BillingResult = {
@@ -53,7 +54,7 @@ export function calculateBilling(input: BillingInput): BillingResult {
   // PRD 15.9: service_fee = CEILING(subtotal × commission_rate, 2dp)
   const serviceFee = Math.ceil(subtotal * input.commissionRate * 100) / 100;
   const taxAmount = Number((subtotal * input.taxRate).toFixed(2));
-  const securityDeposit = input.listingCategory === "car"
+  const securityDeposit = input.listingCategory === "car" && !input.driverProvided
     ? Number((input.securityDeposit ?? 0).toFixed(2))
     : 0;
   const deliveryFee = Number((input.deliveryFee ?? 0).toFixed(2));

@@ -604,6 +604,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       taxRate: getTaxRate(listing.country),
       commissionRate,
       securityDeposit: Number(listing.securityDeposit ?? 0),
+      driverProvided: Boolean(listing.driverProvided),
     });
 
     return {
@@ -938,6 +939,7 @@ export async function bookingRoutes(app: FastifyInstance) {
 
           commissionRate,
           securityDeposit: Number(listing.securityDeposit ?? 0),
+          driverProvided: Boolean(listing.driverProvided),
         });
 
         // ── 10. FIXED RESPONSE ───────────────────────
@@ -1337,10 +1339,11 @@ export async function bookingRoutes(app: FastifyInstance) {
           voucherAmount: 0,
           taxRate: getTaxRate(listing.country),
           commissionRate,
+          driverProvided: Boolean(listing.driverProvided),
         });
 
         // ── 1b. SECURITY DEPOSIT
-        const securityDeposit = listing.category === "car"
+        const securityDeposit = listing.category === "car" && !listing.driverProvided
           ? Number(listing.securityDeposit ?? 0)
           : 0;
 
