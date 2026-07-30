@@ -31,7 +31,7 @@ export async function generateReference(countryCode: string): Promise<string> {
   const result = await prisma.$queryRaw<{ nextval: bigint }[]>`SELECT nextval('booking_seq') AS nextval`;
   const seq = Number(result[0]!.nextval);
   const padded = String(seq).padStart(6, "0");
-  return `KAINOOK-${padded}-${(countryCode ?? "XX").toUpperCase()}`;
+  return `KAIN-${padded}-${(countryCode ?? "XX").toUpperCase()}`;
 }
 
 import { getEffectiveCommissionRate } from "../services/commission.service.js";
@@ -362,6 +362,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           serviceFee: true,
           taxAmount: true,
           deliveryFee: true,
+          securityDeposit: true,
           nightsOrDays: true,
           voucherDiscount: true,
           voucherCode: true,
@@ -1334,7 +1335,12 @@ export async function bookingRoutes(app: FastifyInstance) {
           commissionRate,
         });
 
-        // 1b. PROMOTION LOGIC
+        // ── 1b. SECURITY DEPOSIT
+        const securityDeposit = listing.category === "car"
+          ? Number(listing.securityDeposit ?? 0)
+          : 0;
+
+        // 1c. PROMOTION LOGIC
         const now = new Date();
         const activePromo = await (prisma as any).activityPromotion.findFirst({
           where: {
@@ -1437,6 +1443,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           pointsDiscount,
           taxRate: getTaxRate(listing.country),
           commissionRate,
+          securityDeposit,
         });
 
 
@@ -1501,6 +1508,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             deliveryFee,
             serviceFee: finalBilling.serviceFee,
             taxAmount: finalBilling.taxAmount,
+            securityDeposit,
 
             currency: listing.currency ?? "USD",
 
@@ -1745,32 +1753,35 @@ export async function bookingRoutes(app: FastifyInstance) {
         }
 
         // Send confirmation email (non-blocking)
+        // NOTE: Guest confirmation email is sent by the payment service (includes PDF voucher).
+        // This listing-service email is disabled to avoid duplicate sends.
+        // If re-enabling, also ensure the admin-listings manual confirm still calls it.
         const confirmedListing = await prisma.listing.findUnique({
           where: { id: booking.listingId },
         });
-        sendBookingConfirmationEmail(
-          booking.guestEmail,
-          `${booking.guestFirstName} ${booking.guestLastName}`,
-          {
-            reference: booking.reference,
-            listingName: confirmedListing?.name ?? "Your listing",
-            listingType: booking.listingType,
-            checkIn: booking.checkIn?.toISOString(),
-            checkOut: booking.checkOut?.toISOString(),
-            pickupDatetime: booking.pickupDatetime?.toISOString(),
-            returnDatetime: booking.returnDatetime?.toISOString(),
-            nightsOrDays: booking.nightsOrDays,
-            nightlyRate: Number(booking.nightlyRate ?? booking.dailyRate ?? 0),
-            baseAmount: Number((Number(booking.subtotal) + Number(booking.discountAmount)).toFixed(2)),
-            discount: Number(booking.discountAmount),
-            serviceFee: Number(booking.serviceFee),
-            taxAmount: Number(booking.taxAmount),
-            deliveryFee: Number(booking.deliveryFee),
-            totalAmount: Number(booking.totalAmount),
-            commissionRate: Number(booking.commissionRate),
-            currency: booking.currency,
-          },
-        ).catch(() => { });
+        // sendBookingConfirmationEmail(
+        //   booking.guestEmail,
+        //   `${booking.guestFirstName} ${booking.guestLastName}`,
+        //   {
+        //     reference: booking.reference,
+        //     listingName: confirmedListing?.name ?? "Your listing",
+        //     listingType: booking.listingType,
+        //     checkIn: booking.checkIn?.toISOString(),
+        //     checkOut: booking.checkOut?.toISOString(),
+        //     pickupDatetime: booking.pickupDatetime?.toISOString(),
+        //     returnDatetime: booking.returnDatetime?.toISOString(),
+        //     nightsOrDays: booking.nightsOrDays,
+        //     nightlyRate: Number(booking.nightlyRate ?? booking.dailyRate ?? 0),
+        //     baseAmount: Number((Number(booking.subtotal) + Number(booking.discountAmount)).toFixed(2)),
+        //     discount: Number(booking.discountAmount),
+        //     serviceFee: Number(booking.serviceFee),
+        //     taxAmount: Number(booking.taxAmount),
+        //     deliveryFee: Number(booking.deliveryFee),
+        //     totalAmount: Number(booking.totalAmount),
+        //     commissionRate: Number(booking.commissionRate),
+        //     currency: booking.currency,
+        //   },
+        // ).catch(() => { });
 
         fireNotification(booking.guestId, {
           type: "booking_confirmed",
@@ -2707,6 +2718,9 @@ export async function bookingRoutes(app: FastifyInstance) {
           subtotal: Number(booking.subtotal),
           discountAmount: Number(booking.discountAmount),
           deliveryFee: Number(booking.deliveryFee),
+          serviceFee: Number(booking.serviceFee),
+          taxAmount: Number(booking.taxAmount),
+          securityDeposit: Number(booking.securityDeposit ?? 0),
           voucherCode: booking.voucherCode ?? null,
           voucherDiscount: Number(booking.voucherDiscount),
           totalAmount: Number(booking.totalAmount),

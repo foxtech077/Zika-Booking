@@ -84,7 +84,7 @@ export async function initiateTaraPayment(opts: {
   amount: number;
   currency: string;
   mobileNumber: string;
-  reference: string; // booking reference, e.g. ZIKA-001234-KE
+  reference: string; // booking reference, e.g. KAIN-001234-KE
   description: string;
   attemptNumber?: number;
   network?: string;

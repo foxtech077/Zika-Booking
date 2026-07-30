@@ -78,7 +78,9 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
   const commissionRate = listing.commissionRate ?? 0;
   const serviceFeePercent = Math.round(commissionRate * 1000) / 10;
   const serviceFee = days > 0 ? Math.ceil(subtotalAfterDiscount * commissionRate * 100) / 100 : 0;
-  const grandTotal = subtotalAfterDiscount + serviceFee;
+  // Car rentals collect the security deposit upfront (added on dev).
+  const securityDeposit = isCar ? Number(listing.securityDeposit ?? 0) : 0;
+  const grandTotal = subtotalAfterDiscount + serviceFee + securityDeposit;
 
   return (
     <div className="bg-white border border-slate-200 shadow-xl rounded-2xl p-6 text-left space-y-5">
@@ -210,6 +212,12 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
             <div className="flex justify-between">
               <span>Service fee ({serviceFeePercent}%)</span>
               <span>{listing.currency} {serviceFee.toLocaleString()}</span>
+            </div>
+          )}
+          {isCar && securityDeposit > 0 && (
+            <div className="flex justify-between text-slate-600">
+              <span>Security deposit</span>
+              <span>{listing.currency} {securityDeposit.toLocaleString()}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 text-base">

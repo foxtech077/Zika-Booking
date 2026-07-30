@@ -1201,6 +1201,7 @@ export default function TravellerDashboard() {
           fuelType: item.fuelType,
           seats: item.seats,
           mileagePolicy: item.mileagePolicy,
+          securityDeposit: item.securityDeposit ? Number(item.securityDeposit) : undefined,
           primaryPhotoUrl: item.primaryPhotoUrl || item.photos?.[0]?.cdnUrl || null,
           photos: item.photos || (item.primaryPhotoUrl ? [{ id: "ph", cdnUrl: item.primaryPhotoUrl, position: 1 }] : []),
           amenities: item.amenities || [],

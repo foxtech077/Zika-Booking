@@ -143,7 +143,7 @@ function normalizeBooking(raw: unknown): Booking {
 
   return {
     id: readString(item.id, crypto.randomUUID()),
-    reference: readString(item.reference ?? item.bookingId, "ZIKA-XXXX-CC"),
+    reference: readString(item.reference ?? item.bookingId, "KAIN-XXXX-CC"),
     listingId,
     listingName: readString(item.listingTitle ?? item.listingName, "Listing"),
     listingCategory: category,

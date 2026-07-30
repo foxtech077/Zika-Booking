@@ -1,23 +1,23 @@
 services:
-  db:
-    container_name: zika_booking
-    image: postgis/postgis:18-3.6-alpine
-    environment:
-      POSTGRES_USER: zika_user
-      POSTGRES_PASSWORD: aakopass123
-      POSTGRES_DB: zika_booking
-    ports:
-      - "5434:5432"
-    volumes:
-      - db_data:/var/lib/postgresql
+  # redis:
+  #   image: docker.io/redis:7-alpine
+  #   container_name: zika-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - zika-redis-data:/data
 
-  redis:
-    image: docker.io/redis:7-alpine
-    container_name: zika-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - zika-redis-data:/data
+  # db:
+  #   container_name: zika_booking
+  #   image: postgis/postgis:18-3.6-alpine
+  #   environment:
+  #     POSTGRES_USER: zika_user
+  #     POSTGRES_PASSWORD: aakopass123
+  #     POSTGRES_DB: zika_booking
+  #   ports:
+  #     - "5434:5432"
+  #   volumes:
+  #     - db_data:/var/lib/postgresql
 
   auth-service:
     image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/auth-service:latest
@@ -69,6 +69,6 @@ services:
       - apps/admin/.env
     network_mode: host
 
-volumes:
-  db_data:
-  zika-redis-data:
+# volumes:
+  # zika-redis-data:
+  # db_data:

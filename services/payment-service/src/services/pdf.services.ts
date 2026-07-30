@@ -2,13 +2,13 @@ import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
 import QRCode from "qrcode";
-import { uploadBuffer, cdnUrl } from "../lib/s3.js";
+import { uploadBuffer, getPublicUrl } from "../lib/s3.js";
 import os from "os";
 
 const BOOKING_BASE_URL = process.env["BOOKING_PUBLIC_URL"] ?? "https://kainook.com/bookings";
 
 export async function generateVoucherPDF(booking: any, invoice: any) {
-  const fileName = `KAINOOK-${booking.code}.pdf`;
+  const fileName = `KAIN-${booking.code}.pdf`;
   const filePath = path.join(os.tmpdir(), fileName);
 
   const bookingUrl = `${BOOKING_BASE_URL}/${booking.code}`;
@@ -58,7 +58,12 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
   doc.text(`Discount: ${invoice.discount}`, 40, y); y += 15;
   doc.text(`Subtotal: ${invoice.subtotal}`, 40, y); y += 15;
   doc.text(`Service Fee: ${invoice.serviceFee}`, 40, y); y += 15;
-  doc.text(`Tax: ${invoice.tax}`, 40, y); y += 18;
+  doc.text(`Tax: ${invoice.tax}`, 40, y); y += 15;
+  if (invoice.securityDeposit && invoice.securityDeposit > 0) {
+    doc.text(`Security Deposit: ${invoice.securityDeposit}`, 40, y); y += 18;
+  } else {
+    y += 3;
+  }
   doc.fontSize(14).text(`TOTAL PAID: ${invoice.total}`, 40, y); y += 24;
 
   // ── PAYMENT INFORMATION ─────────────────────────────────────────────────
@@ -86,9 +91,9 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
 
   const pdfBuffer = fs.readFileSync(filePath);
 
-  const s3Key = `vouchers/${booking.code}.pdf`;
+  const s3Key = `invoice/${booking.id}/KAIN-${booking.code}.pdf`;
   await uploadBuffer(s3Key, pdfBuffer, "application/pdf");
-  const pdfUrl = cdnUrl(s3Key);
+  const pdfUrl = await getPublicUrl(s3Key);
 
   try {
     fs.unlinkSync(filePath);

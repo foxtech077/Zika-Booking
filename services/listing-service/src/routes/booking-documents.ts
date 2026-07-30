@@ -281,6 +281,8 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
           lineItems.push({ label: `Daily rate × ${booking.nightsOrDays} days`, amount: Number(booking.subtotal), type: "subtotal" });
           if (Number(booking.deliveryFee) > 0)
             lineItems.push({ label: "Delivery fee", amount: Number(booking.deliveryFee), type: "fee" });
+          if (Number(booking.securityDeposit) > 0)
+            lineItems.push({ label: "Security deposit", amount: Number(booking.securityDeposit), type: "deposit" });
         } else {
           lineItems.push({ label: `Nightly rate × ${booking.nightsOrDays} nights`, amount: Number(booking.subtotal), type: "subtotal" });
           if (Number(booking.discountAmount) > 0)
@@ -327,6 +329,7 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
             discountAmount:  Number(booking.discountAmount),
             deliveryFee:     Number(booking.deliveryFee),
             voucherDiscount: Number(booking.voucherDiscount),
+            securityDeposit: Number(booking.securityDeposit ?? 0),
             total:           Number(booking.totalAmount),
             currency:        booking.currency,
           },

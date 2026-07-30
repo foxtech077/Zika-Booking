@@ -71,7 +71,7 @@ interface PublicListing {
   carMake: string | null; carModel: string | null; carYear: number | null;
   bodyType: string | null; transmission: string | null; fuelType: string | null;
   seats: number | null; mileagePolicy: string | null; mileageLimitKm: number | null;
-  minDriverAge: number | null; deliveryAvailable: boolean | null;
+  minDriverAge: number | null; securityDeposit: number | null; deliveryAvailable: boolean | null;
   deliveryFee: number | null; deliveryRadiusKm: number | null;
   amenities: Amenity[]; customAmenities: CustomAmenity[]; photos: Photo[];
   isFavourited: boolean | undefined;
@@ -902,6 +902,7 @@ export default function ListingDetailScreen() {
     if (listing.minDriverAge) rows.push({ icon: "person-outline", label: "Min driver age", value: `${listing.minDriverAge} years` });
     rows.push({ icon: "speedometer-outline", label: "Mileage", value: listing.mileagePolicy === "unlimited" ? "Unlimited" : listing.mileageLimitKm ? `${listing.mileageLimitKm} km/day` : "See host" });
     if (listing.fuelType) rows.push({ icon: "car-outline", label: "Fuel type", value: listing.fuelType.charAt(0).toUpperCase() + listing.fuelType.slice(1) });
+    if (listing.securityDeposit && listing.securityDeposit > 0) rows.push({ icon: "lock-closed-outline", label: "Security deposit", value: `${listing.currency ?? ""} ${listing.securityDeposit}` });
     rows.push({ icon: "navigate-outline", label: "Delivery", value: listing.deliveryAvailable ? `Yes · within ${listing.deliveryRadiusKm ?? "?"}km` : "Not available" });
     return rows;
   })();

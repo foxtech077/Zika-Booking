@@ -28,48 +28,57 @@ export async function sendGuestEmail(
   invoice: any,
   pdf: { fileName: string; pdfUrl: string; pdfBuffer: Buffer }
 ) {
+  const isCar = booking.listingType === "car";
+  const unitLabel = isCar ? "day" : "night";
+  const dateLabel = isCar
+    ? `Pick-up: ${booking.pickupDatetime ? new Date(booking.pickupDatetime).toLocaleString("en-GB") : "—"}<br>Return: ${booking.returnDatetime ? new Date(booking.returnDatetime).toLocaleString("en-GB") : "—"}`
+    : `Check-in: ${booking.checkIn ? new Date(booking.checkIn).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—"}<br>Check-out: ${booking.checkOut ? new Date(booking.checkOut).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—"}`;
+  const commissionPct = booking.commissionRate ? Math.round(Number(booking.commissionRate) * 100) : 0;
+  const currency = booking.currency ?? "";
+  const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  const nightlyRate = Number(booking.nightlyRate ?? booking.dailyRate ?? 0);
+
   await sgMail.send({
     to: booking.user.email ?? ["EMAIL_ADDRESS"],
     from: {
       email: process.env.SENDGRID_FROM_EMAIL!,
       name: process.env.SENDGRID_FROM_NAME ?? "Kainook",
     },
-    subject: `Your booking is confirmed — ${booking.code}`,
+    subject: `Booking Confirmed — ${booking.code}`,
     html: emailLayout(`
-      <h2 style="color:#15803d;margin-top:0">Booking Confirmed</h2>
+      <h2 style="color:#15803d;margin-top:0">Your booking is confirmed!</h2>
       <p>Hi ${booking.user.name},</p>
-      <p>Your booking has been successfully confirmed.</p>
-
-      <h3 style="color:#374151">Booking Details</h3>
-      <ul>
-        <li><strong>Booking Reference:</strong> ${booking.code}</li>
-        <li><strong>Listing:</strong> ${booking.listing.title}</li>
-        <li><strong>Check-in:</strong> ${booking.checkIn}</li>
-        <li><strong>Check-out:</strong> ${booking.checkOut}</li>
-      </ul>
-
-      <h3 style="color:#374151">Receipt</h3>
-      <table style="width:100%;border-collapse:collapse;margin:8px 0">
-        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Base Amount</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${invoice.baseAmount}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Discount</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${invoice.discount}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Subtotal</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${invoice.subtotal}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Service Fee</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${invoice.serviceFee}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Tax</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${invoice.tax}</td></tr>
-        <tr><td style="padding:8px;color:#374151;font-weight:bold">Total Paid</td><td style="padding:8px;font-weight:bold">${invoice.total}</td></tr>
+      <p>Great news — your booking at <strong>${booking.listing.title}</strong> is confirmed.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0">
+        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Booking Reference</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:bold;font-family:monospace">${booking.code}</td></tr>
+        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Property</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${booking.listing.title}</td></tr>
+        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Dates</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${dateLabel}</td></tr>
+        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Duration</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${booking.nightsOrDays} ${unitLabel}${booking.nightsOrDays !== 1 ? "s" : ""}</td></tr>
       </table>
 
-      <h3 style="color:#374151">Payment Information</h3>
-      <ul>
-        <li><strong>Transaction ID:</strong> ${booking.transactionId ?? "N/A"}</li>
-        <li><strong>Payment Method:</strong> ${booking.paymentMethod ?? "Card"}</li>
-        <li><strong>Payment Status:</strong> Paid</li>
-      </ul>
+      <h3 style="color:#1e293b;font-size:14px;margin:20px 0 8px">Receipt</h3>
+      <table style="width:100%;border-collapse:collapse;margin:8px 0">
+        <tr><td style="padding:6px 8px;color:#6b7280">${currency} ${fmt(nightlyRate)} × ${booking.nightsOrDays} ${unitLabel}${booking.nightsOrDays !== 1 ? "s" : ""}</td><td style="padding:6px 8px;text-align:right">${currency} ${fmt(invoice.baseAmount)}</td></tr>
+        ${Number(invoice.discount) > 0 ? `<tr><td style="padding:6px 8px;color:#15803d">Discount</td><td style="padding:6px 8px;text-align:right;color:#15803d">−${currency} ${fmt(invoice.discount)}</td></tr>` : ''}
+        <tr><td style="padding:6px 8px;border-top:1px solid #e5e7eb;color:#6b7280">Subtotal</td><td style="padding:6px 8px;border-top:1px solid #e5e7eb;text-align:right">${currency} ${fmt(invoice.subtotal)}</td></tr>
+        <tr><td style="padding:6px 8px;color:#6b7280">Service fee${commissionPct > 0 ? ` (${commissionPct}%)` : ''}</td><td style="padding:6px 8px;text-align:right">${currency} ${fmt(invoice.serviceFee)}</td></tr>
+        ${Number(invoice.tax) > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Taxes</td><td style="padding:6px 8px;text-align:right">${currency} ${fmt(invoice.tax)}</td></tr>` : ''}
+        ${isCar && Number(invoice.securityDeposit) > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Security deposit</td><td style="padding:6px 8px;text-align:right">${currency} ${fmt(invoice.securityDeposit)}</td></tr>` : ''}
+        <tr><td style="padding:8px;border-top:2px solid #1e293b;font-weight:bold;color:#1e293b">Total Paid</td><td style="padding:8px;border-top:2px solid #1e293b;font-weight:bold;text-align:right">${currency} ${fmt(invoice.total)}</td></tr>
+      </table>
 
-      <h3 style="color:#374151">Cancellation Policy</h3>
-      <p>Free cancellation before 24 hours of check-in.</p>
+      <h3 style="color:#374151;font-size:14px;margin:20px 0 8px">Payment Information</h3>
+      <table style="width:100%;border-collapse:collapse;margin:8px 0">
+        <tr><td style="padding:6px 8px;color:#6b7280">Transaction ID</td><td style="padding:6px 8px;font-family:monospace">${booking.transactionId ?? "N/A"}</td></tr>
+        <tr><td style="padding:6px 8px;color:#6b7280">Payment Method</td><td style="padding:6px 8px">${booking.paymentMethod ?? "Card"}</td></tr>
+        <tr><td style="padding:6px 8px;color:#6b7280">Payment Status</td><td style="padding:6px 8px;color:#15803d;font-weight:bold">Paid</td></tr>
+      </table>
 
-      <h3 style="color:#374151">Host Contact</h3>
-      <p>${booking.listing.hostEmail ?? "Available in booking dashboard"}</p>
+      <h3 style="color:#374151;font-size:14px;margin:20px 0 8px">Cancellation Policy</h3>
+      <p style="color:#4b5563;font-size:13px">Free cancellation before 24 hours of check-in.</p>
+
+      <h3 style="color:#374151;font-size:14px;margin:20px 0 8px">Host Contact</h3>
+      <p style="color:#4b5563;font-size:13px">${booking.listing.hostEmail ?? "Available in booking dashboard"}</p>
 
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
 
@@ -86,12 +95,12 @@ export async function sendGuestEmail(
         </a>
       </p>
 
-      <p>Your PDF voucher is also attached to this email.</p>
+      <p style="text-align:center;color:#6b7280;font-size:13px">Your PDF voucher is also attached to this email.</p>
       <p>Thank you for choosing Kainook.</p>`),
     attachments: [
       {
         content: pdf.pdfBuffer.toString("base64"),
-        filename: `KAINOOK-${booking.code}.pdf`,
+        filename: `KAIN-${booking.code}.pdf`,
         type: "application/pdf",
         disposition: "attachment",
       },

@@ -11,6 +11,7 @@ export type BillingInput = {
   pointsDiscount?: number;
   taxRate: number;
   commissionRate: number;
+  securityDeposit?: number;
 };
 
 export type BillingResult = {
@@ -24,6 +25,7 @@ export type BillingResult = {
   serviceFee: number;
   taxAmount: number;
   deliveryFee: number;
+  securityDeposit: number;
   totalAmount: number;
   commissionAmount: number;
   providerPayout: number;
@@ -51,10 +53,17 @@ export function calculateBilling(input: BillingInput): BillingResult {
   // PRD 15.9: service_fee = CEILING(subtotal × commission_rate, 2dp)
   const serviceFee = Math.ceil(subtotal * input.commissionRate * 100) / 100;
   const taxAmount = Number((subtotal * input.taxRate).toFixed(2));
+  const securityDeposit = input.listingCategory === "car"
+    ? Number((input.securityDeposit ?? 0).toFixed(2))
+    : 0;
   const deliveryFee = Number((input.deliveryFee ?? 0).toFixed(2));
-  const totalAmount = Number(Math.max(0, subtotal + serviceFee + taxAmount + deliveryFee).toFixed(2));
-  const commissionAmount = Number((totalAmount * input.commissionRate).toFixed(2));
-  const providerPayout = Number(Math.max(0, totalAmount - commissionAmount).toFixed(2));
+
+  // Commission and payout are calculated on the non-deposit amount (deposit is refundable)
+  const commissionableAmount = Number(Math.max(0, subtotal + serviceFee + taxAmount + deliveryFee).toFixed(2));
+  const commissionAmount = Number((commissionableAmount * input.commissionRate).toFixed(2));
+  const providerPayout = Number(Math.max(0, commissionableAmount - commissionAmount).toFixed(2));
+
+  const totalAmount = Number(Math.max(0, commissionableAmount + securityDeposit).toFixed(2));
 
   return {
     units,
@@ -67,6 +76,7 @@ export function calculateBilling(input: BillingInput): BillingResult {
     serviceFee,
     taxAmount,
     deliveryFee,
+    securityDeposit,
     totalAmount,
     commissionAmount,
     providerPayout,
