@@ -1,5 +1,4 @@
 import { prisma } from "../lib/prisma.js";
-import { withRedisLock } from "../lib/redis.js";
 import { RefundRetryStatus } from "../generated/index.js";
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
@@ -174,12 +173,6 @@ export async function processFailedRefundNotifications(): Promise<void> {
   }
 }
 
-const REFUND_RETRY_LOCK_KEY = "cron:refund-retry:running";
-const REFUND_RETRY_LOCK_TTL = 10 * 60; // 10 minutes
-
-export async function runRefundNotificationRetryJob(): Promise<void> {
-  await withRedisLock(REFUND_RETRY_LOCK_KEY, REFUND_RETRY_LOCK_TTL, async () => {
-    console.log("[refund-retry-job] Running (lock acquired)");
-    await processFailedRefundNotifications();
-  });
-}
+// NOTE: runRefundNotificationRetryJob wrapper was removed — BullMQ handles
+// deduplication. See jobs.ts for the worker that calls
+// processFailedRefundNotifications directly.

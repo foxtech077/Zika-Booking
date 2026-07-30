@@ -7,8 +7,7 @@ import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { getRedis } from "./lib/redis";
-import { fastifySchedule } from "@fastify/schedule";
-import { SimpleIntervalJob, AsyncTask } from "toad-scheduler";
+import { registerBullBoard, startJobs, stopJobs } from "./jobs.js";
 import { authRoutes } from "./routes/auth";
 import {
   adminAuthRoutes,
@@ -16,8 +15,6 @@ import {
   adminOperatorRoutes,
 } from "./routes/admin-auth";
 import { adminDashboardRoutes } from "./routes/admin-dashboard.js";
-import { purgeExpiredTokens } from "./lib/tokenPurger.js";
-import { purgeExpiredAuditLogs } from "./lib/auditLogPurger.js";
 
 const PORT = Number(process.env["AUTH_SERVICE_PORT"] ?? 3001);
 const HOST = process.env["AUTH_SERVICE_HOST"] ?? "0.0.0.0";
@@ -205,27 +202,31 @@ async function build() {
   await app.register(adminOperatorRoutes);
   await app.register(adminDashboardRoutes);
 
-  // ── Background scheduled jobs ──────────────────────────────────────────────
-  await app.register(fastifySchedule);
+  // ── Bull Board UI for background jobs ──────────────────────────────────────
+  registerBullBoard(app);
 
   return app;
 }
 
 async function main() {
   const app = await build();
+
+  const shutdown = async (signal: string) => {
+    app.log.info(`[Auth Service] ${signal} received. Shutting down gracefully…`);
+    await stopJobs();
+    await app.close();
+    process.exit(0);
+  };
+
+  process.on("SIGINT", () => void shutdown("SIGINT"));
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+
   try {
     await app.listen({ port: PORT, host: HOST });
     console.log(`[Auth Service] listening on ${HOST}:${PORT}`);
 
-    const onErr = (name: string) => (err: any) => console.error(`[${name}] Job run failed:`, err);
-
-    app.scheduler.addSimpleIntervalJob(
-      new SimpleIntervalJob({ hours: 1 }, new AsyncTask("token-purger", () => purgeExpiredTokens(), onErr("TokenPurger"))),
-    );
-
-    app.scheduler.addSimpleIntervalJob(
-      new SimpleIntervalJob({ hours: 24 }, new AsyncTask("audit-log-purger", () => purgeExpiredAuditLogs(), onErr("AuditLogPurger"))),
-    );
+    await startJobs();
+    console.log(`[Auth Service] Background jobs registered.`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);
