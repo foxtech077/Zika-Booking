@@ -11,7 +11,7 @@ import { Card, SectionHeader } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 
-const NET_TOOLTIP = "This is your earnings after ZikaBooking's 5% service fee. ZikaBooking retains the remainder.";
+const NET_TOOLTIP = "Your earnings after Kainook's commission has been deducted.";
 
 type BookingStatus =
   | "pending_payment"
@@ -347,7 +347,7 @@ export default function ProviderDashboardPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-950">Provider Dashboard</h1>
-          <p className="mt-1 text-sm text-slate-500">All financial figures are net amounts after ZikaBooking&apos;s 5% service fee.</p>
+          <p className="mt-1 text-sm text-slate-500">All financial figures displayed are net amounts after Kainook&apos;s commission has been deducted.</p>
         </div>
         <Button variant="outline" icon={<RefreshCw />} loading={isFetching && !isLoading} onClick={() => refetch()}>
           Refresh
