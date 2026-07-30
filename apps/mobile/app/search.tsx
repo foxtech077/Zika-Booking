@@ -148,6 +148,7 @@ interface SearchResult {
   dailyRate: number | null;
   currency: string;
   cancellationPolicy: string;
+  minStayNights: number | null;
   starRating: number | null;
   isAccredited: boolean;
   roomType: string | null;
@@ -459,6 +460,19 @@ const ResultCard = memo(function ResultCard({
                 style={{ marginRight: 2 }}
               />
               <Text style={cardStyles.overlayBadgeText}>{voucherCode}</Text>
+            </View>
+          )}
+          {!isCar && item.minStayNights != null && item.minStayNights > 1 && (
+            <View style={[cardStyles.overlayBadge, { backgroundColor: "#475569" }]}>
+              <Ionicons
+                name="moon"
+                size={10}
+                color="#fff"
+                style={{ marginRight: 2 }}
+              />
+              <Text style={cardStyles.overlayBadgeText}>
+                Min {item.minStayNights} nights
+              </Text>
             </View>
           )}
         </View>

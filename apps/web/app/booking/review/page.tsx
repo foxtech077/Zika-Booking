@@ -63,6 +63,9 @@ interface CheckoutCtx {
   roomTypeName?: string;
   roomType?: string;
   pricingPreview?: PricingPreview;
+  /** Listing's country commission rate as a decimal fraction (0.05 = 5%).
+   *  Only used if pricingPreview is absent. */
+  commissionRate?: number;
 }
 
 interface WalletVoucher {
@@ -116,11 +119,15 @@ function fmt(n: number) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+// Fallback used only when /bookings/initiate returned no pricingPreview.
+// The rate must still come from the API — a hardcoded 5% here disagreed with
+// the listing page (which assumed 10%) and with what the backend actually charges.
 function calcPricing(ctx: CheckoutCtx) {
   const base = (ctx.pricePerNight ?? 0) * (ctx.nightsOrDays ?? 1);
   const discount = ctx.voucherDiscount ?? 0;
   const subtotal = Math.max(0, base - discount);
-  const serviceFee = Math.round(subtotal * 0.05);
+  const commissionRate = ctx.pricingPreview?.commissionRate ?? ctx.commissionRate ?? 0;
+  const serviceFee = Math.ceil(subtotal * commissionRate * 100) / 100;
   const taxRate = TAX_RATES[ctx.listingCountry] ?? 0;
   const taxes = Math.round(subtotal * taxRate);
   const total = subtotal + serviceFee + taxes;

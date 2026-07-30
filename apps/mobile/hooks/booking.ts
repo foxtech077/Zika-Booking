@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listingApi } from "../lib/listing-api";
+import { paymentApi } from "../lib/payment-api";
 import type {
   BookingDetail,
   BookingsResponse,
@@ -18,6 +19,7 @@ export const BOOKING_QK = {
   receipt:   (id: string) => ["bookings", "receipt", id] as const,
   qrCode:    (id: string) => ["bookings", "qr-code", id] as const,
   voucher:   (id: string) => ["bookings", "voucher", id] as const,
+  paymentDisplayId: (paymentId: string) => ["payments", "display-id", paymentId] as const,
 };
 
 // ── Booking detail ────────────────────────────────────────────────────────────
@@ -67,6 +69,35 @@ export function useReceipt(bookingId: string | undefined) {
     },
     enabled: !!bookingId,
     staleTime: 5 * 60_000,
+  });
+}
+
+// ── Payment display ID ────────────────────────────────────────────────────────
+// The receipt endpoint (listing-service) only carries the raw payment UUID —
+// the human-readable `PAYXXXXX-CC` reference lives in the payment-service DB,
+// which listing-service has no access to. Web resolves it from the payment
+// response at checkout time; on mobile we look it up from the booking's stored
+// payment UUID instead, so receipts opened later still show it.
+//
+// Never surfaces an error: on any failure the caller falls back to the UUID.
+
+export function usePaymentDisplayId(paymentId: string | null | undefined) {
+  return useQuery<string | null>({
+    queryKey: BOOKING_QK.paymentDisplayId(paymentId ?? ""),
+    queryFn: async () => {
+      try {
+        const res = await paymentApi.get<ApiResponse<{ displayId: string | null }>>(
+          `/payments/${paymentId}/status`
+        );
+        if (!res.data.success) return null;
+        return (res.data as { success: true; data: { displayId: string | null } }).data.displayId ?? null;
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!paymentId,
+    staleTime: Infinity, // a payment's display ID never changes once assigned
+    retry: false,
   });
 }
 

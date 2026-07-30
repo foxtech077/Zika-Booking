@@ -37,6 +37,8 @@ interface ListingItem {
   claimedStarRating: number | null;
   rejectionNote: string | null;
   photos: Array<{ cdnUrl: string }>;
+  temporaryActivation?: boolean;
+  geoVerificationDueAt?: string | null;
 }
 
 interface SummaryItem {
@@ -79,7 +81,17 @@ const STATUS_CFG: Record<string, { label: string; bg: string; text: string }> = 
   rejected:       { label: "Rejected",   bg: "#EF4444", text: "#fff" },
   deactivated:    { label: "Offline",    bg: "#64748B", text: "#fff" },
   suspended:      { label: "Suspended",  bg: "#EF4444", text: "#fff" },
+  auto_suspended: { label: "Suspended",  bg: "#EF4444", text: "#fff" },
 };
+
+// Deadline the provider must verify geolocation by, else the listing is
+// auto-suspended by the backend's 180-day expirer job.
+function fmtDueDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  } catch { return iso; }
+}
 
 function fmtMoney(n: number, currency = "USD") {
   return formatCurrency(n, currency);
@@ -185,6 +197,23 @@ const ListingCard = memo(function ListingCard({ item, summary, maxBookings, onEd
           <View style={s.rejectionBox}>
             <Feather name="alert-triangle" size={13} color="#DC2626" style={{ marginTop: 1 }} />
             <Text style={[s.rejectionText, { flex: 1 }]} numberOfLines={2}>{item.rejectionNote}</Text>
+          </View>
+        )}
+
+        {/* Geolocation verification warning — mirrors the web provider dashboard.
+            The listing is live on a 180-day temporary activation and will be
+            auto-suspended if the location is not verified before the due date. */}
+        {item.category === "apartment" && item.temporaryActivation && item.geoVerificationDueAt && (
+          <View style={s.geoWarnBox}>
+            <Feather name="alert-triangle" size={13} color="#B45309" style={{ marginTop: 1 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.geoWarnTitle}>Temporary activation — geolocation pending</Text>
+              <Text style={s.geoWarnText}>
+                Your home is live but its location is not yet verified. Verification is due by{" "}
+                <Text style={s.geoWarnDate}>{fmtDueDate(item.geoVerificationDueAt)}</Text>.
+                If it is not verified, the listing will be auto-suspended. Update your address or contact support.
+              </Text>
+            </View>
           </View>
         )}
 
@@ -763,6 +792,20 @@ const s = StyleSheet.create({
     marginBottom: 10,
   },
   rejectionText: { fontSize: K.font.xs, color: "#DC2626", lineHeight: 16 },
+  geoWarnBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: K.radius.sm,
+    padding: 8,
+    marginBottom: 10,
+  },
+  geoWarnTitle: { fontSize: K.font.xs, fontWeight: "700", color: "#92400E", marginBottom: 2 },
+  geoWarnText: { fontSize: K.font.xs, color: "#B45309", lineHeight: 16 },
+  geoWarnDate: { fontWeight: "700", color: "#92400E" },
 
   // Footer price + actions
   priceBlockRow: { flexDirection: "row", alignItems: "baseline", gap: 4, marginBottom: 12 },

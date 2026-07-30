@@ -70,7 +70,15 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
     : 0;
 
   const subtotalAfterDiscount = Math.max(0, originalSubtotal - longStayDiscountAmount);
-  const serviceFee = days > 0 ? Math.round(subtotalAfterDiscount * 0.1) : 0;
+
+  // Service fee — country-specific rate served by GET /listings/:id/public, so
+  // this matches what checkout charges. Was hardcoded to 10% while checkout used
+  // the real rate (and other screens assumed 5%), so the same booking could be
+  // quoted two different totals.
+  const commissionRate = listing.commissionRate ?? 0;
+  const serviceFeePercent = Math.round(commissionRate * 1000) / 10;
+  const serviceFee = days > 0 ? Math.ceil(subtotalAfterDiscount * commissionRate * 100) / 100 : 0;
+  // Car rentals collect the security deposit upfront (added on dev).
   const securityDeposit = isCar ? Number(listing.securityDeposit ?? 0) : 0;
   const grandTotal = subtotalAfterDiscount + serviceFee + securityDeposit;
 
@@ -200,10 +208,12 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
               <span>−{listing.currency} {longStayDiscountAmount.toLocaleString()}</span>
             </div>
           )}
-          <div className="flex justify-between">
-            <span>Service fee (10%)</span>
-            <span>{listing.currency} {serviceFee.toLocaleString()}</span>
-          </div>
+          {serviceFeePercent > 0 && (
+            <div className="flex justify-between">
+              <span>Service fee ({serviceFeePercent}%)</span>
+              <span>{listing.currency} {serviceFee.toLocaleString()}</span>
+            </div>
+          )}
           {isCar && securityDeposit > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Security deposit</span>

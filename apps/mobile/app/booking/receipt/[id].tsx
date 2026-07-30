@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useReceipt } from "../../../hooks/booking";
+import { useReceipt, usePaymentDisplayId } from "../../../hooks/booking";
 import type { Receipt, ReceiptLineItem } from "../../../lib/types/booking";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ function Row({
 
 // ── Share helper ──────────────────────────────────────────────────────────────
 
-async function buildShareText(r: Receipt): Promise<void> {
+async function buildShareText(r: Receipt, paymentRef: string | null): Promise<void> {
   const cur = r.totals.currency;
   const lines = [
     "══════════════════════════════",
@@ -168,7 +168,7 @@ async function buildShareText(r: Receipt): Promise<void> {
     ),
     `${"TOTAL".padEnd(24)}${fmtMoney(r.totals.total, cur)}`,
     "",
-    r.payment.paymentId ? `Payment ID: ${r.payment.paymentId}` : "",
+    (paymentRef ?? r.payment.paymentId) ? `Payment ID: ${paymentRef ?? r.payment.paymentId}` : "",
     r.payment.confirmedAt ? `Paid on:    ${fmtDateTime(r.payment.confirmedAt)}` : "",
     "══════════════════════════════",
     "Powered by Kainook",
@@ -188,6 +188,9 @@ export default function ReceiptScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const { data: receipt, isLoading, isError, error, refetch } = useReceipt(id);
+  // Human-readable PAYXXXXX-CC reference; null until resolved, or if the
+  // lookup fails — in both cases the raw payment UUID is shown instead.
+  const { data: paymentDisplayId } = usePaymentDisplayId(receipt?.payment.paymentId);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -354,7 +357,7 @@ export default function ReceiptScreen() {
           <View style={s.card}>
             <Text style={s.cardLabel}>Payment</Text>
             {receipt.payment.paymentId ? (
-              <Row label="Payment ID" value={receipt.payment.paymentId} />
+              <Row label="Payment ID" value={paymentDisplayId ?? receipt.payment.paymentId} />
             ) : null}
             {receipt.payment.confirmedAt ? (
               <Row label="Confirmed" value={fmtDateTime(receipt.payment.confirmedAt)} />
@@ -370,7 +373,7 @@ export default function ReceiptScreen() {
         {/* ── Share button ──────────────────────────────────────────── */}
         <TouchableOpacity
           style={s.shareBtn}
-          onPress={() => void buildShareText(receipt)}
+          onPress={() => void buildShareText(receipt, paymentDisplayId ?? null)}
           activeOpacity={0.85}
         >
           <Ionicons name="share-outline" size={18} color="#fff" style={{ marginRight: 8 }} />

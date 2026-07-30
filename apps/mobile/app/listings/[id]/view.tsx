@@ -76,6 +76,15 @@ function SectionCard({ title, children }: { title: string; children: React.React
   );
 }
 
+// Deadline by which geolocation must be verified, else the backend's 180-day
+// expirer job auto-suspends the listing.
+function fmtGeoDueDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  } catch { return String(iso); }
+}
+
 function DetailRow({ icon, label, value }: { icon: string; label: string; value?: string | number | null }) {
   if (value === null || value === undefined || value === "") return null;
   return (
@@ -312,6 +321,23 @@ export default function ViewListingScreen() {
           </View>
         )}
 
+        {/* Geolocation verification warning. Rendered outside the status card
+            above because a temporarily-activated listing is live (isActive),
+            so that card never shows for it. Mirrors the web provider dashboard. */}
+        {category === "apartment" && listing.temporaryActivation && listing.geoVerificationDueAt && (
+          <View style={vs.geoWarnCard}>
+            <Feather name="alert-triangle" size={16} color="#B45309" style={{ marginTop: 1 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={vs.geoWarnTitle}>Temporary activation — geolocation pending</Text>
+              <Text style={vs.geoWarnBody}>
+                Your home is live but its location is not yet verified. Verification is due by{" "}
+                <Text style={vs.geoWarnDate}>{fmtGeoDueDate(listing.geoVerificationDueAt)}</Text>.
+                If it is not verified by then, the listing will be auto-suspended. Update your address or contact support.
+              </Text>
+            </View>
+          </View>
+        )}
+
         {!!listing.description && (
           <SectionCard title="Description">
             <Text style={vs.description}>{listing.description}</Text>
@@ -518,6 +544,11 @@ const vs = StyleSheet.create({
   statusCardTitle: { fontSize: K.font.base, fontWeight: "700", color: K.colors.textDark, marginBottom: 3 },
   statusCardBody: { fontSize: K.font.sm, color: K.colors.textMuted, lineHeight: 18 },
   rejectionNote: { fontSize: K.font.sm, color: K.colors.error, lineHeight: 18, fontWeight: "600", marginTop: 3 },
+
+  geoWarnCard: { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: "#FFFBEB", borderWidth: 1, borderColor: "#FDE68A", marginHorizontal: 16, marginTop: 16, borderRadius: K.radius.lg, padding: 14 },
+  geoWarnTitle: { fontSize: K.font.base, fontWeight: "700", color: "#92400E", marginBottom: 3 },
+  geoWarnBody: { fontSize: K.font.sm, color: "#B45309", lineHeight: 18 },
+  geoWarnDate: { fontWeight: "700", color: "#92400E" },
 
   card: { backgroundColor: "#fff", marginHorizontal: 16, marginTop: 16, borderRadius: K.radius.xl, padding: 18, ...K.shadow.sm },
   cardTitle: { fontSize: 10, fontWeight: "800", color: K.colors.textMuted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 },

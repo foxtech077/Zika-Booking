@@ -42,6 +42,10 @@ export interface PublicListingDetail {
   pricePerNight: number;
   currency: string;
   minStayNights: number;
+  /** Service-fee rate for this listing's country, as a decimal fraction
+   *  (0.05 = 5%). Served by GET /listings/:id/public — the same value the
+   *  booking flow charges. Never hardcode a rate alongside this. */
+  commissionRate?: number | null;
   checkinTime: string;
   checkoutTime: string;
   cancellationPolicy: "flexible" | "moderate" | "strict" | "non_refundable";

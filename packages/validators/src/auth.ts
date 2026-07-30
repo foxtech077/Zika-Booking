@@ -28,6 +28,8 @@ export const registerSchema = z
       .length(2, "Please select your country")
       .toUpperCase()
       .optional(),
+    acceptedTerms: z.boolean().optional(),
+    acceptedPrivacy: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.password !== data.confirmPassword) {
