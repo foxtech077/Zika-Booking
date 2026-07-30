@@ -119,6 +119,10 @@ model User {
   currentTier     LoyaltyTier   @default(bronze)
   loyaltyPoints   Int           @default(0)
   photoUrl        String?       @db.Text
+  termsAcceptedAt   DateTime?
+  termsVersion      String?     @db.VarChar(20)
+  privacyAcceptedAt DateTime?
+  privacyVersion    String?     @db.VarChar(20)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 

@@ -33,6 +33,10 @@ export interface PublicUser {
   currentTier: LoyaltyTier;
   loyaltyPoints: number;
   photoUrl?: string | null;
+  requiresTermsAcceptance?: boolean;
+  requiresPrivacyAcceptance?: boolean;
+  termsAcceptedAt?: string | Date | null;
+  privacyAcceptedAt?: string | Date | null;
 }
 
 export type AdminRole =

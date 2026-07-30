@@ -82,17 +82,60 @@ async function issueTokens(
 
 // ── Helper: map User to public shape ─────────────────────────────────────────
 
+// ── Legal document versions ───────────────────────────────────────────────────
+// Bump these when the published Terms or Privacy Policy change. Users whose
+// stored version no longer matches are re-prompted by the in-app consent screen.
+export const CURRENT_TERMS_VERSION = "1.0";
+export const CURRENT_PRIVACY_VERSION = "1.0";
+
+// The two documents are gated at different points, per the client's spec:
+//   • Privacy Policy  — at registration (or at the latest before a first booking)
+//   • Terms & Conditions — before completing a payment or booking
+// They are therefore tracked and reported independently rather than as one flag.
+
+/** True when the user must accept the Terms before completing a payment/booking. */
+export function requiresTermsAcceptance(u: {
+  termsAcceptedAt: Date | null; termsVersion: string | null;
+}): boolean {
+  return u.termsAcceptedAt === null || u.termsVersion !== CURRENT_TERMS_VERSION;
+}
+
+/**
+ * True when the user must accept the Privacy Policy before entering the app.
+ * Always true for accounts created via Google/Apple OAuth, which show no
+ * consent UI at sign-up.
+ */
+export function requiresPrivacyAcceptance(u: {
+  privacyAcceptedAt: Date | null; privacyVersion: string | null;
+}): boolean {
+  return u.privacyAcceptedAt === null || u.privacyVersion !== CURRENT_PRIVACY_VERSION;
+}
+
 function publicUser(u: {
   id: string; firstName: string; lastName: string; email: string;
   status: string; userType: string; businessName: string | null;
   country: string | null; phone: string | null; emailVerified: boolean;
   currentTier: string; loyaltyPoints: number;
+  termsAcceptedAt?: Date | null; termsVersion?: string | null;
+  privacyAcceptedAt?: Date | null; privacyVersion?: string | null;
 }) {
+  const legal = {
+    termsAcceptedAt: u.termsAcceptedAt ?? null,
+    termsVersion: u.termsVersion ?? null,
+    privacyAcceptedAt: u.privacyAcceptedAt ?? null,
+    privacyVersion: u.privacyVersion ?? null,
+  };
   return {
     id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email,
     status: u.status, userType: u.userType, businessName: u.businessName,
     country: u.country, phone: u.phone, emailVerified: u.emailVerified,
     currentTier: u.currentTier, loyaltyPoints: u.loyaltyPoints,
+    termsAcceptedAt: legal.termsAcceptedAt,
+    privacyAcceptedAt: legal.privacyAcceptedAt,
+    // Two independent gates — see the helpers above. Computed server-side so
+    // the version-comparison rule is not re-implemented per platform.
+    requiresTermsAcceptance: requiresTermsAcceptance(legal),
+    requiresPrivacyAcceptance: requiresPrivacyAcceptance(legal),
   };
 }
 
@@ -127,6 +170,14 @@ export async function authRoutes(app: FastifyInstance) {
             minLength: 2,
             maxLength: 2,
             description: "2-letter ISO country code (e.g. 'IN', 'US')"
+          },
+          acceptedTerms: {
+            type: "boolean",
+            description: "User ticked the Terms & Conditions checkbox. Recorded with a timestamp and version."
+          },
+          acceptedPrivacy: {
+            type: "boolean",
+            description: "User ticked the Privacy Policy checkbox. Recorded with a timestamp and version."
           }
         }
       }
@@ -152,8 +203,18 @@ export async function authRoutes(app: FastifyInstance) {
       userType,
       businessName,
       country,
-      phone
+      phone,
+      acceptedTerms,
+      acceptedPrivacy
     } = parsed.data;
+
+    // Stamped only when the client explicitly reports the boxes were ticked.
+    // Older clients omit these and the account is prompted on first sign-in.
+    const acceptedAt = new Date();
+    const legalAcceptance = {
+      ...(acceptedTerms ? { termsAcceptedAt: acceptedAt, termsVersion: CURRENT_TERMS_VERSION } : {}),
+      ...(acceptedPrivacy ? { privacyAcceptedAt: acceptedAt, privacyVersion: CURRENT_PRIVACY_VERSION } : {}),
+    };
 
     try {
       const existing = await prisma.user.findUnique({
@@ -261,6 +322,7 @@ export async function authRoutes(app: FastifyInstance) {
           businessName: businessName ?? null,
           country: country ?? null,
           phone: phone ?? null,
+          ...legalAcceptance,
           ...(skipVerification
             ? {
               status: "active",
@@ -1147,6 +1209,10 @@ export async function authRoutes(app: FastifyInstance) {
             businessName: true,
             country: true,
             phone: true,
+            termsAcceptedAt: true,
+            termsVersion: true,
+            privacyAcceptedAt: true,
+            privacyVersion: true,
           }
         });
 
@@ -1167,11 +1233,80 @@ export async function authRoutes(app: FastifyInstance) {
             businessName: user.businessName,
             country: user.country,
             phone: user.phone,
+            termsAcceptedAt: user.termsAcceptedAt,
+            privacyAcceptedAt: user.privacyAcceptedAt,
+            // Lets a long-lived session discover a policy bump without re-login.
+            requiresTermsAcceptance: requiresTermsAcceptance(user),
+            requiresPrivacyAcceptance: requiresPrivacyAcceptance(user),
           }
         });
       } catch (err: any) {
         req.log.error(err, "Failed to fetch profile");
         return sendError(reply, 500, "SERVER_ERROR", "Could not fetch profile. Please try again.");
+      }
+    }
+  );
+
+  // ── POST /auth/accept-terms ────────────────────────────────────────────────
+  // Records acceptance for users who never gave one at sign-up — principally
+  // accounts created through Google/Apple OAuth, where no consent UI is shown —
+  // and for anyone whose stored version has been superseded.
+  app.post(
+    "/auth/accept-terms",
+    {
+      schema: {
+        tags: ["User Auth"],
+        summary: "Record the current user's acceptance of the Terms & Privacy Policy",
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: "object",
+          properties: {
+            acceptedTerms: { type: "boolean", description: "Defaults to true when omitted" },
+            acceptedPrivacy: { type: "boolean", description: "Defaults to true when omitted" },
+          },
+        },
+      },
+      preHandler: [requireAuth],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const userId = (req as FastifyRequest & { userId: string }).userId;
+        const body = (req.body ?? {}) as { acceptedTerms?: boolean; acceptedPrivacy?: boolean };
+
+        // The two documents are accepted at different points in the journey —
+        // Privacy at registration, Terms at checkout — so each is recorded
+        // independently and callers send only the one they collected.
+        if (body.acceptedTerms !== true && body.acceptedPrivacy !== true) {
+          return sendError(
+            reply,
+            422,
+            "ACCEPTANCE_REQUIRED",
+            "Nothing to record — pass acceptedTerms and/or acceptedPrivacy as true."
+          );
+        }
+
+        const acceptedAt = new Date();
+        const user = await prisma.user.update({
+          where: { id: userId },
+          data: {
+            ...(body.acceptedTerms === true
+              ? { termsAcceptedAt: acceptedAt, termsVersion: CURRENT_TERMS_VERSION }
+              : {}),
+            ...(body.acceptedPrivacy === true
+              ? { privacyAcceptedAt: acceptedAt, privacyVersion: CURRENT_PRIVACY_VERSION }
+              : {}),
+          },
+        });
+
+        return sendSuccess(reply, 200, {
+          user: publicUser(user),
+          acceptedAt: acceptedAt.toISOString(),
+          termsVersion: CURRENT_TERMS_VERSION,
+          privacyVersion: CURRENT_PRIVACY_VERSION,
+        });
+      } catch (err: any) {
+        req.log.error(err, "Failed to record terms acceptance");
+        return sendError(reply, 500, "SERVER_ERROR", "Could not record your acceptance. Please try again.");
       }
     }
   );
