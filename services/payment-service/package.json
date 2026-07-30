@@ -18,6 +18,7 @@
 		"@bull-board/api": "^8.4.0",
 		"@bull-board/fastify": "^8.4.0",
 		"@fastify/cors": "^10.1.0",
+		"@zika/types": "workspace:*",
 		"@fastify/swagger": "^9.7.0",
 		"@fastify/swagger-ui": "^5.2.6",
 		"@prisma/client": "6.19.3",

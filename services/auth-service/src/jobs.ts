@@ -5,6 +5,7 @@ import { FastifyAdapter } from "@bull-board/fastify";
 import Redis from "ioredis";
 import { purgeExpiredTokens } from "./lib/tokenPurger.js";
 import { purgeExpiredAuditLogs } from "./lib/auditLogPurger.js";
+import { QueueName, AuthJob } from "@zika/types";
 
 // Dedicated connection for BullMQ — must use maxRetriesPerRequest: null
 // (Worker's blocking commands conflict with non-null retry settings).
@@ -14,18 +15,18 @@ const connection = new Redis(process.env["REDIS_URL"] ?? "redis://localhost:6379
   lazyConnect: false,
 });
 
-const queue = new Queue("auth-jobs", { connection });
+const queue = new Queue(QueueName.Auth, { connection });
 
 const worker = new Worker(
-  "auth-jobs",
+  QueueName.Auth,
   async (job) => {
-    switch (job.name) {
-      case "token-purger":
-        console.log("[Job] Running token-purger");
+    switch (job.name as AuthJob) {
+      case AuthJob.TokenPurger:
+        console.log(`[Job] Running ${AuthJob.TokenPurger}`);
         await purgeExpiredTokens();
         break;
-      case "audit-log-purger":
-        console.log("[Job] Running audit-log-purger");
+      case AuthJob.AuditLogPurger:
+        console.log(`[Job] Running ${AuthJob.AuditLogPurger}`);
         await purgeExpiredAuditLogs();
         break;
     }
@@ -50,10 +51,10 @@ export function registerBullBoard(app: any) {
 }
 
 export async function startJobs() {
-  await queue.add("token-purger", {}, { repeat: { every: 60 * 60 * 1000 } });
+  await queue.add(AuthJob.TokenPurger, {}, { repeat: { every: 60 * 60 * 1000 } });
 
   await queue.add(
-    "audit-log-purger",
+    AuthJob.AuditLogPurger,
     {},
     { repeat: { every: 24 * 60 * 60 * 1000 } },
   );

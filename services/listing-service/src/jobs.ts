@@ -9,6 +9,7 @@ import { checkVoucherExpiryWarnings } from "./lib/voucherExpiryWarner.js";
 import { pollIcalFeeds } from "./routes/ical.js";
 import { promotePendingRates } from "./lib/commissionScheduler.js";
 import { expireStaleGeoVerifications } from "./lib/geoVerificationExpirer.js";
+import { QueueName, ListingJob } from "@zika/types";
 
 // Dedicated connection for BullMQ — must use maxRetriesPerRequest: null
 // (Worker's blocking commands conflict with non-null retry settings).
@@ -18,30 +19,30 @@ const connection = new Redis(process.env["REDIS_URL"] ?? "redis://localhost:6379
   lazyConnect: false,
 });
 
-const queue = new Queue("listing-jobs", { connection });
+const queue = new Queue(QueueName.Listing, { connection });
 
 const worker = new Worker(
-  "listing-jobs",
+  QueueName.Listing,
   async (job) => {
-    switch (job.name) {
-      case "pending-payment-canceller":
+    switch (job.name as ListingJob) {
+      case ListingJob.PendingPaymentCanceller:
         // TODO: Can be precision-delayed — schedule at booking creation time instead
         await cancelStalePendingPayments();
         break;
-      case "booking-completion":
+      case ListingJob.BookingCompletion:
         // TODO: Can be precision-delayed — schedule at checkout time instead
         await completeEligibleBookings();
         break;
-      case "voucher-expiry-warner":
+      case ListingJob.VoucherExpiryWarner:
         await checkVoucherExpiryWarnings();
         break;
-      case "ical-poller":
+      case ListingJob.IcalPoller:
         await pollIcalFeeds();
         break;
-      case "commission-scheduler":
+      case ListingJob.CommissionScheduler:
         await promotePendingRates();
         break;
-      case "geo-verification-expirer":
+      case ListingJob.GeoVerificationExpirer:
         await expireStaleGeoVerifications();
         break;
     }
@@ -66,12 +67,12 @@ export function registerBullBoard(app: any) {
 }
 
 export async function startJobs() {
-  await queue.add("pending-payment-canceller", {}, { repeat: { every: 60_000 } });
-  await queue.add("booking-completion", {}, { repeat: { every: 300_000 } });
-  await queue.add("voucher-expiry-warner", {}, { repeat: { every: 4 * 60 * 60 * 1000 } });
-  await queue.add("ical-poller", {}, { repeat: { every: 15 * 60 * 1000 } });
-  await queue.add("commission-scheduler", {}, { repeat: { every: 60 * 60 * 1000 } });
-  await queue.add("geo-verification-expirer", {}, { repeat: { every: 2 * 60 * 60 * 1000 } });
+  await queue.add(ListingJob.PendingPaymentCanceller, {}, { repeat: { every: 60_000 } });
+  await queue.add(ListingJob.BookingCompletion, {}, { repeat: { every: 300_000 } });
+  await queue.add(ListingJob.VoucherExpiryWarner, {}, { repeat: { every: 4 * 60 * 60 * 1000 } });
+  await queue.add(ListingJob.IcalPoller, {}, { repeat: { every: 15 * 60 * 1000 } });
+  await queue.add(ListingJob.CommissionScheduler, {}, { repeat: { every: 60 * 60 * 1000 } });
+  await queue.add(ListingJob.GeoVerificationExpirer, {}, { repeat: { every: 2 * 60 * 60 * 1000 } });
 }
 
 export async function stopJobs() {

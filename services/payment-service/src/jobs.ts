@@ -5,6 +5,7 @@ import { FastifyAdapter } from "@bull-board/fastify";
 import Redis from "ioredis";
 import { processEligiblePayouts } from "./services/payout.service.js";
 import { processFailedRefundNotifications } from "./services/refund.service.js";
+import { QueueName, PaymentJob } from "@zika/types";
 
 // Dedicated connection for BullMQ — must use maxRetriesPerRequest: null
 // (Worker's blocking commands conflict with non-null retry settings).
@@ -14,19 +15,19 @@ const connection = new Redis(process.env["REDIS_URL"] ?? "redis://localhost:6379
   lazyConnect: false,
 });
 
-const queue = new Queue("payment-jobs", { connection });
+const queue = new Queue(QueueName.Payment, { connection });
 
 const worker = new Worker(
-  "payment-jobs",
+  QueueName.Payment,
   async (job) => {
-    switch (job.name) {
-      case "payout-job":
+    switch (job.name as PaymentJob) {
+      case PaymentJob.PayoutJob:
         // TODO: Can be precision-delayed — schedule per payout at creation time
-        console.log("[Job] Running payout-job");
+        console.log(`[Job] Running ${PaymentJob.PayoutJob}`);
         await processEligiblePayouts();
         break;
-      case "refund-retry-job":
-        console.log("[Job] Running refund-retry-job");
+      case PaymentJob.RefundRetryJob:
+        console.log(`[Job] Running ${PaymentJob.RefundRetryJob}`);
         await processFailedRefundNotifications();
         break;
     }
@@ -51,8 +52,8 @@ export function registerBullBoard(app: any) {
 }
 
 export async function startJobs() {
-  await queue.add("payout-job", {}, { repeat: { every: 60_000 } });
-  await queue.add("refund-retry-job", {}, { repeat: { every: 60_000 } });
+  await queue.add(PaymentJob.PayoutJob, {}, { repeat: { every: 60_000 } });
+  await queue.add(PaymentJob.RefundRetryJob, {}, { repeat: { every: 60_000 } });
 }
 
 export async function stopJobs() {
