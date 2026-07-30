@@ -16,6 +16,11 @@ export interface AuthUser {
   emailVerified: boolean;
   currentTier: string;
   loyaltyPoints: number;
+  /** Set by the API when the user has never accepted the Terms/Privacy Policy,
+   *  or accepted a superseded version. Gates entry to the app. */
+  requiresTermsAcceptance?: boolean;
+  termsAcceptedAt?: string | null;
+  privacyAcceptedAt?: string | null;
 }
 
 interface AuthState {

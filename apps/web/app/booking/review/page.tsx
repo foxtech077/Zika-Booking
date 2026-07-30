@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { parsePhoneNumber } from "libphonenumber-js";
 import { paymentApi } from "@/lib/payment-api";
 import { listingApi } from "@/lib/listing-api";
+import { api } from "@/lib/api";
 import { storeLatestReviewContext } from "@/services/traveller";
 import { useAuthStore } from "@/stores/auth";
 import { capitalize } from "@/lib/utils";
@@ -204,6 +205,10 @@ export default function BookingReviewPage() {
   const [bookingRef, setBookingRef] = useState("");
   const [bookingId, setBookingId] = useState("");
   const [confirmed, setConfirmed] = useState<ConfirmedBooking | null>(null);
+  // Gates the Pay button (Todo#2 row 7). Account-level acceptance is recorded
+  // separately at sign-up / via the consent screen; this is the per-transaction
+  // confirmation the client asked for.
+  const [payTermsAccepted, setPayTermsAccepted] = useState(false);
 
   // ── Stripe ──────────────────────────────────────────────────────────────────
   const [stripeInstance, setStripeInstance] = useState<any>(null);
@@ -385,6 +390,13 @@ export default function BookingReviewPage() {
     if (!ctx || !pricing) return;
     setSubmitting(true);
     setPayError("");
+
+    // Record the Terms acceptance the user just gave. Best-effort: a failure
+    // here must not cost the user their reservation lock, so it is logged and
+    // the payment proceeds — the checkbox itself is still an enforced gate.
+    void api.post("/auth/accept-terms", { acceptedTerms: true }).catch((err) => {
+      console.error("[checkout] Failed to record terms acceptance:", err);
+    });
 
     try {
       // Step 1: Create booking
@@ -969,6 +981,26 @@ export default function BookingReviewPage() {
                       <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{payError}</div>
                     )}
 
+                    {/* Terms & Conditions — the client requires these to be
+                        accepted before completing a payment or booking. The
+                        Privacy Policy is handled earlier, at registration.
+                        Web checkout previously had no gate at all. */}
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={payTermsAccepted}
+                        onChange={(e) => setPayTermsAccepted(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#0B1E3F] focus:ring-[#0B1E3F]"
+                      />
+                      <span className="text-sm text-slate-600">
+                        I have read and agree to the{" "}
+                        <a href="/legal/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#0B1E3F] underline">
+                          Terms &amp; Conditions
+                        </a>
+                        .
+                      </span>
+                    </label>
+
                     <div className="flex gap-3">
                       <button
                         onClick={() => { setStep("review"); setPayError(""); }}
@@ -978,7 +1010,7 @@ export default function BookingReviewPage() {
                       </button>
                       <button
                         onClick={handlePay}
-                        disabled={submitting}
+                        disabled={submitting || !payTermsAccepted}
                         className="flex-[2] py-3.5 bg-[#0B1E3F] hover:bg-[#07152B] disabled:opacity-50 text-white font-bold rounded-xl transition text-sm"
                       >
                         {submitting ? "Please wait…" : provider === "tara" ? "Send Payment Request" : "Pay Now"}

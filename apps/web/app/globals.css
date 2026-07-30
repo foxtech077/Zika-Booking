@@ -157,3 +157,14 @@
     animation: slideUp 0.3s ease-out;
   }
 }
+
+/* Google's official Sign-In widget renders in a cross-origin iframe it sizes
+   itself, ignoring the surrounding layout — its own script sets the iframe's
+   width/height via inline style, which beats Tailwind's utility classes. This
+   forces it to fill whatever box it's placed in. Used on the login page to
+   stretch an invisible instance of the real widget under our own matching
+   button, so the click still lands on Google's actual control. */
+.google-btn-proxy iframe {
+  width: 100% !important;
+  height: 100% !important;
+}
