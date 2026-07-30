@@ -30,6 +30,10 @@ export default function AcceptTermsClient() {
 
   const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Held true from success through the route change. `mutation.isPending` flips
+  // back to false the instant the request resolves, which would flash the idle
+  // button for a frame while the redirect is still in flight.
+  const [redirecting, setRedirecting] = useState(false);
 
   const next = params.get("next") || (user?.userType === "provider" ? "/dashboard" : "/traveller");
 
@@ -42,10 +46,12 @@ export default function AcceptTermsClient() {
       return res.data.data;
     },
     onSuccess: (data) => {
+      setRedirecting(true);
       updateUser({ requiresPrivacyAcceptance: false, privacyAcceptedAt: data?.acceptedAt } as never);
       router.replace(next);
     },
     onError: (err: any) => {
+      setRedirecting(false);
       setError(err?.response?.data?.error?.message ?? "Could not save your acceptance. Please try again.");
     },
   });
@@ -63,6 +69,8 @@ export default function AcceptTermsClient() {
     clearSession();
     router.replace("/auth/login");
   }
+
+  const busy = mutation.isPending || redirecting;
 
   if (!isAuthenticated) {
     router.replace("/auth/login");
@@ -104,16 +112,25 @@ export default function AcceptTermsClient() {
         <button
           type="button"
           onClick={handleContinue}
-          disabled={!agreedToPrivacy || mutation.isPending}
-          className="mt-6 w-full rounded-xl bg-[#1D8D2B] py-3 text-sm font-semibold text-white transition hover:bg-[#166f22] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!agreedToPrivacy || busy}
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1D8D2B] py-3 text-sm font-semibold text-white transition hover:bg-[#166f22] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {mutation.isPending ? "Saving…" : "Accept and continue"}
+          {busy ? (
+            <>
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+              </svg>
+              Saving…
+            </>
+          ) : "Accept and continue"}
         </button>
 
         <button
           type="button"
           onClick={handleSignOut}
-          className="mt-3 w-full rounded-xl border border-slate-200 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+          disabled={busy}
+          className="mt-3 w-full rounded-xl border border-slate-200 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Sign out
         </button>
