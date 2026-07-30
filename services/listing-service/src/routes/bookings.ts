@@ -603,6 +603,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       voucherAmount: 0,
       taxRate: getTaxRate(listing.country),
       commissionRate,
+      securityDeposit: Number(listing.securityDeposit ?? 0),
     });
 
     return {
@@ -614,6 +615,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       serviceFee: billing.serviceFee,
       taxAmount: billing.taxAmount,
       deliveryFee: billing.deliveryFee,
+      securityDeposit: billing.securityDeposit,
       totalAmount: billing.totalAmount,
       currency: listing.currency,
       commissionRate,
@@ -935,6 +937,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           taxRate: getTaxRate(listing.country),
 
           commissionRate,
+          securityDeposit: Number(listing.securityDeposit ?? 0),
         });
 
         // ── 10. FIXED RESPONSE ───────────────────────
@@ -947,6 +950,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           serviceFee: billing.serviceFee,
           taxAmount: billing.taxAmount,
           deliveryFee: billing.deliveryFee,
+          securityDeposit: billing.securityDeposit,
           totalAmount: billing.totalAmount,
           currency: listing.currency,
           commissionRate,
@@ -2798,6 +2802,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           pointsDiscount: Number(booking.pointsDiscount),
           taxRate: getTaxRate(booking.listing.country),
           commissionRate: rate,
+          securityDeposit: Number(booking.securityDeposit ?? 0),
         });
 
         // 3. Update the booking record

@@ -36,6 +36,7 @@ interface PricingPreview {
   serviceFee?: number;
   taxAmount?: number;
   deliveryFee?: number;
+  securityDeposit?: number;
   total: number;
   currency: string;
   cancellationPolicyName?: string;
@@ -469,6 +470,7 @@ export default function BookingFlowScreen() {
           serviceFee: raw.serviceFee ?? undefined,
           taxAmount: raw.taxAmount ?? undefined,
           deliveryFee: raw.deliveryFee ?? undefined,
+          securityDeposit: raw.securityDeposit ?? undefined,
           total: raw.totalAmount ?? 0,
           currency: raw.currency ?? "",
         };
@@ -1203,6 +1205,15 @@ export default function BookingFlowScreen() {
                   </View>
                 )}
 
+                {isCar && pricing.securityDeposit != null && pricing.securityDeposit > 0 && (
+                  <View style={styles.priceRow}>
+                    <Text style={styles.priceLabel}>Security deposit</Text>
+                    <Text style={styles.priceValue}>
+                      + {formatCurrency(pricing.securityDeposit, pricing.currency)}
+                    </Text>
+                  </View>
+                )}
+
                 {(() => {
                   const promoAmt = pricing.discountAmount ?? promoDiscountTotal;
                   const voucherAmt = voucherDiscount ?? 0;
@@ -1211,9 +1222,10 @@ export default function BookingFlowScreen() {
                   const sFee = pricing.serviceFee ?? 0;
                   const tFee = pricing.taxAmount ?? 0;
                   const dFee = pricing.deliveryFee ?? 0;
+                  const sDep = pricing.securityDeposit ?? 0;
 
-                  // Total = Subtotal after discount + Service fee + Taxes + Delivery fee
-                  const displayTotal = subAfterDiscount + sFee + tFee + dFee;
+                  // Total = Subtotal after discount + Service fee + Taxes + Delivery fee + Security deposit
+                  const displayTotal = subAfterDiscount + sFee + tFee + dFee + sDep;
                   return (
                     <View style={[styles.priceRow, styles.totalRow]}>
                       <Text style={styles.totalLabel}>Total</Text>

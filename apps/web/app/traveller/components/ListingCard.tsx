@@ -70,7 +70,6 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   const isCar = listing.category === "car";
   const unit = isCar ? "day" : "night";
 
-  // Derive promotion: listing.promoBadge > mrpPrice > activePromotion
   const promoPercentFromBadge = listing.promoBadge?.labelText
     ? parseFloat(listing.promoBadge.labelText.replace(/[^0-9.]/g, ""))
     : 0;
@@ -81,9 +80,22 @@ export const ListingCard: React.FC<ListingCardProps> = ({
 
   const isValidPromo = activePromotion && activePromotion.activity === listing.category && isPromotionValid(activePromotion);
 
-  if (promoPercentFromBadge > 0) {
+  if (isValidPromo) {
+    const promoDiscount = activePromotion.discountType === "percentage"
+      ? Number((rawRate * (Number(activePromotion.discountValue) / 100)).toFixed(2))
+      : Number(Number(activePromotion.discountValue).toFixed(2));
+    displayPrice = Math.max(0, rawRate - promoDiscount);
+    promoBadge = {
+      label: activePromotion.labelText || (
+        activePromotion.discountType === "percentage"
+          ? `${activePromotion.discountValue}% OFF`
+          : `${listing.currency} ${activePromotion.discountValue} OFF`
+      ),
+      colour: activePromotion.labelColour || "#C84B2F"
+    };
+  } else if (promoPercentFromBadge > 0) {
     basePrice = rawRate;
-    displayPrice = Math.round(rawRate * (1 - promoPercentFromBadge / 100));
+    displayPrice = Number((rawRate * (1 - promoPercentFromBadge / 100)).toFixed(2));
     promoBadge = {
       label: listing.promoBadge!.labelText,
       colour: listing.promoBadge!.labelColour || "#C84B2F"
@@ -95,19 +107,6 @@ export const ListingCard: React.FC<ListingCardProps> = ({
     promoBadge = {
       label: `${pct}% OFF`,
       colour: "#C84B2F"
-    };
-  } else if (isValidPromo) {
-    const promoDiscount = activePromotion.discountType === "percentage"
-      ? Math.round(rawRate * (Number(activePromotion.discountValue) / 100))
-      : Math.round(Number(activePromotion.discountValue));
-    displayPrice = Math.max(0, rawRate - promoDiscount);
-    promoBadge = {
-      label: activePromotion.labelText || (
-        activePromotion.discountType === "percentage"
-          ? `${activePromotion.discountValue}% OFF`
-          : `${listing.currency} ${activePromotion.discountValue} OFF`
-      ),
-      colour: activePromotion.labelColour || "#C84B2F"
     };
   }
 

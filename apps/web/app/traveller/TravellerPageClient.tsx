@@ -285,6 +285,7 @@ export default function TravellerDashboard() {
 
   // Details & Checkout context
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
+  const selectedListingIdRef = useRef<string | null>(null);
   const [detailListing, setDetailListing] = useState<PublicListingDetail | null>(null);
   const [selectedRoomTypeId, setSelectedRoomTypeId] = useState<string | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -306,7 +307,6 @@ export default function TravellerDashboard() {
 
   // Promotion state
   const [activePromotion, setActivePromotion] = useState<ActivePromotion | null>(null);
-  const [promotionDiscount, setPromotionDiscount] = useState<number>(0);
 
   // Auto-applicable vouchers (context-filtered, fetched after lock)
   const [applicableVouchers, setApplicableVouchers] = useState<ApplicableVoucher[]>([]);
@@ -337,7 +337,8 @@ export default function TravellerDashboard() {
   const [checkoutStep, setCheckoutStep] = useState<"review" | "details" | "stripe_card" | "polling">("review");
   const [pricingPreview, setPricingPreview] = useState<any>(null);
   const [estimatedPricing, setEstimatedPricing] = useState<any>(null);
-  const [estimatingPricing, setEstimatingPricing] = useState(false);
+  const [pricingLoading, setPricingLoading] = useState(false);
+  const [pricingError, setPricingError] = useState("");
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [stripeClientSecret, setStripeClientSecret] = useState("");
   const [stripeInstance, setStripeInstance] = useState<any>(null);
@@ -472,13 +473,15 @@ export default function TravellerDashboard() {
 
   // Derived discount — explicit voucher selection always wins over auto-promotion.
   // Neither stacks with the other; we always pick the higher value.
+  // Promotion discount comes from the server-computed pricing estimate.
+  const serverPromotionDiscount = estimatedPricing?.promotionDiscount ?? 0;
   const effectiveDiscountSource: "voucher" | "promotion" | null =
     voucherApplied ? "voucher"
-      : promotionDiscount > 0 ? "promotion"
+      : serverPromotionDiscount > 0 ? "promotion"
         : null;
   const bestDiscount =
     effectiveDiscountSource === "voucher" ? voucherDiscount
-      : effectiveDiscountSource === "promotion" ? promotionDiscount
+      : effectiveDiscountSource === "promotion" ? serverPromotionDiscount
         : 0;
 
   // Red badge shown on every listing card when an active activity promotion matches the active tab
@@ -742,30 +745,28 @@ export default function TravellerDashboard() {
       const start = isCar ? detailPickupDate : detailCheckIn;
       const end = isCar ? detailReturnDate : detailCheckOut;
       const days = calcDays(start, end);
-      const baseTotal = pricePerNight * days;
-      const discountedTotal = Math.max(0, baseTotal - bestDiscount);
-      // Country-specific rate from GET /listings/:id/public — never a hardcoded guess.
-      const serviceFee = days > 0
-        ? Math.ceil(discountedTotal * (detailListing.commissionRate ?? 0) * 100) / 100
-        : 0;
-      const taxRate = TAX_RATES[detailListing.country] ?? 0;
-      const taxAmount = Math.ceil(baseTotal * taxRate);
-      const grandTotal = Math.max(0, baseTotal + serviceFee + taxAmount - bestDiscount);
 
-      console.log("[ZikaSearch] Discount/Price calculation details:", {
-        listingName: detailListing.name,
-        days,
-        baseTotal,
-        serviceFee,
-        taxAmount,
-        promotionDiscount,
-        voucherDiscount,
-        effectiveDiscountSource,
-        bestDiscountApplied: bestDiscount,
-        finalPrice: grandTotal,
-      });
+      if (estimatedPricing) {
+        console.log("[ZikaSearch] Pricing (server):", {
+          listingName: detailListing.name,
+          days,
+          baseAmount: estimatedPricing.baseAmount,
+          serviceFee: estimatedPricing.serviceFee,
+          commissionRate: estimatedPricing.commissionRate,
+          taxAmount: estimatedPricing.taxAmount,
+          promotionDiscount: estimatedPricing.promotionDiscount,
+          totalAmount: estimatedPricing.totalAmount,
+        });
+      } else {
+        const baseTotal = pricePerNight * days;
+        console.log("[ZikaSearch] Pricing (client fallback, awaiting API):", {
+          listingName: detailListing.name,
+          days,
+          baseTotal,
+        });
+      }
     }
-  }, [detailListing?.id, detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, bestDiscount, voucherApplied, voucherDiscount, promotionDiscount, selectedRoomTypeId]);
+  }, [detailListing?.id, detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, estimatedPricing, selectedRoomTypeId]);
 
   // Reusable Voucher dropdown & Manual entry component
   function renderVoucherSelector() {
@@ -1137,16 +1138,18 @@ export default function TravellerDashboard() {
   async function handleSelectListing(id: string) {
     setLoadingDetail(true);
     setSelectedListingId(id);
+    selectedListingIdRef.current = id;
     setSecondsLeft(null);
     setLockToken("");
     setVoucherApplied(false);
     setVoucherDiscount(0);
     setVoucherCode("");
     setVoucherError("");
-    setActivePromotion(null);
-    setPromotionDiscount(0);
     setApplicableVouchers([]);
     setWalletVouchers([]);
+    setEstimatedPricing(null);
+    setActivePromotion(null);
+    setPricingError("");
     setDetailCheckIn(searchCheckIn || "");
     setDetailCheckOut(searchCheckOut || "");
     setDetailPickupDate(searchPickupDate || "");
@@ -1223,13 +1226,9 @@ export default function TravellerDashboard() {
 
         addToRecentlyViewed(details);
         listingApi.post("/guests/me/recently-viewed", { listingId: id }).catch(() => { });
-        fetchActivePromotion(details.category);
-        // Fetch wallet + applicable vouchers as soon as the listing opens so the
-        // dropdown is populated in the details step (before the booking lock).
-        if (hasAuthToken) {
-          fetchWalletVouchers();
-          fetchApplicableVouchers(details.id, details.category, details.country);
-        }
+        // Fetch all pricing data atomically — promotions, pricing estimate, and vouchers.
+        // The UI will only show pricing after all calls succeed.
+        fetchAllPricing();
       } else {
         setDetailListing(null);
       }
@@ -1296,71 +1295,109 @@ export default function TravellerDashboard() {
     }
   }
 
-  async function fetchPricingEstimate() {
+  async function fetchAllPricing() {
     if (!detailListing || lockToken) return;
+
+    setPricingLoading(true);
+    setPricingError("");
+
     const isCar = detailListing.category === "car";
     const start = isCar ? detailPickupDate : detailCheckIn;
     const end = isCar ? detailReturnDate : detailCheckOut;
-    if (!start || !end || !detailListing.id) { setEstimatedPricing(null); setEstimatingPricing(false); return; }
+    const hasDates = !!start && !!end && !!detailListing.id;
 
-    setEstimatedPricing(null);
-    setEstimatingPricing(true);
+    // Always fetch promotion (needed for price header discount display).
+    const promotionPromise = listingApi.get<any>("/promotions/active", {
+      params: { activity: detailListing.category },
+    });
+
+    // Only fetch pricing estimate + vouchers when dates are selected.
+    const pricingPromise = hasDates
+      ? listingApi.post<any>("/bookings/pricing-estimate", {
+          listingId: detailListing.id,
+          roomTypeId: selectedRoomTypeId || undefined,
+          checkIn: isCar ? undefined : detailCheckIn || undefined,
+          checkOut: isCar ? undefined : detailCheckOut || undefined,
+          pickupDatetime: isCar ? toIsoDatetime(detailPickupDate) || undefined : undefined,
+          returnDatetime: isCar ? toIsoDatetime(detailReturnDate) || undefined : undefined,
+          guests: searchAdults + searchChildren,
+        })
+      : Promise.resolve(null);
+
+    const voucherPromises = hasDates && hasAuthToken
+      ? [
+          listingApi.get<any>("/vouchers/wallet"),
+          listingApi.get<any>("/vouchers/applicable", {
+            params: { listingId: detailListing.id, category: detailListing.category, country: detailListing.country, totalAmount: 0 },
+          }),
+        ]
+      : [];
+
     try {
-      const res = await listingApi.post<any>("/bookings/pricing-estimate", {
-        listingId: detailListing.id,
-        roomTypeId: selectedRoomTypeId || undefined,
-        checkIn: isCar ? undefined : detailCheckIn || undefined,
-        checkOut: isCar ? undefined : detailCheckOut || undefined,
-        pickupDatetime: isCar ? detailPickupDate || undefined : undefined,
-        returnDatetime: isCar ? detailReturnDate || undefined : undefined,
-        guests: searchAdults + searchChildren,
-      });
-      if (res.data?.success && res.data.data?.pricingPreview) {
-        setEstimatedPricing(res.data.data.pricingPreview);
+      const results = await Promise.all([promotionPromise, pricingPromise, ...voucherPromises]);
+
+      const promotionRes = results[0];
+      const pricingRes = results[1];
+      const walletRes = hasDates && hasAuthToken ? results[2] : null;
+      const applicableRes = hasDates && hasAuthToken ? results[3] : null;
+
+      // Active promotions
+      if (promotionRes.data?.success) {
+        const raw = promotionRes.data.data ?? [];
+        const promos: ActivePromotion[] = Array.isArray(raw) ? raw : (raw?.promotions ?? []);
+        const normalised = promos.map((p: any) => ({ ...p, discountValue: Number(p.discountValue) }));
+        const matched = normalised.filter((p: any) => p.activity === detailListing.category && isPromotionValid(p));
+        setActivePromotion(matched.length > 0 ? (matched[0] ?? null) : null);
+      } else {
+        setActivePromotion(null);
+      }
+
+      // Pricing estimate (null when no dates)
+      if (pricingRes) {
+        if (pricingRes.data?.success && pricingRes.data.data?.pricingPreview) {
+          setEstimatedPricing(pricingRes.data.data.pricingPreview);
+        } else {
+          setEstimatedPricing(null);
+          setPricingError("Service is currently unavailable. Please try again later.");
+        }
       } else {
         setEstimatedPricing(null);
       }
+
+      // Wallet vouchers
+      if (walletRes) {
+        if (walletRes.data?.success) {
+          setWalletVouchers(walletRes.data.data ?? []);
+        } else {
+          setWalletVouchers([]);
+        }
+      }
+
+      // Applicable vouchers
+      if (applicableRes) {
+        if (applicableRes.data?.success) {
+          setApplicableVouchers(applicableRes.data.data ?? []);
+        } else {
+          setApplicableVouchers([]);
+        }
+      }
     } catch {
       setEstimatedPricing(null);
+      setActivePromotion(null);
+      setPricingError("Service is currently unavailable. Please try again later.");
     } finally {
-      setEstimatingPricing(false);
+      setPricingLoading(false);
     }
   }
 
-  // Re-check availability + fetch pricing estimate whenever dates change.
+  // Re-check availability + fetch all pricing whenever dates/guests change.
   // GET /listings/:id/availability is PUBLIC — no auth guard needed.
   useEffect(() => {
     if (!detailListing || lockToken) return;
     setBookingError("");
     checkAvailability(detailListing.id, detailListing.category);
-    fetchPricingEstimate();
+    fetchAllPricing();
   }, [detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id, selectedRoomTypeId, searchAdults, searchChildren]);
-
-  // Recompute promotion discount whenever dates or active promotion changes.
-  // effectiveDiscountSource is derived — no state mutation needed here.
-  useEffect(() => {
-    if (!activePromotion || !detailListing || !isPromotionValid(activePromotion) || activePromotion.activity !== detailListing.category) {
-      setPromotionDiscount(0);
-      return;
-    }
-    const isCar = detailListing.category === "car";
-    const start = isCar ? detailPickupDate : detailCheckIn;
-    const end = isCar ? detailReturnDate : detailCheckOut;
-    const days = calcDays(start, end);
-    if (days <= 0) { setPromotionDiscount(0); return; }
-
-    const isHotel = detailListing.category === "hotel";
-    const selectedRt = isHotel
-      ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
-      : null;
-    const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
-
-    const base = pricePerNight * days;
-    const pDiscount = activePromotion.discountType === "percentage"
-      ? Math.round(base * activePromotion.discountValue / 100)
-      : Math.round(activePromotion.discountValue);
-    setPromotionDiscount(pDiscount);
-  }, [activePromotion, detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id, selectedRoomTypeId]);
 
   // Helper: calculate nights/days between two date strings
   function calcDays(start: string, end: string): number {
@@ -1436,7 +1473,8 @@ export default function TravellerDashboard() {
         setCheckoutStep("review");
         setPaymentId(null);
         if (paymentPollRef.current) clearInterval(paymentPollRef.current);
-        fetchApplicableVouchers(detailListing.id, detailListing.category, detailListing.country);
+        const totalForVouchers = pricingPreview ? (pricingPreview.totalAmount ?? 0) : 0;
+        fetchApplicableVouchers(detailListing.id, detailListing.category, detailListing.country, totalForVouchers);
         fetchWalletVouchers();
       } else {
         const msg = res.data?.error?.message ?? (res.data as any)?.message ?? "Unable to hold these dates. Please try again.";
@@ -1502,8 +1540,8 @@ export default function TravellerDashboard() {
         console.log("[ZikaSearch] Voucher discount amount computed:", vDiscount);
 
         // Promotion stacking guard — reject voucher if an active promotion gives more
-        if (activePromotion && promotionDiscount > vDiscount) {
-          console.log("[ZikaSearch] Voucher rejected: active promotion gives better discount", { promotionDiscount, voucherDiscount: vDiscount });
+        if (activePromotion && serverPromotionDiscount > vDiscount) {
+          console.log("[ZikaSearch] Voucher rejected: active promotion gives better discount", { promotionDiscount: serverPromotionDiscount, voucherDiscount: vDiscount });
           setVoucherError(`A better promotion (${activePromotion.name || "Category Discount"}) is active. Vouchers cannot be stacked with active promotions.`);
           return;
         }
@@ -1525,16 +1563,19 @@ export default function TravellerDashboard() {
 
   // Fetch active promotions for a listing category
   async function fetchActivePromotion(category: string) {
+    // Skip if a listing is open — fetchAllPricing() owns activePromotion in that case.
+    if (selectedListingIdRef.current) return;
     try {
       console.log("[ZikaSearch] Fetching active promotions for category:", category);
-      const res = await listingApi.get<any>("/promotions/active", { params: { category } });
+      const res = await listingApi.get<any>("/promotions/active", { params: { activity: category } });
       console.log("[ZikaSearch] Active promotions API response:", res.data);
+      // Guard again after await — a listing may have been opened while the request was in flight.
+      if (selectedListingIdRef.current) return;
       if (res.data.success) {
         const raw = res.data.data ?? [];
         const promos: ActivePromotion[] = Array.isArray(raw)
           ? raw
           : (raw?.promotions ?? []);
-        // Coerce discountValue to number — API may return it as a string
         const normalised = promos.map((p: any) => ({
           ...p,
           discountValue: Number(p.discountValue),
@@ -1551,18 +1592,18 @@ export default function TravellerDashboard() {
       }
     } catch (err) {
       console.error("[ZikaSearch] fetchActivePromotion error:", err);
-      setActivePromotion(null);
+      if (!selectedListingIdRef.current) setActivePromotion(null);
     }
   }
 
   // Fetch auto-assigned vouchers applicable to the current booking context.
   // Guard removed: if a lock was obtained, the backend already confirmed the user is authenticated.
-  async function fetchApplicableVouchers(listingId: string, category: string, country: string) {
+  async function fetchApplicableVouchers(listingId: string, category: string, country: string, totalAmount?: number) {
     setLoadingApplicableVouchers(true);
     try {
-      console.log("[ZikaSearch] Fetching applicable vouchers for listing:", listingId, category, country);
+      console.log("[ZikaSearch] Fetching applicable vouchers for listing:", listingId, category, country, totalAmount);
       const res = await listingApi.get<any>("/vouchers/applicable", {
-        params: { listingId, category, country },
+        params: { listingId, category, country, totalAmount: totalAmount ?? 0 },
       });
       console.log("[ZikaSearch] Applicable vouchers API response:", res.data);
       if (res.data.success) {
@@ -1970,7 +2011,7 @@ export default function TravellerDashboard() {
           <div className="max-w-7xl mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
             <button
               onClick={() => {
-                setSelectedListingId(null);
+                setSelectedListingId(null); selectedListingIdRef.current = null;
                 setDetailListing(null);
                 abandonLock();
               }}
@@ -2042,6 +2083,7 @@ export default function TravellerDashboard() {
                           {detailListing.seats && <><span>·</span><span>{detailListing.seats} seats</span></>}
                           {detailListing.transmission && <><span>·</span><span className="capitalize">{detailListing.transmission}</span></>}
                           {detailListing.fuelType && <><span>·</span><span className="capitalize">{detailListing.fuelType}</span></>}
+                          {detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && <><span>·</span><span>Deposit: {detailListing.currency} {detailListing.securityDeposit.toLocaleString()}</span></>}
                         </>
                       )}
                     </div>
@@ -2139,7 +2181,12 @@ export default function TravellerDashboard() {
                 <div className="lg:col-span-4 relative lg:sticky lg:top-28 top-4 self-start">
                   <div className="bg-white border border-slate-200 shadow-xl rounded-2xl p-6 text-left shadow-slate-200/50">
                     {/* Price header */}
-                    {(() => {
+                    {pricingLoading ? (
+                      <div className="mb-3 animate-pulse">
+                        <div className="h-8 bg-slate-200 rounded w-1/2 mb-2" />
+                        <div className="h-4 bg-slate-200 rounded w-1/4" />
+                      </div>
+                    ) : (() => {
                       const isHotel = detailListing.category === "hotel";
                       const selectedRt = isHotel
                         ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
@@ -2154,11 +2201,11 @@ export default function TravellerDashboard() {
 
                       if (isValidPromo) {
                         const promoDiscount = activePromotion.discountType === "percentage"
-                          ? Math.round(basePrice * (Number(activePromotion.discountValue) / 100))
-                          : Math.round(Number(activePromotion.discountValue));
+                          ? Number((basePrice * (Number(activePromotion.discountValue) / 100)).toFixed(2))
+                          : Number(Number(activePromotion.discountValue).toFixed(2));
                         displayPrice = Math.max(0, basePrice - promoDiscount);
                       } else if (hasLongStay) {
-                        displayPrice = Math.round(basePrice * (1 - longStayPct / 100));
+                        displayPrice = Number((basePrice * (1 - longStayPct / 100)).toFixed(2));
                       }
 
                       return (
@@ -2187,6 +2234,13 @@ export default function TravellerDashboard() {
                       );
                     })()}
 
+                    {/* Security deposit notice for car rentals */}
+                    {detailListing.category === "car" && detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && (
+                      <div className="flex items-center gap-2 text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-3">
+                        <span className="text-amber-600 font-bold">🔒</span>
+                        <span><strong>Security deposit:</strong> {detailListing.currency} {detailListing.securityDeposit.toLocaleString()} — collected at booking.</span>
+                      </div>
+                    )}
                     {/* Best Offer banner — shown when an active promotion exists */}
                     {activePromotion && (
                       <div className="mb-4 flex items-center gap-2.5 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
@@ -2286,11 +2340,11 @@ export default function TravellerDashboard() {
 
                                     if (isValidPromo) {
                                       const promoDiscount = activePromotion.discountType === "percentage"
-                                        ? Math.round(baseRtPrice * (Number(activePromotion.discountValue) / 100))
-                                        : Math.round(Number(activePromotion.discountValue));
+                                        ? Number((baseRtPrice * (Number(activePromotion.discountValue) / 100)).toFixed(2))
+                                        : Number(Number(activePromotion.discountValue).toFixed(2));
                                       displayRtPrice = Math.max(0, baseRtPrice - promoDiscount);
                                     } else if (hasLongStay) {
-                                      displayRtPrice = Math.round(baseRtPrice * (1 - longStayPct / 100));
+                                      displayRtPrice = Number((baseRtPrice * (1 - longStayPct / 100)).toFixed(2));
                                     }
 
                                     return (
@@ -2367,12 +2421,16 @@ export default function TravellerDashboard() {
 
                           {/* Dynamic price breakdown */}
                           {days > 0 && (
-                            estimatingPricing && !estimatedPricing ? (
+                            pricingLoading ? (
                               <div className="space-y-3 pt-2 border-t border-slate-100 animate-pulse">
                                 <div className="h-4 bg-slate-200 rounded w-3/4" />
                                 <div className="h-4 bg-slate-200 rounded w-1/2" />
                                 <div className="h-4 bg-slate-200 rounded w-5/6" />
                                 <div className="h-5 bg-slate-200 rounded w-2/3 mt-2" />
+                              </div>
+                            ) : pricingError ? (
+                              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs font-semibold text-red-600">
+                                {pricingError}
                               </div>
                             ) : estimatedPricing ? (
                               <div className="space-y-2 pt-2 border-t border-slate-100 text-sm text-slate-600">
@@ -2380,20 +2438,32 @@ export default function TravellerDashboard() {
                                   <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
                                   <span>{detailListing.currency} {estimatedPricing.baseAmount.toLocaleString()}</span>
                                 </div>
+                                {effectiveDiscountSource === "promotion" && estimatedPricing.promotionDiscount > 0 && (
+                                  <div className="flex justify-between text-emerald-600 font-semibold">
+                                    <span>Promotion discount ({activePromotion?.discountValue}%)</span>
+                                    <span>−{detailListing.currency} {estimatedPricing.promotionDiscount.toLocaleString()}</span>
+                                  </div>
+                                )}
+                                {effectiveDiscountSource === "voucher" && bestDiscount > 0 && (
+                                  <div className="flex justify-between text-emerald-600 font-semibold">
+                                    <span>Voucher discount</span>
+                                    <span>−{detailListing.currency} {bestDiscount.toLocaleString()}</span>
+                                  </div>
+                                )}
                                 <div className="flex justify-between">
                                   <span>Service fee{estimatedPricing.commissionRate ? ` (${Math.round(estimatedPricing.commissionRate * 100)}%)` : ''}</span>
                                   <span>{detailListing.currency} {estimatedPricing.serviceFee.toLocaleString()}</span>
                                 </div>
-                                {sidebarDiscount > 0 && (
-                                  <div className="flex justify-between text-emerald-600 font-semibold">
-                                    <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
-                                    <span>−{detailListing.currency} {sidebarDiscount.toLocaleString()}</span>
-                                  </div>
-                                )}
                                 {estimatedPricing.taxAmount > 0 && (
                                   <div className="flex justify-between text-slate-500">
                                     <span>Taxes{estimatedPricing.taxRate ? ` (${Math.round(estimatedPricing.taxRate * 100)}%)` : ''}</span>
                                     <span>{detailListing.currency} {estimatedPricing.taxAmount.toLocaleString()}</span>
+                                  </div>
+                                )}
+                                {isCar && estimatedPricing.securityDeposit != null && estimatedPricing.securityDeposit > 0 && (
+                                  <div className="flex justify-between text-slate-600">
+                                    <span>Security deposit</span>
+                                    <span>{detailListing.currency} {estimatedPricing.securityDeposit.toLocaleString()}</span>
                                   </div>
                                 )}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 mt-1">
@@ -2401,17 +2471,7 @@ export default function TravellerDashboard() {
                                   <span>{detailListing.currency} {estimatedPricing.totalAmount.toLocaleString()}</span>
                                 </div>
                               </div>
-                            ) : days > 0 && (
-                              <div className="space-y-2 pt-2 border-t border-slate-100 text-sm text-slate-600">
-                                <div className="flex justify-between">
-                                  <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
-                                  <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
-                                </div>
-                                <div className="flex justify-between text-slate-400 text-xs italic">
-                                  <span>Pricing estimate unavailable</span>
-                                </div>
-                              </div>
-                            )
+                            ) : null
                           )}
                         </div>
                       );
@@ -2468,19 +2528,16 @@ export default function TravellerDashboard() {
                           const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
                           const start = isCar ? detailPickupDate : detailCheckIn;
                           const end = isCar ? detailReturnDate : detailCheckOut;
-                          const days = pricingPreview ? pricingPreview.units : calcDays(start, end);
-                          const base = pricingPreview ? pricingPreview.baseAmount : pricePerNight * days;
-                          const discount = pricingPreview
-                            ? (pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0))
-                            : bestDiscount;
+                          if (!pricingPreview) return null;
+                          const days = pricingPreview.units;
+                          const base = pricingPreview.baseAmount;
+                          const discount = pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0);
                           const subtotal = base - discount;
-                          const serviceFee = pricingPreview
-                            ? pricingPreview.serviceFee
-                            : Math.ceil(subtotal * (detailListing.commissionRate ?? 0) * 100) / 100;
-                          const taxAmount = pricingPreview ? pricingPreview.taxAmount : 0;
-                          const grandTotal = pricingPreview
-                            ? base - discount + serviceFee + taxAmount + (pricingPreview.deliveryFee ?? 0)
-                            : Math.max(0, base + serviceFee + taxAmount - bestDiscount);
+                          const serviceFee = pricingPreview.serviceFee;
+                          const taxAmount = pricingPreview.taxAmount;
+                          const securityDeposit = isCar ? (pricingPreview.securityDeposit ?? 0) : 0;
+                          const deliveryFee = pricingPreview.deliveryFee ?? 0;
+                          const grandTotal = pricingPreview.totalAmount;
                           const fmt = (d: string | null | undefined) =>
                             d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
                           return (
@@ -2527,6 +2584,12 @@ export default function TravellerDashboard() {
                                   <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days !== 1 ? "s" : ""}</span>
                                   <span>{detailListing.currency} {base.toLocaleString()}</span>
                                 </div>
+                                {discount > 0 && (
+                                  <div className="flex justify-between text-emerald-600 font-semibold">
+                                    <span>{effectiveDiscountSource === "promotion" ? `Promotion discount (${activePromotion?.discountValue}%)` : "Voucher discount"}</span>
+                                    <span>−{detailListing.currency} {discount.toLocaleString()}</span>
+                                  </div>
+                                )}
                                 <div className="flex justify-between text-slate-500">
                                   <span>Service fee{pricingPreview?.commissionRate ? ` (${Math.round(pricingPreview.commissionRate * 100)}%)` : ''}</span>
                                   <span>{detailListing.currency} {serviceFee.toLocaleString()}</span>
@@ -2537,10 +2600,11 @@ export default function TravellerDashboard() {
                                     <span>{detailListing.currency} {taxAmount.toLocaleString()}</span>
                                   </div>
                                 )}
-                                {discount > 0 && (
-                                  <div className="flex justify-between text-emerald-600 font-semibold">
-                                    <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
-                                    <span>−{detailListing.currency} {discount.toLocaleString()}</span>
+
+                                {isCar && securityDeposit > 0 && (
+                                  <div className="flex justify-between text-slate-600">
+                                    <span>Security deposit</span>
+                                    <span>{detailListing.currency} {securityDeposit.toLocaleString()}</span>
                                   </div>
                                 )}
 
@@ -2592,7 +2656,7 @@ export default function TravellerDashboard() {
                           {/* Discount section — promotion badge + wallet vouchers + manual entry always visible */}
                           <div className="space-y-2">
                             {/* Promotion badge — always shown when a promotion exists */}
-                            {promotionDiscount > 0 && activePromotion && (
+                            {serverPromotionDiscount > 0 && activePromotion && (
                               <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
                                 <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
                                   <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
@@ -2601,7 +2665,7 @@ export default function TravellerDashboard() {
                                     <span className="text-slate-400 font-normal"> (voucher saves more)</span>
                                   )}
                                 </span>
-                                <span className="text-xs font-bold text-emerald-700">−{detailListing.currency} {promotionDiscount.toLocaleString()}</span>
+                                <span className="text-xs font-bold text-emerald-700">−{detailListing.currency} {serverPromotionDiscount.toLocaleString()}</span>
                               </div>
                             )}
 
@@ -2618,29 +2682,39 @@ export default function TravellerDashboard() {
                             const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
                             const start = isCar ? detailPickupDate : detailCheckIn;
                             const end = isCar ? detailReturnDate : detailCheckOut;
-                            const days = pricingPreview ? pricingPreview.units : calcDays(start, end);
-                            const baseTotal = pricingPreview ? pricingPreview.baseAmount : pricePerNight * days;
-                            const discount = pricingPreview
-                              ? (pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0))
-                              : bestDiscount;
+                            if (!pricingPreview) return null;
+                            const days = pricingPreview.units;
+                            const baseTotal = pricingPreview.baseAmount;
+                            const discount = pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0);
                             const subtotal = baseTotal - discount;
-                            const serviceFee = pricingPreview
-                            ? pricingPreview.serviceFee
-                            : Math.ceil(subtotal * (detailListing.commissionRate ?? 0) * 100) / 100;
-                            const grandTotal = pricingPreview
-                              ? baseTotal - discount + serviceFee + (pricingPreview.deliveryFee ?? 0)
-                              : Math.max(0, baseTotal + serviceFee - bestDiscount);
+                            const serviceFee = pricingPreview.serviceFee;
+                            const taxAmount = pricingPreview.taxAmount ?? 0;
+                            const securityDeposit = isCar ? (pricingPreview.securityDeposit ?? 0) : 0;
+                            const deliveryFee = pricingPreview.deliveryFee ?? 0;
+                            const grandTotal = pricingPreview.totalAmount;
                             return (
                               <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
                                 <div className="flex justify-between">
                                   <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
                                   <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
                                 </div>
-                                <div className="flex justify-between"><span>Service fee{pricingPreview?.commissionRate ? ` (${Math.round(pricingPreview.commissionRate * 100)}%)` : ''}</span><span>{detailListing.currency} {serviceFee.toLocaleString()}</span></div>
                                 {discount > 0 && (
                                   <div className="flex justify-between text-emerald-600 font-semibold">
-                                    <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
+                                    <span>{effectiveDiscountSource === "promotion" ? `Promotion discount (${activePromotion?.discountValue}%)` : "Voucher discount"}</span>
                                     <span>−{detailListing.currency} {discount.toLocaleString()}</span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between"><span>Service fee{pricingPreview?.commissionRate ? ` (${Math.round(pricingPreview.commissionRate * 100)}%)` : ''}</span><span>{detailListing.currency} {serviceFee.toLocaleString()}</span></div>
+                                {taxAmount > 0 && (
+                                  <div className="flex justify-between text-slate-500">
+                                    <span>Taxes{pricingPreview?.taxRate ? ` (${Math.round(pricingPreview.taxRate * 100)}%)` : ''}</span>
+                                    <span>{detailListing.currency} {taxAmount.toLocaleString()}</span>
+                                  </div>
+                                )}
+                                {isCar && securityDeposit > 0 && (
+                                  <div className="flex justify-between text-slate-600">
+                                    <span>Security deposit</span>
+                                    <span>{detailListing.currency} {securityDeposit.toLocaleString()}</span>
                                   </div>
                                 )}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
@@ -2822,7 +2896,7 @@ export default function TravellerDashboard() {
                 <p className="text-lg font-semibold">Reservation details are unavailable.</p>
                 <p className="mt-2 text-sm">Please go back to search or select a different listing.</p>
                 <button
-                  onClick={() => { setSelectedListingId(null); setActiveTab("home"); }}
+                  onClick={() => { setSelectedListingId(null); selectedListingIdRef.current = null; setActiveTab("home"); }}
                   className="mt-6 inline-flex items-center justify-center rounded-full bg-[#0c2614] px-6 py-3 text-sm font-semibold text-white hover:bg-[#081b0d] transition"
                 >
                   Return to Search
@@ -3734,7 +3808,7 @@ export default function TravellerDashboard() {
                       </p>
                     </div>
                     <button
-                      onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
+                      onClick={() => { setActiveTab("home"); setSelectedListingId(null); selectedListingIdRef.current = null; }}
                       className="mt-2 px-6 py-2.5 bg-[#0c2614] text-white text-xs font-bold rounded-xl uppercase tracking-wider hover:bg-[#081b0d] transition"
                     >
                       Try a Different Search
@@ -3959,7 +4033,7 @@ export default function TravellerDashboard() {
                 </p>
                 {/* {reservationStatusFilter === "all" && (
                   <button
-                    onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
+                    onClick={() => { setActiveTab("home"); setSelectedListingId(null); selectedListingIdRef.current = null; }}
                     className="mt-6 inline-flex items-center gap-2 bg-[#0c2614] text-white text-sm font-semibold px-6 py-3 rounded-xl hover:bg-[#081b0d] transition shadow-md"
                   >
                     Explore Listings
@@ -4007,7 +4081,7 @@ export default function TravellerDashboard() {
             <nav className="flex flex-col gap-1 p-4 flex-1 overflow-y-auto">
               <TravellerWorkspaceNav orientation="stack" showHome={false} showAvatar={false} className="mb-3" />
               <button
-                onClick={() => { setSelectedListingId(null); setMobileNavOpen(false); router.push("/traveller"); }}
+                onClick={() => { setSelectedListingId(null); selectedListingIdRef.current = null; setMobileNavOpen(false); router.push("/traveller"); }}
                 className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "home" ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
               >
                 Destinations
@@ -4016,7 +4090,7 @@ export default function TravellerDashboard() {
                 <button
                   key={cat}
                   onClick={() => {
-                    setSelectedListingId(null);
+                    setSelectedListingId(null); selectedListingIdRef.current = null;
                     setMobileNavOpen(false);
                     router.push(cat === "hotel" ? "/traveller/hotels" : cat === "apartment" ? "/traveller/apartments" : "/traveller/cars");
                   }}
@@ -4027,7 +4101,7 @@ export default function TravellerDashboard() {
               ))}
               {user && (
                 <button
-                  onClick={() => { setSelectedListingId(null); setMobileNavOpen(false); router.push("/traveller?tab=bookings"); }}
+                  onClick={() => { setSelectedListingId(null); selectedListingIdRef.current = null; setMobileNavOpen(false); router.push("/traveller?tab=bookings"); }}
                   className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "bookings" ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
                 >
                   My Reservations
@@ -4247,7 +4321,7 @@ export default function TravellerDashboard() {
             <button
               onClick={() => {
                 setBookingSuccessModal(null);
-                setSelectedListingId(null);
+                setSelectedListingId(null); selectedListingIdRef.current = null;
                 setActiveTab("bookings");
                 fetchGuestBookings();
                 // Re-fetch 6s later in case webhook hasn't confirmed the booking yet
