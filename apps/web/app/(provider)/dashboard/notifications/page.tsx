@@ -53,7 +53,7 @@ export default function NotificationsPage() {
   const [prepared, setPrepared] = useState(false);
 
   const marketLabel = COUNTRY_OPTIONS.find((item) => item.value === country)?.label ?? "All markets";
-  const subject = `Important: ZikaBooking commission rate update for ${marketLabel}`;
+  const subject = `Important: Kainook commission rate update for ${marketLabel}`;
   const providerDashboardLink = "/dashboard/earnings";
   const current = readRate(currentRate);
   const next = readRate(newRate);

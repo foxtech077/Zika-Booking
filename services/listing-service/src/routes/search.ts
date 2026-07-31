@@ -65,6 +65,11 @@ export async function searchRoutes(app: FastifyInstance) {
     const lat = parseFloat(q["lat"] ?? "");
     const lng = parseFloat(q["lng"] ?? "");
     const placeName = q["place_name"] ?? "";
+    // Free-text search. `place_name` was accepted but only echoed back in the
+    // response, never used as a filter — so typing anything in the destination
+    // box returned the entire category. Matches listing name as well as
+    // location fields, because the box is commonly used for both.
+    const textQuery = (q["q"] ?? "").trim();
     const radiusKm = parseInt(q["radius_km"] ?? "25", 10);
     const checkIn = q["check_in"];
     const checkOut = q["check_out"];
@@ -133,6 +138,16 @@ export async function searchRoutes(app: FastifyInstance) {
     }
     if (smokingAllowed !== undefined) where.smokingAllowed = smokingAllowed === "true";
     if (petsAllowed !== undefined) where.petsAllowed = petsAllowed === "true";
+    // Free-text: match the listing's own name or any of its location fields.
+    if (textQuery) {
+      const contains = { contains: textQuery, mode: "insensitive" as const };
+      where.OR = [
+        { name: contains },
+        { town: contains },
+        { neighborhood: contains },
+        { address: contains },
+      ];
+    }
     // Hotel
     if (starRatings?.length) where.starRating = { in: starRatings };
     // Apartment

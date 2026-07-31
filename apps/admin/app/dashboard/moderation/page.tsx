@@ -700,7 +700,7 @@ export default function ModerationPage() {
               ? "Reactivate the listing immediately. This overrides the suspension without warnings."
               : resolveType === "keep_suspended"
                 ? "Maintain the active suspension status and request clarifications or fixes from the provider."
-                : "Permanently ban this listing from the ZikaBooking platform. This action is irreversible."
+                : "Permanently ban this listing from the Kainook platform. This action is irreversible."
         }
         size="sm"
         footer={
