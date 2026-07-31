@@ -18,6 +18,7 @@ import {
 } from "../lib/s3.js";
 import { geocodePlaceId, geocodeAddress, reverseGeocode } from "../lib/geocoding.js";
 import { sendListingSubmittedEmail, sendListingActivatedEmail } from "../lib/email.js";
+import { getExchangeRate, ceilingForCurrency } from "../services/exchangeRate.services.js";
 
 const MAX_PHOTOS = 30;
 
@@ -282,7 +283,8 @@ export async function listingRoutes(app: FastifyInstance) {
           status: { type: "string" },
           geoPending: { type: "string", enum: ["true", "false"], description: "Filter by geo verification pending status" },
           page: { type: "string", pattern: "^[0-9]+$" },
-          limit: { type: "string", pattern: "^[0-9]+$" }
+          limit: { type: "string", pattern: "^[0-9]+$" },
+          currency: { type: "string", description: "ISO 4217 currency code for localized prices (e.g. KES, NGN, USD)" }
         }
       },
       response: {
@@ -311,7 +313,8 @@ export async function listingRoutes(app: FastifyInstance) {
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { providerId } = req as ProviderRequest;
-      const { status, geoPending, page = "1", limit = "20" } = req.query as Record<string, string>;
+      const { status, geoPending, page = "1", limit = "20", currency: targetCurrency } = req.query as Record<string, string>;
+      const target = targetCurrency?.toUpperCase() || null;
 
       const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
       const take = Math.min(parseInt(limit, 10), 50);
@@ -360,7 +363,31 @@ export async function listingRoutes(app: FastifyInstance) {
       ]);
 
       const signedListings = await Promise.all(
-        listings.map((l) => ({ ...l, photos: l.photos })),
+        listings.map(async (l) => {
+          const baseCurrency = l.currency ?? "USD";
+          const nightlyRate = l.pricePerNight ? Number(l.pricePerNight) : null;
+          const dailyRate = l.pricePerDay ? Number(l.pricePerDay) : null;
+          let localizedNightlyRate = nightlyRate;
+          let localizedDailyRate = dailyRate;
+
+          if (target && target !== baseCurrency) {
+            const rate = await getExchangeRate(baseCurrency, target);
+            if (rate !== null) {
+              if (localizedNightlyRate !== null) localizedNightlyRate = ceilingForCurrency(localizedNightlyRate * rate, target);
+              if (localizedDailyRate !== null) localizedDailyRate = ceilingForCurrency(localizedDailyRate * rate, target);
+            }
+          }
+
+          return {
+            ...l,
+            nightlyRate,
+            dailyRate,
+            localizedNightlyRate,
+            localizedDailyRate,
+            localizedCurrency: target ?? baseCurrency,
+            photos: l.photos,
+          };
+        }),
       );
       return sendSuccess(reply, 200, { listings: signedListings, total, page: parseInt(page, 10), limit: take });
     } catch (err) {
@@ -381,12 +408,20 @@ export async function listingRoutes(app: FastifyInstance) {
           id: { type: "string" }
         }
       },
+      querystring: {
+        type: "object",
+        properties: {
+          currency: { type: "string", description: "ISO 4217 currency code for localized prices (e.g. KES, NGN, USD)" },
+        },
+      },
 
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { providerId } = req as ProviderRequest;
       const { id } = req.params as { id: string };
+      const { currency: targetCurrency } = (req.query as Record<string, string>) ?? {};
+      const target = targetCurrency?.toUpperCase() || null;
 
       const listing = await prisma.listing.findFirst({
         where: { id, providerId, deletedAt: null },
@@ -427,6 +462,20 @@ export async function listingRoutes(app: FastifyInstance) {
         }
       }
 
+      const baseCurrency = listing.currency ?? "USD";
+      const nightlyRate = listing.pricePerNight ? Number(listing.pricePerNight) : null;
+      const dailyRate = listing.pricePerDay ? Number(listing.pricePerDay) : null;
+      let localizedNightlyRate = nightlyRate;
+      let localizedDailyRate = dailyRate;
+
+      if (target && target !== baseCurrency) {
+        const rate = await getExchangeRate(baseCurrency, target);
+        if (rate !== null) {
+          if (localizedNightlyRate !== null) localizedNightlyRate = ceilingForCurrency(localizedNightlyRate * rate, target);
+          if (localizedDailyRate !== null) localizedDailyRate = ceilingForCurrency(localizedDailyRate * rate, target);
+        }
+      }
+
       const formattedListing = {
         ...listing,
         amenities: groupedAmenities,
@@ -435,6 +484,11 @@ export async function listingRoutes(app: FastifyInstance) {
         //   pricePerNight: Number(rt.pricePerNight),
         // })),
         photos: listing.photos,
+        nightlyRate,
+        dailyRate,
+        localizedNightlyRate,
+        localizedDailyRate,
+        localizedCurrency: target ?? baseCurrency,
       };
 
       return sendSuccess(reply, 200, formattedListing);
