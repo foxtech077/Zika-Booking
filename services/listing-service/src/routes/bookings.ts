@@ -800,6 +800,23 @@ export async function bookingRoutes(app: FastifyInstance) {
           );
         }
 
+        // ── 5. MINIMUM STAY ─────────────────────────
+        // `minStayNights` is the provider's minimum booking length: nights for
+        // hotels/apartments, rental days for cars (surfaced as "Min Rental
+        // Days" on the car form). It was captured, stored and displayed on
+        // every surface but never enforced, so a guest could book — and pay
+        // for — a shorter stay than the provider allows.
+        const minStay = listing.minStayNights ?? 1;
+        if (minStay > 1 && units < minStay) {
+          const unitWord = listing.category === "car" ? "day" : "night";
+          return sendError(
+            reply,
+            400,
+            "BELOW_MINIMUM_STAY",
+            `This listing requires a minimum booking of ${minStay} ${unitWord}${minStay === 1 ? "" : "s"}. You selected ${units}.`
+          );
+        }
+
         // Pending booking limit (max 5) — only count non-expired locks (mirrors checkAvailability logic)
         const pendingExpiry = new Date(Date.now() - LOCK_TTL_MS);
         const pendingCount = await prisma.booking.count({
@@ -1341,6 +1358,22 @@ export async function bookingRoutes(app: FastifyInstance) {
           commissionRate,
           driverProvided: Boolean(listing.driverProvided),
         });
+
+        // ── 1a. MINIMUM STAY ────────────────────────
+        // Re-checked here as well as in /bookings/initiate: this is the
+        // endpoint that actually persists the booking, and it can be reached
+        // directly with a still-valid lock token. Uses the billing engine's
+        // own `units` so the rule can never diverge from what is charged.
+        const minStayRequired = listing.minStayNights ?? 1;
+        if (minStayRequired > 1 && baseBilling.units < minStayRequired) {
+          const unitWord = listing.category === "car" ? "day" : "night";
+          return sendError(
+            reply,
+            400,
+            "BELOW_MINIMUM_STAY",
+            `This listing requires a minimum booking of ${minStayRequired} ${unitWord}${minStayRequired === 1 ? "" : "s"}. You selected ${baseBilling.units}.`
+          );
+        }
 
         // ── 1b. SECURITY DEPOSIT
         const securityDeposit = listing.category === "car" && !listing.driverProvided
