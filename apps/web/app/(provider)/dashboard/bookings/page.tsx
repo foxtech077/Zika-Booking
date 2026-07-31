@@ -112,7 +112,7 @@ const formatGuestName = (fullName?: string) => {
 
 const NetCurrency = ({ amount, currency = "USD", className }: { amount: number; currency?: string; className?: string }) => {
     const formatted = formatCurrency(amount, currency);
-    const tooltipText = "This is your earnings after ZikaBooking's 5% service fee. ZikaBooking retains the remainder.";
+    const tooltipText = "Your earnings after Kainook's commission has been deducted.";
     return (
         <span
             className={cn("inline-flex items-center gap-1 group relative cursor-help font-semibold", className)}

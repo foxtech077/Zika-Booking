@@ -5,9 +5,8 @@ import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
-import { fastifySchedule } from "@fastify/schedule";
-import { SimpleIntervalJob, AsyncTask } from "toad-scheduler";
 import Redis from "ioredis";
+import { registerBullBoard, startJobs, stopJobs } from "./jobs.js";
 import { listingRoutes } from "./routes/listings.js";
 import { adminListingRoutes } from "./routes/admin-listings.js";
 import { bookingRoutes } from "./routes/bookings.js";
@@ -16,19 +15,14 @@ import { reviewRoutes } from "./routes/reviews.js";
 import { commissionRoutes } from "./routes/commission.js";
 import { voucherRoutes } from "./routes/vouchers.js";
 import { providerRoutes } from "./routes/provider.js";
-import { icalRoutes, pollIcalFeeds } from "./routes/ical.js";
+import { icalRoutes } from "./routes/ical.js";
 import { messagingRoutes } from "./routes/messaging.js";
-import { promotePendingRates } from "./lib/commissionScheduler.js";
 import { bookingDocumentRoutes } from "./routes/booking-documents.js";
 import { loyaltyRoutes } from "./routes/loyalty.js";
 import { locationRoutes } from "./routes/location.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { profilePhotoRoutes } from "./routes/profile-photos.js";
 import { roomTypeRoutes } from "./routes/room-types.js";
-import { checkVoucherExpiryWarnings } from "./lib/voucherExpiryWarner.js";
-import { completeEligibleBookings } from "./lib/bookingCompletionScheduler.js";
-import { cancelStalePendingPayments } from "./lib/pendingPaymentCanceller.js";
-import { expireStaleGeoVerifications } from "./lib/geoVerificationExpirer.js";
 
 const PORT = Number(process.env["LISTING_SERVICE_PORT"] ?? 3003);
 const HOST = process.env["LISTING_SERVICE_HOST"] ?? "0.0.0.0";
@@ -343,46 +337,31 @@ app.all("/admin/payouts/*", async (req, reply) => {
   await app.register(profilePhotoRoutes);
   await app.register(roomTypeRoutes);
 
-  // ── Background scheduled jobs ──────────────────────────────────────────────
-  await app.register(fastifySchedule);
+  // ── Bull Board UI for background jobs ──────────────────────────────────────
+  registerBullBoard(app);
 
   return app;
 }
 
 async function main() {
   const app = await build();
+
+  const shutdown = async (signal: string) => {
+    app.log.info(`[Listing Service] ${signal} received. Shutting down gracefully…`);
+    await stopJobs();
+    await app.close();
+    process.exit(0);
+  };
+
+  process.on("SIGINT", () => void shutdown("SIGINT"));
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+
   try {
     await app.listen({ port: PORT, host: HOST });
     console.log(`[Listing Service] listening on ${HOST}:${PORT}`);
 
-    // Scheduled jobs are registered after listen so the app is fully ready
-    const onErr = (name: string) => (err: any) => console.error(`[${name}] Job run failed:`, err);
-
-    app.scheduler.addSimpleIntervalJob(
-      new SimpleIntervalJob({ seconds: 60 }, new AsyncTask("pending-payment-canceller", () => cancelStalePendingPayments(), onErr("PendingPaymentCanceller"))),
-    );
-
-    app.scheduler.addSimpleIntervalJob(
-      new SimpleIntervalJob({ minutes: 5 }, new AsyncTask("booking-completion", () => completeEligibleBookings(), onErr("BookingCompletionScheduler"))),
-    );
-
-    app.scheduler.addSimpleIntervalJob(
-      new SimpleIntervalJob({ hours: 4 }, new AsyncTask("voucher-expiry-warner", () => checkVoucherExpiryWarnings(), onErr("VoucherExpiryWarner"))),
-    );
-
-    app.scheduler.addSimpleIntervalJob(
-      new SimpleIntervalJob({ minutes: 15 }, new AsyncTask("ical-poller", () => pollIcalFeeds(), onErr("IcalPoller"))),
-    );
-
-    app.scheduler.addSimpleIntervalJob(
-      new SimpleIntervalJob({ hours: 1 }, new AsyncTask("commission-scheduler", () => promotePendingRates(), onErr("CommissionScheduler"))),
-    );
-
-    app.scheduler.addSimpleIntervalJob(
-      new SimpleIntervalJob({ hours: 2 }, new AsyncTask("geo-verification-expirer", () => expireStaleGeoVerifications(), onErr("GeoVerificationExpirer"))),
-    );
-
-    console.log(`[Listing Service] Scheduled background jobs registered.`);
+    await startJobs();
+    console.log(`[Listing Service] Background jobs registered.`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

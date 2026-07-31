@@ -3,16 +3,13 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
-import { fastifySchedule } from "@fastify/schedule";
-import { SimpleIntervalJob, AsyncTask } from "toad-scheduler";
+import { registerBullBoard, startJobs, stopJobs } from "./jobs.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { paymentMethodRoutes } from "./routes/payment-methods.js";
 import { adminPaymentRoutes } from "./routes/admin-payments.js";
 import { merchantRoutes } from "./routes/merchants.js";
 import { payoutRoutes } from "./routes/payouts.js";
-import { runPayoutJob } from "./services/payout.service.js";
-import { runRefundNotificationRetryJob } from "./services/refund.service.js";
 import { prisma } from "./lib/prisma.js";
 
 const PORT = Number(process.env["PORT"] ?? 3004);
@@ -138,8 +135,8 @@ async function build() {
   await app.register(merchantRoutes,);
   await app.register(payoutRoutes,);
 
-  // ── Background scheduled jobs ──────────────────────────────────────────────
-  await app.register(fastifySchedule);
+  // ── Bull Board UI for background jobs ──────────────────────────────────────
+  registerBullBoard(app);
 
   return app;
 }
@@ -151,6 +148,7 @@ async function main() {
   const shutdown = async (signal: string) => {
     app.log.info(`[Payment Service] ${signal} received. Shutting down gracefully…`);
     try {
+      await stopJobs();
       await app.close();
       await prisma.$disconnect();
     } finally {
@@ -165,19 +163,8 @@ async function main() {
     await app.listen({ port: PORT, host: HOST });
     console.log(`[Payment Service] listening on ${HOST}:${PORT}`);
 
-    // Run background jobs once immediately on startup, then scheduled jobs take over
-    void runPayoutJob().catch((err) => console.error("[payout-job] Startup run failed:", err));
-    void runRefundNotificationRetryJob().catch((err) => console.error("[refund-retry-job] Startup run failed:", err));
-
-    const onErr = (name: string) => (err: any) => console.error(`[${name}] Job run failed:`, err);
-
-    app.scheduler.addSimpleIntervalJob(
-      new SimpleIntervalJob({ seconds: 60 }, new AsyncTask("payout-job", () => runPayoutJob(), onErr("payout-job"))),
-    );
-
-    app.scheduler.addSimpleIntervalJob(
-      new SimpleIntervalJob({ seconds: 60 }, new AsyncTask("refund-retry-job", () => runRefundNotificationRetryJob(), onErr("refund-retry-job"))),
-    );
+    await startJobs();
+    console.log(`[Payment Service] Background jobs registered.`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

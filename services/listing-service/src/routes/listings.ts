@@ -165,6 +165,7 @@ export const patchListingSchema = z.object({
   colour: z.string().max(30).optional().nullable(),
   securityDeposit: z.number().nonnegative().optional().nullable(),
   minimumDriverAge: z.number().int().min(16).max(100).optional().nullable(),
+  driverProvided: z.boolean().optional().nullable(),
   minimumRentalDays: z.number().int().min(1).optional().nullable(),
   fuelPolicy: z.preprocess((val) => {
     if (typeof val !== "string") return val;

@@ -1,6 +1,5 @@
 import { prisma } from "../lib/prisma.js";
 import { stripe, toStripeAmount } from "../lib/stripe.js";
-import { withRedisLock } from "../lib/redis.js";
 import { RefundStatus, PayoutStatus } from "../generated/index.js";
 
 export interface SchedulePayoutParams {
@@ -496,12 +495,7 @@ async function processSinglePayout(payout: any): Promise<void> {
   }
 }
 
-const PAYOUT_LOCK_KEY = "cron:payout:running";
-const PAYOUT_LOCK_TTL = 10 * 60; // 10 minutes — generous safety net
-
-export async function runPayoutJob(): Promise<void> {
-  await withRedisLock(PAYOUT_LOCK_KEY, PAYOUT_LOCK_TTL, async () => {
-    console.log("[payout-job] Running (lock acquired)");
-    await processEligiblePayouts();
-  });
-}
+// NOTE: runPayoutJob wrapper was removed — BullMQ handles deduplication.
+// See jobs.ts for the worker that calls processEligiblePayouts directly.
+// withRedisLock (formerly used here) was a manual lock for the old
+// toad-scheduler — no longer needed with BullMQ repeatable jobs.

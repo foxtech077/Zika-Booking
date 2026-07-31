@@ -100,12 +100,6 @@ type PayProvider = "stripe" | "tara";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TAX_RATES: Record<string, number> = {
-  Kenya: 0.16, Nigeria: 0.075, Ghana: 0.125, Tanzania: 0.18,
-  Uganda: 0.18, "South Africa": 0.15, Rwanda: 0.18, Ethiopia: 0.15,
-  Zambia: 0.16, Zimbabwe: 0.15, Egypt: 0.14,
-};
-
 const CARD_LOGOS = ["Visa", "Mastercard", "Amex", "UnionPay", "Apple Pay", "Google Pay", "PayPal", "Bank Debit", "Klarna"];
 
 const TARA_COUNTRIES = new Set([
@@ -117,39 +111,23 @@ const TARA_COUNTRIES = new Set([
 
 function fmt(n: number) {
   if (typeof n !== "number" || isNaN(n)) return "0";
-  return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
-
-// Fallback used only when /bookings/initiate returned no pricingPreview.
-// The rate must still come from the API — a hardcoded 5% here disagreed with
-// the listing page (which assumed 10%) and with what the backend actually charges.
-function calcPricing(ctx: CheckoutCtx) {
-  const base = (ctx.pricePerNight ?? 0) * (ctx.nightsOrDays ?? 1);
-  const discount = ctx.voucherDiscount ?? 0;
-  const subtotal = Math.max(0, base - discount);
-  const commissionRate = ctx.pricingPreview?.commissionRate ?? ctx.commissionRate ?? 0;
-  const serviceFee = Math.ceil(subtotal * commissionRate * 100) / 100;
-  const taxRate = TAX_RATES[ctx.listingCountry] ?? 0;
-  const taxes = Math.round(subtotal * taxRate);
-  const total = subtotal + serviceFee + taxes;
-  return { base, discount, subtotal, serviceFee, taxes, total };
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function getPricing(ctx: CheckoutCtx) {
-  if (ctx.pricingPreview) {
-    const pp = ctx.pricingPreview;
-    const base = pp.baseAmount ?? 0;
-    const serviceFee = pp.serviceFee ?? 0;
-    const taxAmount = pp.taxAmount ?? 0;
-    const deliveryFee = pp.deliveryFee ?? 0;
-    const totalDiscount = ctx.discountSource === "voucher"
-      ? (ctx.voucherDiscount ?? 0)
-      : (pp.promotionDiscount ?? 0);
-    const subtotal = Math.max(0, base - totalDiscount);
-    const total = subtotal + serviceFee + taxAmount + deliveryFee;
-    return { base, discount: totalDiscount, subtotal, serviceFee, taxes: taxAmount, total };
-  }
-  return calcPricing(ctx);
+  if (!ctx.pricingPreview) return null;
+  const pp = ctx.pricingPreview;
+  const base = pp.baseAmount ?? 0;
+  const serviceFee = pp.serviceFee ?? 0;
+  const taxAmount = pp.taxAmount ?? 0;
+  const deliveryFee = pp.deliveryFee ?? 0;
+  const securityDeposit = pp.securityDeposit ?? 0;
+  const totalDiscount = ctx.discountSource === "voucher"
+    ? (ctx.voucherDiscount ?? 0)
+    : (pp.promotionDiscount ?? 0);
+  const subtotal = Math.max(0, base - totalDiscount);
+  const total = subtotal + serviceFee + taxAmount + deliveryFee + securityDeposit;
+  return { base, discount: totalDiscount, subtotal, serviceFee, taxes: taxAmount, deliveryFee, securityDeposit, total };
 }
 
 function fmtDate(d?: string) {
@@ -781,7 +759,7 @@ export default function BookingReviewPage() {
                         <div className="space-y-3">
                           <p className="text-sm text-emerald-700 font-semibold flex items-center gap-1.5">
                             <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                            Promotion applied — saves {ctx.currency} {fmt(ctx.voucherDiscount ?? 0)}
+                            Promotion applied — saves {ctx.currency} {fmt(pricing?.discount ?? 0)}
                           </p>
                           <p className="text-xs text-slate-500">Have a voucher that saves more? Select or enter it below:</p>
 
@@ -1126,7 +1104,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: ReturnType<typeof calcPricing> }) {
+function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable<ReturnType<typeof getPricing>> }) {
   const isCar = ctx.listingCategory === "car";
   const securityDeposit = isCar ? Number(ctx.pricingPreview?.securityDeposit ?? 0) : 0;
   return (

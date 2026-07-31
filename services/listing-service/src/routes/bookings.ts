@@ -603,6 +603,8 @@ export async function bookingRoutes(app: FastifyInstance) {
       voucherAmount: 0,
       taxRate: getTaxRate(listing.country),
       commissionRate,
+      securityDeposit: Number(listing.securityDeposit ?? 0),
+      driverProvided: Boolean(listing.driverProvided),
     });
 
     return {
@@ -614,6 +616,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       serviceFee: billing.serviceFee,
       taxAmount: billing.taxAmount,
       deliveryFee: billing.deliveryFee,
+      securityDeposit: billing.securityDeposit,
       totalAmount: billing.totalAmount,
       currency: listing.currency,
       commissionRate,
@@ -935,6 +938,8 @@ export async function bookingRoutes(app: FastifyInstance) {
           taxRate: getTaxRate(listing.country),
 
           commissionRate,
+          securityDeposit: Number(listing.securityDeposit ?? 0),
+          driverProvided: Boolean(listing.driverProvided),
         });
 
         // ── 10. FIXED RESPONSE ───────────────────────
@@ -947,6 +952,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           serviceFee: billing.serviceFee,
           taxAmount: billing.taxAmount,
           deliveryFee: billing.deliveryFee,
+          securityDeposit: billing.securityDeposit,
           totalAmount: billing.totalAmount,
           currency: listing.currency,
           commissionRate,
@@ -1333,10 +1339,11 @@ export async function bookingRoutes(app: FastifyInstance) {
           voucherAmount: 0,
           taxRate: getTaxRate(listing.country),
           commissionRate,
+          driverProvided: Boolean(listing.driverProvided),
         });
 
         // ── 1b. SECURITY DEPOSIT
-        const securityDeposit = listing.category === "car"
+        const securityDeposit = listing.category === "car" && !listing.driverProvided
           ? Number(listing.securityDeposit ?? 0)
           : 0;
 
@@ -2798,6 +2805,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           pointsDiscount: Number(booking.pointsDiscount),
           taxRate: getTaxRate(booking.listing.country),
           commissionRate: rate,
+          securityDeposit: Number(booking.securityDeposit ?? 0),
         });
 
         // 3. Update the booking record
