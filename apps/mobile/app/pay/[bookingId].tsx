@@ -21,6 +21,7 @@ import { useStripe } from "@stripe/stripe-react-native";
 import * as SecureStore from "expo-secure-store";
 import { listingApi } from "../../lib/listing-api";
 import { paymentApi } from "../../lib/payment-api";
+import { api } from "../../lib/api";
 import { LOYALTY_QK } from "../../hooks/loyalty";
 import { initializeStripe, resolveStripePublishableKey } from "../../lib/stripe-config";
 import { clearPaymentLogs, formatLogsForSharing, payLog } from "../../lib/payment-logger";
@@ -681,6 +682,13 @@ export default function PaymentScreen() {
       setExpiredModal(true);
       return;
     }
+
+    // Record the Terms acceptance the user just gave (the checkbox above gates
+    // this button). Best-effort: a failure must not cost the user their
+    // reservation lock, so it is logged and the payment proceeds.
+    void api.post("auth/accept-terms", { acceptedTerms: true }).catch((err) => {
+      payLog("warn", "HANDLE-PAY", "Failed to record terms acceptance", err);
+    });
     // ── Stripe Payment Sheet flow ─────────────────────────────────────────
     if (provider === "stripe") {
       payLog("info", "HANDLE-PAY", `Stripe — bookingId: ${bookingId}, savedMethod: ${selectedSavedMethodId ?? "none"}`);

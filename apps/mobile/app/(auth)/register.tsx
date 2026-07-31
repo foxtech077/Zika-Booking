@@ -70,6 +70,11 @@ export default function RegisterScreen() {
     phone: "",
   });
   const [errors, setErrors] = useState<FieldErrors>({});
+  // Privacy Policy is accepted at registration; the Terms & Conditions are
+  // accepted later, at payment. A passive "by signing up you agree" notice is
+  // not an auditable acceptance, so this is an explicit tick and the value is
+  // sent to the API to be recorded, not merely enforced in the UI.
+  const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [countryModalVisible, setCountryModalVisible] = useState(false);
@@ -95,6 +100,7 @@ export default function RegisterScreen() {
         businessName: userType === "provider" ? form.businessName.trim() || undefined : undefined,
         country: form.country || undefined,
         phone: userType === "provider" ? form.phone.trim() || undefined : undefined,
+        acceptedPrivacy: agreedToPrivacy,
       };
       const res = await api.post<ApiResponse<{
         message?: string;
@@ -424,11 +430,39 @@ export default function RegisterScreen() {
               </View>
             ) : null}
 
+            {/* Privacy Policy acceptance — recorded against the account.
+                Terms & Conditions are collected at payment, per the spec. */}
+            <View style={ss.legalBlock}>
+              <TouchableOpacity
+                style={ss.termsRow}
+                onPress={() => setAgreedToPrivacy((p) => !p)}
+                activeOpacity={0.8}
+              >
+                <View style={[ss.checkbox, agreedToPrivacy && { backgroundColor: btnColor, borderColor: btnColor }]}>
+                  {agreedToPrivacy && <Ionicons name="checkmark" size={13} color="#fff" />}
+                </View>
+                <Text style={ss.termsText}>
+                  I have read and agree to the{" "}
+                  <Text
+                    style={[ss.legalLink, { color: btnColor }]}
+                    onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "privacy" } } as any)}
+                  >
+                    Privacy Policy
+                  </Text>
+                  .
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             {/* Submit button */}
             <TouchableOpacity
-              style={[ss.btn, { backgroundColor: btnColor }, registerMutation.isPending && ss.btnDim]}
+              style={[
+                ss.btn,
+                { backgroundColor: btnColor },
+                (registerMutation.isPending || !agreedToPrivacy) && ss.btnDim,
+              ]}
               onPress={handleSubmit}
-              disabled={registerMutation.isPending}
+              disabled={registerMutation.isPending || !agreedToPrivacy}
               activeOpacity={0.85}
             >
               {registerMutation.isPending ? (
@@ -456,19 +490,6 @@ export default function RegisterScreen() {
                 />
               </>
             )}
-
-            {/* Legal notice */}
-            <Text style={ss.legalNotice}>
-              By signing up, you acknowledge that you have read and agree to Kainook's{" "}
-              {" "}
-              <Text
-                style={[ss.legalLink, { color: btnColor }]}
-                onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "privacy" } } as any)}
-              >
-                Privacy Policy
-              </Text>
-              .
-            </Text>
 
             {/* Sign in link */}
             <View style={ss.linkRow}>
@@ -677,6 +698,19 @@ const ss = StyleSheet.create({
     fontWeight: "700",
     textDecorationLine: "underline",
   },
+  legalBlock: { marginTop: 18, marginBottom: 18, gap: 12 },
+  termsRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  termsText: { flex: 1, fontSize: 13, color: MUTED, lineHeight: 19 },
 
   // Button
   btn: {

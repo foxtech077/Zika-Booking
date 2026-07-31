@@ -52,6 +52,17 @@ async function importAnonViews() {
 
 // ─── redirect helper ─────────────────────────────────────────────────────────
 export function handleRoleAndStatusRedirect(user: PublicUser) {
+  // Privacy Policy gate — required at registration per the client's spec.
+  // Every post-auth path funnels through here (email/password login, register,
+  // Google sign-in, email verification and password reset), so this single
+  // check covers social signups, which never see a consent checkbox on either
+  // the login or register screen. The Terms are gated separately, at payment.
+  if ((user as { requiresPrivacyAcceptance?: boolean }).requiresPrivacyAcceptance) {
+    // Cast matches the convention used elsewhere for routes the generated
+    // expo-router types have not picked up yet.
+    router.replace("/(auth)/accept-terms" as any);
+    return;
+  }
   if (user.userType === "provider") {
     if (user.status === "pending_verification")
       router.replace("/pending-approval");
