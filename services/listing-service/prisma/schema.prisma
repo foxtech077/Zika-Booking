@@ -879,6 +879,21 @@ model DeviceToken {
   @@schema("auth")
 }
 
+// ── Exchange Rates ────────────────────────────────────────────────────────────
+
+model ExchangeRate {
+  id           String   @id @default(uuid())
+  fromCurrency String   @map("fromCurrency") @db.Char(3)
+  toCurrency   String   @map("toCurrency") @db.Char(3)
+  rate         Decimal  @db.Decimal(16, 8)
+  fetchedAt    DateTime @default(now()) @map("fetchedAt")
+  expiresAt    DateTime @map("expiresAt")
+
+  @@unique([fromCurrency, toCurrency])
+  @@map("exchange_rates")
+  @@schema("listing")
+}
+
 // ── E15 — Commission Management ───────────────────────────────────────────────
 
 
