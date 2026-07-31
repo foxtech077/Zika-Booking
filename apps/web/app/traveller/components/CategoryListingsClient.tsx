@@ -755,7 +755,9 @@ export default function CategoryListingsClient({ category }: Props) {
   const [checkOut, setCheckOut] = useState(sp.get("checkout") || "");
   const [pickupDate, setPickupDate] = useState(sp.get("pickup") || "");
   const [returnDate, setReturnDate] = useState(sp.get("return") || "");
-  const [guests, setGuests] = useState(Number(sp.get("guests") || 1));
+  // Defaults to 2 to match the detail page's `searchAdults`, so the guest
+  // count does not silently change between the results list and the listing.
+  const [guests, setGuests] = useState(Number(sp.get("guests") || 2));
 
   /* ── filter state (read initial values from URL) ──────────── */
   const [filters, setFilters] = useState<FilterState>({
@@ -865,6 +867,12 @@ export default function CategoryListingsClient({ category }: Props) {
       radius_km: 20000,
       sort: sortBy,
     };
+
+    // Send the destination box as a real text filter. Previously it was only
+    // geocoded into lat/lng, and since every text search uses a global radius
+    // the coordinates had no narrowing effect — so the full category came back
+    // regardless of what was typed.
+    if (dest) params.q = dest;
 
     if (guests > 1) params.guests = guests;
     if (filters.priceMax < 500000) params.price_max = filters.priceMax;
@@ -1066,7 +1074,20 @@ export default function CategoryListingsClient({ category }: Props) {
   /* Select listing → open in main traveller page               */
   /* ─────────────────────────────────────────────────────────── */
   function handleSelect(id: string) {
-    router.push(`/traveller?listing=${id}`);
+    // Carry the search criteria through to the detail page. TravellerPageClient
+    // already reads checkin/checkout/pickup/return from the URL and seeds both
+    // its search and detail date state from them — this caller simply wasn't
+    // passing them, so the guest had to re-pick dates they had just chosen.
+    const params = new URLSearchParams({ listing: id });
+    if (isCar) {
+      if (pickupDate) params.set("pickup", pickupDate);
+      if (returnDate) params.set("return", returnDate);
+    } else {
+      if (checkIn) params.set("checkin", checkIn);
+      if (checkOut) params.set("checkout", checkOut);
+    }
+    if (guests > 0) params.set("guests", String(guests));
+    router.push(`/traveller?${params.toString()}`);
   }
 
   async function handleToggleFavourite(listingId: string) {
