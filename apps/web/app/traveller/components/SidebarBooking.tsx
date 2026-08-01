@@ -201,7 +201,7 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
           </div>
           {hasPromoBadge && (
             <div className="flex justify-between text-emerald-600 font-medium">
-              <span>Promotion discount ({listing.promoBadge?.labelText})</span>
+              <span>Promotional discount ({listing.promoBadge?.labelText})</span>
               <span>−{listing.currency} {((rawRate - promoRate) * days).toLocaleString()}</span>
             </div>
           )}

@@ -1252,7 +1252,7 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
           </div>
           {pricing.discount > 0 && (
             <div className="flex justify-between text-emerald-600">
-              <span>{ctx.discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
+              <span>{ctx.discountSource === "promotion" ? "Promotional discount" : "Voucher discount"}</span>
               <span>−{ctx.currency} {fmt(pricing.discount)}</span>
             </div>
           )}
@@ -1283,12 +1283,6 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
             <div className="flex justify-between text-slate-600">
               <span>Security deposit</span>
               <span>{ctx.currency} {fmt(securityDeposit)}</span>
-            </div>
-          )}
-          {pricing.deliveryFee > 0 && (
-            <div className="flex justify-between text-slate-600">
-              <span>Delivery fee</span>
-              <span>{ctx.currency} {fmt(pricing.deliveryFee)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
@@ -1365,7 +1359,7 @@ function ConfirmedView({
           </div>
           {confirmed.discount > 0 && (
             <div className="flex justify-between text-emerald-600">
-              <span>{ctx.discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
+              <span>{ctx.discountSource === "promotion" ? "Promotional discount" : "Voucher discount"}</span>
               <span>−{confirmed.currency} {fmt(confirmed.discount)}</span>
             </div>
           )}
