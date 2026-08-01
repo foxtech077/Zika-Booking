@@ -543,6 +543,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     pickupDatetime?: string;
     returnDatetime?: string;
     guests?: number;
+    deliveryRequested?: boolean;
   }) {
     const listing = await prisma.listing.findUnique({
       where: { id: body.listingId, deletedAt: null },
@@ -1012,6 +1013,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             pickupDatetime: { type: "string", format: "date-time" },
             returnDatetime: { type: "string", format: "date-time" },
             guests: { type: "integer", minimum: 1 },
+            deliveryRequested: { type: "boolean", default: false },
           },
         },
         response: {
@@ -1040,6 +1042,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         pickupDatetime?: string;
         returnDatetime?: string;
         guests?: number;
+        deliveryRequested?: boolean;
       };
 
       try {
