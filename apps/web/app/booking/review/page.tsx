@@ -1135,7 +1135,7 @@ export default function BookingReviewPage() {
                 Search again
               </button>
               <button
-                onClick={() => { sessionStorage.removeItem("zika:checkout"); router.push(`/traveller?listing=${ctx.listingId}`); }}
+                onClick={() => { sessionStorage.removeItem("zika:checkout"); router.push(`/listings/${ctx.listingId}`); }}
                 className="flex-1 py-2.5 bg-[#0B1E3F] text-white font-bold rounded-xl hover:bg-[#07152B] transition text-sm"
               >
                 Try to rebook
