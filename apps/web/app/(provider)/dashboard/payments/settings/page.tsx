@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { parsePhoneNumber } from "libphonenumber-js";
+import { isTaraCountry } from "@zika/types";
 import {
   AlertCircle,
   ArrowLeft,
@@ -35,10 +36,7 @@ import {
   type StripeConnectStatusResponse,
 } from "@/lib/payment-api";
 
-const TARA_COUNTRIES = new Set([
-  "BJ", "BF", "CM", "CG", "CD", "CI", "GA", "KE",
-  "RW", "SN", "SL", "UG", "TZ", "GH", "ZM",
-]);
+// ── Tara-supported countries for mobile money payouts (shared rule) ─────────
 
 type PayoutMethod = MerchantProfile["payoutMethod"];
 type Toast = { message: string; type: "success" | "error" } | null;
@@ -394,7 +392,7 @@ export default function PaymentSettingsPage() {
 
       try {
         const parsed = parsePhoneNumber(mobileMoneyNumber.trim());
-        if (!parsed?.country || !TARA_COUNTRIES.has(parsed.country)) {
+        if (!parsed?.country || !isTaraCountry(parsed.country)) {
           setMobileMoneyError("This country doesn't support mobile money via Tara. Please use a supported African number.");
           setSaving(false);
           return;

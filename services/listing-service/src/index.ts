@@ -23,7 +23,7 @@ import { locationRoutes } from "./routes/location.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { profilePhotoRoutes } from "./routes/profile-photos.js";
 import { roomTypeRoutes } from "./routes/room-types.js";
-
+import { fxRoutes } from "./routes/fx.js";
 const PORT = Number(process.env["LISTING_SERVICE_PORT"] ?? 3003);
 const HOST = process.env["LISTING_SERVICE_HOST"] ?? "0.0.0.0";
 
@@ -336,6 +336,7 @@ app.all("/admin/payouts/*", async (req, reply) => {
   await app.register(notificationRoutes);
   await app.register(profilePhotoRoutes);
   await app.register(roomTypeRoutes);
+  await app.register(fxRoutes);
 
   // ── Bull Board UI for background jobs ──────────────────────────────────────
   registerBullBoard(app);

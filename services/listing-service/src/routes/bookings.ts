@@ -369,6 +369,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           listing: {
             select: {
               name: true,
+              country: true,
             },
           },
         },
@@ -2825,9 +2826,11 @@ export async function bookingRoutes(app: FastifyInstance) {
           // Already bound/paid
           return sendSuccess(reply, 200, {
             id: booking.id,
+            reference: booking.reference,
             totalAmount: Number(booking.totalAmount),
             currency: booking.currency,
             commissionRate: Number(booking.commissionRate),
+            listing: { country: booking.listing.country },
           });
         }
 
@@ -2865,9 +2868,11 @@ export async function bookingRoutes(app: FastifyInstance) {
 
         return sendSuccess(reply, 200, {
           id: updated.id,
+          reference: updated.reference,
           totalAmount: Number(updated.totalAmount),
           currency: updated.currency,
           commissionRate: Number(updated.commissionRate),
+          listing: { country: booking.listing.country },
         });
       } catch (err) {
         req.log.error({ err }, "Failed to bind commission rate to booking");

@@ -1,6 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
-import { parsePhoneNumber } from "libphonenumber-js";
 import { prisma } from "../lib/prisma.js";
 import { stripe, toStripeAmount } from "../lib/stripe.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
@@ -8,7 +7,7 @@ import { requireUser, requireAdmin, requireInternalService, type GuestRequest } 
 import { cancelPayout } from "../services/payout.service.js";
 import { calculateAlreadyRefunded } from "../services/refund.service.js";
 import { initiateTaraPayment, initiateTaraReversal } from "../lib/tara.js";
-import { getCurrencyForCountry } from "../lib/countryCurrency.js";
+import { computeTaraCharge, getTaraPhoneCountry, TaraNotAllowedError } from "../lib/taraEligibility.js";
 import { sendPaymentLinkEmail } from "../services/email.services.js";
 import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
 import { extractCountryCode, generateDisplayId } from "../lib/paymentReference.js";
@@ -186,13 +185,26 @@ export async function paymentRoutes(app: FastifyInstance) {
     const amount = Number(booking["totalAmount"]);
     const currency = (booking["currency"] as string).toLowerCase();
 
-    // TODO: Handle currency conversion once implemented — currently only XAF is supported for mobile-money
-    if (currency !== "xaf") {
-      return sendError(reply, 400, "UNSUPPORTED_CURRENCY", "Mobile money payments are currently only supported for XAF (Central African CFA Franc). Please use card payment instead.");
+    const bookingReference = (booking["reference"] as string | undefined) ?? bookingId;
+    const bookingCountry = (booking["listing"] as any)?.country ?? extractCountryCode(bookingReference) ?? null;
+
+    let charge: { amountXaf: number; phoneCountry: string };
+    try {
+      charge = await computeTaraCharge({
+        totalAmount: amount,
+        currency,
+        listingCountry: bookingCountry,
+        phoneCountry: getTaraPhoneCountry((booking["guestPhone"] as string) ?? ""),
+      });
+    } catch (err: any) {
+      if (err instanceof TaraNotAllowedError) {
+        return sendError(reply, 400, err.code, err.message);
+      }
+      throw err;
     }
 
     // Step 1: Create payment record
-    const cc = extractCountryCode((booking["reference"] as string) ?? "");
+    const cc = extractCountryCode(bookingReference);
     const displayId = await generateDisplayId(cc);
     await prisma.payment.create({
       data: {
@@ -202,6 +214,8 @@ export async function paymentRoutes(app: FastifyInstance) {
         status: "initiated",
         amount,
         currency,
+        chargedAmount: charge.amountXaf,
+        chargedCurrency: "XAF",
         idempotencyKey: `tara-link-${bookingId}-${Date.now()}`,
       },
     });
@@ -214,10 +228,10 @@ export async function paymentRoutes(app: FastifyInstance) {
     await sendPaymentLinkEmail(
       booking["guestEmail"] as string,
       booking["guestFirstName"] as string,
-      amount,
-      currency,
+      charge.amountXaf,
+      "XAF",
       triggerUrl,
-      booking["reference"] as string
+      bookingReference
     );
 
     // Step 3: Only after all steps succeed, update status to pending_payment
@@ -252,38 +266,27 @@ export async function paymentRoutes(app: FastifyInstance) {
       return sendError(reply, 400, "MISSING_PHONE", "Guest phone number is required for Tara STK push.");
     }
 
-    let phoneCountry: string | undefined;
-    try {
-      const parsed = parsePhoneNumber(rawPhone);
-      if (parsed && parsed.country) {
-        phoneCountry = parsed.country;
-      }
-    } catch {
-      // parsing failed — will be caught by the check below
-    }
-
+    const phoneCountry = getTaraPhoneCountry(rawPhone);
     if (!phoneCountry) {
       return sendError(reply, 400, "INVALID_PHONE", "Guest phone number is invalid or unrecognised.");
     }
 
-    const bookingCurrency = (booking["currency"] as string).toUpperCase();
+    const bookingReference = (booking["reference"] as string | undefined) ?? bookingId;
+    const bookingCountry = (booking["listing"] as any)?.country ?? extractCountryCode(bookingReference) ?? null;
 
-    // TODO: Handle currency conversion once implemented — currently only XAF is supported for mobile-money
-    if (bookingCurrency !== "XAF") {
-      return sendError(reply, 400, "UNSUPPORTED_CURRENCY", "Mobile money payments are currently only supported for XAF (Central African CFA Franc). Please use card payment instead.");
-    }
-
-    const expectedCurrency = getCurrencyForCountry(phoneCountry);
-
-    if (!expectedCurrency) {
-      return sendError(reply, 400, "UNSUPPORTED_COUNTRY", `Could not determine currency for country ${phoneCountry}.`);
-    }
-
-    if (expectedCurrency !== bookingCurrency) {
-      return sendError(
-        reply, 409, "CURRENCY_MISMATCH",
-        `Phone number country (${phoneCountry}, ${expectedCurrency}) does not match booking currency (${bookingCurrency}). Payment cannot proceed.`
-      );
+    let charge: { amountXaf: number; phoneCountry: string };
+    try {
+      charge = await computeTaraCharge({
+        totalAmount: Number(booking["totalAmount"]),
+        currency: (booking["currency"] as string) ?? "",
+        listingCountry: bookingCountry,
+        phoneCountry,
+      });
+    } catch (err: any) {
+      if (err instanceof TaraNotAllowedError) {
+        return sendError(reply, 400, err.code, err.message);
+      }
+      throw err;
     }
 
     // Find the existing initiated payment record (created by /payments/tara/payment-link)
@@ -305,11 +308,11 @@ export async function paymentRoutes(app: FastifyInstance) {
     }
 
     const taraResult = await initiateTaraPayment({
-      amount: Number(booking["totalAmount"]),
-      currency: booking["currency"] as string,
-      mobileNumber: booking["guestPhone"] as string,
-      reference: booking["reference"] as string,
-      description: `Booking ${booking["reference"]}`,
+      amount: charge.amountXaf,
+      currency: "XAF",
+      mobileNumber: rawPhone,
+      reference: bookingReference,
+      description: `Booking ${bookingReference}`,
       attemptNumber: 1,
       network,
     });
@@ -320,6 +323,8 @@ export async function paymentRoutes(app: FastifyInstance) {
       data: {
         status: "pending",
         providerPaymentId: taraResult.taraReference,
+        chargedAmount: charge.amountXaf,
+        chargedCurrency: "XAF",
       },
     });
 
@@ -707,15 +712,6 @@ export async function paymentRoutes(app: FastifyInstance) {
 
       // ── 7. Tara flow ──────────────────────────────────────────────────────
       if (paymentProvider === "tara") {
-        // TODO: Handle currency conversion once implemented — currently only XAF is supported for mobile-money
-        if (currency !== "xaf") {
-          await prisma.payment.update({
-            where: { id: payment.id },
-            data: { status: "failed", failureCode: "UNSUPPORTED_CURRENCY", failureMessage: "Mobile money payments are currently only supported for XAF (Central African CFA Franc)." }
-          });
-          return sendError(reply, 400, "UNSUPPORTED_CURRENCY", "Mobile money payments are currently only supported for XAF (Central African CFA Franc). Please use card payment instead.");
-        }
-
         if (!mobileNumber) {
           await prisma.payment.update({
             where: { id: payment.id },
@@ -725,10 +721,30 @@ export async function paymentRoutes(app: FastifyInstance) {
         }
 
         const bookingReference = (booking["reference"] as string | undefined) ?? bookingId;
+        const bookingCountry = (booking["listing"] as any)?.country ?? extractCountryCode(bookingReference) ?? null;
+
+        let charge: { amountXaf: number; phoneCountry: string };
+        try {
+          charge = await computeTaraCharge({
+            totalAmount: Number(amount),
+            currency,
+            listingCountry: bookingCountry,
+            phoneCountry: getTaraPhoneCountry(mobileNumber),
+          });
+        } catch (err: any) {
+          if (err instanceof TaraNotAllowedError) {
+            await prisma.payment.update({
+              where: { id: payment.id },
+              data: { status: "failed", failureCode: err.code, failureMessage: err.message }
+            });
+            return sendError(reply, 400, err.code, err.message);
+          }
+          throw err;
+        }
 
         const taraResult = await initiateTaraPayment({
-          amount: Number(amount),
-          currency,
+          amount: charge.amountXaf,
+          currency: "XAF",
           mobileNumber,
           reference: bookingReference,
           description: `Booking ${bookingReference}`,
@@ -743,6 +759,8 @@ export async function paymentRoutes(app: FastifyInstance) {
             status: "pending",
             attemptNumber,
             idempotencyKey: `${bookingReference}-${attemptNumber}`,
+            chargedAmount: charge.amountXaf,
+            chargedCurrency: "XAF",
           },
         });
 

@@ -24,6 +24,7 @@ import { paymentApi } from "../../lib/payment-api";
 import { LOYALTY_QK } from "../../hooks/loyalty";
 import { initializeStripe, resolveStripePublishableKey } from "../../lib/stripe-config";
 import { clearPaymentLogs, formatLogsForSharing, payLog } from "../../lib/payment-logger";
+import { isTaraCountry, TARA_COUNTRIES_LIST } from "@zika/types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ interface BookingDetail {
   status: string;
   createdAt: string;
   listingId: string;
+  listing?: { country?: string | null };
   checkIn?: string;
   checkOut?: string;
   pickupDatetime?: string;
@@ -88,6 +90,8 @@ interface PaymentStatusResponse {
 }
 
 // ── Country options for mobile money ─────────────────────────────────────────
+// Restricted to Tara-supported countries — the guest can only pay via mobile
+// money with a number from one of these countries.
 
 interface CountryOption {
   prefix: string;
@@ -96,21 +100,12 @@ interface CountryOption {
   flag: string;
 }
 
-const COUNTRY_OPTIONS: CountryOption[] = [
-  { prefix: "+254", name: "Kenya", currency: "KES", flag: "🇰🇪" },
-  { prefix: "+256", name: "Uganda", currency: "UGX", flag: "🇺🇬" },
-  { prefix: "+255", name: "Tanzania", currency: "TZS", flag: "🇹🇿" },
-  { prefix: "+234", name: "Nigeria", currency: "NGN", flag: "🇳🇬" },
-  { prefix: "+233", name: "Ghana", currency: "GHS", flag: "🇬🇭" },
-  { prefix: "+27", name: "South Africa", currency: "ZAR", flag: "🇿🇦" },
-  { prefix: "+91", name: "India", currency: "INR", flag: "🇮🇳" },
-  { prefix: "+1", name: "USA / Canada", currency: "USD", flag: "🇺🇸" },
-  { prefix: "+44", name: "UK", currency: "GBP", flag: "🇬🇧" },
-  { prefix: "+971", name: "UAE", currency: "AED", flag: "🇦🇪" },
-  { prefix: "+966", name: "Saudi Arabia", currency: "SAR", flag: "🇸🇦" },
-  { prefix: "+20", name: "Egypt", currency: "EGP", flag: "🇪🇬" },
-];
-
+const COUNTRY_OPTIONS: CountryOption[] = TARA_COUNTRIES_LIST.map((c) => ({
+  prefix: c.dialCode,
+  name: c.name,
+  currency: c.currency,
+  flag: c.flag,
+}));
 const COUNTRY_PREFIXES = COUNTRY_OPTIONS.map((c) => c.prefix);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -229,6 +224,8 @@ export default function PaymentScreen() {
   const [mobileNumber, setMobileNumber] = useState("");
   const [saveMobileNumber, setSaveMobileNumber] = useState(false);
   const [showPrefixPicker, setShowPrefixPicker] = useState(false);
+  const [taraXafAmount, setTaraXafAmount] = useState<number | null>(null);
+  const [taraXafLoading, setTaraXafLoading] = useState(false);
 
   // ── Tara countdown ────────────────────────────────────────────────────────
   const [taraCountdownMs, setTaraCountdownMs] = useState(90_000);
@@ -333,6 +330,41 @@ export default function PaymentScreen() {
       }
     }
   }, [booking?.status, bookingLoading]);
+
+  // ── Fetch the XAF amount the guest will pay via Tara (charged in XAF) ─────
+  useEffect(() => {
+    if (provider !== "tara" || !booking) {
+      setTaraXafAmount(null);
+      setTaraXafLoading(false);
+      return;
+    }
+    const currency = (booking.currency ?? "").toUpperCase();
+    if (currency === "XAF") {
+      setTaraXafAmount(null);
+      setTaraXafLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setTaraXafLoading(true);
+    listingApi
+      .get<{ success: boolean; data: { converted?: number } }>("/fx/convert", {
+        params: { amount: booking.totalAmount, from: currency, to: "XAF" },
+      })
+      .then((res) => {
+        if (!cancelled && res.data?.success && res.data.data?.converted != null) {
+          setTaraXafAmount(Number(res.data.data.converted));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setTaraXafAmount(null);
+      })
+      .finally(() => {
+        if (!cancelled) setTaraXafLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [provider, booking?.id, booking?.totalAmount, booking?.currency]);
 
   // ── Cleanup on unmount ────────────────────────────────────────────────────
   useEffect(() => {
@@ -467,6 +499,9 @@ export default function PaymentScreen() {
   function validateTara(): string | null {
     const digits = mobileNumber.replace(/\D/g, "");
     if (digits.length < 6) return "Please enter a valid mobile number.";
+    if (!COUNTRY_PREFIXES.includes(countryPrefix)) {
+      return "Mobile money is only available for supported African countries.";
+    }
     return null;
   }
 
@@ -1097,6 +1132,8 @@ export default function PaymentScreen() {
 
   // ── Render: Select + form (main view) ─────────────────────────────────────
   const hasSavedMethods = savedMethods && savedMethods.length > 0;
+  // Mobile Money is only offered when the listing is in a Tara-supported country.
+  const taraListingEligible = isTaraCountry(booking?.listing?.country);
 
   return (
     <View style={styles.container}>
@@ -1202,25 +1239,27 @@ export default function PaymentScreen() {
             <Text style={styles.methodTileSubtitle}>Visa / Mastercard / Amex</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.methodTile, provider === "tara" && styles.methodTileSelected]}
-            onPress={() => {
-              setProvider("tara");
-              setSelectedSavedMethodId(null);
-              stripeSessionRef.current = null;
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="phone-portrait-outline"
-              size={28}
-              color={provider === "tara" ? "#16a34a" : "#6b7280"}
-            />
-            <Text style={[styles.methodTileTitle, provider === "tara" && styles.methodTileTitleSelected]}>
-              Mobile Money
-            </Text>
-            <Text style={styles.methodTileSubtitle}>M-Pesa, MTN, Airtel Money</Text>
-          </TouchableOpacity>
+          {taraListingEligible && (
+            <TouchableOpacity
+              style={[styles.methodTile, provider === "tara" && styles.methodTileSelected]}
+              onPress={() => {
+                setProvider("tara");
+                setSelectedSavedMethodId(null);
+                stripeSessionRef.current = null;
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="phone-portrait-outline"
+                size={28}
+                color={provider === "tara" ? "#16a34a" : "#6b7280"}
+              />
+              <Text style={[styles.methodTileTitle, provider === "tara" && styles.methodTileTitleSelected]}>
+                Mobile Money
+              </Text>
+              <Text style={styles.methodTileSubtitle}>M-Pesa, MTN, Airtel Money</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ── Saved payment methods ─────────────────────────────────────── */}
@@ -1290,6 +1329,8 @@ export default function PaymentScreen() {
                 showPrefixPicker={showPrefixPicker}
                 setShowPrefixPicker={setShowPrefixPicker}
                 bookingCurrency={booking.currency}
+                taraXafAmount={taraXafAmount}
+                taraXafLoading={taraXafLoading}
               />
             )}
           </View>
@@ -1334,6 +1375,8 @@ interface TaraFormProps {
   showPrefixPicker: boolean;
   setShowPrefixPicker: (v: boolean) => void;
   bookingCurrency: string;
+  taraXafAmount: number | null;
+  taraXafLoading: boolean;
 }
 
 function TaraForm({
@@ -1346,9 +1389,11 @@ function TaraForm({
   showPrefixPicker,
   setShowPrefixPicker,
   bookingCurrency,
+  taraXafAmount,
+  taraXafLoading,
 }: TaraFormProps) {
   const selected = COUNTRY_OPTIONS.find((c) => c.prefix === countryPrefix) ?? COUNTRY_OPTIONS[0];
-  const currencyMismatch = selected.currency !== bookingCurrency;
+  const currencyMismatch = (selected.currency ?? "").toUpperCase() !== (bookingCurrency ?? "").toUpperCase();
 
   return (
     <View>
@@ -1417,13 +1462,16 @@ function TaraForm({
         )}
       </View>
 
-      {/* Currency note when booking currency differs from country currency */}
+      {/* Currency note when the booking isn't in XAF — Tara always charges XAF */}
       {currencyMismatch && (
         <View style={styles.currencyNoteBox}>
           <Ionicons name="information-circle-outline" size={14} color="#92400e" />
           <Text style={styles.currencyNoteText}>
-            This booking is charged in <Text style={{ fontWeight: "700" }}>{bookingCurrency}</Text>.
-            Your mobile money provider will apply the exchange rate to {selected.currency}.
+            {taraXafLoading
+              ? "Converting to XAF…"
+              : taraXafAmount != null
+                ? <>You'll pay approximately <Text style={{ fontWeight: "700" }}>{taraXafAmount.toLocaleString()} XAF</Text> — mobile money is charged in XAF.</>
+                : "Mobile money is charged in XAF (Central African CFA Franc)."}
           </Text>
         </View>
       )}

@@ -70,6 +70,8 @@ model Payment {
   providerPmId        String?
   amount              Decimal         @db.Decimal(12, 2)
   currency            String          @db.Char(3)
+  chargedAmount       Decimal?        @db.Decimal(12, 2)
+  chargedCurrency     String?         @db.Char(3)
   paymentMethodType   String?
   cardBrand           String?
   cardLast4           String?         @db.Char(4)

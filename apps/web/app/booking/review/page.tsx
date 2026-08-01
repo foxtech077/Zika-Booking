@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parsePhoneNumber } from "libphonenumber-js";
+import { isTaraCountry } from "@zika/types";
 import { paymentApi } from "@/lib/payment-api";
 import { listingApi } from "@/lib/listing-api";
 import { api } from "@/lib/api";
@@ -103,11 +104,6 @@ type PayProvider = "stripe" | "tara";
 
 const CARD_LOGOS = ["Visa", "Mastercard", "Amex", "UnionPay", "Apple Pay", "Google Pay", "PayPal", "Bank Debit", "Klarna"];
 
-const TARA_COUNTRIES = new Set([
-  "BJ", "BF", "CM", "CG", "CD", "CI", "GA", "KE",
-  "RW", "SN", "SL", "UG", "TZ", "GH", "ZM",
-]);
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(n: number) {
@@ -183,6 +179,8 @@ export default function BookingReviewPage() {
   // ── Payment State ────────────────────────────────────────────────────────────
   const [mobileNumber, setMobileNumber] = useState("");
   const [phoneCountry, setPhoneCountry] = useState("");
+  const [taraXafAmount, setTaraXafAmount] = useState<number | null>(null);
+  const [taraXafLoading, setTaraXafLoading] = useState(false);
   
   const [submitting, setSubmitting] = useState(false);
   const [payError, setPayError] = useState("");
@@ -206,6 +204,41 @@ export default function BookingReviewPage() {
   // ── Derived pricing ──────────────────────────────────────────────────────────
   const pricing = ctx ? getPricing(ctx) : null;
 
+  // Fetch the XAF amount the guest will pay when Tara is selected and the
+  // booking is not already in XAF (Tara only charges in XAF).
+  useEffect(() => {
+    if (provider !== "tara" || !ctx || !pricing) {
+      setTaraXafAmount(null);
+      setTaraXafLoading(false);
+      return;
+    }
+    if ((ctx.currency ?? "").toUpperCase() === "XAF") {
+      setTaraXafAmount(null);
+      setTaraXafLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setTaraXafLoading(true);
+    listingApi
+      .get<any>("/fx/convert", {
+        params: { amount: pricing.total, from: ctx.currency, to: "XAF" },
+      })
+      .then((res) => {
+        if (!cancelled && res.data?.success && res.data.data?.converted != null) {
+          setTaraXafAmount(Number(res.data.data.converted));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setTaraXafAmount(null);
+      })
+      .finally(() => {
+        if (!cancelled) setTaraXafLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [provider, ctx, pricing?.total]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ─── Bootstrap ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -221,7 +254,7 @@ export default function BookingReviewPage() {
           const parsed = parsePhoneNumber(data.phone);
           if (parsed?.country) {
             setPhoneCountry(parsed.country);
-            setProvider(TARA_COUNTRIES.has(parsed.country) ? "tara" : "stripe");
+            setProvider(isTaraCountry(data.listingCountry) ? "tara" : "stripe");
           } else {
             setProvider("stripe");
           }
@@ -452,6 +485,14 @@ export default function BookingReviewPage() {
       } else {
         // Tara M-Pesa
         if (!mobileNumber.trim()) { setPayError("Please enter your mobile number."); return; }
+        let phoneCountry = "";
+        try {
+          phoneCountry = parsePhoneNumber(mobileNumber.trim())?.country ?? "";
+        } catch { /* handled below */ }
+        if (!phoneCountry || !isTaraCountry(phoneCountry)) {
+          setPayError("Mobile money is only available for supported African countries. Please use card payment instead.");
+          return;
+        }
         const payRes = await paymentApi.post<any>("/payments/initiate", {
           bookingId: bId,
           paymentProvider: "tara",
@@ -559,8 +600,10 @@ export default function BookingReviewPage() {
   }
 
   const isCar = ctx.listingCategory === "car";
-  // TODO: Handle currency conversion once implemented — currently only XAF is supported for mobile-money
-  const hasTara = TARA_COUNTRIES.has(phoneCountry) && ctx.currency === "XAF";
+  // Mobile Money is shown iff the listing is in a Tara-supported country.
+  // The guest's phone country is validated when they enter the number.
+  const taraListingEligible = isTaraCountry(ctx.listingCountry);
+  const hasTara = taraListingEligible;
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -914,7 +957,7 @@ export default function BookingReviewPage() {
                     {/* Payment method selector */}
                     <SectionCard title="Payment Method">
                       <div className="grid grid-cols-2 gap-3">
-                        {(hasTara ? (["tara", "stripe"] as PayProvider[]) : (["stripe", "tara"] as PayProvider[])).map((p) => (
+                        {(taraListingEligible ? (["tara", "stripe"] as PayProvider[]) : (["stripe"] as PayProvider[])).map((p) => (
                           <button
                             key={p}
                             onClick={() => setProvider(p)}
@@ -948,7 +991,21 @@ export default function BookingReviewPage() {
                           placeholder="+254 700 000 000"
                           className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B1E3F]/20 focus:border-[#0B1E3F]"
                         />
+                        {phoneCountry && !isTaraCountry(phoneCountry) && (
+                          <p className="text-xs text-red-600 mt-2">
+                            Mobile money is only available for supported African countries. Please use card payment instead.
+                          </p>
+                        )}
                         <p className="text-xs text-slate-400 mt-2">You will receive a payment prompt on this number.</p>
+                        {ctx && (ctx.currency ?? "").toUpperCase() !== "XAF" && (
+                          <p className="text-xs text-slate-500 mt-1">
+                            {taraXafLoading
+                              ? "Converting to XAF…"
+                              : taraXafAmount != null
+                                ? `You'll pay approximately ${taraXafAmount.toLocaleString()} XAF (mobile money is charged in XAF).`
+                                : "Mobile money is charged in XAF (Central African CFA Franc)."}
+                          </p>
+                        )}
                       </SectionCard>
                     )}
 
