@@ -150,7 +150,13 @@ function toActivity(category: string): string {
 
 export default function BookingReviewPage() {
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, updateUser } = useAuthStore();
+
+  // Acceptance is recorded against the account on the first booking, so the
+  // gate is only shown to guests who have not yet accepted. Defaults to true
+  // when the flag is absent (e.g. a session persisted before the field
+  // existed), which fails safe by asking rather than silently skipping.
+  const needsTermsAcceptance = user?.requiresTermsAcceptance ?? true;
 
   // ── Context from sessionStorage ─────────────────────────────────────────────
   const [ctx, setCtx] = useState<CheckoutCtx | null>(null);
@@ -369,12 +375,15 @@ export default function BookingReviewPage() {
     setSubmitting(true);
     setPayError("");
 
-    // Record the Terms acceptance the user just gave. Best-effort: a failure
-    // here must not cost the user their reservation lock, so it is logged and
-    // the payment proceeds — the checkbox itself is still an enforced gate.
-    void api.post("/auth/accept-terms", { acceptedTerms: true }).catch((err) => {
-      console.error("[checkout] Failed to record terms acceptance:", err);
-    });
+    // Record the acceptance the guest just gave, once. Best-effort: a failure
+    // must not cost them their reservation lock, so it is logged and the
+    // payment proceeds — the checkbox itself is still an enforced gate.
+    if (needsTermsAcceptance) {
+      void api
+        .post("/auth/accept-terms", { acceptedTerms: true })
+        .then(() => updateUser({ requiresTermsAcceptance: false }))
+        .catch((err) => console.error("[checkout] Failed to record terms acceptance:", err));
+    }
 
     try {
       // Step 1: Create booking
@@ -959,10 +968,11 @@ export default function BookingReviewPage() {
                       <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{payError}</div>
                     )}
 
-                    {/* Terms & Conditions — the client requires these to be
-                        accepted before completing a payment or booking. The
-                        Privacy Policy is handled earlier, at registration.
-                        Web checkout previously had no gate at all. */}
+                    {/* Terms & Conditions — required before completing a payment
+                        or booking. Acceptance is stored against the account on the
+                        first booking, so this is shown once and skipped thereafter.
+                        The Privacy Policy is handled earlier, at registration. */}
+                    {needsTermsAcceptance && (
                     <label className="flex items-start gap-3 cursor-pointer">
                       <input
                         type="checkbox"
@@ -978,6 +988,7 @@ export default function BookingReviewPage() {
                         .
                       </span>
                     </label>
+                    )}
 
                     <div className="flex gap-3">
                       <button
@@ -988,7 +999,7 @@ export default function BookingReviewPage() {
                       </button>
                       <button
                         onClick={handlePay}
-                        disabled={submitting || !payTermsAccepted}
+                        disabled={submitting || (needsTermsAcceptance && !payTermsAccepted)}
                         className="flex-[2] py-3.5 bg-[#0B1E3F] hover:bg-[#07152B] disabled:opacity-50 text-white font-bold rounded-xl transition text-sm"
                       >
                         {submitting ? "Please wait…" : provider === "tara" ? "Send Payment Request" : "Pay Now"}

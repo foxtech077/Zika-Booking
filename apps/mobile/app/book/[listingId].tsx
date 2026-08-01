@@ -19,10 +19,12 @@ import { useMutation } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import * as SecureStore from "expo-secure-store";
 import { listingApi } from "../../lib/listing-api";
+import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
 import { useReleaseLock } from "../../hooks/booking";
 import { VoucherSelector } from "../../components/checkout/VoucherSelector";
 import type { ActivityScope } from "../../lib/types/voucher";
+import type { PublicUser } from "@zika/types";
 import { useActivePromotion, applyPromotion } from "../../lib/promotions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -145,6 +147,7 @@ function useCountdown(expiresAt: string | null) {
 export default function BookingFlowScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const updateUser = useAuthStore((s) => s.updateUser);
   const params = useLocalSearchParams<{
     listingId: string;
     roomTypeId?: string;
@@ -219,6 +222,11 @@ export default function BookingFlowScreen() {
 
   // ── Review step ───────────────────────────────────────────────────────────
   const [termsChecked, setTermsChecked] = useState(false);
+  // Acceptance is stored against the account on the first booking, so the gate
+  // is only shown to guests who have not accepted yet. Defaults to true when
+  // the flag is absent so we ask rather than silently skip.
+  const needsTermsAcceptance = user?.requiresTermsAcceptance ?? true;
+  const termsSatisfied = !needsTermsAcceptance || termsChecked;
 
   // ── Voucher / promo code ──────────────────────────────────────────────────
   const [voucherCode, setVoucherCode] = useState("");
@@ -663,6 +671,17 @@ export default function BookingFlowScreen() {
     },
     onSuccess: (data) => {
       bookingCreatedRef.current = true;
+
+      // Persist the Terms acceptance the guest gave above, once per account.
+      // Best-effort: the booking already exists, so a failure here must not
+      // block the guest from reaching payment — it only means we ask again.
+      if (needsTermsAcceptance) {
+        void api
+          .post("auth/accept-terms", { acceptedTerms: true })
+          .then(() => updateUser({ requiresTermsAcceptance: false } as Partial<PublicUser>))
+          .catch(() => { });
+      }
+
       SecureStore.deleteItemAsync("ZIKA_ACTIVE_LOCK").catch(() => { });
       router.push({
         pathname: "/pay/[bookingId]",
@@ -1343,7 +1362,8 @@ export default function BookingFlowScreen() {
             )}
 
 
-            {/* Terms and Privacy Policy acceptance */}
+            {/* Terms acceptance — shown once, on the guest's first booking. */}
+            {needsTermsAcceptance && (
             <TouchableOpacity
               style={styles.termsRow}
               onPress={() => setTermsChecked((prev) => !prev)}
@@ -1362,21 +1382,22 @@ export default function BookingFlowScreen() {
                 </Text>.
               </Text>
             </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={[
                 styles.primaryBtn,
-                (!termsChecked || isExpired) && styles.primaryBtnDisabled,
+                (!termsSatisfied || isExpired) && styles.primaryBtnDisabled,
               ]}
               onPress={() => {
-                if (!termsChecked) return;
+                if (!termsSatisfied) return;
                 if (isExpired) {
                   setExpiredModal(true);
                   return;
                 }
                 createBookingMutation.mutate();
               }}
-              disabled={!termsChecked || createBookingMutation.isPending || isExpired}
+              disabled={!termsSatisfied || createBookingMutation.isPending || isExpired}
             >
               {createBookingMutation.isPending ? (
                 <ActivityIndicator size="small" color="#fff" />
