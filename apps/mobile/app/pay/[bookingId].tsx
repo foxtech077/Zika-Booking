@@ -21,7 +21,6 @@ import { useStripe } from "@stripe/stripe-react-native";
 import * as SecureStore from "expo-secure-store";
 import { listingApi } from "../../lib/listing-api";
 import { paymentApi } from "../../lib/payment-api";
-import { api } from "../../lib/api";
 import { LOYALTY_QK } from "../../hooks/loyalty";
 import { initializeStripe, resolveStripePublishableKey } from "../../lib/stripe-config";
 import { clearPaymentLogs, formatLogsForSharing, payLog } from "../../lib/payment-logger";
@@ -248,8 +247,6 @@ export default function PaymentScreen() {
   const [showDiagModal, setShowDiagModal] = useState(false);
   const [diagReport, setDiagReport] = useState("");
 
-  // ── Terms & Conditions acceptance ─────────────────────────────────────────
-  const [termsAccepted, setTermsAccepted] = useState(false);
 
   // ── Fetch booking detail ──────────────────────────────────────────────────
   const { data: booking, isLoading: bookingLoading, error: bookingError } = useQuery<BookingDetail>({
@@ -683,12 +680,6 @@ export default function PaymentScreen() {
       return;
     }
 
-    // Record the Terms acceptance the user just gave (the checkbox above gates
-    // this button). Best-effort: a failure must not cost the user their
-    // reservation lock, so it is logged and the payment proceeds.
-    void api.post("auth/accept-terms", { acceptedTerms: true }).catch((err) => {
-      payLog("warn", "HANDLE-PAY", "Failed to record terms acceptance", err);
-    });
     // ── Stripe Payment Sheet flow ─────────────────────────────────────────
     if (provider === "stripe") {
       payLog("info", "HANDLE-PAY", `Stripe — bookingId: ${bookingId}, savedMethod: ${selectedSavedMethodId ?? "none"}`);
@@ -1304,31 +1295,15 @@ export default function PaymentScreen() {
           </View>
         )}
 
-        {/* ── Terms & Conditions checkbox ───────────────────────────────── */}
-        <TouchableOpacity
-          style={styles.termsRow}
-          onPress={() => setTermsAccepted((v) => !v)}
-          activeOpacity={0.75}
-        >
-          <View style={[styles.termsCheckbox, termsAccepted && styles.termsCheckboxChecked]}>
-            {termsAccepted && <Ionicons name="checkmark" size={13} color="#fff" />}
-          </View>
-          <Text style={styles.termsLabel}>
-            I have read and agree to the{" "}
-            <Text
-              style={styles.termsLink}
-              onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "terms" } } as any)}
-            >
-              Terms of Use
-            </Text>.
-          </Text>
-        </TouchableOpacity>
+        {/* Terms acceptance is collected once, on the Review & Price step where
+            the booking is created, and stored against the account — repeating
+            it here asked the same guest to agree twice for one booking. */}
 
         {/* ── Pay button ────────────────────────────────────────────────── */}
         <TouchableOpacity
-          style={[styles.primaryBtn, (isProcessing || !termsAccepted) && styles.primaryBtnDisabled]}
+          style={[styles.primaryBtn, isProcessing && styles.primaryBtnDisabled]}
           onPress={() => void handlePay()}
-          disabled={isProcessing || !termsAccepted}
+          disabled={isProcessing}
         >
           {isProcessing ? (
             <View style={styles.btnLoadingRow}>
@@ -1694,31 +1669,6 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
 
   // Terms & Conditions checkbox
-  termsRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 16,
-    paddingHorizontal: 4,
-  },
-  termsCheckbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: "#d1d5db",
-    backgroundColor: "#f9fafb",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-    marginTop: 1,
-  },
-  termsCheckboxChecked: {
-    backgroundColor: "#16a34a",
-    borderColor: "#16a34a",
-  },
-  termsLabel: { flex: 1, fontSize: 13, color: "#374151", lineHeight: 20 },
-  termsLink: { color: "#16a34a", fontWeight: "700", textDecorationLine: "underline" },
   secondaryBtn: {
     borderWidth: 1,
     borderColor: "#d1d5db",

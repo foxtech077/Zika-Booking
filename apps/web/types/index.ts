@@ -64,6 +64,9 @@ export interface PublicListingDetail {
   seats?: number;
   mileagePolicy?: string;
   securityDeposit?: number;
+  /** Provider supplies a driver with the vehicle. When true the backend waives
+   *  the security deposit, so any deposit shown to a guest must be gated on this. */
+  driverProvided?: boolean;
   primaryPhotoUrl?: string | null;
   photos: ListingPhoto[];
   amenities: ListingAmenity[];

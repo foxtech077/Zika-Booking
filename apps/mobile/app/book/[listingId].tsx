@@ -19,10 +19,12 @@ import { useMutation } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import * as SecureStore from "expo-secure-store";
 import { listingApi } from "../../lib/listing-api";
+import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
 import { useReleaseLock } from "../../hooks/booking";
 import { VoucherSelector } from "../../components/checkout/VoucherSelector";
 import type { ActivityScope } from "../../lib/types/voucher";
+import type { PublicUser } from "@zika/types";
 import { useActivePromotion, applyPromotion } from "../../lib/promotions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -145,6 +147,7 @@ function useCountdown(expiresAt: string | null) {
 export default function BookingFlowScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const updateUser = useAuthStore((s) => s.updateUser);
   const params = useLocalSearchParams<{
     listingId: string;
     roomTypeId?: string;
@@ -219,6 +222,11 @@ export default function BookingFlowScreen() {
 
   // ── Review step ───────────────────────────────────────────────────────────
   const [termsChecked, setTermsChecked] = useState(false);
+  // Acceptance is stored against the account on the first booking, so the gate
+  // is only shown to guests who have not accepted yet. Defaults to true when
+  // the flag is absent so we ask rather than silently skip.
+  const needsTermsAcceptance = user?.requiresTermsAcceptance ?? true;
+  const termsSatisfied = !needsTermsAcceptance || termsChecked;
 
   // ── Voucher / promo code ──────────────────────────────────────────────────
   const [voucherCode, setVoucherCode] = useState("");
@@ -291,7 +299,7 @@ export default function BookingFlowScreen() {
   async function handleTryRebook() {
     setReBookingLoading(true);
     try {
-      const body: Record<string, unknown> = { listingId, deliveryRequested: false };
+      const body: Record<string, unknown> = { listingId, deliveryRequested };
       if (roomTypeId) body.roomTypeId = roomTypeId;
       if (checkIn) body.checkIn = checkIn;
       if (checkOut) body.checkOut = checkOut;
@@ -441,7 +449,7 @@ export default function BookingFlowScreen() {
       try {
         const body: Record<string, unknown> = {
           listingId,
-          deliveryRequested: false,
+          deliveryRequested,
         };
         if (roomTypeId) body.roomTypeId = roomTypeId;
         if (checkIn) body.checkIn = checkIn;
@@ -529,6 +537,65 @@ export default function BookingFlowScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lockRetryKey]);
 
+  // ── Re-quote when the delivery toggle changes ─────────────────────────────
+  // initiateLock() runs on mount, before the guest reaches the delivery switch
+  // in step 0, so the lock's pricingPreview cannot reflect a choice made after
+  // it. Without this the Review & Price step showed a total that excluded the
+  // delivery fee while POST /bookings went on to charge it. Uses the lock-free
+  // estimate endpoint — both it and booking creation gate the fee on the same
+  // flag, so the figure shown is exactly what will be charged.
+  useEffect(() => {
+    if (!lockStateRef.current) return; // no lock yet — initiateLock covers it
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const body: Record<string, unknown> = { listingId, deliveryRequested };
+        if (roomTypeId) body.roomTypeId = roomTypeId;
+        if (checkIn) body.checkIn = checkIn;
+        if (checkOut) body.checkOut = checkOut;
+        if (pickupDatetime) body.pickupDatetime = pickupDatetime;
+        if (returnDatetime) body.returnDatetime = returnDatetime;
+        if (guests) body.guests = parseInt(guests, 10);
+
+        const res = await listingApi.post<{ data: { pricingPreview: any } }>(
+          "/bookings/pricing-estimate", body,
+        );
+        if (cancelled) return;
+
+        const raw = res.data.data.pricingPreview ?? {};
+        const units = raw.units ?? 0;
+        const baseAmount = raw.baseAmount ?? 0;
+        setLockState((prev) =>
+          prev
+            ? {
+              ...prev,
+              pricingPreview: {
+                ratePerUnit: units > 0 ? baseAmount / units : 0,
+                units,
+                unitLabel: isCar ? "days" : "nights",
+                subtotal: baseAmount,
+                discountAmount: raw.promotionDiscount || undefined,
+                serviceFee: raw.serviceFee ?? undefined,
+                taxAmount: raw.taxAmount ?? undefined,
+                deliveryFee: raw.deliveryFee ?? undefined,
+                securityDeposit: raw.securityDeposit ?? undefined,
+                total: raw.totalAmount ?? 0,
+                currency: raw.currency ?? "",
+              },
+            }
+            : prev,
+        );
+      } catch {
+        // Keep the existing quote — the server re-computes authoritatively at
+        // booking creation, so a failed refresh cannot cause an overcharge.
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deliveryRequested]);
+
   // ── Renew lock mutation ───────────────────────────────────────────────────
   const renewMutation = useMutation({
     mutationFn: async () => {
@@ -604,6 +671,17 @@ export default function BookingFlowScreen() {
     },
     onSuccess: (data) => {
       bookingCreatedRef.current = true;
+
+      // Persist the Terms acceptance the guest gave above, once per account.
+      // Best-effort: the booking already exists, so a failure here must not
+      // block the guest from reaching payment — it only means we ask again.
+      if (needsTermsAcceptance) {
+        void api
+          .post("auth/accept-terms", { acceptedTerms: true })
+          .then(() => updateUser({ requiresTermsAcceptance: false } as Partial<PublicUser>))
+          .catch(() => { });
+      }
+
       SecureStore.deleteItemAsync("ZIKA_ACTIVE_LOCK").catch(() => { });
       router.push({
         pathname: "/pay/[bookingId]",
@@ -1284,7 +1362,8 @@ export default function BookingFlowScreen() {
             )}
 
 
-            {/* Terms and Privacy Policy acceptance */}
+            {/* Terms acceptance — shown once, on the guest's first booking. */}
+            {needsTermsAcceptance && (
             <TouchableOpacity
               style={styles.termsRow}
               onPress={() => setTermsChecked((prev) => !prev)}
@@ -1303,21 +1382,22 @@ export default function BookingFlowScreen() {
                 </Text>.
               </Text>
             </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={[
                 styles.primaryBtn,
-                (!termsChecked || isExpired) && styles.primaryBtnDisabled,
+                (!termsSatisfied || isExpired) && styles.primaryBtnDisabled,
               ]}
               onPress={() => {
-                if (!termsChecked) return;
+                if (!termsSatisfied) return;
                 if (isExpired) {
                   setExpiredModal(true);
                   return;
                 }
                 createBookingMutation.mutate();
               }}
-              disabled={!termsChecked || createBookingMutation.isPending || isExpired}
+              disabled={!termsSatisfied || createBookingMutation.isPending || isExpired}
             >
               {createBookingMutation.isPending ? (
                 <ActivityIndicator size="small" color="#fff" />
