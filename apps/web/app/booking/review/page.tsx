@@ -91,6 +91,7 @@ interface ConfirmedBooking {
   taxes: number;
   discount: number;
   securityDeposit?: number;
+  deliveryFee?: number;
   commissionRate?: number;
   taxRate?: number;
 }
@@ -321,6 +322,7 @@ export default function BookingReviewPage() {
     disc: number,
     method: string,
     securityDeposit?: number,
+    deliveryFee?: number,
     commissionRate?: number,
     taxRate?: number,
   ) {
@@ -356,6 +358,7 @@ export default function BookingReviewPage() {
             paymentId: pmId, displayId, paymentMethod: method, transactionId: txId,
             baseAmount: base, serviceFee: fee, taxes: tax, discount: disc,
             securityDeposit,
+            deliveryFee,
             commissionRate, taxRate,
           });
           sessionStorage.removeItem("zika:checkout");
@@ -461,7 +464,7 @@ export default function BookingReviewPage() {
         pmId = payRes.data.data.paymentId as string;
         setPaymentId(pmId);
         setStep("polling");
-        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money", ctx.pricingPreview?.securityDeposit, ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.taxRate);
+        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money", ctx.pricingPreview?.securityDeposit, ctx.pricingPreview?.deliveryFee, ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.taxRate);
       }
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message ?? err?.response?.data?.message ?? err?.message ?? "Something went wrong.";
@@ -483,7 +486,7 @@ export default function BookingReviewPage() {
         setPayError(result.error.message ?? "Card payment failed. Please check your details.");
       } else {
         setStep("polling");
-        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Card", ctx!.pricingPreview?.securityDeposit, ctx!.pricingPreview?.commissionRate, ctx!.pricingPreview?.taxRate);
+        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Card", ctx!.pricingPreview?.securityDeposit, ctx!.pricingPreview?.deliveryFee, ctx!.pricingPreview?.commissionRate, ctx!.pricingPreview?.taxRate);
       }
     } catch (err: any) {
       setPayError(err?.message ?? "Card payment failed.");
@@ -1183,6 +1186,12 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
               <span>{ctx.currency} {fmt(securityDeposit)}</span>
             </div>
           )}
+          {pricing.deliveryFee > 0 && (
+            <div className="flex justify-between text-slate-600">
+              <span>Delivery fee</span>
+              <span>{ctx.currency} {fmt(pricing.deliveryFee)}</span>
+            </div>
+          )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
             <span>Total</span>
             <span>{ctx.currency} {fmt(pricing.total)}</span>
@@ -1275,6 +1284,12 @@ function ConfirmedView({
             <div className="flex justify-between text-slate-600">
               <span>Security deposit</span>
               <span>{confirmed.currency} {fmt(confirmed.securityDeposit)}</span>
+            </div>
+          )}
+          {confirmed.deliveryFee != null && confirmed.deliveryFee > 0 && (
+            <div className="flex justify-between text-slate-600">
+              <span>Delivery fee</span>
+              <span>{confirmed.currency} {fmt(confirmed.deliveryFee)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
