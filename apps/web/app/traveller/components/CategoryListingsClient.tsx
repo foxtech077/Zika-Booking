@@ -1077,11 +1077,11 @@ export default function CategoryListingsClient({ category }: Props) {
   /* Select listing → open in main traveller page               */
   /* ─────────────────────────────────────────────────────────── */
   function handleSelect(id: string) {
-    // Carry the search criteria through to the canonical /listings/:id detail
-    // page. ListingDetailClient reads checkin/checkout/pickup/return/guests
-    // from the URL and seeds its date state from them — this caller simply
-    // wasn't passing them, so the guest had to re-pick dates they had just chosen.
-    const params = new URLSearchParams();
+    // Carry the search criteria through to the detail page. TravellerPageClient
+    // already reads checkin/checkout/pickup/return from the URL and seeds both
+    // its search and detail date state from them — this caller simply wasn't
+    // passing them, so the guest had to re-pick dates they had just chosen.
+    const params = new URLSearchParams({ listing: id });
     if (isCar) {
       if (pickupDate) params.set("pickup", pickupDate);
       if (returnDate) params.set("return", returnDate);
@@ -1090,8 +1090,7 @@ export default function CategoryListingsClient({ category }: Props) {
       if (checkOut) params.set("checkout", checkOut);
     }
     if (guests > 0) params.set("guests", String(guests));
-    const qs = params.toString();
-    router.push(qs ? `/listings/${id}?${qs}` : `/listings/${id}`);
+    router.push(`/traveller?${params.toString()}`);
   }
 
   async function handleToggleFavourite(listingId: string) {
