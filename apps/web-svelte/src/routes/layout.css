@@ -51,3 +51,41 @@ html {
 		transform: translateX(-50%);
 	}
 }
+
+@keyframes progress-slide {
+	0% {
+		transform: translateX(-100%);
+	}
+	100% {
+		transform: translateX(250%);
+	}
+}
+
+/* Native View Transitions — cross-fade between pages on client-side
+   navigation, with a subtle upward drift for new content. */
+::view-transition-old(root) {
+	animation: 0.18s ease-out both view-fade-out;
+}
+::view-transition-new(root) {
+	animation: 0.18s ease-in both view-fade-in;
+}
+
+@keyframes view-fade-out {
+	to {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+}
+@keyframes view-fade-in {
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	::view-transition-old(root),
+	::view-transition-new(root) {
+		animation: none;
+	}
+}
