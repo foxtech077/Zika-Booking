@@ -599,7 +599,11 @@ export async function bookingRoutes(app: FastifyInstance) {
       pickupDatetime: body.pickupDatetime,
       returnDatetime: body.returnDatetime,
       rate: baseRate,
-      deliveryFee: Number(listing.deliveryFee ?? 0),
+      // Only charge delivery when the guest actually asked for it. This was
+      // passing the listing's fee unconditionally, so every car booking was
+      // charged delivery even when declined — and because no client itemises
+      // the fee, it surfaced only as a total that did not match its own lines.
+      deliveryFee: body.deliveryRequested ? Number(listing.deliveryFee ?? 0) : 0,
       promotionDiscount,
       voucherAmount: 0,
       taxRate: getTaxRate(listing.country),
@@ -948,7 +952,8 @@ export async function bookingRoutes(app: FastifyInstance) {
 
           rate: baseRate,
 
-          deliveryFee: Number(listing.deliveryFee ?? 0),
+          // Gated on the guest's choice — see computePricingPreview.
+          deliveryFee: body.deliveryRequested ? Number(listing.deliveryFee ?? 0) : 0,
 
           promotionDiscount,
           voucherAmount: 0,
@@ -1354,7 +1359,8 @@ export async function bookingRoutes(app: FastifyInstance) {
           pickupDatetime: body.pickupDatetime,
           returnDatetime: body.returnDatetime,
           rate,
-          deliveryFee: Number(listing.deliveryFee ?? 0),
+          // Gated on the guest's choice — see computePricingPreview.
+          deliveryFee: body.deliveryRequested ? Number(listing.deliveryFee ?? 0) : 0,
           promotionDiscount: 0,
           voucherAmount: 0,
           taxRate: getTaxRate(listing.country),
@@ -1480,7 +1486,8 @@ export async function bookingRoutes(app: FastifyInstance) {
           pickupDatetime: body.pickupDatetime,
           returnDatetime: body.returnDatetime,
           rate,
-          deliveryFee: Number(listing.deliveryFee ?? 0),
+          // Gated on the guest's choice — see computePricingPreview.
+          deliveryFee: body.deliveryRequested ? Number(listing.deliveryFee ?? 0) : 0,
           promotionDiscount,
           voucherAmount: voucherDiscount,
           pointsDiscount,
