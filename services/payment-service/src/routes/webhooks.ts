@@ -11,6 +11,7 @@
 
   const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
   const STRIPE_WEBHOOK_SECRET = process.env["STRIPE_WEBHOOK_SECRET"] ?? "";
+  const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
 
   // ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -36,6 +37,17 @@
       });
     } catch (err) {
       console.error("[webhook] Failed to mark booking as failed", bookingId, err);
+    }
+  }
+
+  async function revertBookingToDraft(bookingId: string) {
+    try {
+      await fetch(`${BOOKING_SERVICE_URL}/bookings/internal/${bookingId}/revert-to-draft`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-service-key": INTERNAL_SERVICE_KEY },
+      });
+    } catch (err) {
+      console.error("[webhook] Failed to revert booking to draft", bookingId, err);
     }
   }
 
@@ -322,6 +334,54 @@
         }
 
         return reply.send({ received: true });
+      }
+
+      // ========================
+      // PAYMENT CANCELLED / EXPIRED
+      // ========================
+      if (event.type === "payment_intent.canceled") {
+        try {
+          const intent = event.data.object as any;
+
+          let payment = await prisma.payment.findFirst({
+            where: { providerPaymentId: intent.id },
+          });
+
+          if (!payment && intent.metadata?.bookingId) {
+            payment = await prisma.payment.findFirst({
+              where: {
+                bookingId: intent.metadata.bookingId,
+                status: { in: ["initiated", "pending"] },
+              },
+            });
+          }
+
+          if (!payment) {
+            return reply.send({ received: true });
+          }
+
+          // Idempotent — never downgrade a captured/failed payment
+          if (!["initiated", "pending"].includes(payment.status)) {
+            return reply.send({ received: true });
+          }
+
+          await prisma.payment.update({
+            where: { id: payment.id },
+            data: {
+              status: "timed_out",
+              failureCode: intent.cancellation_reason ?? "CANCELLED",
+              failureMessage: "Payment was cancelled or expired before completion.",
+            },
+          });
+
+          // Best-effort: release the booking back to draft so the guest can retry.
+          await revertBookingToDraft(payment.bookingId);
+
+          return reply.send({ received: true });
+        } catch (err: any) {
+          req.log.error(err, "payment_intent.canceled handler error");
+          return reply.code(400).send({ error: "payment_intent.canceled handler failed: " + (err?.message || "Unknown error") });
+        }
       }
 
       // default fallback

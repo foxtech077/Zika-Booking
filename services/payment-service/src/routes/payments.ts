@@ -45,6 +45,14 @@ async function updateBookingStatus(bookingId: string, status: string): Promise<b
   return res.ok;
 }
 
+async function revertBookingToDraft(bookingId: string): Promise<boolean> {
+  const res = await fetch(`${BOOKING_SERVICE_URL}/bookings/internal/${bookingId}/revert-to-draft`, {
+    method: "PATCH",
+    headers: internalHeaders(),
+  });
+  return res.ok;
+}
+
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
 const initiatePaymentSchema = z.object({
@@ -825,6 +833,74 @@ export async function paymentRoutes(app: FastifyInstance) {
       currency: payment.currency,
       capturedAt: payment.capturedAt?.toISOString() ?? null,
     });
+  });
+
+  // ── POST /payments/:id/cancel ─────────────────────────────────────────────
+  // Cancels an abandoned Stripe PaymentIntent. Called by the client when the
+  // user navigates away from checkout. Only cancels intents that have not yet
+  // been paid; an in-flight or successful payment is never cancelled.
+  app.post("/payments/:id/cancel", {
+    preHandler: [requireUser], schema: {
+      tags: ["Payments"],
+      summary: "Cancel an abandoned Stripe payment",
+      description:
+        "Cancels the Stripe PaymentIntent for a payment still awaiting confirmation. " +
+        "Safe to call multiple times. If the payment already succeeded or is processing, no action is taken.",
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: { id: { type: "string" } },
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { userId } = req as GuestRequest;
+    const authHeader = req.headers.authorization ?? "";
+    const { id } = req.params as { id: string };
+
+    const payment = await prisma.payment.findUnique({ where: { id } });
+    if (!payment) {
+      return sendError(reply, 404, "NOT_FOUND", "Payment not found.");
+    }
+
+    if (payment.paymentProvider !== "stripe") {
+      return sendError(reply, 400, "UNSUPPORTED_PROVIDER", "Only Stripe payments can be cancelled via this endpoint.");
+    }
+
+    // Verify ownership by checking booking belongs to user
+    const booking = await fetchBooking(payment.bookingId, authHeader);
+    if (!booking) {
+      return sendError(reply, 403, "FORBIDDEN", "You do not have access to this payment.");
+    }
+
+    // Already terminal — nothing to cancel
+    if (["captured", "failed", "timed_out", "refunded", "partially_refunded"].includes(payment.status)) {
+      return sendSuccess(reply, 200, { id: payment.id, status: payment.status });
+    }
+
+    if (payment.providerPaymentId) {
+      const intent = await stripe.paymentIntents.retrieve(payment.providerPaymentId);
+
+      // Never cancel a payment that is already paid, processing, or awaiting capture.
+      if (!["requires_payment_method", "requires_confirmation", "requires_action"].includes(intent.status)) {
+        return sendSuccess(reply, 200, { id: payment.id, status: payment.status, intentStatus: intent.status });
+      }
+
+      await stripe.paymentIntents.cancel(payment.providerPaymentId);
+    }
+
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: "timed_out",
+        failureCode: "CANCELLED_BY_USER",
+        failureMessage: "Payment was cancelled by the user before completion.",
+      },
+    });
+
+    // Best-effort: release the booking back to draft so the guest can retry.
+    await revertBookingToDraft(payment.bookingId).catch(() => {});
+
+    return sendSuccess(reply, 200, { id: payment.id, status: "timed_out" });
   });
 
   // ── POST /payments/refunds (internal) ─────────────────────────────────────

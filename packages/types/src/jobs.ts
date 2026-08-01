@@ -22,4 +22,5 @@ export enum ListingJob {
 export enum PaymentJob {
   PayoutJob = "payout-job",
   RefundRetryJob = "refund-retry-job",
+  StalePaymentCanceller = "stale-payment-canceller",
 }

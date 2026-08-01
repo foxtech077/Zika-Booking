@@ -5,6 +5,7 @@ import { FastifyAdapter } from "@bull-board/fastify";
 import Redis from "ioredis";
 import { processEligiblePayouts } from "./services/payout.service.js";
 import { processFailedRefundNotifications } from "./services/refund.service.js";
+import { cancelStaleStripePayments } from "./services/cancelStalePayments.service.js";
 import { QueueName, PaymentJob } from "@zika/types";
 
 // Dedicated connection for BullMQ — must use maxRetriesPerRequest: null
@@ -30,6 +31,10 @@ const worker = new Worker(
         console.log(`[Job] Running ${PaymentJob.RefundRetryJob}`);
         await processFailedRefundNotifications();
         break;
+      case PaymentJob.StalePaymentCanceller:
+        console.log(`[Job] Running ${PaymentJob.StalePaymentCanceller}`);
+        await cancelStaleStripePayments();
+        break;
     }
   },
   { connection },
@@ -54,6 +59,7 @@ export function registerBullBoard(app: any) {
 export async function startJobs() {
   await queue.add(PaymentJob.PayoutJob, {}, { repeat: { every: 60_000 } });
   await queue.add(PaymentJob.RefundRetryJob, {}, { repeat: { every: 60_000 } });
+  await queue.add(PaymentJob.StalePaymentCanceller, {}, { repeat: { every: 60_000 } });
 }
 
 export async function stopJobs() {
