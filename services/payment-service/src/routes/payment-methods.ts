@@ -5,6 +5,9 @@ import { stripe } from "../lib/stripe.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireUser, type GuestRequest } from "../middleware/auth.js";
 import { initiateTaraPayment } from "../lib/tara.js";
+import { computeTaraCharge, getTaraPhoneCountry, TaraNotAllowedError } from "../lib/taraEligibility.js";
+import { isTaraCountry } from "@zika/types";
+import { extractCountryCode } from "../lib/paymentReference.js";
 
 // ── Constants & helpers for Tara payment ────────────────────────────────────
 
@@ -320,6 +323,15 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
       }
 
       const { mobileNumber } = parsed.data;
+      const phoneCountry = getTaraPhoneCountry(mobileNumber);
+      if (!phoneCountry || !isTaraCountry(phoneCountry)) {
+        return sendError(
+          reply,
+          400,
+          "UNSUPPORTED_COUNTRY",
+          "Mobile money is only available for supported African countries.",
+        );
+      }
       const mobileNumberMasked = mobileNumber.slice(-4);
 
       try {
@@ -371,11 +383,29 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
         }
 
         const currency = (booking.currency as string).toLowerCase();
+        const bookingReference = (booking.reference as string | undefined) ?? `tara-${bookingId}-${Date.now()}`;
+        const bookingCountry = (booking.listing as any)?.country ?? extractCountryCode(bookingReference) ?? null;
+
+        let charge: { amountXaf: number; phoneCountry: string };
+        try {
+          charge = await computeTaraCharge({
+            totalAmount: Number(booking.totalAmount),
+            currency,
+            listingCountry: bookingCountry,
+            phoneCountry: getTaraPhoneCountry(mobileNumber),
+          });
+        } catch (err: any) {
+          if (err instanceof TaraNotAllowedError) {
+            return sendError(reply, 400, err.code, err.message);
+          }
+          throw err;
+        }
+
         const taraResult = await initiateTaraPayment({
-          amount: Number(booking.totalAmount),
-          currency,
+          amount: charge.amountXaf,
+          currency: "XAF",
           mobileNumber,
-          reference: booking.reference ?? `tara-${bookingId}-${Date.now()}`,
+          reference: bookingReference,
           description: `Booking ${bookingId}`,
         });
 
@@ -395,6 +425,8 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
             paymentProvider: "tara",
             amount: Number(booking.totalAmount),
             currency,
+            chargedAmount: charge.amountXaf,
+            chargedCurrency: "XAF",
             attemptNumber,
             idempotencyKey,
             providerPaymentId: taraResult.taraReference,

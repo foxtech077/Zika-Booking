@@ -22,6 +22,7 @@ import ReservationCard from "./components/ReservationCard";
 import MapView from "./components/MapView";
 import DateRangePicker from "./components/DateRangePicker";
 import type { PublicListingDetail } from "@/types";
+import { isTaraCountry } from "@zika/types";
 
 const AMENITY_CATEGORY: Record<string, string> = {
   wifi: "Connectivity", smart_tv: "Connectivity", work_desk: "Connectivity",
@@ -104,16 +105,8 @@ interface WalletVoucher {
 }
 
 
-// Countries where Tara Mobile Money is the recommended payment method
-const AFRICAN_COUNTRIES = new Set([
-  "Kenya", "Nigeria", "Ghana", "Tanzania", "Uganda", "South Africa", "Rwanda",
-  "Ethiopia", "Zambia", "Zimbabwe", "Cameroon", "Ivory Coast", "Senegal",
-  "Mali", "Burkina Faso", "Niger", "Chad", "Somalia", "Sudan", "Egypt",
-  "Morocco", "Algeria", "Tunisia", "Libya", "Angola", "Mozambique",
-  "Madagascar", "Malawi", "Botswana", "Namibia", "Lesotho", "Eswatini",
-  "Mauritius", "Seychelles", "Burundi", "Djibouti", "Eritrea", "Gabon",
-  "Guinea", "Liberia", "Sierra Leone", "Gambia", "Cape Verde",
-]);
+
+
 
 // Tax rates by country (VAT %)
 const TAX_RATES: Record<string, number> = {
@@ -718,12 +711,10 @@ export default function TravellerDashboard() {
     return () => { try { card.destroy(); } catch { /* already destroyed */ } };
   }, [checkoutStep, stripeInstance]);
 
-  // Auto-select payment method based on listing country (Africa → Tara, Others → Stripe)
+  // Auto-select payment method based on listing country (Tara-supported country → Mobile Money, otherwise Stripe)
   useEffect(() => {
     if (!detailListing) return;
-    const country = detailListing.country || detailListing.town || "";
-    // TODO: Handle currency conversion once implemented — currently only XAF is supported for mobile-money
-    setPaymentProvider(AFRICAN_COUNTRIES.has(country) && detailListing.currency === "XAF" ? "tara" : "stripe");
+    setPaymentProvider(isTaraCountry(detailListing.country) ? "tara" : "stripe");
   }, [detailListing?.id]);
 
   // Clean up payment poll on unmount

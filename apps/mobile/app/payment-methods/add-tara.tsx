@@ -15,17 +15,15 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAddTaraAccount } from "../../hooks/paymentMethods";
 import type { SavedPaymentMethod } from "../../lib/types/booking";
+import { TARA_COUNTRIES_LIST } from "@zika/types";
 
-// ── Country prefixes (same as pay screen) ─────────────────────────────────────
+// ── Country prefixes — Tara-supported countries only ─────────────────────────
 
-const COUNTRY_PREFIXES = [
-  { prefix: "+254", country: "Kenya",        flag: "🇰🇪" },
-  { prefix: "+234", country: "Nigeria",      flag: "🇳🇬" },
-  { prefix: "+233", country: "Ghana",        flag: "🇬🇭" },
-  { prefix: "+27",  country: "South Africa", flag: "🇿🇦" },
-  { prefix: "+256", country: "Uganda",       flag: "🇺🇬" },
-  { prefix: "+255", country: "Tanzania",     flag: "🇹🇿" },
-];
+const COUNTRY_PREFIXES = TARA_COUNTRIES_LIST.map((c) => ({
+  prefix: c.dialCode,
+  country: c.name,
+  flag: c.flag,
+}));
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
