@@ -10,6 +10,7 @@
 		"dev:auth": "turbo run dev --filter=@zika/auth-service",
 		"dev:listing": "turbo run dev --filter=@zika/listing-service",
 		"dev:web": "turbo run dev --filter=@zika/web",
+		"dev:web-svelte": "turbo run dev --filter=@zika/web-svelte",
 		"dev:admin": "turbo run dev --filter=@zika/admin",
 		"dev:mobile": "turbo run dev --filter=@zika/mobile",
 		"dev:backend": "turbo run dev --filter=@zika/auth-service --filter=@zika/listing-service",
