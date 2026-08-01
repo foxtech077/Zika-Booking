@@ -151,7 +151,7 @@ type EditForm = {
   transmission: string; fuelType: string; driveType: string;
   engineSize: string; airConditioning: boolean;
   mileagePolicy: string; mileageLimitKm: string; extraKmRate: string;
-  fuelPolicy: string; insuranceType: string; securityDeposit: string;
+  fuelPolicy: string; insuranceType: string; securityDeposit: string; driverProvided: boolean;
   minDriverAge: string;
   roadsideAssistance: boolean; crossBorderAllowed: boolean;
   airportPickup: boolean; returnSameLocation: boolean;
@@ -179,7 +179,7 @@ const DEFAULTS: EditForm = {
   transmission: "", fuelType: "", driveType: "",
   engineSize: "", airConditioning: true,
   mileagePolicy: "unlimited", mileageLimitKm: "", extraKmRate: "",
-  fuelPolicy: "full_to_full", insuranceType: "", securityDeposit: "", minDriverAge: "21",
+  fuelPolicy: "full_to_full", insuranceType: "", securityDeposit: "", driverProvided: false, minDriverAge: "21",
   roadsideAssistance: false, crossBorderAllowed: false,
   airportPickup: false, returnSameLocation: true,
   deliveryAvailable: false, deliveryRadiusKm: "", deliveryFee: "",
@@ -271,6 +271,7 @@ export default function EditListingScreen() {
       fuelPolicy: listing.fuelPolicy ?? "full_to_full",
       insuranceType: listing.insuranceType ?? "",
       securityDeposit: String(listing.securityDeposit ?? ""),
+      driverProvided: listing.driverProvided ?? false,
       minDriverAge: String(listing.minimumDriverAge ?? "21"),
       roadsideAssistance: listing.roadsideAssistance ?? false,
       crossBorderAllowed: listing.crossBorderAllowed ?? false,
@@ -456,6 +457,7 @@ export default function EditListingScreen() {
       };
       case 2: return {
         securityDeposit: parseFloat(form.securityDeposit) || null,
+        driverProvided: form.driverProvided,
         minStayNights: parseInt(form.minStayNights, 10) || 1,
         minimumDriverAge: parseInt(form.minDriverAge, 10) || null,
         mileagePolicy: form.mileagePolicy,
@@ -976,7 +978,12 @@ export default function EditListingScreen() {
             <View>
               <SectionHeader title="Rental Conditions" icon="clipboard" />
               <FormField label={`Security Deposit (${form.currency})`} value={form.securityDeposit}
-                onChangeText={(t) => set("securityDeposit", t)} placeholder="500.00" keyboardType="decimal-pad" />
+                onChangeText={(t) => set("securityDeposit", t)} placeholder="500.00" keyboardType="decimal-pad"
+                editable={!form.driverProvided} />
+              {/* Waives the deposit — the API zeroes it when this is on. */}
+              <SwitchRow label="I provide a driver"
+                hint="No security deposit is collected from the guest when you supply the driver"
+                value={form.driverProvided} onValueChange={(v) => set("driverProvided", v)} />
               <View style={s.twoCol}>
                 <View style={{ flex: 1 }}>
                   <FormField label="Min Rental Days" value={form.minStayNights}

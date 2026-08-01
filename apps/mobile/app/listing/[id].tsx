@@ -72,6 +72,8 @@ interface PublicListing {
   bodyType: string | null; transmission: string | null; fuelType: string | null;
   seats: number | null; mileagePolicy: string | null; mileageLimitKm: number | null;
   minDriverAge: number | null; securityDeposit: number | null; deliveryAvailable: boolean | null;
+  /** Provider supplies a driver — backend waives the deposit when true. */
+  driverProvided?: boolean | null;
   deliveryFee: number | null; deliveryRadiusKm: number | null;
   amenities: Amenity[]; customAmenities: CustomAmenity[]; photos: Photo[];
   isFavourited: boolean | undefined;
@@ -902,7 +904,12 @@ export default function ListingDetailScreen() {
     if (listing.minDriverAge) rows.push({ icon: "person-outline", label: "Min driver age", value: `${listing.minDriverAge} years` });
     rows.push({ icon: "speedometer-outline", label: "Mileage", value: listing.mileagePolicy === "unlimited" ? "Unlimited" : listing.mileageLimitKm ? `${listing.mileageLimitKm} km/day` : "See host" });
     if (listing.fuelType) rows.push({ icon: "car-outline", label: "Fuel type", value: listing.fuelType.charAt(0).toUpperCase() + listing.fuelType.slice(1) });
-    if (listing.securityDeposit && listing.securityDeposit > 0) rows.push({ icon: "lock-closed-outline", label: "Security deposit", value: `${listing.currency ?? ""} ${listing.securityDeposit}` });
+    // A supplied driver waives the deposit server-side, so never quote one here.
+    if (listing.driverProvided) {
+      rows.push({ icon: "person-circle-outline", label: "Driver", value: "Included — no deposit" });
+    } else if (listing.securityDeposit && listing.securityDeposit > 0) {
+      rows.push({ icon: "lock-closed-outline", label: "Security deposit", value: `${listing.currency ?? ""} ${listing.securityDeposit}` });
+    }
     rows.push({ icon: "navigate-outline", label: "Delivery", value: listing.deliveryAvailable ? `Yes · within ${listing.deliveryRadiusKm ?? "?"}km` : "Not available" });
     return rows;
   })();

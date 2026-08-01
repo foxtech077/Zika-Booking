@@ -291,7 +291,7 @@ export default function BookingFlowScreen() {
   async function handleTryRebook() {
     setReBookingLoading(true);
     try {
-      const body: Record<string, unknown> = { listingId, deliveryRequested: false };
+      const body: Record<string, unknown> = { listingId, deliveryRequested };
       if (roomTypeId) body.roomTypeId = roomTypeId;
       if (checkIn) body.checkIn = checkIn;
       if (checkOut) body.checkOut = checkOut;
@@ -441,7 +441,7 @@ export default function BookingFlowScreen() {
       try {
         const body: Record<string, unknown> = {
           listingId,
-          deliveryRequested: false,
+          deliveryRequested,
         };
         if (roomTypeId) body.roomTypeId = roomTypeId;
         if (checkIn) body.checkIn = checkIn;
@@ -528,6 +528,65 @@ export default function BookingFlowScreen() {
     void initiateLock();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lockRetryKey]);
+
+  // ── Re-quote when the delivery toggle changes ─────────────────────────────
+  // initiateLock() runs on mount, before the guest reaches the delivery switch
+  // in step 0, so the lock's pricingPreview cannot reflect a choice made after
+  // it. Without this the Review & Price step showed a total that excluded the
+  // delivery fee while POST /bookings went on to charge it. Uses the lock-free
+  // estimate endpoint — both it and booking creation gate the fee on the same
+  // flag, so the figure shown is exactly what will be charged.
+  useEffect(() => {
+    if (!lockStateRef.current) return; // no lock yet — initiateLock covers it
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const body: Record<string, unknown> = { listingId, deliveryRequested };
+        if (roomTypeId) body.roomTypeId = roomTypeId;
+        if (checkIn) body.checkIn = checkIn;
+        if (checkOut) body.checkOut = checkOut;
+        if (pickupDatetime) body.pickupDatetime = pickupDatetime;
+        if (returnDatetime) body.returnDatetime = returnDatetime;
+        if (guests) body.guests = parseInt(guests, 10);
+
+        const res = await listingApi.post<{ data: { pricingPreview: any } }>(
+          "/bookings/pricing-estimate", body,
+        );
+        if (cancelled) return;
+
+        const raw = res.data.data.pricingPreview ?? {};
+        const units = raw.units ?? 0;
+        const baseAmount = raw.baseAmount ?? 0;
+        setLockState((prev) =>
+          prev
+            ? {
+              ...prev,
+              pricingPreview: {
+                ratePerUnit: units > 0 ? baseAmount / units : 0,
+                units,
+                unitLabel: isCar ? "days" : "nights",
+                subtotal: baseAmount,
+                discountAmount: raw.promotionDiscount || undefined,
+                serviceFee: raw.serviceFee ?? undefined,
+                taxAmount: raw.taxAmount ?? undefined,
+                deliveryFee: raw.deliveryFee ?? undefined,
+                securityDeposit: raw.securityDeposit ?? undefined,
+                total: raw.totalAmount ?? 0,
+                currency: raw.currency ?? "",
+              },
+            }
+            : prev,
+        );
+      } catch {
+        // Keep the existing quote — the server re-computes authoritatively at
+        // booking creation, so a failed refresh cannot cause an overcharge.
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deliveryRequested]);
 
   // ── Renew lock mutation ───────────────────────────────────────────────────
   const renewMutation = useMutation({

@@ -1157,6 +1157,15 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
               <span>{ctx.currency} {fmt(pricing.taxes)}</span>
             </div>
           )}
+          {/* Delivery is already inside pricing.total (see getPricing). Without
+              this row the payment page showed a total that did not reconcile
+              with the lines above it. */}
+          {pricing.deliveryFee > 0 && (
+            <div className="flex justify-between text-slate-600">
+              <span>Delivery fee</span>
+              <span>{ctx.currency} {fmt(pricing.deliveryFee)}</span>
+            </div>
+          )}
           {isCar && securityDeposit > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Security deposit</span>

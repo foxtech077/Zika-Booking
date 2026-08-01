@@ -143,6 +143,7 @@ type CarForm = {
   insuranceType: string;
   securityDeposit: string;
   cancellationPolicy: string;
+  driverProvided: boolean;
   // features
   roadsideAssistance: boolean;
   crossBorderAllowed: boolean;
@@ -298,6 +299,7 @@ export default function CarListingScreen() {
     fuelPolicy: "full_to_full",
     insuranceType: "",
     securityDeposit: "",
+    driverProvided: false,
     cancellationPolicy: "moderate",
     roadsideAssistance: false,
     crossBorderAllowed: false,
@@ -360,6 +362,7 @@ export default function CarListingScreen() {
       fuelPolicy: listing.fuelPolicy ?? "full_to_full",
       insuranceType: listing.insuranceType ?? "",
       securityDeposit: String(listing.securityDeposit ?? ""),
+      driverProvided: listing.driverProvided ?? false,
       cancellationPolicy: listing.cancellationPolicy ?? "moderate",
       roadsideAssistance: listing.roadsideAssistance ?? false,
       crossBorderAllowed: listing.crossBorderAllowed ?? false,
@@ -482,6 +485,7 @@ export default function CarListingScreen() {
       case 2: // Rental Conditions
         return {
           securityDeposit: parseFloat(form.securityDeposit) || null,
+          driverProvided: form.driverProvided,
           minStayNights: parseInt(form.minStayNights, 10) || 1,
           minimumDriverAge: parseInt(form.minDriverAge, 10) || null,
           mileagePolicy: form.mileagePolicy,
@@ -973,6 +977,16 @@ export default function CarListingScreen() {
               onChangeText={(t) => set("securityDeposit", t)}
               placeholder="e.g. 500.00"
               keyboardType="decimal-pad"
+              editable={!form.driverProvided}
+            />
+
+            {/* Waives the deposit — the API zeroes it when this is on, so it
+                sits with the deposit field rather than in Vehicle Features. */}
+            <SwitchRow
+              label="I provide a driver"
+              hint="No security deposit is collected from the guest when you supply the driver"
+              value={form.driverProvided}
+              onValueChange={(v) => set("driverProvided", v)}
             />
 
             <View style={s.gap} />

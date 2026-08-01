@@ -1205,6 +1205,14 @@ export default function TravellerDashboard() {
           seats: item.seats,
           mileagePolicy: item.mileagePolicy,
           securityDeposit: item.securityDeposit ? Number(item.securityDeposit) : undefined,
+          // Must be carried through: this mapper copies fields explicitly, so
+          // anything omitted here is invisible to the UI even though the API
+          // returns it. Gates every deposit display for car rentals.
+          driverProvided: item.driverProvided ?? false,
+          // Country-specific service-fee rate. Used by the price fallback that
+          // runs before a pricing preview exists; without it that path silently
+          // computed a 0% service fee.
+          commissionRate: item.commissionRate ?? null,
           primaryPhotoUrl: item.primaryPhotoUrl || item.photos?.[0]?.cdnUrl || null,
           photos: item.photos || (item.primaryPhotoUrl ? [{ id: "ph", cdnUrl: item.primaryPhotoUrl, position: 1 }] : []),
           amenities: item.amenities || [],
@@ -1321,6 +1329,9 @@ export default function TravellerDashboard() {
           pickupDatetime: isCar ? toIsoDatetime(detailPickupDate) || undefined : undefined,
           returnDatetime: isCar ? toIsoDatetime(detailReturnDate) || undefined : undefined,
           guests: searchAdults + searchChildren,
+          // Keeps the preview consistent with what /bookings/initiate will
+          // charge — the fee is only applied when delivery is actually requested.
+          deliveryRequested: isCar ? deliveryRequested : undefined,
         })
       : Promise.resolve(null);
 
@@ -1397,7 +1408,7 @@ export default function TravellerDashboard() {
     setBookingError("");
     checkAvailability(detailListing.id, detailListing.category);
     fetchAllPricing();
-  }, [detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id, selectedRoomTypeId, searchAdults, searchChildren]);
+  }, [detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id, selectedRoomTypeId, searchAdults, searchChildren, deliveryRequested]);
 
   // Helper: calculate nights/days between two date strings
   function calcDays(start: string, end: string): number {
@@ -2083,7 +2094,12 @@ export default function TravellerDashboard() {
                           {detailListing.seats && <><span>·</span><span>{detailListing.seats} seats</span></>}
                           {detailListing.transmission && <><span>·</span><span className="capitalize">{detailListing.transmission}</span></>}
                           {detailListing.fuelType && <><span>·</span><span className="capitalize">{detailListing.fuelType}</span></>}
-                          {detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && <><span>·</span><span>Deposit: {detailListing.currency} {detailListing.securityDeposit.toLocaleString()}</span></>}
+                          {/* A supplied driver waives the deposit server-side, so the
+                              guest must not be told one is payable. Surface the driver
+                              instead — it is the more useful fact for the traveller. */}
+                          {detailListing.driverProvided
+                            ? <><span>·</span><span className="font-semibold text-emerald-700">Driver included</span></>
+                            : detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && <><span>·</span><span>Deposit: {detailListing.currency} {detailListing.securityDeposit.toLocaleString()}</span></>}
                         </>
                       )}
                     </div>
@@ -2234,8 +2250,18 @@ export default function TravellerDashboard() {
                       );
                     })()}
 
+                    {/* Driver included — replaces the deposit notice, since the
+                        backend waives the deposit whenever the provider supplies
+                        a driver. Showing both would contradict what is charged. */}
+                    {detailListing.category === "car" && detailListing.driverProvided && (
+                      <div className="flex items-center gap-2 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 mb-3">
+                        <span className="shrink-0">🧑‍✈️</span>
+                        <span><strong>Driver included:</strong> a driver is provided with this vehicle — no security deposit is required.</span>
+                      </div>
+                    )}
+
                     {/* Security deposit notice for car rentals */}
-                    {detailListing.category === "car" && detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && (
+                    {detailListing.category === "car" && !detailListing.driverProvided && detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && (
                       <div className="flex items-center gap-2 text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-3">
                         <span className="text-amber-600 font-bold">🔒</span>
                         <span><strong>Security deposit:</strong> {detailListing.currency} {detailListing.securityDeposit.toLocaleString()} — collected at booking.</span>
@@ -2458,6 +2484,14 @@ export default function TravellerDashboard() {
                                   <div className="flex justify-between text-slate-500">
                                     <span>Taxes{estimatedPricing.taxRate ? ` (${Math.round(estimatedPricing.taxRate * 100)}%)` : ''}</span>
                                     <span>{detailListing.currency} {estimatedPricing.taxAmount.toLocaleString()}</span>
+                                  </div>
+                                )}
+                                {/* Delivery is part of totalAmount server-side. Without this row
+                                    the itemised lines did not add up to the total shown below. */}
+                                {estimatedPricing.deliveryFee != null && estimatedPricing.deliveryFee > 0 && (
+                                  <div className="flex justify-between">
+                                    <span>Delivery fee</span>
+                                    <span>{detailListing.currency} {estimatedPricing.deliveryFee.toLocaleString()}</span>
                                   </div>
                                 )}
                                 {isCar && estimatedPricing.securityDeposit != null && estimatedPricing.securityDeposit > 0 && (

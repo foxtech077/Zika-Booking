@@ -80,7 +80,9 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
   const serviceFeePercent = Math.round(commissionRate * 1000) / 10;
   const serviceFee = days > 0 ? Math.ceil(subtotalAfterDiscount * commissionRate * 100) / 100 : 0;
   // Car rentals collect the security deposit upfront (added on dev).
-  const securityDeposit = isCar ? Number(listing.securityDeposit ?? 0) : 0;
+  // Waived when the provider supplies a driver — mirrors the backend,
+  // which zeroes the deposit in calculateBilling under the same condition.
+  const securityDeposit = isCar && !listing.driverProvided ? Number(listing.securityDeposit ?? 0) : 0;
   const grandTotal = subtotalAfterDiscount + serviceFee + securityDeposit;
 
   return (

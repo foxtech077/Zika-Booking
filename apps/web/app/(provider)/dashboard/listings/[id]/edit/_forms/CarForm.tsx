@@ -140,6 +140,7 @@ type CarState = {
   allowPreBooking: boolean;
   roadsideAssistance: boolean;
   crossBorderAllowed: boolean;
+  driverProvided: boolean;
   airportPickup: boolean;
   returnSameLocation: boolean;
 };
@@ -239,6 +240,7 @@ function initState(l: Listing): CarState {
     allowPreBooking: a.allowPreBooking ?? false,
     roadsideAssistance: a.roadsideAssistance ?? false,
     crossBorderAllowed: a.crossBorderAllowed ?? false,
+    driverProvided: a.driverProvided ?? false,
     airportPickup: a.airportPickup ?? false,
     returnSameLocation: a.returnSameLocation ?? true,
   };
@@ -325,6 +327,7 @@ function buildPayload(s: CarState): Record<string, unknown> {
 
   p.roadsideAssistance = s.roadsideAssistance;
   p.crossBorderAllowed = s.crossBorderAllowed;
+  p.driverProvided = s.driverProvided;
   p.airportPickup = s.airportPickup;
   p.returnSameLocation = s.returnSameLocation;
   p.pickupHoursFrom = s.pickupHoursFrom || null;
@@ -889,8 +892,36 @@ export function CarForm({ listingId, listing }: Props) {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <Input label="Min Driver Age" type="number" min="16" max="100" value={s.minimumDriverAge} onChange={(e) => set("minimumDriverAge", e.target.value)} />
-                  <Input label="Security Deposit" type="number" min="0" value={s.securityDeposit} onChange={(e) => set("securityDeposit", e.target.value)} placeholder="0.00" />
+                  <Input
+                    label="Security Deposit"
+                    type="number"
+                    min="0"
+                    value={s.securityDeposit}
+                    onChange={(e) => set("securityDeposit", e.target.value)}
+                    placeholder="0.00"
+                    disabled={s.driverProvided}
+                    hint={s.driverProvided ? "Not collected while you supply a driver" : undefined}
+                  />
                 </div>
+
+                {/* Driver supplied by provider — waives the security deposit.
+                    Sits next to the deposit field rather than in the generic
+                    feature list because it directly changes what the guest is
+                    charged: the API zeroes the deposit when this is on. */}
+                <label className="flex cursor-pointer select-none items-start gap-3 rounded-xl border border-border bg-slate-50 p-4">
+                  <input
+                    type="checkbox"
+                    checked={s.driverProvided}
+                    onChange={(e) => set("driverProvided", e.target.checked)}
+                    className="mt-0.5 rounded border-slate-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm">
+                    <span className="font-semibold text-slate-800">I provide a driver with this vehicle</span>
+                    <span className="mt-0.5 block text-xs text-slate-500">
+                      No security deposit is collected from the guest when you supply the driver.
+                    </span>
+                  </span>
+                </label>
 
                 {/* Delivery */}
                 <div className="border-t border-border pt-4 space-y-3">
