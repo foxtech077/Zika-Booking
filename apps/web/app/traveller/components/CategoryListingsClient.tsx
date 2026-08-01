@@ -247,8 +247,8 @@ function Chip({
       type="button"
       onClick={onClick}
       className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${active
-          ? "bg-[#0c2614] text-white border-[#0c2614]"
-          : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+        ? "bg-[#0c2614] text-white border-[#0c2614]"
+        : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
         }`}
     >
       {children}
@@ -443,8 +443,8 @@ function FilterPanel({
                 type="button"
                 onClick={() => onChange({ rating: s === filters.rating ? null : s })}
                 className={`flex-1 py-2 border rounded-xl text-xs font-semibold transition ${s === filters.rating
-                    ? "bg-[#0c2614] text-white border-[#0c2614]"
-                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                  ? "bg-[#0c2614] text-white border-[#0c2614]"
+                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
                   }`}
               >
                 ★ {s}+
@@ -526,8 +526,8 @@ function FilterPanel({
                   type="button"
                   onClick={() => onChange({ cancellation: value })}
                   className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition ${filters.cancellation === value
-                      ? "bg-[#0c2614] border-[#0c2614]"
-                      : "border-slate-300 group-hover:border-[#1D8D2B]"
+                    ? "bg-[#0c2614] border-[#0c2614]"
+                    : "border-slate-300 group-hover:border-[#1D8D2B]"
                     }`}
                 >
                   {filters.cancellation === value && (
@@ -589,8 +589,8 @@ function FilterPanel({
                 type="button"
                 onClick={() => onChange({ transmission: filters.transmission === t ? "" : t })}
                 className={`flex-1 py-2 border rounded-xl text-xs font-semibold capitalize transition ${filters.transmission === t
-                    ? "bg-[#0c2614] text-white border-[#0c2614]"
-                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                  ? "bg-[#0c2614] text-white border-[#0c2614]"
+                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
                   }`}
               >
                 {t}
@@ -629,8 +629,8 @@ function FilterPanel({
                 type="button"
                 onClick={() => onChange({ seats: filters.seats === s ? null : s })}
                 className={`flex-1 py-2 border rounded-xl text-xs font-semibold transition ${filters.seats === s
-                    ? "bg-[#0c2614] text-white border-[#0c2614]"
-                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                  ? "bg-[#0c2614] text-white border-[#0c2614]"
+                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
                   }`}
               >
                 {s}+
@@ -1385,11 +1385,6 @@ export default function CategoryListingsClient({ category }: Props) {
                   ? "Loading…"
                   : `${totalCount > 0 ? totalCount.toLocaleString() : listings.length} ${meta.label} Found`}
               </h1>
-              <p className="text-sm text-slate-500 mt-0.5">
-                {destination
-                  ? `${meta.label} in ${destination.split(",")[0]}`
-                  : `Browse ${meta.plural} worldwide`}
-              </p>
             </div>
 
             <div className="flex items-center gap-3">
@@ -1398,8 +1393,8 @@ export default function CategoryListingsClient({ category }: Props) {
                 type="button"
                 onClick={() => setShowMap((v) => !v)}
                 className={`hidden lg:flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-semibold transition ${showMap
-                    ? "bg-[#0c2614] text-white border-[#0c2614]"
-                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                  ? "bg-[#0c2614] text-white border-[#0c2614]"
+                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
                   }`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -1494,8 +1489,8 @@ export default function CategoryListingsClient({ category }: Props) {
                 <>
                   <div
                     className={`grid gap-5 ${showMap
-                        ? "grid-cols-1 sm:grid-cols-2"
-                        : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                      ? "grid-cols-1 sm:grid-cols-2"
+                      : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
                       }`}
                   >
                     {listings.map((listing) => (
