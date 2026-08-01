@@ -159,7 +159,7 @@ export default function WishlistClient() {
   }
 
   function handleSelectListing(id: string) {
-    router.push(`/listings/${id}`);
+    router.push(`/traveller?listing=${id}`);
   }
 
   const filtered = activeTab === "all"
