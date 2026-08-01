@@ -627,6 +627,7 @@ export async function listingRoutes(app: FastifyInstance) {
             // so Prisma leaves the existing value intact rather than throwing a type error.
             roadsideAssistance: dbFields.roadsideAssistance ?? undefined,
             crossBorderAllowed: dbFields.crossBorderAllowed ?? undefined,
+            driverProvided: dbFields.driverProvided ?? undefined,
             airportPickup: dbFields.airportPickup ?? undefined,
             deliveryEnabled: dbFields.deliveryEnabled ?? undefined,
             returnSameLocation: dbFields.returnSameLocation ?? undefined,
