@@ -339,6 +339,7 @@ export default function TravellerDashboard() {
   const [estimatedPricing, setEstimatedPricing] = useState<any>(null);
   const [pricingLoading, setPricingLoading] = useState(false);
   const [pricingError, setPricingError] = useState("");
+  const [promotionLoaded, setPromotionLoaded] = useState(false);
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [stripeClientSecret, setStripeClientSecret] = useState("");
   const [stripeInstance, setStripeInstance] = useState<any>(null);
@@ -590,6 +591,9 @@ export default function TravellerDashboard() {
       fuelType: l.fuelType,
       seats: l.seats,
       mileagePolicy: l.mileagePolicy,
+      deliveryAvailable: !!l.deliveryEnabled,
+      deliveryFee: l.deliveryFee != null ? Number(l.deliveryFee) : null,
+      deliveryRadiusKm: l.deliveryRadiusKm != null ? Number(l.deliveryRadiusKm) : null,
       primaryPhotoUrl: l.primaryPhotoUrl || l.photos?.[0]?.cdnUrl || null,
       photos: l.photos || (l.primaryPhotoUrl ? [{ id: "ph", cdnUrl: l.primaryPhotoUrl, position: 1 }] : []),
       amenities: l.amenities || [],
@@ -1154,6 +1158,9 @@ export default function TravellerDashboard() {
     setDetailCheckOut(searchCheckOut || "");
     setDetailPickupDate(searchPickupDate || "");
     setDetailReturnDate(searchReturnDate || "");
+    setDeliveryRequested(false);
+    setDeliveryAddress("");
+    setPromotionLoaded(false);
 
     try {
       const res = await listingApi.get<any>(`/listings/${id}/public`);
@@ -1213,6 +1220,9 @@ export default function TravellerDashboard() {
           // runs before a pricing preview exists; without it that path silently
           // computed a 0% service fee.
           commissionRate: item.commissionRate ?? null,
+          deliveryAvailable: !!item.deliveryEnabled,
+          deliveryFee: item.deliveryFee != null ? Number(item.deliveryFee) : null,
+          deliveryRadiusKm: item.deliveryRadiusKm != null ? Number(item.deliveryRadiusKm) : null,
           primaryPhotoUrl: item.primaryPhotoUrl || item.photos?.[0]?.cdnUrl || null,
           photos: item.photos || (item.primaryPhotoUrl ? [{ id: "ph", cdnUrl: item.primaryPhotoUrl, position: 1 }] : []),
           amenities: item.amenities || [],
@@ -1303,7 +1313,7 @@ export default function TravellerDashboard() {
     }
   }
 
-  async function fetchAllPricing() {
+  async function fetchAllPricing(deliveryOverride?: boolean) {
     if (!detailListing || lockToken) return;
 
     setPricingLoading(true);
@@ -1313,6 +1323,7 @@ export default function TravellerDashboard() {
     const start = isCar ? detailPickupDate : detailCheckIn;
     const end = isCar ? detailReturnDate : detailCheckOut;
     const hasDates = !!start && !!end && !!detailListing.id;
+    const wantDelivery = deliveryOverride ?? deliveryRequested;
 
     // Always fetch promotion (needed for price header discount display).
     const promotionPromise = listingApi.get<any>("/promotions/active", {
@@ -1328,10 +1339,8 @@ export default function TravellerDashboard() {
           checkOut: isCar ? undefined : detailCheckOut || undefined,
           pickupDatetime: isCar ? toIsoDatetime(detailPickupDate) || undefined : undefined,
           returnDatetime: isCar ? toIsoDatetime(detailReturnDate) || undefined : undefined,
+          deliveryRequested: isCar ? wantDelivery : undefined,
           guests: searchAdults + searchChildren,
-          // Keeps the preview consistent with what /bookings/initiate will
-          // charge — the fee is only applied when delivery is actually requested.
-          deliveryRequested: isCar ? deliveryRequested : undefined,
         })
       : Promise.resolve(null);
 
@@ -1359,8 +1368,10 @@ export default function TravellerDashboard() {
         const normalised = promos.map((p: any) => ({ ...p, discountValue: Number(p.discountValue) }));
         const matched = normalised.filter((p: any) => p.activity === detailListing.category && isPromotionValid(p));
         setActivePromotion(matched.length > 0 ? (matched[0] ?? null) : null);
+        setPromotionLoaded(true);
       } else {
         setActivePromotion(null);
+        setPromotionLoaded(true);
       }
 
       // Pricing estimate (null when no dates)
@@ -1395,6 +1406,7 @@ export default function TravellerDashboard() {
     } catch {
       setEstimatedPricing(null);
       setActivePromotion(null);
+      setPromotionLoaded(true);
       setPricingError("Service is currently unavailable. Please try again later.");
     } finally {
       setPricingLoading(false);
@@ -1468,8 +1480,15 @@ export default function TravellerDashboard() {
         setLockingListing(false);
         return;
       }
+      if (deliveryRequested && !deliveryAddress.trim()) {
+        setBookingError("Please enter a delivery address.");
+        setLockingListing(false);
+        return;
+      }
       body.pickupDatetime = toIsoDatetime(detailPickupDate);
       body.returnDatetime = toIsoDatetime(detailReturnDate);
+      body.deliveryRequested = deliveryRequested;
+      body.deliveryAddress = deliveryAddress.trim();
     }
 
     try {
@@ -1706,13 +1725,18 @@ export default function TravellerDashboard() {
       body.checkIn = detailCheckIn;
       body.checkOut = detailCheckOut;
     } else {
+      if (deliveryRequested && !deliveryAddress.trim()) {
+        setBookingError("Please enter a delivery address.");
+        setSubmittingCheckout(false);
+        return;
+      }
       body.pickupDatetime = toIsoDatetime(detailPickupDate);
       body.returnDatetime = toIsoDatetime(detailReturnDate);
       body.driverFirstName = driverFirstName || firstName;
       body.driverLastName = driverLastName || lastName;
       body.driverAge = driverAge;
       body.deliveryRequested = deliveryRequested;
-      body.deliveryAddress = deliveryAddress;
+      body.deliveryAddress = deliveryAddress.trim();
     }
     if (effectiveDiscountSource === "voucher" && voucherApplied) body.voucherCode = voucherCode;
     if (effectiveDiscountSource === "promotion" && activePromotion) body.promotionId = activePromotion.id;
@@ -2197,7 +2221,7 @@ export default function TravellerDashboard() {
                 <div className="lg:col-span-4 relative lg:sticky lg:top-28 top-4 self-start">
                   <div className="bg-white border border-slate-200 shadow-xl rounded-2xl p-6 text-left shadow-slate-200/50">
                     {/* Price header */}
-                    {pricingLoading ? (
+                    {!promotionLoaded ? (
                       <div className="mb-3 animate-pulse">
                         <div className="h-8 bg-slate-200 rounded w-1/2 mb-2" />
                         <div className="h-4 bg-slate-200 rounded w-1/4" />
@@ -2347,6 +2371,41 @@ export default function TravellerDashboard() {
                               </>
                             )}
                           </div>
+                          {isCar && detailListing.deliveryAvailable && (
+                            <div className="p-3 border border-slate-200 rounded-xl bg-slate-50 space-y-2">
+                              <label className="flex items-center justify-between gap-2 cursor-pointer select-none">
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-800">Request vehicle delivery</p>
+                                  <p className="text-xs text-slate-400 mt-0.5">
+                                    {detailListing.deliveryFee && detailListing.deliveryFee > 0
+                                      ? `${detailListing.currency} ${detailListing.deliveryFee.toLocaleString()} delivery fee · within ${detailListing.deliveryRadiusKm ?? "—"} km`
+                                      : `Free delivery · within ${detailListing.deliveryRadiusKm ?? "—"} km`}
+                                  </p>
+                                </div>
+                                <input
+                                  type="checkbox"
+                                  checked={deliveryRequested}
+                                  onChange={(e) => {
+                                    setDeliveryRequested(e.target.checked);
+                                    if (detailPickupDate && detailReturnDate) {
+                                      fetchAllPricing(e.target.checked);
+                                    }
+                                  }}
+                                  className="rounded border-slate-300 text-primary focus:ring-primary"
+                                />
+                              </label>
+                              {deliveryRequested && (
+                                <input
+                                  type="text"
+                                  required
+                                  placeholder="Delivery address"
+                                  value={deliveryAddress}
+                                  onChange={(e) => setDeliveryAddress(e.target.value)}
+                                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1D8D2B]"
+                                />
+                              )}
+                            </div>
+                          )}
                           {detailListing.category === "hotel" && detailListing.roomTypes && detailListing.roomTypes.length > 0 && (
                             <div className="p-3 border-t border-slate-200">
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Room Type</p>
@@ -2439,7 +2498,7 @@ export default function TravellerDashboard() {
                           {/* Book Now button */}
                           <button
                             onClick={handleInitiateLock}
-                            disabled={lockingListing || availabilityStatus === "unavailable" || availabilityStatus === "checking"}
+                            disabled={lockingListing || pricingLoading || availabilityStatus === "unavailable" || availabilityStatus === "checking"}
                             className="w-full py-3.5 bg-[#0c2614] hover:bg-[#081b0d] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition text-sm"
                           >
                             {lockingListing ? "Securing your dates…" : "Continue — You won't be charged yet"}
@@ -2498,6 +2557,12 @@ export default function TravellerDashboard() {
                                   <div className="flex justify-between text-slate-600">
                                     <span>Security deposit</span>
                                     <span>{detailListing.currency} {estimatedPricing.securityDeposit.toLocaleString()}</span>
+                                  </div>
+                                )}
+                                {isCar && estimatedPricing.deliveryFee != null && estimatedPricing.deliveryFee > 0 && (
+                                  <div className="flex justify-between text-slate-600">
+                                    <span>Delivery fee</span>
+                                    <span>{detailListing.currency} {estimatedPricing.deliveryFee.toLocaleString()}</span>
                                   </div>
                                 )}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 mt-1">
@@ -2642,6 +2707,13 @@ export default function TravellerDashboard() {
                                   </div>
                                 )}
 
+                                {isCar && deliveryFee > 0 && (
+                                  <div className="flex justify-between text-slate-600">
+                                    <span>Delivery fee</span>
+                                    <span>{detailListing.currency} {deliveryFee.toLocaleString()}</span>
+                                  </div>
+                                )}
+
                                 {renderVoucherSelector()}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 text-base">
                                   <span>Total</span>
@@ -2749,6 +2821,12 @@ export default function TravellerDashboard() {
                                   <div className="flex justify-between text-slate-600">
                                     <span>Security deposit</span>
                                     <span>{detailListing.currency} {securityDeposit.toLocaleString()}</span>
+                                  </div>
+                                )}
+                                {isCar && deliveryFee > 0 && (
+                                  <div className="flex justify-between text-slate-600">
+                                    <span>Delivery fee</span>
+                                    <span>{detailListing.currency} {deliveryFee.toLocaleString()}</span>
                                   </div>
                                 )}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
