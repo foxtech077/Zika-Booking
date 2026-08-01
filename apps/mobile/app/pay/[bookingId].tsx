@@ -239,6 +239,10 @@ export default function PaymentScreen() {
   const stripePollingActiveRef = useRef(false);
   const taraPollingActiveRef = useRef(false);
   const stripeSessionRef = useRef<StripePaymentSession | null>(null);
+  // ── Abandoned-payment cancel ──────────────────────────────────────────────
+  const activeStripePaymentIdRef = useRef<string | null>(null);
+  const paymentSucceededRef = useRef(false);
+  const lastCancelledPaymentIdRef = useRef<string | null>(null);
   // ── Diagnostic log capture ────────────────────────────────────────────────
   const capturedPaymentIdRef = useRef<string | undefined>(undefined);
   const [showDiagModal, setShowDiagModal] = useState(false);
@@ -369,6 +373,7 @@ export default function PaymentScreen() {
   // ── Cleanup on unmount ────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
+      fireStripePaymentCancel();
       stripePollingActiveRef.current = false;
       taraPollingActiveRef.current = false;
       if (stripePollingRef.current) { clearTimeout(stripePollingRef.current); stripePollingRef.current = null; }
@@ -559,6 +564,7 @@ export default function PaymentScreen() {
       if (Date.now() - startTime >= MAX_DURATION) {
         payLog("warn", "STRIPE-POLL", "60 s timeout — showing failure");
         clearPolling();
+        fireStripePaymentCancel();
         setFailureReason("Payment confirmation timed out after 60 seconds. Please try again.");
         setView("failure");
         return;
@@ -693,8 +699,19 @@ export default function PaymentScreen() {
     if (taraIntervalRef.current) { clearInterval(taraIntervalRef.current); taraIntervalRef.current = null; }
   }
 
+  // ── Cancel an abandoned Stripe payment (best-effort) ─────────────────────
+  function fireStripePaymentCancel() {
+    const paymentId = activeStripePaymentIdRef.current;
+    if (!paymentId || paymentSucceededRef.current) return;
+    if (lastCancelledPaymentIdRef.current === paymentId) return;
+    lastCancelledPaymentIdRef.current = paymentId;
+    paymentApi.post(`/payments/${paymentId}/cancel`).catch(() => {});
+  }
+
   // ── Navigate to success ───────────────────────────────────────────────────
   function navigateToSuccess() {
+    paymentSucceededRef.current = true;
+    activeStripePaymentIdRef.current = null;
     stripeSessionRef.current = null;
     void queryClient.invalidateQueries({ queryKey: ["booking", bookingId] });
     void queryClient.invalidateQueries({ queryKey: ["myBookings"] });
@@ -740,6 +757,7 @@ export default function PaymentScreen() {
 
               const { paymentId, clientSecret, requiresAction } = res.data.data;
               capturedPaymentIdRef.current = paymentId;
+              activeStripePaymentIdRef.current = paymentId;
               payLog("success", "HANDLE-PAY", `Saved-card initiate OK — paymentId: ${paymentId}, requiresAction: ${requiresAction ?? false}`);
               setAttemptCount((c) => c + 1);
 
@@ -786,6 +804,7 @@ export default function PaymentScreen() {
               }
 
               capturedPaymentIdRef.current = paymentId;
+              activeStripePaymentIdRef.current = paymentId;
               payLog("success", "HANDLE-PAY", `create-intent OK — paymentId: ${paymentId}`, { hasClientSecret: true, hasPublishableKey: !!publishableKey });
               session = { paymentId, clientSecret, publishableKey };
               stripeSessionRef.current = session;
@@ -962,6 +981,7 @@ export default function PaymentScreen() {
   }
 
   function handleCancel() {
+    fireStripePaymentCancel();
     clearPolling();
     router.back();
   }

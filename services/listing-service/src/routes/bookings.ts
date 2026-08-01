@@ -453,6 +453,44 @@ export async function bookingRoutes(app: FastifyInstance) {
     }
   });
 
+  // ── PATCH /bookings/internal/:id/revert-to-draft ────────────────────────────
+  // Reverts a pending_payment booking back to draft. Used by the payment
+  // service when a payment is abandoned/cancelled so the guest can retry.
+  app.patch("/bookings/internal/:id/revert-to-draft", {
+    schema: {
+      tags: ["Bookings"],
+      summary: "Internal: revert a pending_payment booking back to draft (service-to-service only)",
+      params: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+  }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    if (!validateServiceToken(req, reply)) return;
+
+    const { id } = req.params;
+
+    try {
+      const booking = await prisma.booking.findUnique({ where: { id } });
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+
+      if (booking.status !== "pending_payment") {
+        return sendSuccess(reply, 200, { message: `Booking is already in ${booking.status}.` });
+      }
+
+      await prisma.booking.update({ where: { id }, data: { status: "draft" } });
+      await prisma.bookingStatusLog.create({
+        data: { bookingId: id, fromStatus: "pending_payment", toStatus: "draft", actorType: "system", reason: "Payment cancelled or expired" },
+      });
+
+      return sendSuccess(reply, 200, { message: "Booking reverted to draft." });
+    } catch (err) {
+      req.log.error({ err }, "Failed to revert booking to draft");
+      return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while reverting the booking status.");
+    }
+  });
+
   // ── PATCH /bookings/internal/:id/refund ─────────────────────────────────────
   app.patch("/bookings/internal/:id/refund", {
     schema: {

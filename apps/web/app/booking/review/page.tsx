@@ -201,6 +201,44 @@ export default function BookingReviewPage() {
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ── Abandoned-payment cancel ───────────────────────────────────────────────
+  // When the guest leaves the page mid-checkout, tell the payment service to
+  // cancel the open Stripe PaymentIntent (idempotent, best-effort).
+  const paymentResolvedRef = useRef(false);
+  const lastCancelledPaymentIdRef = useRef<string | null>(null);
+
+  function firePaymentCancel(paymentId: string | null) {
+    if (!paymentId || provider !== "stripe" || paymentResolvedRef.current) return;
+    if (lastCancelledPaymentIdRef.current === paymentId) return;
+    lastCancelledPaymentIdRef.current = paymentId;
+
+    const baseUrl = paymentApi.defaults.baseURL ?? "";
+    const token =
+      sessionStorage.getItem("zika:access_token") ??
+      localStorage.getItem("zika:access_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    try {
+      fetch(`${baseUrl}/payments/${paymentId}/cancel`, {
+        method: "POST",
+        keepalive: true,
+        headers,
+      }).catch(() => {});
+    } catch { /* best-effort */ }
+  }
+
+  useEffect(() => {
+    const onPageHide = () => firePaymentCancel(paymentId);
+    const onBeforeUnload = () => firePaymentCancel(paymentId);
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [paymentId, provider]);
+
   // ── Derived pricing ──────────────────────────────────────────────────────────
   const pricing = ctx ? getPricing(ctx) : null;
 
@@ -375,6 +413,7 @@ export default function BookingReviewPage() {
         if (status === "captured") {
           clearInterval(pollRef.current!);
           pollRef.current = null;
+          paymentResolvedRef.current = true;
           const txId = res.data?.data?.transactionId ?? res.data?.data?.transaction_id ?? pmId;
           const displayId = res.data?.data?.displayId as string | undefined;
           storeLatestReviewContext({
@@ -399,6 +438,7 @@ export default function BookingReviewPage() {
         } else if (status === "failed" || status === "timed_out") {
           clearInterval(pollRef.current!);
           pollRef.current = null;
+          paymentResolvedRef.current = true;
           setPayError("Payment failed. Please try again.");
           setStep("payment");
         }
@@ -541,6 +581,8 @@ export default function BookingReviewPage() {
     if (ctx?.lockToken) {
       try { await listingApi.delete(`/bookings/lock/${ctx.lockToken}`); } catch { }
     }
+    // Cancel the open Stripe PaymentIntent so it doesn't stay dangling
+    firePaymentCancel(paymentId);
     sessionStorage.removeItem("zika:checkout");
     if (pollRef.current) clearInterval(pollRef.current);
     setShowCancelConfirm(false);
