@@ -137,10 +137,7 @@ export default function RecentlyViewedPage() {
                         </p>
                       </div>
                       <Link
-                        href="/traveller"
-                        onClick={() => {
-                          sessionStorage.setItem("zika:open_listing", l.id);
-                        }}
+                        href={`/listings/${l.id}`}
                         className="text-[11px] font-semibold px-3 py-1.5 rounded-xl bg-[#0c2614] text-white hover:bg-[#1D8D2B] transition"
                       >
                         View

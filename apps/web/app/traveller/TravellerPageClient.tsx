@@ -402,8 +402,15 @@ export default function TravellerDashboard() {
       setActiveTab("home");
     }
 
-    if (listingId && listingId !== selectedListingId) {
-      handleSelectListing(listingId);
+    // Deep links using the legacy ?listing=<id> shape now redirect to the
+    // canonical /listings/:id route, carrying any date/guest params through.
+    if (listingId) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("listing");
+      params.delete("tab");
+      const qs = params.toString();
+      router.replace(qs ? `/listings/${listingId}?${qs}` : `/listings/${listingId}`);
+      return;
     }
   }, [ready, searchParams, user?.id, activeTab, selectedListingId]);
 
@@ -1251,6 +1258,19 @@ export default function TravellerDashboard() {
     } finally {
       setLoadingDetail(false);
     }
+  }
+
+  // Navigate to the canonical /listings/:id detail route, carrying the current
+  // search dates and guest count so the standalone detail page can seed them.
+  function selectListing(id: string) {
+    const params = new URLSearchParams();
+    if (searchCheckIn) params.set("checkin", searchCheckIn);
+    if (searchCheckOut) params.set("checkout", searchCheckOut);
+    if (searchPickupDate) params.set("pickup", searchPickupDate);
+    if (searchReturnDate) params.set("return", searchReturnDate);
+    if (searchAdults + searchChildren > 0) params.set("guests", String(searchAdults + searchChildren));
+    const qs = params.toString();
+    router.push(qs ? `/listings/${id}?${qs}` : `/listings/${id}`);
   }
 
   // 4b. Availability check — GET /{id}/availability
@@ -3344,7 +3364,7 @@ export default function TravellerDashboard() {
                       <ListingCard
                         key={listing.id}
                         listing={listing}
-                        onSelect={handleSelectListing}
+                        onSelect={selectListing}
                         variant="compact"
                         promotionBadge={promotionBadge}
                         activePromotion={activePromotion}
@@ -3480,7 +3500,7 @@ export default function TravellerDashboard() {
                   {recentlyViewed.map((item) => (
                     <button
                       key={item.id}
-                      onClick={() => handleSelectListing(item.id)}
+                      onClick={() => selectListing(item.id)}
                       className="group flex items-center gap-3 bg-white border border-slate-100 rounded-2xl p-3 hover:shadow-md hover:border-slate-200 transition text-left w-full"
                     >
                       <div className="w-16 h-16 bg-slate-100 rounded-xl overflow-hidden shrink-0">
@@ -3917,7 +3937,7 @@ export default function TravellerDashboard() {
                     {displayedListings[0] && (
                       <ListingCard
                         listing={displayedListings[0]}
-                        onSelect={handleSelectListing}
+                        onSelect={selectListing}
                         hoveredId={mapHoveredId}
                         onHover={setMapHoveredId}
                         variant="featured"
@@ -3962,7 +3982,7 @@ export default function TravellerDashboard() {
                     {displayedListings[1] && (
                       <ListingCard
                         listing={displayedListings[1]}
-                        onSelect={handleSelectListing}
+                        onSelect={selectListing}
                         hoveredId={mapHoveredId}
                         onHover={setMapHoveredId}
                         variant="featured"
@@ -3975,7 +3995,7 @@ export default function TravellerDashboard() {
                     {displayedListings[2] && (
                       <ListingCard
                         listing={displayedListings[2]}
-                        onSelect={handleSelectListing}
+                        onSelect={selectListing}
                         hoveredId={mapHoveredId}
                         onHover={setMapHoveredId}
                         variant="featured"
@@ -3993,7 +4013,7 @@ export default function TravellerDashboard() {
                           <ListingCard
                             key={l.id}
                             listing={l}
-                            onSelect={handleSelectListing}
+                            onSelect={selectListing}
                             hoveredId={mapHoveredId}
                             onHover={setMapHoveredId}
                             variant="compact"
