@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, optionalGuest, type GuestRequest } from "../middleware/auth.js";
 import { getCommissionRate } from "./bookings.js";
+import { getExchangeRate, getRatesBatch, ceilingForCurrency } from "../services/exchangeRate.services.js";
 
 import { DriveType, FuelType } from "../generated/index.js";
 
@@ -110,6 +111,7 @@ export async function searchRoutes(app: FastifyInstance) {
     const driverAge = q["driver_age"] ? parseInt(q["driver_age"], 10) : undefined;
     const minRentalDays = q["min_rental_days"] ? parseInt(q["min_rental_days"], 10) : undefined;
     const delivery = q["delivery"];
+    const targetCurrency = q["currency"]?.toUpperCase() || null;
 
     if (!category || isNaN(lat) || isNaN(lng)) {
       return sendError(reply, 400, "INVALID_PARAMS", "category, lat, and lng are required.");
@@ -305,6 +307,13 @@ export async function searchRoutes(app: FastifyInstance) {
       if (promo) promoBadge = { labelText: promo.labelText, labelColour: promo.labelColour };
     } catch { /* non-critical */ }
 
+    // Batch-fetch exchange rates for all listing currencies in one query
+    let rateMap = new Map<string, number>();
+    if (targetCurrency) {
+      const listingCurrencies = page.map((l) => l.currency ?? "USD");
+      rateMap = await getRatesBatch(listingCurrencies, targetCurrency);
+    }
+
     const results = page.map((l) => {
       // Calculate nightly rate: use minimum room type price for hotels with room types
       let nightlyRate: number | null = null;
@@ -314,6 +323,35 @@ export async function searchRoutes(app: FastifyInstance) {
           nightlyRate = Math.min(...l.hotelRoomTypes.map((rt) => Number(rt.pricePerNight)));
         } else if (l.pricePerNight) {
           nightlyRate = Number(l.pricePerNight);
+        }
+      }
+
+      const baseCurrency = l.currency ?? "USD";
+      let localizedNightlyRate = nightlyRate;
+      let localizedDailyRate = l.category === "car" && l.pricePerDay ? Number(l.pricePerDay) : null;
+      let localizedRoomTypes = l.category === "hotel"
+        ? l.hotelRoomTypes.map((rt) => ({
+            id: rt.id,
+            name: rt.name,
+            roomType: rt.roomType,
+            pricePerNight: Number(rt.pricePerNight),
+            unitCount: rt.unitCount,
+            maxGuests: rt.maxGuests,
+            localizedPricePerNight: Number(rt.pricePerNight),
+          }))
+        : undefined;
+
+      if (targetCurrency && targetCurrency !== baseCurrency) {
+        const rate = rateMap.get(baseCurrency);
+        if (rate) {
+          if (nightlyRate !== null) localizedNightlyRate = ceilingForCurrency(nightlyRate * rate, targetCurrency);
+          if (localizedDailyRate !== null) localizedDailyRate = ceilingForCurrency(localizedDailyRate * rate, targetCurrency);
+          if (localizedRoomTypes) {
+            localizedRoomTypes = localizedRoomTypes.map((rt) => ({
+              ...rt,
+              localizedPricePerNight: ceilingForCurrency(rt.pricePerNight * rate, targetCurrency),
+            }));
+          }
         }
       }
 
@@ -329,6 +367,9 @@ export async function searchRoutes(app: FastifyInstance) {
         nightlyRate,
         dailyRate: l.category === "car" && l.pricePerDay ? Number(l.pricePerDay) : null,
         currency: l.currency,
+        localizedNightlyRate,
+        localizedDailyRate,
+        localizedCurrency: targetCurrency ?? baseCurrency,
         cancellationPolicy: l.cancellationPolicy,
         // Stays (hotel + apartment) — clients badge this when > 1 night
         minStayNights: l.category === "car" ? null : l.minStayNights,
@@ -336,16 +377,7 @@ export async function searchRoutes(app: FastifyInstance) {
         starRating: l.starRating,
         isAccredited: !!l.approvedAt,
         roomType: l.category === "hotel" ? null : l.roomType,
-        roomTypes: l.category === "hotel"
-          ? l.hotelRoomTypes.map((rt) => ({
-              id: rt.id,
-              name: rt.name,
-              roomType: rt.roomType,
-              pricePerNight: Number(rt.pricePerNight),
-              unitCount: rt.unitCount,
-              maxGuests: rt.maxGuests,
-            }))
-          : undefined,
+        roomTypes: localizedRoomTypes,
         // Apartment
         bedrooms: l.bedrooms,
         bathrooms: l.bathrooms,
@@ -435,6 +467,7 @@ export async function searchRoutes(app: FastifyInstance) {
           driver_age: { type: "integer", description: "Driver age — filters out listings with minimum driver age requirement above this value" },
           min_rental_days: { type: "integer", description: "User's planned rental duration in days — filters out listings that require more than this many days minimum" },
           delivery: { type: "string", enum: ["true", "false"], description: "Filter by delivery availability" },
+          currency: { type: "string", description: "ISO 4217 currency code for localized prices (e.g. KES, NGN, USD)" },
         },
         required: ["category", "lat", "lng"],
       },
@@ -457,6 +490,12 @@ export async function searchRoutes(app: FastifyInstance) {
           },
           required: ["id"],
         },
+        querystring: {
+          type: "object",
+          properties: {
+            currency: { type: "string", description: "ISO 4217 currency code for localized prices (e.g. KES, NGN, USD)" },
+          },
+        },
       },
       preHandler: [optionalGuest],
     },
@@ -464,6 +503,7 @@ export async function searchRoutes(app: FastifyInstance) {
       try {
         const guestId = (req as GuestRequest).guestId;
         const { id } = req.params as { id: string };
+        const { currency: targetCurrency } = (req.query as Record<string, string>) ?? {};
 
       const listing = await prisma.listing.findUnique({
         where: { id, deletedAt: null },
@@ -507,6 +547,40 @@ export async function searchRoutes(app: FastifyInstance) {
 
       const commissionRate = await getCommissionRate(listing.country ?? null);
 
+      const baseCurrency = listing.currency ?? "USD";
+      const target = targetCurrency?.toUpperCase() || null;
+      let localizedNightlyRate: number | null = listing.category !== "car"
+        ? (listing.category === "hotel" && listing.hotelRoomTypes.length > 0
+            ? Math.min(...listing.hotelRoomTypes.map((rt) => Number(rt.pricePerNight)))
+            : (listing.pricePerNight ? Number(listing.pricePerNight) : null))
+        : null;
+      let localizedDailyRate: number | null = listing.category === "car" && listing.pricePerDay ? Number(listing.pricePerDay) : null;
+      let localizedRoomTypes = listing.category === "hotel"
+        ? listing.hotelRoomTypes.map((rt) => ({
+            id: rt.id,
+            name: rt.name,
+            roomType: rt.roomType,
+            pricePerNight: Number(rt.pricePerNight),
+            unitCount: rt.unitCount,
+            maxGuests: rt.maxGuests,
+            localizedPricePerNight: Number(rt.pricePerNight),
+          }))
+        : undefined;
+
+      if (target && target !== baseCurrency) {
+        const rate = await getExchangeRate(baseCurrency, target);
+        if (rate !== null) {
+          if (localizedNightlyRate !== null) localizedNightlyRate = ceilingForCurrency(localizedNightlyRate * rate, target);
+          if (localizedDailyRate !== null) localizedDailyRate = ceilingForCurrency(localizedDailyRate * rate, target);
+          if (localizedRoomTypes) {
+            localizedRoomTypes = localizedRoomTypes.map((rt) => ({
+              ...rt,
+              localizedPricePerNight: ceilingForCurrency(rt.pricePerNight * rate, target),
+            }));
+          }
+        }
+      }
+
       // Strip sensitive car fields pre-booking
       const data: any = {
         ...listing,
@@ -527,16 +601,10 @@ export async function searchRoutes(app: FastifyInstance) {
               : (listing.pricePerNight ? Number(listing.pricePerNight) : null))
           : null,
         dailyRate: listing.category === "car" && listing.pricePerDay ? Number(listing.pricePerDay) : null,
-        roomTypes: listing.category === "hotel"
-          ? listing.hotelRoomTypes.map((rt) => ({
-              id: rt.id,
-              name: rt.name,
-              roomType: rt.roomType,
-              pricePerNight: Number(rt.pricePerNight),
-              unitCount: rt.unitCount,
-              maxGuests: rt.maxGuests,
-            }))
-          : undefined,
+        localizedNightlyRate,
+        localizedDailyRate,
+        localizedCurrency: target ?? baseCurrency,
+        roomTypes: localizedRoomTypes,
         isAccredited: !!listing.approvedAt,
         longStayDiscountEnabled: listing.longStayEnabled,
         promoBadge,
@@ -811,6 +879,7 @@ export async function searchRoutes(app: FastifyInstance) {
               maxItems: 20,
               description: "Array of listing IDs (max 20)",
             },
+            currency: { type: "string", description: "ISO 4217 currency code for localized prices (e.g. KES, NGN, USD)" },
           },
           required: ["ids"],
         },
@@ -818,8 +887,9 @@ export async function searchRoutes(app: FastifyInstance) {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const body = req.body as { ids?: string[] };
+        const body = req.body as { ids?: string[]; currency?: string };
         const ids = (body.ids ?? []).slice(0, 20);
+        const target = body.currency?.toUpperCase() || null;
       if (!ids.length) return sendSuccess(reply, 200, { listings: [] });
 
       const listings = await prisma.listing.findMany({
@@ -827,19 +897,32 @@ export async function searchRoutes(app: FastifyInstance) {
         include: { photos: { where: { deletedAt: null }, orderBy: { position: "asc" }, take: 1 } },
       });
 
-      return sendSuccess(reply, 200, {
-        listings: listings.map((l) => ({
+      const listingsWithLocale = await Promise.all(listings.map(async (l) => {
+        const baseCurrency = l.currency ?? "USD";
+        const nightlyRate = l.pricePerNight ? Number(l.pricePerNight) : null;
+        let localizedNightlyRate = nightlyRate;
+
+          if (target && target !== baseCurrency && nightlyRate !== null) {
+            const rate = await getExchangeRate(baseCurrency, target);
+            if (rate !== null) localizedNightlyRate = ceilingForCurrency(nightlyRate * rate, target);
+          }
+
+        return {
           id: l.id,
           title: l.name,
           category: l.category,
           city: l.town,
           neighborhood: l.neighborhood,
           countryCode: l.country,
-          nightlyRate: l.pricePerNight ? Number(l.pricePerNight) : null,
+          nightlyRate,
           currency: l.currency,
+          localizedNightlyRate,
+          localizedCurrency: target ?? baseCurrency,
           primaryPhotoUrl: l.photos[0]?.cdnUrl ?? null,
-        })),
-      });
+        };
+      }));
+
+      return sendSuccess(reply, 200, { listings: listingsWithLocale });
       } catch (err) {
         req.log.error({ err }, "Failed to fetch batch listing summaries");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching listing summaries.");
@@ -924,6 +1007,7 @@ export async function searchRoutes(app: FastifyInstance) {
           type: "object",
           properties: {
             cursor: { type: "integer", default: 0, description: "Pagination offset cursor" },
+            currency: { type: "string", description: "ISO 4217 currency code for localized prices (e.g. KES, NGN, USD)" },
           },
         },
       },
@@ -934,6 +1018,7 @@ export async function searchRoutes(app: FastifyInstance) {
         const userId = (req as any).providerId as string;
         const q = req.query as Record<string, string>;
       const cursor = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
+      const target = q["currency"]?.toUpperCase() || null;
       const limit = 20;
 
       const favs = await prisma.userFavourite.findMany({
@@ -952,21 +1037,34 @@ export async function searchRoutes(app: FastifyInstance) {
       const page = hasMore ? favs.slice(0, limit) : favs;
 
       return sendSuccess(reply, 200, {
-        favourites: page.map((f) => ({
-          listingId: f.listingId,
-          savedAt: f.createdAt,
-          listing: {
-            id: f.listing.id,
-            title: f.listing.name,
-            category: f.listing.category,
-            status: f.listing.status,
-            city: f.listing.town,
-            neighborhood: f.listing.neighborhood,
-            countryCode: f.listing.country,
-            nightlyRate: f.listing.pricePerNight ? Number(f.listing.pricePerNight) : null,
-            currency: f.listing.currency,
-            primaryPhotoUrl: f.listing.photos[0]?.cdnUrl ?? null,
-          },
+        favourites: await Promise.all(page.map(async (f) => {
+          const baseCurrency = f.listing.currency ?? "USD";
+          const nightlyRate = f.listing.pricePerNight ? Number(f.listing.pricePerNight) : null;
+          let localizedNightlyRate = nightlyRate;
+
+          if (target && target !== baseCurrency && nightlyRate !== null) {
+            const rate = await getExchangeRate(baseCurrency, target);
+            if (rate !== null) localizedNightlyRate = Math.round(nightlyRate * rate);
+          }
+
+          return {
+            listingId: f.listingId,
+            savedAt: f.createdAt,
+            listing: {
+              id: f.listing.id,
+              title: f.listing.name,
+              category: f.listing.category,
+              status: f.listing.status,
+              city: f.listing.town,
+              neighborhood: f.listing.neighborhood,
+              countryCode: f.listing.country,
+              nightlyRate,
+              currency: f.listing.currency,
+              localizedNightlyRate,
+              localizedCurrency: target ?? baseCurrency,
+              primaryPhotoUrl: f.listing.photos[0]?.cdnUrl ?? null,
+            },
+          };
         })),
         nextCursor: hasMore ? String(cursor + limit) : null,
       });
@@ -1032,12 +1130,20 @@ export async function searchRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ["Recently Viewed"],
+        querystring: {
+          type: "object",
+          properties: {
+            currency: { type: "string", description: "ISO 4217 currency code for localized prices (e.g. KES, NGN, USD)" },
+          },
+        },
       },
       preHandler: [requireProvider],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (req as any).providerId as string;
+        const q = req.query as Record<string, string>;
+        const target = q["currency"]?.toUpperCase() || null;
 
       const views = await prisma.userRecentlyViewed.findMany({
         where: { userId },
@@ -1051,20 +1157,33 @@ export async function searchRoutes(app: FastifyInstance) {
       });
 
       return sendSuccess(reply, 200, {
-        recentlyViewed: views.map((v) => ({
-          listingId: v.listingId,
-          viewedAt: v.viewedAt,
-          listing: {
-            id: v.listing.id,
-            title: v.listing.name,
-            category: v.listing.category,
-            status: v.listing.status,
-            city: v.listing.town,
-            neighborhood: v.listing.neighborhood,
-            nightlyRate: v.listing.pricePerNight ? Number(v.listing.pricePerNight) : null,
-            currency: v.listing.currency,
-            primaryPhotoUrl: v.listing.photos[0]?.cdnUrl ?? null,
-          },
+        recentlyViewed: await Promise.all(views.map(async (v) => {
+          const baseCurrency = v.listing.currency ?? "USD";
+          const nightlyRate = v.listing.pricePerNight ? Number(v.listing.pricePerNight) : null;
+          let localizedNightlyRate = nightlyRate;
+
+          if (target && target !== baseCurrency && nightlyRate !== null) {
+            const rate = await getExchangeRate(baseCurrency, target);
+            if (rate !== null) localizedNightlyRate = Math.round(nightlyRate * rate);
+          }
+
+          return {
+            listingId: v.listingId,
+            viewedAt: v.viewedAt,
+            listing: {
+              id: v.listing.id,
+              title: v.listing.name,
+              category: v.listing.category,
+              status: v.listing.status,
+              city: v.listing.town,
+              neighborhood: v.listing.neighborhood,
+              nightlyRate,
+              currency: v.listing.currency,
+              localizedNightlyRate,
+              localizedCurrency: target ?? baseCurrency,
+              primaryPhotoUrl: v.listing.photos[0]?.cdnUrl ?? null,
+            },
+          };
         })),
       });
       } catch (err) {

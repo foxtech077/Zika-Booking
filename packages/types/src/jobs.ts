@@ -16,6 +16,7 @@ export enum ListingJob {
   IcalPoller = "ical-poller",
   CommissionScheduler = "commission-scheduler",
   GeoVerificationExpirer = "geo-verification-expirer",
+  ExchangeRateRefresher = "exchange-rate-refresher",
 }
 
 export enum PaymentJob {

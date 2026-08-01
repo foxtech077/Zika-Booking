@@ -1,4 +1,5 @@
-// services/fx.services.ts (renamed without leading space)
+import { convertFromDb } from "./exchangeRate.services.js";
+
 const cache = new Map<string, { rate: number; time: number }>();
 const inflight = new Map<string, Promise<number>>();
 const TTL = 1000 * 60 * 60;
@@ -12,7 +13,6 @@ export async function convertCurrency(
   const now = Date.now();
 
   const cached = cache.get(key);
-
   if (cached && now - cached.time < TTL) {
     return amount * cached.rate;
   }
@@ -34,12 +34,21 @@ export async function convertCurrency(
   inflight.set(key, fetchPromise);
 
   const rate = await fetchPromise;
-
   return amount * rate;
 }
 
-// Fetch live FX rates from ExchangeRate-API (free public endpoint)
 async function getRate(from: string, to: string): Promise<number> {
+  if (from.toUpperCase() === to.toUpperCase()) return 1;
+
+  // Try DB first
+  const dbRate = await convertFromDb(1, from, to);
+  if (dbRate !== null) return dbRate;
+
+  // Fallback to live API
+  return getRateFromApi(from, to);
+}
+
+async function getRateFromApi(from: string, to: string): Promise<number> {
   try {
     const response = await fetch(`https://open.er-api.com/v6/latest/${from}`);
     if (!response.ok) {
