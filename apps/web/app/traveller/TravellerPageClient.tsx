@@ -231,6 +231,7 @@ export default function TravellerDashboard() {
 
   const { isFavourited, toggleFavourite } = useFavourites();
   const [showFavAuthPrompt, setShowFavAuthPrompt] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   const [recentlyViewed, setRecentlyViewed] = useState<PublicListingDetail[]>([]);
   const [favouritedIds, setFavouritedIds] = useState<Set<string>>(new Set());
@@ -1124,6 +1125,30 @@ export default function TravellerDashboard() {
     const res = await toggleFavourite(listingId);
     if (res === "auth_required") {
       setShowFavAuthPrompt(true);
+    }
+  }
+
+  // Share the listing. `/traveller?listing=<id>` is the canonical public URL —
+  // generateMetadata in traveller/page.tsx already emits Open Graph tags for
+  // exactly this shape, so shared links render a rich preview.
+  //
+  // Uses the native share sheet where the browser offers one (mobile, Safari)
+  // and falls back to copying the link on desktop, which has no share sheet.
+  async function handleShareListing() {
+    if (!detailListing) return;
+    const url = `${window.location.origin}/traveller?listing=${detailListing.id}`;
+    const title = detailListing.name;
+
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({ title, text: `Take a look at ${title} on Kainook`, url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      // AbortError just means the user dismissed the share sheet — not a failure.
     }
   }
 
@@ -2064,9 +2089,16 @@ export default function TravellerDashboard() {
                       <span className="underline cursor-pointer hover:text-slate-900">{detailListing.address}, {detailListing.neighborhood ? `${detailListing.neighborhood}, ` : ""}{detailListing.town}, {detailListing.country}</span>
                     </div>
                     <div className="flex items-center gap-4 text-sm font-semibold text-slate-700">
-                      <button className="flex items-center gap-2 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition border border-slate-300 bg-white">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                        Share
+                      <button
+                        onClick={handleShareListing}
+                        className="flex items-center gap-2 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition border border-slate-300 bg-white"
+                      >
+                        {shareCopied ? (
+                          <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                        )}
+                        {shareCopied ? "Link copied" : "Share"}
                       </button>
                       <button
                         onClick={() => handleToggleFavourite(detailListing.id)}
