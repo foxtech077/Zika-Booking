@@ -170,6 +170,7 @@ export default function SavedScreen() {
   const router = useRouter();
   const qc     = useQueryClient();
   const user   = useAuthStore((s) => s.user);
+  const localCurrency = useAuthStore((s) => s.localCurrency);
 
   const hotelPromo = useActivePromotion("hotel");
   const aptPromo   = useActivePromotion("apartment");
@@ -221,7 +222,10 @@ export default function SavedScreen() {
   }
 
   const { isLoading, refetch, isRefetching } = useQuery<FavouritesResponse>({
-    queryKey: ["favourites"],
+    // Prices are localized per currency by the API, so the currency is part of
+    // the cache identity — without it a currency change serves cached amounts
+    // still labelled with the previous currency.
+    queryKey: ["favourites", localCurrency],
     queryFn:  async () => {
       const res = await listingApi.get<FavouritesResponse>("/guests/me/favourites");
       setAllFavourites(res.data.data.favourites);

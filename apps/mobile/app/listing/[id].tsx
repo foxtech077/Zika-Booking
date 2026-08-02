@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, FlatList, TextInput,
   ActivityIndicator, Alert, StyleSheet, Dimensions,
-  NativeSyntheticEvent, NativeScrollEvent, Modal, Platform, Linking,
+  NativeSyntheticEvent, NativeScrollEvent, Modal, Platform, Linking, Share,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -15,6 +15,7 @@ import { ActivePromotion, applyPromotion } from "../../lib/promotions";
 import { RoomTypeSelector } from "../../components/listing/RoomTypeSelector";
 import type { RoomType } from "../../components/listing/RoomTypeCard";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
+import { WEB_BASE_URL } from "../../constants/legalContent";
 
 let MapView: any = null;
 let Marker: any = null;
@@ -580,6 +581,7 @@ export default function ListingDetailScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const localCurrency = useAuthStore((s) => s.localCurrency);
   const insets = useSafeAreaInsets();
 
   const [photoIdx, setPhotoIdx] = useState(0);
@@ -598,7 +600,10 @@ export default function ListingDetailScreen() {
 
   // ── Data ──
   const { data: listing, isLoading, isError, refetch: refetchListing } = useQuery<PublicListing>({
-    queryKey: ["listing-full", id],
+    // Prices are localized per currency by the API, so the currency is part of
+    // the cache identity — without it a currency change serves cached amounts
+    // still labelled with the previous currency.
+    queryKey: ["listing-full", id, localCurrency],
     queryFn: async () => {
       const res = await listingApi.get<{ data: PublicListing }>(`/listings/${id}/public`);
       return res.data.data;
@@ -718,6 +723,23 @@ export default function ListingDetailScreen() {
       : Number(listing.nightlyRate ?? listing.pricePerNight ?? 0);
 
   const rateLabel = isCar ? "per day" : "per night";
+  // Shares the web listing URL. `/traveller?listing=<id>` is the canonical
+  // public link — the web app emits Open Graph tags for exactly that shape,
+  // so the shared link previews with the listing photo and title.
+  async function handleShare() {
+    const url = `${WEB_BASE_URL}/traveller?listing=${id}`;
+    const title = listing?.name ?? "this listing";
+    try {
+      await Share.share(
+        Platform.OS === "ios"
+          ? { url, message: `Take a look at ${title} on Kainook` }
+          : { message: `Take a look at ${title} on Kainook\n${url}` },
+      );
+    } catch {
+      // User dismissed the sheet — nothing to report.
+    }
+  }
+
   const isFav = listing.isFavourited ?? false;
 
   // Derive effective promotion from listing.promoBadge or activePromotions
@@ -985,6 +1007,16 @@ export default function ListingDetailScreen() {
           <Ionicons name="arrow-back" size={20} color={TEXT} />
         </TouchableOpacity>
         <View style={{ flexDirection: "row", gap: 8 }}>
+          {/* Share is available to everyone, signed in or not — a shareable
+              listing link should not require an account. */}
+          <TouchableOpacity
+            style={s.circleBtn}
+            onPress={() => void handleShare()}
+            activeOpacity={0.85}
+            accessibilityLabel="Share this listing"
+          >
+            <Ionicons name="share-outline" size={20} color={TEXT} />
+          </TouchableOpacity>
           {user && !isProvider && (
             <TouchableOpacity
               style={s.circleBtn}
