@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, optionalGuest, type GuestRequest } from "../middleware/auth.js";
 import { getCommissionRate } from "./bookings.js";
-import { getExchangeRate, getRatesBatch, ceilingForCurrency, getConvertedAmounts } from "../services/exchangeRate.services.js";
+import { getRatesBatch, ceilingForCurrency, getConvertedAmounts, getLocalizedContext } from "../services/exchangeRate.services.js";
 
 import { DriveType, FuelType } from "../generated/index.js";
 
@@ -327,8 +327,16 @@ export async function searchRoutes(app: FastifyInstance) {
       }
 
       const baseCurrency = l.currency ?? "USD";
-      let localizedNightlyRate = nightlyRate;
-      let localizedDailyRate = l.category === "car" && l.pricePerDay ? Number(l.pricePerDay) : null;
+      const wantLocalized = !!targetCurrency && targetCurrency !== baseCurrency;
+      const rate = wantLocalized ? rateMap.get(baseCurrency) : undefined;
+      const conversionUnavailable = wantLocalized && !rate;
+      const localizedCurrency = wantLocalized ? (conversionUnavailable ? null : targetCurrency) : baseCurrency;
+
+      let localizedNightlyRate: number | null = conversionUnavailable ? null : nightlyRate;
+      let localizedDailyRate: number | null =
+        conversionUnavailable
+          ? null
+          : (l.category === "car" && l.pricePerDay ? Number(l.pricePerDay) : null);
       let localizedRoomTypes = l.category === "hotel"
         ? l.hotelRoomTypes.map((rt) => ({
             id: rt.id,
@@ -337,22 +345,15 @@ export async function searchRoutes(app: FastifyInstance) {
             pricePerNight: Number(rt.pricePerNight),
             unitCount: rt.unitCount,
             maxGuests: rt.maxGuests,
-            localizedPricePerNight: Number(rt.pricePerNight),
+            localizedPricePerNight:
+              conversionUnavailable ? null
+              : (rate ? ceilingForCurrency(Number(rt.pricePerNight) * rate, targetCurrency!) : Number(rt.pricePerNight)),
           }))
         : undefined;
 
-      if (targetCurrency && targetCurrency !== baseCurrency) {
-        const rate = rateMap.get(baseCurrency);
-        if (rate) {
-          if (nightlyRate !== null) localizedNightlyRate = ceilingForCurrency(nightlyRate * rate, targetCurrency);
-          if (localizedDailyRate !== null) localizedDailyRate = ceilingForCurrency(localizedDailyRate * rate, targetCurrency);
-          if (localizedRoomTypes) {
-            localizedRoomTypes = localizedRoomTypes.map((rt) => ({
-              ...rt,
-              localizedPricePerNight: ceilingForCurrency(rt.pricePerNight * rate, targetCurrency),
-            }));
-          }
-        }
+      if (wantLocalized && rate) {
+        if (nightlyRate !== null) localizedNightlyRate = ceilingForCurrency(nightlyRate * rate, targetCurrency);
+        if (localizedDailyRate !== null) localizedDailyRate = ceilingForCurrency(localizedDailyRate * rate, targetCurrency);
       }
 
       return {
@@ -369,7 +370,7 @@ export async function searchRoutes(app: FastifyInstance) {
         currency: l.currency,
         localizedNightlyRate,
         localizedDailyRate,
-        localizedCurrency: targetCurrency ?? baseCurrency,
+        localizedCurrency,
         cancellationPolicy: l.cancellationPolicy,
         // Stays (hotel + apartment) — clients badge this when > 1 night
         minStayNights: l.category === "car" ? null : l.minStayNights,
@@ -549,12 +550,19 @@ export async function searchRoutes(app: FastifyInstance) {
 
       const baseCurrency = listing.currency ?? "USD";
       const target = targetCurrency?.toUpperCase() || null;
-      let localizedNightlyRate: number | null = listing.category !== "car"
+      const ctx = await getLocalizedContext(baseCurrency, target);
+      const baseNightlyRate: number | null = listing.category !== "car"
         ? (listing.category === "hotel" && listing.hotelRoomTypes.length > 0
             ? Math.min(...listing.hotelRoomTypes.map((rt) => Number(rt.pricePerNight)))
             : (listing.pricePerNight ? Number(listing.pricePerNight) : null))
         : null;
-      let localizedDailyRate: number | null = listing.category === "car" && listing.pricePerDay ? Number(listing.pricePerDay) : null;
+      const baseDailyRate: number | null = listing.category === "car" && listing.pricePerDay ? Number(listing.pricePerDay) : null;
+      const localizedNightlyRate: number | null =
+        ctx.currency === null ? null
+        : (ctx.rate !== null && baseNightlyRate !== null ? ceilingForCurrency(baseNightlyRate * ctx.rate, ctx.currency) : baseNightlyRate);
+      const localizedDailyRate: number | null =
+        ctx.currency === null ? null
+        : (ctx.rate !== null && baseDailyRate !== null ? ceilingForCurrency(baseDailyRate * ctx.rate, ctx.currency) : baseDailyRate);
       let localizedRoomTypes = listing.category === "hotel"
         ? listing.hotelRoomTypes.map((rt) => ({
             id: rt.id,
@@ -563,23 +571,11 @@ export async function searchRoutes(app: FastifyInstance) {
             pricePerNight: Number(rt.pricePerNight),
             unitCount: rt.unitCount,
             maxGuests: rt.maxGuests,
-            localizedPricePerNight: Number(rt.pricePerNight),
+            localizedPricePerNight:
+              ctx.currency === null ? null
+              : (ctx.rate !== null ? ceilingForCurrency(Number(rt.pricePerNight) * ctx.rate, ctx.currency) : Number(rt.pricePerNight)),
           }))
         : undefined;
-
-      if (target && target !== baseCurrency) {
-        const rate = await getExchangeRate(baseCurrency, target);
-        if (rate !== null) {
-          if (localizedNightlyRate !== null) localizedNightlyRate = ceilingForCurrency(localizedNightlyRate * rate, target);
-          if (localizedDailyRate !== null) localizedDailyRate = ceilingForCurrency(localizedDailyRate * rate, target);
-          if (localizedRoomTypes) {
-            localizedRoomTypes = localizedRoomTypes.map((rt) => ({
-              ...rt,
-              localizedPricePerNight: ceilingForCurrency(rt.pricePerNight * rate, target),
-            }));
-          }
-        }
-      }
 
       // Localized equivalents for absolute-money fee fields (additive only).
       const feeAmounts: Record<string, number | null> = {
@@ -594,9 +590,9 @@ export async function searchRoutes(app: FastifyInstance) {
           ? { childPrice: Number(listing.childPriceValue) }
           : {}),
       };
-      const localizedFees = await getConvertedAmounts(baseCurrency, target, feeAmounts);
+      const localizedFee = await getConvertedAmounts(baseCurrency, target, feeAmounts);
       const localizedFeeFields = Object.fromEntries(
-        Object.entries(localizedFees).map(([k, v]) => [
+        Object.entries(localizedFee.values).map(([k, v]) => [
           `localized${k.charAt(0).toUpperCase()}${k.slice(1)}`,
           v,
         ])
@@ -624,7 +620,7 @@ export async function searchRoutes(app: FastifyInstance) {
         dailyRate: listing.category === "car" && listing.pricePerDay ? Number(listing.pricePerDay) : null,
         localizedNightlyRate,
         localizedDailyRate,
-        localizedCurrency: target ?? baseCurrency,
+        localizedCurrency: ctx.currency,
         roomTypes: localizedRoomTypes,
         isAccredited: !!listing.approvedAt,
         longStayDiscountEnabled: listing.longStayEnabled,
@@ -922,12 +918,10 @@ export async function searchRoutes(app: FastifyInstance) {
       const listingsWithLocale = await Promise.all(listings.map(async (l) => {
         const baseCurrency = l.currency ?? "USD";
         const nightlyRate = l.pricePerNight ? Number(l.pricePerNight) : null;
-        let localizedNightlyRate = nightlyRate;
-
-          if (target && target !== baseCurrency && nightlyRate !== null) {
-            const rate = await getExchangeRate(baseCurrency, target);
-            if (rate !== null) localizedNightlyRate = ceilingForCurrency(nightlyRate * rate, target);
-          }
+        const ctx = await getLocalizedContext(baseCurrency, target);
+        const localizedNightlyRate =
+          ctx.currency === null ? null
+          : (ctx.rate !== null && nightlyRate !== null ? ceilingForCurrency(nightlyRate * ctx.rate, ctx.currency) : nightlyRate);
 
         return {
           id: l.id,
@@ -939,7 +933,7 @@ export async function searchRoutes(app: FastifyInstance) {
           nightlyRate,
           currency: l.currency,
           localizedNightlyRate,
-          localizedCurrency: target ?? baseCurrency,
+          localizedCurrency: ctx.currency,
           primaryPhotoUrl: l.photos[0]?.cdnUrl ?? null,
         };
       }));
@@ -1062,12 +1056,10 @@ export async function searchRoutes(app: FastifyInstance) {
         favourites: await Promise.all(page.map(async (f) => {
           const baseCurrency = f.listing.currency ?? "USD";
           const nightlyRate = f.listing.pricePerNight ? Number(f.listing.pricePerNight) : null;
-          let localizedNightlyRate = nightlyRate;
-
-          if (target && target !== baseCurrency && nightlyRate !== null) {
-            const rate = await getExchangeRate(baseCurrency, target);
-            if (rate !== null) localizedNightlyRate = Math.round(nightlyRate * rate);
-          }
+          const ctx = await getLocalizedContext(baseCurrency, target);
+          const localizedNightlyRate =
+            ctx.currency === null ? null
+            : (ctx.rate !== null && nightlyRate !== null ? ceilingForCurrency(nightlyRate * ctx.rate, ctx.currency) : nightlyRate);
 
           return {
             listingId: f.listingId,
@@ -1083,7 +1075,7 @@ export async function searchRoutes(app: FastifyInstance) {
               nightlyRate,
               currency: f.listing.currency,
               localizedNightlyRate,
-              localizedCurrency: target ?? baseCurrency,
+              localizedCurrency: ctx.currency,
               primaryPhotoUrl: f.listing.photos[0]?.cdnUrl ?? null,
             },
           };
@@ -1182,12 +1174,10 @@ export async function searchRoutes(app: FastifyInstance) {
         recentlyViewed: await Promise.all(views.map(async (v) => {
           const baseCurrency = v.listing.currency ?? "USD";
           const nightlyRate = v.listing.pricePerNight ? Number(v.listing.pricePerNight) : null;
-          let localizedNightlyRate = nightlyRate;
-
-          if (target && target !== baseCurrency && nightlyRate !== null) {
-            const rate = await getExchangeRate(baseCurrency, target);
-            if (rate !== null) localizedNightlyRate = Math.round(nightlyRate * rate);
-          }
+          const ctx = await getLocalizedContext(baseCurrency, target);
+          const localizedNightlyRate =
+            ctx.currency === null ? null
+            : (ctx.rate !== null && nightlyRate !== null ? ceilingForCurrency(nightlyRate * ctx.rate, ctx.currency) : nightlyRate);
 
           return {
             listingId: v.listingId,
@@ -1202,7 +1192,7 @@ export async function searchRoutes(app: FastifyInstance) {
               nightlyRate,
               currency: v.listing.currency,
               localizedNightlyRate,
-              localizedCurrency: target ?? baseCurrency,
+              localizedCurrency: ctx.currency,
               primaryPhotoUrl: v.listing.photos[0]?.cdnUrl ?? null,
             },
           };

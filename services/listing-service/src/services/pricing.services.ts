@@ -1,17 +1,24 @@
 // services/pricing.service.ts
-import { convertCurrency } from "./fx.services";
+import { getLocalizedContext } from "./exchangeRate.services";
 
 export async function getPricing(basePrice: number, baseCurrency: string, targetCurrency: string) {
-  let displayPrice = basePrice;
+  const ctx = await getLocalizedContext(baseCurrency, targetCurrency);
 
-  if (baseCurrency !== targetCurrency) {
-    displayPrice = await convertCurrency(basePrice, baseCurrency, targetCurrency);
+  let displayPrice: number | null;
+  if (ctx.currency === null) {
+    // Conversion requested but unavailable — never show a wrong amount.
+    displayPrice = null;
+  } else if (ctx.rate !== null) {
+    displayPrice = Math.round(basePrice * ctx.rate);
+  } else {
+    // Identity — same currency.
+    displayPrice = basePrice;
   }
 
   return {
     basePrice,
     baseCurrency,
-    displayPrice: Math.round(displayPrice),
-    currency: targetCurrency,
+    displayPrice,
+    currency: ctx.currency,
   };
 }

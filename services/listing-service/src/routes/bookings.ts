@@ -306,8 +306,9 @@ export async function bookingRoutes(app: FastifyInstance) {
         const paymentProvider = getPaymentProvider(country);
 
         // Localized equivalents (additive, ceiling-rounded) for the quote's
-        // money fields in the guest's display currency.
-        const localizedAmounts = await getConvertedAmounts(baseCurrency, targetCurrency, {
+        // money fields in the guest's display currency. Null when the rate is
+        // unavailable — never a mislabeled base amount.
+        const localized = await getConvertedAmounts(baseCurrency, targetCurrency, {
           nightlyRate: listing.pricePerNight != null ? Number(listing.pricePerNight) : null,
           dailyRate: listing.pricePerDay != null ? Number(listing.pricePerDay) : null,
           securityDeposit: listing.securityDeposit != null ? Number(listing.securityDeposit) : null,
@@ -318,10 +319,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           success: true,
           data: {
             ...pricing,
-            ...(localizedAmounts.nightlyRate != null ? { localizedNightlyRate: localizedAmounts.nightlyRate } : {}),
-            ...(localizedAmounts.dailyRate != null ? { localizedDailyRate: localizedAmounts.dailyRate } : {}),
-            ...(localizedAmounts.securityDeposit != null ? { localizedSecurityDeposit: localizedAmounts.securityDeposit } : {}),
-            ...(localizedAmounts.deliveryFee != null ? { localizedDeliveryFee: localizedAmounts.deliveryFee } : {}),
+            localizedNightlyRate: localized.values.nightlyRate,
+            localizedDailyRate: localized.values.dailyRate,
+            localizedSecurityDeposit: localized.values.securityDeposit,
+            localizedDeliveryFee: localized.values.deliveryFee,
 
             country,
             paymentProvider,
@@ -703,7 +704,8 @@ export async function bookingRoutes(app: FastifyInstance) {
   }
 
   // Convert a pricing/breakdown object into additive `localized*` equivalents
-  // using the rate-once helper. Also emits `localizedCurrency`.
+  // using the rate-once helper. Also emits `localizedCurrency` (null when the
+  // conversion is unavailable so callers never show a mislabeled amount).
   async function buildLocalizedBreakdown(
     baseCurrency: string,
     target: string | undefined,
@@ -711,12 +713,12 @@ export async function bookingRoutes(app: FastifyInstance) {
   ): Promise<Record<string, unknown>> {
     const converted = await getConvertedAmounts(baseCurrency, target, amounts);
     const localized = Object.fromEntries(
-      Object.entries(converted).map(([k, v]) => [
+      Object.entries(converted.values).map(([k, v]) => [
         `localized${k.charAt(0).toUpperCase()}${k.slice(1)}`,
         v,
       ])
     );
-    return { ...localized, localizedCurrency: target?.toUpperCase() ?? baseCurrency };
+    return { ...localized, localizedCurrency: converted.currency };
   }
 
   // ── POST /bookings/initiate — acquire reservation lock ──────────────────────
@@ -1617,13 +1619,14 @@ export async function bookingRoutes(app: FastifyInstance) {
           providerPayout,
         };
         const displayCurrency = (listing.currency ?? "USD").toUpperCase();
-        const localizedSnap =
-          body.currency && body.currency.toUpperCase() !== displayCurrency
-            ? await getConvertedAmounts(displayCurrency, body.currency, breakdownBase)
-            : null;
+        const wantLocalized =
+          !!body.currency && body.currency.toUpperCase() !== displayCurrency;
+        const localizedSnap = wantLocalized
+          ? await getConvertedAmounts(displayCurrency, body.currency, breakdownBase)
+          : null;
         const localizedSnapKeys = localizedSnap
           ? Object.fromEntries(
-              Object.entries(localizedSnap).map(([k, v]) => [
+              Object.entries(localizedSnap.values).map(([k, v]) => [
                 `localized${k.charAt(0).toUpperCase()}${k.slice(1)}`,
                 v,
               ])
@@ -1633,7 +1636,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           currency: displayCurrency,
           baseCurrency: displayCurrency,
           ...(localizedSnap
-            ? { localizedCurrency: body.currency!.toUpperCase(), ...localizedSnapKeys }
+            ? { localizedCurrency: localizedSnap.currency, ...localizedSnapKeys }
             : {}),
           breakdown: breakdownBase,
           capturedAt: new Date().toISOString(),
