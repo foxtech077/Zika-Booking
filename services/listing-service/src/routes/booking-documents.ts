@@ -275,23 +275,30 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
           return sendError(reply, 409, "NOT_CONFIRMED", "Receipt is only available for confirmed bookings.");
 
         const isCar = booking.listingType === "car";
+        const snapshot = (booking as any).priceBreakdownJson;
+        const snap = snapshot?.breakdown;
+        // Prefer the stored price snapshot (matches the moment of booking); fall
+        // back to live columns for older bookings that predate the snapshot.
+        const fromSnap = (key: string, fallback: unknown) =>
+          snap && snap[key] != null ? Number(snap[key]) : Number(fallback ?? 0);
+
         const lineItems: { label: string; amount: number; type: string }[] = [];
 
         if (isCar) {
-          lineItems.push({ label: `Daily rate × ${booking.nightsOrDays} days`, amount: Number(booking.subtotal), type: "subtotal" });
-          if (Number(booking.deliveryFee) > 0)
-            lineItems.push({ label: "Delivery fee", amount: Number(booking.deliveryFee), type: "fee" });
-          if (Number(booking.securityDeposit) > 0)
-            lineItems.push({ label: "Security deposit", amount: Number(booking.securityDeposit), type: "deposit" });
+          lineItems.push({ label: `Daily rate × ${booking.nightsOrDays} days`, amount: fromSnap("subtotal", booking.subtotal), type: "subtotal" });
+          if (fromSnap("deliveryFee", booking.deliveryFee) > 0)
+            lineItems.push({ label: "Delivery fee", amount: fromSnap("deliveryFee", booking.deliveryFee), type: "fee" });
+          if (fromSnap("securityDeposit", booking.securityDeposit ?? 0) > 0)
+            lineItems.push({ label: "Security deposit", amount: fromSnap("securityDeposit", booking.securityDeposit ?? 0), type: "deposit" });
         } else {
-          lineItems.push({ label: `Nightly rate × ${booking.nightsOrDays} nights`, amount: Number(booking.subtotal), type: "subtotal" });
-          if (Number(booking.discountAmount) > 0)
-            lineItems.push({ label: "Long-stay discount", amount: -Number(booking.discountAmount), type: "discount" });
+          lineItems.push({ label: `Nightly rate × ${booking.nightsOrDays} nights`, amount: fromSnap("subtotal", booking.subtotal), type: "subtotal" });
+          if (fromSnap("discountAmount", booking.discountAmount) > 0)
+            lineItems.push({ label: "Long-stay discount", amount: -fromSnap("discountAmount", booking.discountAmount), type: "discount" });
         }
-        if (Number(booking.voucherDiscount) > 0) {
+        if (fromSnap("voucherDiscount", booking.voucherDiscount) > 0) {
           lineItems.push({
             label: `Voucher (${booking.voucherCode ?? ""})`,
-            amount: -Number(booking.voucherDiscount),
+            amount: -fromSnap("voucherDiscount", booking.voucherDiscount),
             type: "voucher",
           });
         }
@@ -325,13 +332,22 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
           },
           lineItems,
           totals: {
-            subtotal:        Number(booking.subtotal),
-            discountAmount:  Number(booking.discountAmount),
-            deliveryFee:     Number(booking.deliveryFee),
-            voucherDiscount: Number(booking.voucherDiscount),
-            securityDeposit: Number(booking.securityDeposit ?? 0),
-            total:           Number(booking.totalAmount),
+            subtotal:        fromSnap("subtotal", booking.subtotal),
+            discountAmount:  fromSnap("discountAmount", booking.discountAmount),
+            deliveryFee:     fromSnap("deliveryFee", booking.deliveryFee),
+            voucherDiscount: fromSnap("voucherDiscount", booking.voucherDiscount),
+            securityDeposit: fromSnap("securityDeposit", booking.securityDeposit ?? 0),
+            total:           fromSnap("totalAmount", booking.totalAmount),
             currency:        booking.currency,
+            ...(snap
+              ? {
+                  localizedCurrency: snapshot.localizedCurrency ?? null,
+                  localized: Object.fromEntries(
+                    Object.entries(snapshot ?? {}).filter(([k]) => k.startsWith("localized"))
+                  ),
+                  eur: snapshot.eur ?? null,
+                }
+              : {}),
           },
           payment: {
             paymentId:   booking.paymentId ?? null,

@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, optionalGuest, type GuestRequest } from "../middleware/auth.js";
 import { getCommissionRate } from "./bookings.js";
-import { getExchangeRate, getRatesBatch, ceilingForCurrency } from "../services/exchangeRate.services.js";
+import { getExchangeRate, getRatesBatch, ceilingForCurrency, getConvertedAmounts } from "../services/exchangeRate.services.js";
 
 import { DriveType, FuelType } from "../generated/index.js";
 
@@ -581,6 +581,27 @@ export async function searchRoutes(app: FastifyInstance) {
         }
       }
 
+      // Localized equivalents for absolute-money fee fields (additive only).
+      const feeAmounts: Record<string, number | null> = {
+        securityDeposit: listing.securityDeposit != null ? Number(listing.securityDeposit) : null,
+        deliveryFee: listing.deliveryFee != null ? Number(listing.deliveryFee) : null,
+        cleaningFee: listing.cleaningFee != null ? Number(listing.cleaningFee) : null,
+        extraGuestFee: listing.extraGuestFee != null ? Number(listing.extraGuestFee) : null,
+        earlyCheckinFee: listing.earlyCheckinFee != null ? Number(listing.earlyCheckinFee) : null,
+        lateCheckoutFee: listing.lateCheckoutFee != null ? Number(listing.lateCheckoutFee) : null,
+        extraKmRate: listing.extraKmRate != null ? Number(listing.extraKmRate) : null,
+        ...(listing.childPriceType === "flat" && listing.childPriceValue != null
+          ? { childPrice: Number(listing.childPriceValue) }
+          : {}),
+      };
+      const localizedFees = await getConvertedAmounts(baseCurrency, target, feeAmounts);
+      const localizedFeeFields = Object.fromEntries(
+        Object.entries(localizedFees).map(([k, v]) => [
+          `localized${k.charAt(0).toUpperCase()}${k.slice(1)}`,
+          v,
+        ])
+      );
+
       // Strip sensitive car fields pre-booking
       const data: any = {
         ...listing,
@@ -608,6 +629,7 @@ export async function searchRoutes(app: FastifyInstance) {
         isAccredited: !!listing.approvedAt,
         longStayDiscountEnabled: listing.longStayEnabled,
         promoBadge,
+        ...localizedFeeFields,
       };
       if (data.licencePlate !== undefined) {
         delete data.licencePlate;

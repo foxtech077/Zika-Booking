@@ -178,6 +178,58 @@ export async function convertFromDb(
 }
 
 /**
+ * Convert a set of amount fields from `baseCurrency` into `target`, producing
+ * `localized` equivalents that never replace the originals.
+ *
+ * - If no target, target === baseCurrency, or the rate is missing/stale
+ *   (`getExchangeRate` returns null), the values are returned unchanged.
+ * - Otherwise each non-null value is ceiling-rounded to the target currency's
+ *   precision via `ceilingForCurrency`.
+ * - Only a single rate lookup is performed per call.
+ */
+export async function getConvertedAmounts(
+  baseCurrency: string,
+  target: string | null | undefined,
+  amounts: Record<string, number | null | undefined>
+): Promise<Record<string, number | null>> {
+  const out: Record<string, number | null> = {};
+  const targetNorm = target?.toUpperCase() || null;
+  const baseNorm = baseCurrency.toUpperCase();
+
+  const convertAll = (rate: number) => {
+    for (const key of Object.keys(amounts)) {
+      const v = amounts[key];
+      out[key] = v == null ? null : ceilingForCurrency(v * rate, targetNorm!);
+    }
+  };
+
+  if (!targetNorm || targetNorm === baseNorm) {
+    for (const key of Object.keys(amounts)) out[key] = amounts[key] ?? null;
+    return out;
+  }
+
+  const rate = await getExchangeRate(baseNorm, targetNorm);
+  if (rate === null) {
+    for (const key of Object.keys(amounts)) out[key] = amounts[key] ?? null;
+    return out;
+  }
+
+  convertAll(rate);
+  return out;
+}
+
+/**
+ * Strict DB-only rate for converting a currency into EUR for charging/payout.
+ * Returns null when the rate is stale or missing so the caller can fail with
+ * TEMPORARILY_UNAVAILABLE instead of using a fallback or a wrong amount.
+ */
+export async function getEurRateOrNull(from: string): Promise<number | null> {
+  const fromNorm = from.toUpperCase();
+  if (fromNorm === "EUR") return 1;
+  return getExchangeRate(fromNorm, "EUR");
+}
+
+/**
  * Fetch rates for multiple source currencies → one target currency in a single query.
  * All rates are USD-based, so: rate(from→to) = rate(USD→to) / rate(USD→from)
  * Returns a map like { "KES": 155.28, "NGN": 1540.5, ... }
