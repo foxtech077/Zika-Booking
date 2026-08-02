@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
-	import { mount, unmount } from 'svelte';
 	import type { PageProps } from './$types';
 	import ListingGallery from '$lib/components/ListingGallery.svelte';
 	import ReviewsSection from '$lib/components/ReviewsSection.svelte';
+	import { currencySymbol } from '$lib/utils';
 
 	let { data }: PageProps = $props();
 
@@ -66,6 +66,14 @@
 
 	const factRows = $derived.by(() => {
 		const rows: { label: string; value: string }[] = [];
+		const converted = !!detail.localizedCurrency && detail.localizedCurrency !== detail.currency;
+		const sym = currencySymbol(detail.localizedCurrency ?? detail.currency);
+		const baseSym = currencySymbol(detail.currency);
+		const money = (loc: number | null | undefined, base: number | null | undefined) => {
+			let s = `${converted ? '~ ' : ''}${sym}${(loc ?? 0).toLocaleString()}`;
+			if (converted && base && loc !== base) s += ` (${baseSym}${base.toLocaleString()})`;
+			return s;
+		};
 		if (detail.category !== 'car') {
 			rows.push({ label: 'Check-in', value: detail.checkinTime || 'Flexible' });
 			rows.push({ label: 'Check-out', value: detail.checkoutTime || 'Flexible' });
@@ -84,16 +92,14 @@
 			} else if (detail.securityDeposit != null && detail.securityDeposit > 0) {
 				rows.push({
 					label: 'Deposit',
-					value: `${detail.localizedCurrency ?? detail.currency} ${(
-						detail.localizedSecurityDeposit ?? detail.securityDeposit
-					).toLocaleString()}`
+					value: money(detail.localizedSecurityDeposit, detail.securityDeposit)
 				});
 			}
 			if (detail.deliveryAvailable) {
 				const fee = detail.localizedDeliveryFee ?? detail.deliveryFee;
 				const feeText =
 					fee != null && fee > 0
-						? ` · ${detail.localizedCurrency ?? detail.currency} ${fee.toLocaleString()}`
+						? ` · ${money(detail.localizedDeliveryFee, detail.deliveryFee)}`
 						: ' · Free';
 				rows.push({ label: 'Delivery', value: `Available${feeText}` });
 			}
@@ -102,25 +108,18 @@
 		return rows;
 	});
 
-	let host = $state<HTMLDivElement | null>(null);
-	let widgetReady = $state(false);
-	let widget: ReturnType<typeof mount> | null = null;
+	let WidgetComponent = $state<
+		typeof import('$lib/components/BookingWidget.svelte').default | null
+	>(null);
 
 	$effect(() => {
 		if (!browser) return;
 		let cancelled = false;
-		widgetReady = false;
 		void import('$lib/components/BookingWidget.svelte').then((mod) => {
-			if (cancelled || !host || !data.detail) return;
-			widget = mount(mod.default, {
-				target: host,
-				props: { listing: data.detail }
-			});
-			widgetReady = true;
+			if (!cancelled) WidgetComponent = mod.default;
 		});
 		return () => {
 			cancelled = true;
-			if (widget) unmount(widget);
 		};
 	});
 </script>
@@ -245,8 +244,9 @@
 
 		<aside class="h-fit lg:sticky lg:top-24">
 			<div class="relative min-h-[280px]">
-				<div bind:this={host}></div>
-				{#if !widgetReady}
+				{#if WidgetComponent}
+					<WidgetComponent listing={detail} />
+				{:else}
 					<div class="absolute inset-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-md">
 						<div class="h-5 w-24 animate-pulse rounded bg-slate-200"></div>
 						<div class="mt-4 h-10 animate-pulse rounded-xl bg-slate-100"></div>

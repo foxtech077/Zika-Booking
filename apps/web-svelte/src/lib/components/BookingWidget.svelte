@@ -32,10 +32,19 @@
 			listing.pricePerNight
 	);
 	const sym = $derived(currencySymbol(listing.localizedCurrency ?? listing.currency));
+	const baseSym = $derived(currencySymbol(listing.currency));
+	/* True when the API returned prices converted into a different currency,
+	   so shown amounts are an estimate against the actual (base) price. */
+	const converted = $derived(
+		!!listing.localizedCurrency && listing.localizedCurrency !== listing.currency
+	);
+	const baseRate = $derived(cheapestRoom?.pricePerNight ?? listing.pricePerNight);
 	const securityDeposit = $derived(
 		listing.localizedSecurityDeposit ?? listing.securityDeposit ?? 0
 	);
+	const securityDepositBase = $derived(listing.securityDeposit ?? 0);
 	const deliveryFee = $derived(listing.localizedDeliveryFee ?? listing.deliveryFee ?? 0);
+	const deliveryFeeBase = $derived(listing.deliveryFee ?? 0);
 
 	let checkIn = $state('');
 	let checkOut = $state('');
@@ -124,10 +133,19 @@
 
 <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-md">
 	<div class="flex items-end justify-between gap-3">
-		<p class="text-sm font-bold text-slate-900">
-			{sym}{rate > 0 ? rate.toLocaleString() : '—'}
-			<span class="text-[11px] font-medium text-slate-400">/{unit}</span>
-		</p>
+		<div>
+			<p class="text-sm font-bold text-slate-900">
+				{#if converted}<span class="text-[11px] font-medium text-slate-400">~</span>{/if}
+				{sym}{rate > 0 ? rate.toLocaleString() : '—'}
+				<span class="text-[11px] font-medium text-slate-400">/{unit}</span>
+			</p>
+			{#if converted}
+				<p class="mt-0.5 text-[11px] font-medium text-slate-400">
+					≈ {baseSym}{baseRate.toLocaleString()}
+					{listing.currency}/{unit}
+				</p>
+			{/if}
+		</div>
 		{#if listing.minStayNights > 1}
 			<p class="text-[10px] font-semibold text-slate-400">Min {listing.minStayNights} {unit}s</p>
 		{/if}
@@ -156,7 +174,12 @@
 			<span class="shrink-0 font-bold text-amber-600">🔒</span>
 			<span
 				><strong>Security deposit:</strong>
-				{sym}{(securityDeposit ?? 0).toLocaleString()} — collected at booking.</span
+				{#if converted}<span>~ </span>{/if}
+				{sym}{(securityDeposit ?? 0).toLocaleString()}
+				{#if converted && securityDepositBase > 0}
+					({baseSym}{(securityDepositBase ?? 0).toLocaleString()})
+				{/if}
+				— collected at booking.</span
 			>
 		</div>
 	{/if}
@@ -180,7 +203,12 @@
 						<p class="text-sm font-semibold text-slate-800">Request vehicle delivery</p>
 						<p class="mt-0.5 text-xs text-slate-400">
 							{#if deliveryFee > 0}
-								{sym}{deliveryFee.toLocaleString()} delivery fee · within
+								{#if converted}<span>~ </span>{/if}
+								{sym}{deliveryFee.toLocaleString()} delivery fee
+								{#if converted && deliveryFeeBase > 0}
+									({baseSym}{(deliveryFeeBase ?? 0).toLocaleString()})
+								{/if}
+								· within
 								{listing.deliveryRadiusKm ?? '—'} km
 							{:else}
 								Free delivery · within {listing.deliveryRadiusKm ?? '—'} km

@@ -74,7 +74,7 @@
 		endDate = '',
 		onChange,
 		label = 'Dates',
-		placeholder = 'Add dates',
+		placeholder = 'Select your dates',
 		isCar = false,
 		minDate = getTodayString(),
 		variant = 'default',
