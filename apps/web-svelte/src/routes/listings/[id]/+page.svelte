@@ -70,8 +70,9 @@
 		const sym = currencySymbol(detail.localizedCurrency ?? detail.currency);
 		const baseSym = currencySymbol(detail.currency);
 		const money = (loc: number | null | undefined, base: number | null | undefined) => {
-			let s = `${converted ? '~ ' : ''}${sym}${(loc ?? 0).toLocaleString()}`;
-			if (converted && base && loc !== base) s += ` (${baseSym}${base.toLocaleString()})`;
+			const shown = loc ?? base;
+			let s = `${converted ? '~ ' : ''}${sym}${(shown ?? 0).toLocaleString()}`;
+			if (converted && base && shown !== base) s += ` (${baseSym}${base.toLocaleString()})`;
 			return s;
 		};
 		if (detail.category !== 'car') {
@@ -111,12 +112,26 @@
 	let WidgetComponent = $state<
 		typeof import('$lib/components/BookingWidget.svelte').default | null
 	>(null);
+	let MapComponent = $state<typeof import('$lib/components/ListingMap.svelte').default | null>(
+		null
+	);
 
 	$effect(() => {
 		if (!browser) return;
 		let cancelled = false;
 		void import('$lib/components/BookingWidget.svelte').then((mod) => {
 			if (!cancelled) WidgetComponent = mod.default;
+		});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	$effect(() => {
+		if (!browser) return;
+		let cancelled = false;
+		void import('$lib/components/ListingMap.svelte').then((mod) => {
+			if (!cancelled) MapComponent = mod.default;
 		});
 		return () => {
 			cancelled = true;
@@ -167,6 +182,11 @@
 		{#if detail.isAccredited}
 			<span class="rounded-full bg-[#1D8D2B]/90 px-2.5 py-1 text-[10px] font-semibold text-white">
 				✓ Verified
+			</span>
+		{/if}
+		{#if detail.promoBadge?.labelText}
+			<span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700">
+				🏷️ {detail.promoBadge.labelText}
 			</span>
 		{/if}
 		{#if detail.starRating}
@@ -236,6 +256,66 @@
 					{/each}
 				</dl>
 			</section>
+
+			{#if detail.lat != null && detail.lng != null}
+				<section>
+					<h2 class="font-serif text-2xl font-bold text-slate-900">Where you'll be</h2>
+					{#if detail.address}
+						<p class="mt-1 text-sm text-slate-500">{detail.address}</p>
+					{/if}
+					<div
+						class="relative z-0 mt-4 h-[300px] overflow-hidden rounded-3xl border border-slate-200"
+					>
+						{#if MapComponent}
+							<MapComponent
+								listings={[detail]}
+								hoveredId={detail.id}
+								onHover={() => {}}
+								onSelect={() => {}}
+							/>
+						{:else}
+							<div
+								class="flex h-full w-full flex-col items-center justify-center gap-3 rounded-3xl bg-slate-100"
+							>
+								<div
+									class="h-6 w-6 animate-spin rounded-full border-4 border-[#0B1E3F] border-t-transparent"
+								></div>
+								<p class="text-xs font-semibold tracking-wider text-slate-400 uppercase">
+									Loading map…
+								</p>
+							</div>
+						{/if}
+					</div>
+				</section>
+			{:else}
+				<section>
+					<h2 class="font-serif text-2xl font-bold text-slate-900">Where you'll be</h2>
+					<div
+						class="mt-4 flex h-[300px] w-full flex-col items-center justify-center rounded-3xl border border-slate-200 bg-slate-100"
+					>
+						<svg
+							class="h-8 w-8 text-slate-400"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"
+							/>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"
+							/>
+						</svg>
+						<p class="mt-2 text-sm font-semibold text-slate-600">{locationLabel}</p>
+						<p class="mt-1 text-xs text-slate-400">Location coordinates not available</p>
+					</div>
+				</section>
+			{/if}
 
 			{#if reviews && reviews.reviews.length > 0}
 				<ReviewsSection {reviews} listingName={detail.name} />

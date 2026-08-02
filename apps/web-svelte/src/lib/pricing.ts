@@ -25,7 +25,11 @@ export function getTaxRate(country?: string | null): number {
 
 export interface PriceBreakdown {
 	nights: number;
+	/** Base amount before any discounts (rate × nights). */
+	baseAmount: number;
 	subtotal: number;
+	/** Promotional discount applied to the base rate before fees. */
+	promotionDiscount: number;
 	serviceFee: number;
 	taxAmount: number;
 	deliveryFee: number;
@@ -49,10 +53,14 @@ export function computePriceBreakdown(options: {
 	/** Security deposit for cars; waived when the provider supplies a driver. */
 	securityDeposit?: number;
 	driverProvided?: boolean;
+	/** Promotional discount (in currency units) applied to the base amount. */
+	promotionDiscount?: number;
 }): PriceBreakdown | null {
 	const nights = nightsBetween(options.checkIn, options.checkOut);
 	if (nights <= 0 || options.pricePerNight <= 0) return null;
-	const subtotal = options.pricePerNight * nights;
+	const baseAmount = options.pricePerNight * nights;
+	const promotionDiscount = Number((options.promotionDiscount ?? 0).toFixed(2));
+	const subtotal = Math.max(0, baseAmount - promotionDiscount);
 	const serviceFee = Math.ceil(subtotal * (options.commissionRate ?? 0.15) * 100) / 100;
 	const taxAmount = Number((subtotal * (options.taxRate ?? 0)).toFixed(2));
 	const isCar = options.category === 'car';
@@ -63,7 +71,9 @@ export function computePriceBreakdown(options: {
 	const total = Number((commissionableAmount + securityDeposit).toFixed(2));
 	return {
 		nights,
+		baseAmount,
 		subtotal,
+		promotionDiscount,
 		serviceFee,
 		taxAmount,
 		deliveryFee,

@@ -13,6 +13,7 @@ export interface PublicListing {
 	country: string;
 	primaryPhotoUrl: string | null;
 	description?: string;
+	promoBadge?: { labelText?: string; labelColour?: string };
 }
 
 export interface ListingPhoto {
@@ -147,10 +148,10 @@ export function mapSearchResult(
 
 	const town = (l.town ?? l.city ?? '') as string;
 	const country = (l.country ?? l.countryCode ?? '') as string;
-	const rawRoomTypes = Array.isArray(l.hotelRoomTypes)
-		? (l.hotelRoomTypes as Record<string, unknown>[])
-		: Array.isArray(l.roomTypes)
-			? (l.roomTypes as Record<string, unknown>[])
+	const rawRoomTypes = Array.isArray(l.roomTypes)
+		? (l.roomTypes as Record<string, unknown>[])
+		: Array.isArray(l.hotelRoomTypes)
+			? (l.hotelRoomTypes as Record<string, unknown>[])
 			: [];
 
 	let basePrice = Number(l.pricePerNight ?? l.nightlyRate ?? l.pricePerDay ?? l.dailyRate ?? 0);
@@ -175,7 +176,8 @@ export function mapSearchResult(
 		town,
 		country,
 		primaryPhotoUrl: (l.primaryPhotoUrl ?? photos[0]?.cdnUrl ?? null) as string | null,
-		description: (l.description ?? '') as string
+		description: (l.description ?? '') as string,
+		promoBadge: l?.promoBadge as { labelText?: string; labelColour?: string } | undefined
 	};
 }
 
@@ -188,10 +190,10 @@ export function mapListingDetail(
 
 	const photos = Array.isArray(l?.photos) ? ((l?.photos as Record<string, unknown>[]) ?? []) : [];
 	const rawAmenities = Array.isArray(l?.amenities) ? (l?.amenities as unknown[]) : [];
-	const rawRoomTypes = Array.isArray(l?.hotelRoomTypes)
-		? (l?.hotelRoomTypes as Record<string, unknown>[])
-		: Array.isArray(l?.roomTypes)
-			? (l?.roomTypes as Record<string, unknown>[])
+	const rawRoomTypes = Array.isArray(l?.roomTypes)
+		? (l?.roomTypes as Record<string, unknown>[])
+		: Array.isArray(l?.hotelRoomTypes)
+			? (l?.hotelRoomTypes as Record<string, unknown>[])
 			: [];
 
 	return {

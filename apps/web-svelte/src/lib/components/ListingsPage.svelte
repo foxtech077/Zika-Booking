@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { browser } from '$app/environment';
 	import { navigating, page } from '$app/state';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import { cn, todayString } from '$lib/utils';
@@ -59,6 +60,20 @@
 	let showFilterPanel = $state(false);
 	let loadingMore = $state(false);
 	let appended = $state<PublicListingDetail[]>([]);
+	let showMap = $state(false);
+	let hoveredId = $state<string | null>(null);
+	let MapComponent = $state<typeof import('./ListingMap.svelte').default | null>(null);
+
+	$effect(() => {
+		if (!browser) return;
+		let cancelled = false;
+		void import('./ListingMap.svelte').then((mod) => {
+			if (!cancelled) MapComponent = mod.default;
+		});
+		return () => {
+			cancelled = true;
+		};
+	});
 
 	let showSuggestions = $state(false);
 	let nominatimResults = $state<NominatimResult[]>([]);
@@ -422,7 +437,12 @@
 	</form>
 </div>
 
-<div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+<div
+	class={cn(
+		'px-4 py-6 sm:px-6 lg:px-8',
+		showMap ? 'mx-auto w-full max-w-none' : 'mx-auto max-w-7xl'
+	)}
+>
 	<div class="lg:flex lg:gap-8 xl:gap-12 2xl:gap-16">
 		<!-- Desktop filter sidebar -->
 		<aside class="hidden shrink-0 lg:block lg:w-72 xl:w-80">
@@ -476,6 +496,32 @@
 				</div>
 
 				<div class="flex items-center gap-3">
+					<button
+						type="button"
+						onclick={() => (showMap = !showMap)}
+						class={cn(
+							'hidden items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-semibold transition lg:flex',
+							showMap
+								? 'border-[#0c2614] bg-[#0c2614] text-white'
+								: 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'
+						)}
+					>
+						<svg
+							class="h-4 w-4"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+							/>
+						</svg>
+						{showMap ? 'Hide Map' : 'Show Map'}
+					</button>
+
 					<button
 						type="button"
 						onclick={() => (showFilterPanel = true)}
@@ -538,92 +584,129 @@
 
 			<!-- Results -->
 			<div class="relative">
-				{#if allResults.length > 0}
-					<div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-						{#each allResults as listing (listing.id)}
-							<ListingCard {listing} />
-						{/each}
-					</div>
-				{:else if !initial.error}
-					<div
-						class="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 py-20 text-center"
-					>
+				<div class={cn('flex', showMap ? 'gap-5' : '')}>
+					{#if showMap}
 						<div
-							class="mb-1 flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 text-3xl"
+							class="sticky top-[140px] hidden h-[calc(100vh-210px)] w-[45%] shrink-0 overflow-hidden rounded-3xl border border-slate-200 shadow-md lg:block"
 						>
-							🔍
+							{#if MapComponent}
+								<MapComponent
+									listings={allResults}
+									{hoveredId}
+									onHover={(id: string | null) => (hoveredId = id)}
+									onSelect={(id: string) => void goto(`/listings/${id}`)}
+								/>
+							{:else}
+								<div
+									class="flex h-full w-full flex-col items-center justify-center gap-3 rounded-3xl bg-slate-100"
+								>
+									<div
+										class="h-6 w-6 animate-spin rounded-full border-4 border-[#0B1E3F] border-t-transparent"
+									></div>
+									<p class="text-xs font-semibold tracking-wider text-slate-400 uppercase">
+										Loading map…
+									</p>
+								</div>
+							{/if}
 						</div>
-						<h3 class="text-lg font-bold text-slate-900">
-							{query.trim() ? `No results found for "${query.trim()}"` : `No ${meta.plural} found`}
-						</h3>
-						<p class="max-w-xs text-xs leading-relaxed text-slate-400">
-							{query.trim()
-								? 'No listings match your search. Try a different location or property name.'
-								: 'Try adjusting your filters, changing dates, or searching a broader location.'}
-						</p>
-						{#if activeFilterCount > 0}
-							<button
-								type="button"
-								onclick={resetFilters}
-								class="mt-2 rounded-xl bg-[#0c2614] px-6 py-2.5 text-xs font-bold tracking-wider text-white uppercase transition hover:bg-[#1D8D2B]"
+					{/if}
+
+					<div class={cn('min-w-0 flex-1', showMap ? 'overflow-y-auto' : '')}>
+						{#if allResults.length > 0}
+							<div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+								{#each allResults as listing (listing.id)}
+									<ListingCard
+										{listing}
+										hovered={hoveredId === listing.id}
+										onmouseenter={() => (hoveredId = listing.id)}
+										onmouseleave={() => (hoveredId = null)}
+									/>
+								{/each}
+							</div>
+						{:else if !initial.error}
+							<div
+								class="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 py-20 text-center"
 							>
-								Clear all filters
-							</button>
+								<div
+									class="mb-1 flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 text-3xl"
+								>
+									🔍
+								</div>
+								<h3 class="text-lg font-bold text-slate-900">
+									{query.trim()
+										? `No results found for "${query.trim()}"`
+										: `No ${meta.plural} found`}
+								</h3>
+								<p class="max-w-xs text-xs leading-relaxed text-slate-400">
+									{query.trim()
+										? 'No listings match your search. Try a different location or property name.'
+										: 'Try adjusting your filters, changing dates, or searching a broader location.'}
+								</p>
+								{#if activeFilterCount > 0}
+									<button
+										type="button"
+										onclick={resetFilters}
+										class="mt-2 rounded-xl bg-[#0c2614] px-6 py-2.5 text-xs font-bold tracking-wider text-white uppercase transition hover:bg-[#1D8D2B]"
+									>
+										Clear all filters
+									</button>
+								{/if}
+							</div>
+						{/if}
+
+						<!-- Load more -->
+						{#if hasMore}
+							<div class="mt-10 text-center">
+								<button
+									type="button"
+									onclick={loadMore}
+									disabled={loadingMore}
+									class="inline-flex items-center gap-2 rounded-full border border-[#0c2614] px-8 py-3 text-sm font-semibold text-[#0c2614] transition hover:bg-[#0c2614] hover:text-white disabled:opacity-50"
+								>
+									{#if loadingMore}
+										<span
+											class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+										></span>
+										Loading…
+									{:else}
+										Load More {meta.label}
+										<svg
+											class="h-4 w-4"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2.5"
+											viewBox="0 0 24 24"
+										>
+											<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+										</svg>
+									{/if}
+								</button>
+								<p class="mt-2 text-xs text-slate-400">
+									Showing {allResults.length} of {initial.totalCount.toLocaleString()}
+								</p>
+							</div>
+						{/if}
+
+						{#if allResults.length === 0 && initial.totalCount === 0 && initial.error}
+							<div class="mt-4 text-center text-xs text-slate-400">
+								The listing service is currently unreachable. Please try again shortly.
+							</div>
+						{/if}
+
+						{#if isNavigating}
+							<div
+								class="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/50 backdrop-blur-[2px]"
+							>
+								<div class="flex flex-col items-center gap-3">
+									<div
+										class="h-8 w-8 animate-spin rounded-full border-4 border-[#1D8D2B]/20 border-t-[#1D8D2B]"
+									></div>
+									<p class="text-xs font-semibold text-slate-600">Loading listings…</p>
+								</div>
+							</div>
 						{/if}
 					</div>
-				{/if}
-
-				<!-- Load more -->
-				{#if hasMore}
-					<div class="mt-10 text-center">
-						<button
-							type="button"
-							onclick={loadMore}
-							disabled={loadingMore}
-							class="inline-flex items-center gap-2 rounded-full border border-[#0c2614] px-8 py-3 text-sm font-semibold text-[#0c2614] transition hover:bg-[#0c2614] hover:text-white disabled:opacity-50"
-						>
-							{#if loadingMore}
-								<span
-									class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
-								></span>
-								Loading…
-							{:else}
-								Load More {meta.label}
-								<svg
-									class="h-4 w-4"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2.5"
-									viewBox="0 0 24 24"
-								>
-									<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-								</svg>
-							{/if}
-						</button>
-						<p class="mt-2 text-xs text-slate-400">
-							Showing {allResults.length} of {initial.totalCount.toLocaleString()}
-						</p>
-					</div>
-				{/if}
-
-				{#if allResults.length === 0 && initial.totalCount === 0 && initial.error}
-					<div class="mt-4 text-center text-xs text-slate-400">
-						The listing service is currently unreachable. Please try again shortly.
-					</div>
-				{/if}
-
-				{#if isNavigating}
-					<div
-						class="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/50 backdrop-blur-[2px]"
-					>
-						<div class="flex flex-col items-center gap-3">
-							<div
-								class="h-8 w-8 animate-spin rounded-full border-4 border-[#1D8D2B]/20 border-t-[#1D8D2B]"
-							></div>
-							<p class="text-xs font-semibold text-slate-600">Loading listings…</p>
-						</div>
-					</div>
-				{/if}
+				</div>
 			</div>
 		</div>
 	</div>

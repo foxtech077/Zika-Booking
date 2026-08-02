@@ -6,7 +6,7 @@
 		isRangeAvailable,
 		type PublicListingDetail
 	} from '$lib/listing-api';
-	import { computePriceBreakdown, getTaxRate } from '$lib/pricing';
+	import { computePriceBreakdown, getTaxRate, nightsBetween } from '$lib/pricing';
 	import { currencySymbol } from '$lib/utils';
 	import DateRangePicker from './DateRangePicker.svelte';
 
@@ -24,20 +24,22 @@
 				})
 			: null
 	);
-	const rate = $derived(
-		cheapestRoom?.localizedPricePerNight ??
-			cheapestRoom?.pricePerNight ??
-			listing.localizedNightlyRate ??
-			listing.localizedDailyRate ??
-			listing.pricePerNight
-	);
-	const sym = $derived(currencySymbol(listing.localizedCurrency ?? listing.currency));
-	const baseSym = $derived(currencySymbol(listing.currency));
 	/* True when the API returned prices converted into a different currency,
 	   so shown amounts are an estimate against the actual (base) price. */
 	const converted = $derived(
 		!!listing.localizedCurrency && listing.localizedCurrency !== listing.currency
 	);
+	const rate = $derived(
+		converted
+			? (cheapestRoom?.localizedPricePerNight ??
+					listing.localizedNightlyRate ??
+					listing.localizedDailyRate ??
+					cheapestRoom?.pricePerNight ??
+					listing.pricePerNight)
+			: (cheapestRoom?.pricePerNight ?? listing.pricePerNight)
+	);
+	const sym = $derived(currencySymbol(listing.localizedCurrency ?? listing.currency));
+	const baseSym = $derived(currencySymbol(listing.currency));
 	const baseRate = $derived(cheapestRoom?.pricePerNight ?? listing.pricePerNight);
 	const securityDeposit = $derived(
 		listing.localizedSecurityDeposit ?? listing.securityDeposit ?? 0
@@ -45,6 +47,19 @@
 	const securityDepositBase = $derived(listing.securityDeposit ?? 0);
 	const deliveryFee = $derived(listing.localizedDeliveryFee ?? listing.deliveryFee ?? 0);
 	const deliveryFeeBase = $derived(listing.deliveryFee ?? 0);
+
+	const promoPct = $derived(
+		listing.promoBadge?.labelText
+			? parseFloat(listing.promoBadge.labelText.replace(/[^0-9.]/g, '')) || 0
+			: 0
+	);
+	const promoLabel = $derived(
+		promoPct > 0 ? (listing.promoBadge?.labelText ?? `${promoPct}% OFF`) : ''
+	);
+	/* Discounted per-unit rate shown in the header (original stays as the base). */
+	const displayRate = $derived(
+		promoPct > 0 ? Number((rate * (1 - promoPct / 100)).toFixed(2)) : rate
+	);
 
 	let checkIn = $state('');
 	let checkOut = $state('');
@@ -55,6 +70,13 @@
 		| null
 		| undefined
 	>(undefined);
+
+	/* Promo discount in currency units for the breakdown (applied to the base amount). */
+	const promotionDiscount = $derived(
+		checkIn && checkOut && promoPct > 0
+			? Number((rate * nightsBetween(checkIn, checkOut) * (promoPct / 100)).toFixed(2))
+			: 0
+	);
 
 	const breakdown = $derived.by(() =>
 		checkIn && checkOut
@@ -67,7 +89,8 @@
 					category: listing.category,
 					deliveryFee: deliveryRequested ? deliveryFee : 0,
 					securityDeposit,
-					driverProvided: listing.driverProvided
+					driverProvided: listing.driverProvided,
+					promotionDiscount
 				})
 			: null
 	);
@@ -132,13 +155,20 @@
 </script>
 
 <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-md">
-	<div class="flex items-end justify-between gap-3">
-		<div>
-			<p class="text-sm font-bold text-slate-900">
-				{#if converted}<span class="text-[11px] font-medium text-slate-400">~</span>{/if}
-				{sym}{rate > 0 ? rate.toLocaleString() : '—'}
-				<span class="text-[11px] font-medium text-slate-400">/{unit}</span>
-			</p>
+	<div class="flex items-start justify-between gap-3">
+		<div class="min-w-0">
+			<div class="flex flex-wrap items-baseline gap-2">
+				<p class="text-2xl font-extrabold text-slate-900">
+					{#if converted}<span class="text-sm font-medium text-slate-400">~</span>{/if}
+					{sym}{displayRate > 0 ? displayRate.toLocaleString() : '—'}
+					{#if promoPct > 0}
+						<span class="ml-1 text-sm font-semibold text-slate-400 line-through">
+							{sym}{rate.toLocaleString()}
+						</span>
+					{/if}
+				</p>
+			</div>
+			<p class="mt-0.5 text-xs font-medium text-slate-400">/ {unit}</p>
 			{#if converted}
 				<p class="mt-0.5 text-[11px] font-medium text-slate-400">
 					≈ {baseSym}{baseRate.toLocaleString()}
@@ -147,12 +177,31 @@
 			{/if}
 		</div>
 		{#if listing.minStayNights > 1}
-			<p class="text-[10px] font-semibold text-slate-400">Min {listing.minStayNights} {unit}s</p>
+			<p class="shrink-0 text-[10px] font-semibold text-slate-400">
+				Min {listing.minStayNights}
+				{unit}s
+			</p>
 		{/if}
 	</div>
 
+	{#if promoPct > 0}
+		<div
+			class="mt-3 flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5"
+		>
+			<span class="shrink-0 text-base">🏷️</span>
+			<div class="min-w-0 flex-1">
+				<p class="text-[10px] font-bold tracking-wider text-emerald-700 uppercase">Best Offer</p>
+			</div>
+			<span
+				class="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold whitespace-nowrap text-emerald-700"
+			>
+				{promoLabel}
+			</span>
+		</div>
+	{/if}
+
 	{#if cheapestRoom}
-		<p class="mt-1 text-[11px] font-medium text-slate-400">
+		<p class="mt-3 text-[11px] font-medium text-slate-400">
 			{cheapestRoom.name}{cheapestRoom.maxGuests ? ` · up to ${cheapestRoom.maxGuests} guests` : ''}
 		</p>
 	{/if}
@@ -265,8 +314,14 @@
 					{sym}{rate.toLocaleString()} × {breakdown.nights}
 					{unit}{breakdown.nights > 1 ? 's' : ''}
 				</span>
-				<span>{sym}{breakdown.subtotal.toLocaleString()}</span>
+				<span>{sym}{breakdown.baseAmount.toLocaleString()}</span>
 			</div>
+			{#if breakdown.promotionDiscount > 0}
+				<div class="flex justify-between font-semibold text-emerald-600">
+					<span>Promotional discount ({promoLabel})</span>
+					<span>−{sym}{breakdown.promotionDiscount.toLocaleString()}</span>
+				</div>
+			{/if}
 			{#if listing.commissionRate}
 				<div class="flex justify-between">
 					<span>Service fee ({Math.round(listing.commissionRate * 100)}%)</span>

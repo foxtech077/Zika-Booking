@@ -1,9 +1,19 @@
 <script lang="ts">
 	import type { PublicListing, PublicListingDetail } from '$lib/listing-api';
-	import { currencySymbol } from '$lib/utils';
+	import { cn, currencySymbol } from '$lib/utils';
 	import ListingImage from './ListingImage.svelte';
 
-	let { listing }: { listing: PublicListing & Partial<PublicListingDetail> } = $props();
+	let {
+		listing,
+		hovered = false,
+		onmouseenter = () => {},
+		onmouseleave = () => {}
+	}: {
+		listing: PublicListing & Partial<PublicListingDetail>;
+		hovered?: boolean;
+		onmouseenter?: () => void;
+		onmouseleave?: () => void;
+	} = $props();
 
 	const isCar = $derived(listing.category === 'car');
 	const unit = $derived(isCar ? 'day' : 'night');
@@ -11,15 +21,28 @@
 	let favOverride = $state<boolean | null>(null);
 	const isFav = $derived(favOverride ?? listing.isFavourited ?? false);
 
+	const promoPct = $derived(
+		listing.promoBadge?.labelText
+			? parseFloat(listing.promoBadge.labelText.replace(/[^0-9.]/g, '')) || 0
+			: 0
+	);
+	const promoColour = $derived(listing.promoBadge?.labelColour || '#C84B2F');
+	const rawPrice = $derived(listing.pricePerNight);
 	const basePrice = $derived(
-		listing.mrpPrice && listing.mrpPrice > listing.pricePerNight
-			? listing.mrpPrice
-			: listing.pricePerNight
+		promoPct > 0
+			? rawPrice
+			: listing.mrpPrice && listing.mrpPrice > listing.pricePerNight
+				? listing.mrpPrice
+				: listing.pricePerNight
+	);
+	const displayPrice = $derived(
+		promoPct > 0 ? Number((rawPrice * (1 - promoPct / 100)).toFixed(2)) : listing.pricePerNight
 	);
 	const discountPct = $derived(
-		basePrice > listing.pricePerNight
-			? Math.round(((basePrice - listing.pricePerNight) / basePrice) * 100)
-			: 0
+		basePrice > displayPrice ? Math.round(((basePrice - displayPrice) / basePrice) * 100) : 0
+	);
+	const promoLabel = $derived(
+		promoPct > 0 ? (listing.promoBadge?.labelText ?? `${promoPct}% OFF`) : ''
 	);
 
 	const localizedRate = $derived(
@@ -27,22 +50,32 @@
 			? (listing.localizedDailyRate ?? listing.localizedNightlyRate)
 			: listing.localizedNightlyRate
 	);
+	const promoLocalizedRate = $derived(
+		promoPct > 0 && localizedRate ? Number((localizedRate * (1 - promoPct / 100)).toFixed(2)) : null
+	);
 	const showLocalized = $derived(
-		!!localizedRate &&
-			localizedRate > 0 &&
+		!!(promoLocalizedRate ?? localizedRate) &&
+			(promoLocalizedRate ?? localizedRate)! > 0 &&
 			!!listing.localizedCurrency &&
 			listing.localizedCurrency !== listing.currency
 	);
 	const localizedLabel = $derived(
-		showLocalized && localizedRate && listing.localizedCurrency
-			? `~${currencySymbol(listing.localizedCurrency)}${localizedRate.toLocaleString()}`
+		showLocalized && (promoLocalizedRate ?? localizedRate) && listing.localizedCurrency
+			? `~${currencySymbol(listing.localizedCurrency)}${(promoLocalizedRate ?? localizedRate)!.toLocaleString()}`
 			: ''
 	);
 </script>
 
 <a
 	href={`/listings/${listing.id}`}
-	class="group relative block cursor-pointer overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md transition-all duration-300 hover:-translate-y-1 hover:border-[#1D8D2B] hover:shadow-xl"
+	{onmouseenter}
+	{onmouseleave}
+	class={cn(
+		'group relative block cursor-pointer overflow-hidden rounded-2xl border bg-white shadow-md transition-all duration-300 hover:-translate-y-1 hover:shadow-xl',
+		hovered
+			? 'border-[#1D8D2B] ring-2 ring-[#1D8D2B]/60'
+			: 'border-slate-200 hover:border-[#1D8D2B]'
+	)}
 >
 	<div class="relative h-44 w-full overflow-hidden">
 		<ListingImage
@@ -77,7 +110,14 @@
 						Instant Book
 					</span>
 				{/if}
-				{#if discountPct > 0}
+				{#if promoLabel}
+					<span
+						class="rounded-full px-2.5 py-1 text-[9px] font-bold text-white backdrop-blur-sm"
+						style={`background-color:${promoColour}`}
+					>
+						{promoLabel}
+					</span>
+				{:else if discountPct > 0}
 					<span
 						class="rounded-full bg-[#C84B2F] px-2.5 py-1 text-[9px] font-bold text-white backdrop-blur-sm"
 					>
@@ -125,7 +165,7 @@
 				{location}
 			</p>
 			<div class="ml-2 shrink-0 text-right">
-				{#if basePrice > listing.pricePerNight}
+				{#if basePrice > displayPrice}
 					<p class="text-[9px] leading-none text-slate-400 line-through">
 						{currencySymbol(listing.currency)}{basePrice.toLocaleString()}
 					</p>
@@ -137,12 +177,12 @@
 					</p>
 					<p class="text-[10px] font-medium text-slate-400">
 						{currencySymbol(listing.currency)}
-						{listing.pricePerNight > 0 ? listing.pricePerNight.toLocaleString() : '—'}/{unit}
+						{displayPrice > 0 ? displayPrice.toLocaleString() : '—'}/{unit}
 					</p>
 				{:else}
 					<p class="text-sm font-bold text-slate-800">
 						{currencySymbol(listing.currency)}
-						{listing.pricePerNight > 0 ? listing.pricePerNight.toLocaleString() : '—'}
+						{displayPrice > 0 ? displayPrice.toLocaleString() : '—'}
 						<span class="text-[10px] font-medium text-slate-400">/{unit}</span>
 					</p>
 				{/if}
