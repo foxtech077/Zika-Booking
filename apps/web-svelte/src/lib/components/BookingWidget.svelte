@@ -17,11 +17,21 @@
 
 	const cheapestRoom = $derived(
 		listing.category === 'hotel' && listing.roomTypes && listing.roomTypes.length > 0
-			? listing.roomTypes.reduce((min, rt) => (rt.pricePerNight < min.pricePerNight ? rt : min))
+			? listing.roomTypes.reduce((min, rt) => {
+					const minLocal = min.localizedPricePerNight ?? min.pricePerNight;
+					const rtLocal = rt.localizedPricePerNight ?? rt.pricePerNight;
+					return rtLocal < minLocal ? rt : min;
+				})
 			: null
 	);
-	const rate = $derived(cheapestRoom?.pricePerNight ?? listing.pricePerNight);
-	const sym = $derived(currencySymbol(listing.currency));
+	const rate = $derived(
+		cheapestRoom?.localizedPricePerNight ??
+			cheapestRoom?.pricePerNight ??
+			listing.localizedNightlyRate ??
+			listing.localizedDailyRate ??
+			listing.pricePerNight
+	);
+	const sym = $derived(currencySymbol(listing.localizedCurrency ?? listing.currency));
 
 	let checkIn = $state('');
 	let checkOut = $state('');

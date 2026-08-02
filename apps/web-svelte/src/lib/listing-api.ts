@@ -341,15 +341,22 @@ export async function fetchActivePromotion(
 export async function fetchListingDetail(
 	fetchFn: typeof fetch,
 	id: string,
-	apiUrl: string
+	apiUrl: string,
+	currency?: string
 ): Promise<PublicListingDetail | null> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 	try {
-		const res = await fetchFn(`${apiUrl}/listings/${encodeURIComponent(id)}/public`, {
-			headers: { Accept: 'application/json' },
-			signal: controller.signal
-		});
+		const query = new URLSearchParams();
+		if (currency) query.set('currency', currency);
+		const qs = query.toString();
+		const res = await fetchFn(
+			`${apiUrl}/listings/${encodeURIComponent(id)}/public${qs ? `?${qs}` : ''}`,
+			{
+				headers: { Accept: 'application/json' },
+				signal: controller.signal
+			}
+		);
 		if (!res.ok) return null;
 		const json = (await res.json()) as { success?: boolean; data?: Record<string, unknown> };
 		if (!json?.success) return null;
