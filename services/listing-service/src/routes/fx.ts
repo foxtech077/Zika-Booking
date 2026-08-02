@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { convertCurrency } from "../services/fx.services.js";
-import { ceilingForCurrency } from "../services/exchangeRate.services.js";
+import { ceilingForCurrency, getEurRateOrNull } from "../services/exchangeRate.services.js";
+import { enqueueExchangeRateRefresh } from "../jobs.js";
 
 const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
 
@@ -123,6 +124,89 @@ export async function fxRoutes(app: FastifyInstance) {
         req.log.error({ err, from, to }, "Internal FX conversion failed");
         return sendError(reply, 502, "FX_UNAVAILABLE", "Exchange rate unavailable. Please try again later.");
       }
+    },
+  );
+
+  /**
+   * Strict EUR quote for the money-of-record charge/transfer path.
+   * Uses the DB exchange-rate table only (NO live-API fallback). If the rate
+   * is stale or missing it enqueues an immediate BullMQ re-sync and returns
+   * 503 TEMPORARILY_UNAVAILABLE so the caller can retry instead of charging a
+   * wrong amount.
+   */
+  app.post(
+    "/internal/fx/eur-quote",
+    {
+      schema: {
+        tags: ["FX"],
+        summary: "Strict quote of a base-currency amount in EUR (service-to-service)",
+        body: {
+          type: "object",
+          required: ["amount", "currency"],
+          properties: {
+            amount: { type: "number" },
+            currency: { type: "string", minLength: 3, maxLength: 3 },
+          },
+        },
+      },
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      if (!INTERNAL_SERVICE_KEY) {
+        return sendError(reply, 503, "SERVICE_UNAVAILABLE", "Internal service key not configured.");
+      }
+      const token = req.headers["x-service-key"];
+      if (!token || token !== INTERNAL_SERVICE_KEY) {
+        return sendError(reply, 401, "UNAUTHORIZED", "Invalid or missing service token.");
+      }
+
+      const { amount, currency } = req.body as { amount: number; currency: string };
+      const n = Number(amount);
+      if (!Number.isFinite(n) || n < 0) {
+        return sendError(reply, 400, "INVALID_AMOUNT", "amount must be a non-negative number.");
+      }
+      const from = currency.toUpperCase();
+
+      const rate = await getEurRateOrNull(from);
+      if (rate === null) {
+        void enqueueExchangeRateRefresh();
+        return sendError(reply, 503, "TEMPORARILY_UNAVAILABLE", "EUR conversion is temporarily unavailable. Please try again shortly.");
+      }
+
+      const converted = ceilingForCurrency(n * rate, "EUR");
+      return sendSuccess(reply, 200, {
+        amount: n,
+        converted,
+        rate: Number(rate.toFixed(6)),
+        from,
+        to: "EUR",
+      });
+    },
+  );
+
+  /**
+   * Trigger an immediate exchange-rate re-sync (schedules a BullMQ
+   * ExchangeRateRefresher job). Used by the payment service when a stale-EUR
+   * failure occurs so the guest can retry shortly.
+   */
+  app.post(
+    "/internal/fx/refresh",
+    {
+      schema: {
+        tags: ["FX"],
+        summary: "Schedule an immediate exchange-rate refresh (service-to-service)",
+        body: { type: "object", additionalProperties: false },
+      },
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      if (!INTERNAL_SERVICE_KEY) {
+        return sendError(reply, 503, "SERVICE_UNAVAILABLE", "Internal service key not configured.");
+      }
+      const token = req.headers["x-service-key"];
+      if (!token || token !== INTERNAL_SERVICE_KEY) {
+        return sendError(reply, 401, "UNAUTHORIZED", "Invalid or missing service token.");
+      }
+      await enqueueExchangeRateRefresh();
+      return sendSuccess(reply, 200, { message: "Exchange-rate refresh scheduled." });
     },
   );
 }

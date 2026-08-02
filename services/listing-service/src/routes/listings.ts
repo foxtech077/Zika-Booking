@@ -18,7 +18,7 @@ import {
 } from "../lib/s3.js";
 import { geocodePlaceId, geocodeAddress, reverseGeocode } from "../lib/geocoding.js";
 import { sendListingSubmittedEmail, sendListingActivatedEmail } from "../lib/email.js";
-import { getExchangeRate, ceilingForCurrency } from "../services/exchangeRate.services.js";
+import { getExchangeRate, ceilingForCurrency, getConvertedAmounts } from "../services/exchangeRate.services.js";
 
 const MAX_PHOTOS = 30;
 
@@ -476,6 +476,27 @@ export async function listingRoutes(app: FastifyInstance) {
         }
       }
 
+      // Localized equivalents for absolute-money fee fields (additive only).
+      const feeAmounts: Record<string, number | null> = {
+        securityDeposit: listing.securityDeposit != null ? Number(listing.securityDeposit) : null,
+        deliveryFee: listing.deliveryFee != null ? Number(listing.deliveryFee) : null,
+        cleaningFee: listing.cleaningFee != null ? Number(listing.cleaningFee) : null,
+        extraGuestFee: listing.extraGuestFee != null ? Number(listing.extraGuestFee) : null,
+        earlyCheckinFee: listing.earlyCheckinFee != null ? Number(listing.earlyCheckinFee) : null,
+        lateCheckoutFee: listing.lateCheckoutFee != null ? Number(listing.lateCheckoutFee) : null,
+        extraKmRate: listing.extraKmRate != null ? Number(listing.extraKmRate) : null,
+        ...(listing.childPriceType === "flat" && listing.childPriceValue != null
+          ? { childPrice: Number(listing.childPriceValue) }
+          : {}),
+      };
+      const localizedFees = await getConvertedAmounts(baseCurrency, target, feeAmounts);
+      const localizedFeeFields = Object.fromEntries(
+        Object.entries(localizedFees).map(([k, v]) => [
+          `localized${k.charAt(0).toUpperCase()}${k.slice(1)}`,
+          v,
+        ])
+      );
+
       const formattedListing = {
         ...listing,
         amenities: groupedAmenities,
@@ -489,6 +510,7 @@ export async function listingRoutes(app: FastifyInstance) {
         localizedNightlyRate,
         localizedDailyRate,
         localizedCurrency: target ?? baseCurrency,
+        ...localizedFeeFields,
       };
 
       return sendSuccess(reply, 200, formattedListing);

@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 import { stripe, toStripeAmount } from "../lib/stripe.js";
 import { RefundStatus, PayoutStatus } from "../generated/index.js";
+import { resolveEurCharge, EurQuoteUnavailableError } from "./eurCharge.service.js";
 
 export interface SchedulePayoutParams {
   bookingId: string;
@@ -421,10 +422,34 @@ async function processSinglePayout(payout: any): Promise<void> {
       merchant.payoutMethod === "stripe_connect" &&
       merchant.stripeConnectAccountId
     ) {
+      // EUR is the money-of-record for host transfers. Resolve at the moment
+      // the funds actually move; if the EUR rate is stale, leave the payout
+      // pending so it retries once the scheduled re-sync lands.
+      let eur;
+      try {
+        eur = await resolveEurCharge(Number(payout.amount), payout.currency);
+      } catch (err) {
+        if (err instanceof EurQuoteUnavailableError) {
+          console.error(
+            `[payout-job] Payout ${payout.id}: EUR rate unavailable, leaving pending for retry`,
+          );
+          await prisma.payout.update({
+            where: { id: payout.id },
+            data: {
+              status: PayoutStatus.pending,
+              failureReason: err.message,
+              updatedAt: new Date(),
+            },
+          });
+          return;
+        }
+        throw err;
+      }
+
       const transfer = await stripe.transfers.create(
         {
-          amount: toStripeAmount(Number(payout.amount), payout.currency),
-          currency: payout.currency.toLowerCase(),
+          amount: toStripeAmount(eur.amountEur, "EUR"),
+          currency: "eur",
           destination: merchant.stripeConnectAccountId,
           transfer_group: payout.bookingId,
           source_type: "card",
@@ -442,6 +467,17 @@ async function processSinglePayout(payout: any): Promise<void> {
           status: "paid",
           processedAt: new Date(),
           providerPayoutId,
+          amount: eur.amountEur,
+          currency: "EUR",
+          priceBreakdownJson: {
+            display: {
+              currency: (payout.currency ?? "").toUpperCase() || "USD",
+              providerPayout: Number(payout.amount),
+            },
+            eur: { rate: eur.rate, chargedCurrency: "EUR", providerPayout: eur.amountEur },
+            capturedAt: new Date().toISOString(),
+            source: "payout",
+          },
           failureReason: null,
           updatedAt: new Date(),
         },
