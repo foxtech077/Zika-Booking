@@ -15,9 +15,27 @@ export const listingApi = axios.create({
   timeout: 30_000,
 });
 
+// Endpoints that return localized prices when given a `currency` query param.
+// Scoped deliberately: attaching it to every listing-service call would send a
+// meaningless param to booking, provider and upload routes.
+const LOCALIZED_PRICE_ENDPOINTS = /(^|\/)(search|listings\/[^/]+\/public)(\?|$)/;
+
 listingApi.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken;
   if (token) config.headers.Authorization = `Bearer ${token}`;
+
+  // Ask for prices in the guest's local currency. Several screens build their
+  // URLs as template strings rather than a params object, so doing this here
+  // covers search, browse, home carousels and listing detail in one place.
+  const url = config.url ?? "";
+  if ((config.method ?? "get").toLowerCase() === "get" && LOCALIZED_PRICE_ENDPOINTS.test(url)) {
+    const currency = useAuthStore.getState().localCurrency;
+    const alreadySet = url.includes("currency=") || (config.params as any)?.currency;
+    if (currency && !alreadySet) {
+      config.params = { ...(config.params ?? {}), currency };
+    }
+  }
+
   const fullUrl = `${config.baseURL ?? LISTING_BASE_URL}${config.url ?? ""}`;
   console.log(`[LISTING-API] ▶ ${(config.method ?? "GET").toUpperCase()} ${fullUrl}`);
   if (config.data) console.log("[LISTING-API] Request body:", JSON.stringify(config.data, null, 2));

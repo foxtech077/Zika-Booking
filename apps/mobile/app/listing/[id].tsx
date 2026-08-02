@@ -581,6 +581,7 @@ export default function ListingDetailScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const localCurrency = useAuthStore((s) => s.localCurrency);
   const insets = useSafeAreaInsets();
 
   const [photoIdx, setPhotoIdx] = useState(0);
@@ -599,7 +600,10 @@ export default function ListingDetailScreen() {
 
   // ── Data ──
   const { data: listing, isLoading, isError, refetch: refetchListing } = useQuery<PublicListing>({
-    queryKey: ["listing-full", id],
+    // Prices are localized per currency by the API, so the currency is part of
+    // the cache identity — without it a currency change serves cached amounts
+    // still labelled with the previous currency.
+    queryKey: ["listing-full", id, localCurrency],
     queryFn: async () => {
       const res = await listingApi.get<{ data: PublicListing }>(`/listings/${id}/public`);
       return res.data.data;

@@ -40,6 +40,10 @@ interface Listing {
   primaryPhotoUrl: string | null;
   nightlyRate: number | null;
   dailyRate: number | null;
+  // Localized by the API when a currency is requested; display-only.
+  localizedNightlyRate?: number | null;
+  localizedDailyRate?: number | null;
+  localizedCurrency?: string | null;
   currency: string;
   starRating: number | null;
   isAccredited: boolean;
@@ -98,7 +102,10 @@ function ListingCard({ item, apiCategory, onPress, signedPhotoUrl, promotion }: 
 }) {
   const [imgErr, setImgErr] = useState(false);
   const isCar = apiCategory === "car";
-  const price = isCar ? item.dailyRate : item.nightlyRate;
+  const price = isCar
+    ? (item.localizedDailyRate ?? item.dailyRate)
+    : (item.localizedNightlyRate ?? item.nightlyRate);
+  const priceCurrency = item.localizedCurrency ?? item.currency;
   const unit = isCar ? "/day" : "/night";
 
   const promoPercentFromBadge = item.promoBadge?.labelText
@@ -176,11 +183,11 @@ function ListingCard({ item, apiCategory, onPress, signedPhotoUrl, promotion }: 
             promoted.hasPromotion && promoted.discountedPrice != null ? (
               <View>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                  <Text style={card.originalPrice}>{item.currency} {price.toLocaleString()}</Text>
+                  <Text style={card.originalPrice}>{priceCurrency} {price.toLocaleString()}</Text>
                   <Text style={card.promoBadge}>🔥 {promoted.labelText}</Text>
                 </View>
                 <Text style={card.price}>
-                  <Text style={card.currency}>{item.currency} </Text>
+                  <Text style={card.currency}>{priceCurrency} </Text>
                   {Math.round(promoted.discountedPrice).toLocaleString()}
                   <Text style={card.unit}>{unit}</Text>
                 </Text>
@@ -190,7 +197,7 @@ function ListingCard({ item, apiCategory, onPress, signedPhotoUrl, promotion }: 
                 {item.roomTypes && item.roomTypes.length > 1 ? (
                   <Text style={{ fontSize: 11, color: MUTED, fontWeight: "500" }}>From </Text>
                 ) : null}
-                <Text style={card.currency}>{item.currency} </Text>
+                <Text style={card.currency}>{priceCurrency} </Text>
                 {price.toLocaleString()}
                 <Text style={card.unit}>{unit}</Text>
               </Text>
@@ -280,6 +287,7 @@ export default function BrowseCategoryScreen() {
   const router = useRouter();
   const { category } = useLocalSearchParams<{ category: string }>();
   const user = useAuthStore((s) => s.user);
+  const localCurrency = useAuthStore((s) => s.localCurrency);
 
   // Map URL segment to API category value
   const apiCategory = category === "apartments" ? "apartment" : category === "cars" ? "car" : "hotel";
@@ -295,7 +303,10 @@ export default function BrowseCategoryScreen() {
   const [favouriteLoading, setFavouriteLoading] = useState<string | null>(null);
 
   const { data, isLoading, isFetching, isError, isPlaceholderData, refetch } = useQuery({
-    queryKey: ["browse", apiCategory, sort, cursor],
+    // Prices are localized per currency by the API, so the currency is part of
+    // the cache identity — without it a currency change serves cached amounts
+    // still labelled with the previous currency.
+    queryKey: ["browse", apiCategory, sort, cursor, localCurrency],
     queryFn: async () => {
       const qp = new URLSearchParams({
         category: apiCategory,

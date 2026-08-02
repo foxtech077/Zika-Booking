@@ -29,6 +29,9 @@ interface SearchResult {
   id: string; listingType: string; title: string; city: string; countryCode: string;
   distanceKm: number; primaryPhotoUrl: string | null; nightlyRate: number | null;
   dailyRate: number | null; currency: string; starRating: number | null;
+  // Localized by the API when a currency is requested; display-only.
+  localizedNightlyRate?: number | null; localizedDailyRate?: number | null;
+  localizedCurrency?: string | null;
   isAccredited: boolean; longStayDiscountEnabled?: boolean;
   carMake: string | null; carModel: string | null; carYear: number | null;
   transmission: string | null; seats: number | null;
@@ -227,7 +230,10 @@ const ListingCard = memo(function ListingCard({ item, onPress, width = 240, badg
 }) {
   const isCar = item.listingType === "car";
   const isApt = item.listingType === "apartment";
-  const rate = isCar ? item.dailyRate : item.nightlyRate;
+  const rate = isCar
+    ? (item.localizedDailyRate ?? item.dailyRate)
+    : (item.localizedNightlyRate ?? item.nightlyRate);
+  const rateCurrency = item.localizedCurrency ?? item.currency;
   const unit = isCar ? "day" : "night";
   const [imgErr, setImgErr] = useState(false);
   const displayPhoto = photoUrl ?? null;
@@ -281,11 +287,11 @@ const ListingCard = memo(function ListingCard({ item, onPress, width = 240, badg
         {promoted.hasPromotion && promoted.discountedPrice != null ? (
           <View>
             <View style={lc.priceRow}>
-              <Text style={lc.originalPrice}>{fmtPrice(rate, item.currency)}</Text>
+              <Text style={lc.originalPrice}>{fmtPrice(rate, rateCurrency)}</Text>
               <Text style={lc.promoBadgeText}>🔥 {promoted.labelText}</Text>
             </View>
             <View style={lc.priceRow}>
-              <Text style={lc.price}>{fmtPrice(Math.round(promoted.discountedPrice), item.currency)}</Text>
+              <Text style={lc.price}>{fmtPrice(Math.round(promoted.discountedPrice), rateCurrency)}</Text>
               <Text style={lc.priceUnit}>/{unit}</Text>
             </View>
           </View>
@@ -294,7 +300,7 @@ const ListingCard = memo(function ListingCard({ item, onPress, width = 240, badg
             {item.roomTypes && item.roomTypes.length > 1 ? (
               <Text style={{ fontSize: 10, color: K.colors.textMuted, fontWeight: "500" }}>From </Text>
             ) : null}
-            <Text style={lc.price}>{fmtPrice(rate, item.currency)}</Text>
+            <Text style={lc.price}>{fmtPrice(rate, rateCurrency)}</Text>
             {rate ? <Text style={lc.priceUnit}>/{unit}</Text> : null}
           </View>
         )}
@@ -330,7 +336,10 @@ const EliteCard = memo(function EliteCard({ item, onPress, badgeLabel, badgeColo
 }) {
   const isCar = item.listingType === "car";
   const isApt = item.listingType === "apartment";
-  const rate = isCar ? item.dailyRate : item.nightlyRate;
+  const rate = isCar
+    ? (item.localizedDailyRate ?? item.dailyRate)
+    : (item.localizedNightlyRate ?? item.nightlyRate);
+  const rateCurrency = item.localizedCurrency ?? item.currency;
   const unit = isCar ? "day" : "night";
   const [imgErr, setImgErr] = useState(false);
   const fallbackEmoji = isCar ? "🚗" : isApt ? "🏠" : "🏨";
@@ -390,17 +399,17 @@ const EliteCard = memo(function EliteCard({ item, onPress, badgeLabel, badgeColo
         {promoted.hasPromotion && promoted.discountedPrice != null ? (
           <View>
             <View style={ec.priceRow}>
-              <Text style={ec.originalPrice}>{fmtPrice(rate, item.currency)}</Text>
+              <Text style={ec.originalPrice}>{fmtPrice(rate, rateCurrency)}</Text>
               <Text style={ec.promoLabel}>🔥 {promoted.labelText}</Text>
             </View>
             <View style={ec.priceRow}>
-              <Text style={ec.price}>{fmtPrice(Math.round(promoted.discountedPrice), item.currency)}</Text>
+              <Text style={ec.price}>{fmtPrice(Math.round(promoted.discountedPrice), rateCurrency)}</Text>
               <Text style={ec.unit}>/{unit}</Text>
             </View>
           </View>
         ) : (
           <View style={ec.priceRow}>
-            <Text style={ec.price}>{fmtPrice(rate, item.currency)}</Text>
+            <Text style={ec.price}>{fmtPrice(rate, rateCurrency)}</Text>
             {rate ? <Text style={ec.unit}>/{unit}</Text> : null}
           </View>
         )}
@@ -462,11 +471,13 @@ const CompactCarCard = memo(function CompactCarCard({ item, onPress, photoUrl, p
   const cardTitle = item.carMake
     ? `${item.carMake} ${item.carModel ?? ""} ${item.carYear ?? ""}`.trim()
     : item.title;
-  const promoted = applyPromotion(item.dailyRate, promotion ?? null);
+  const carRate = item.localizedDailyRate ?? item.dailyRate;
+  const rateCurrency = item.localizedCurrency ?? item.currency;
+  const promoted = applyPromotion(carRate, promotion ?? null);
   const pct = promotion?.discountType === "percentage"
     ? Number(promotion.discountValue)
-    : (item.dailyRate && promoted.savings)
-      ? Math.round((promoted.savings / item.dailyRate) * 100)
+    : (carRate && promoted.savings)
+      ? Math.round((promoted.savings / carRate) * 100)
       : null;
   return (
     <TouchableOpacity style={cc.card} onPress={onPress} activeOpacity={0.88}>
@@ -503,11 +514,11 @@ const CompactCarCard = memo(function CompactCarCard({ item, onPress, photoUrl, p
         </View>
         {promoted.hasPromotion && promoted.discountedPrice != null ? (
           <View>
-            <Text style={cc.originalPrice}>{fmtPrice(item.dailyRate, item.currency)}</Text>
-            <Text style={cc.price}>{fmtPrice(Math.round(promoted.discountedPrice), item.currency)}<Text style={cc.unit}>/day</Text></Text>
+            <Text style={cc.originalPrice}>{fmtPrice(carRate, rateCurrency)}</Text>
+            <Text style={cc.price}>{fmtPrice(Math.round(promoted.discountedPrice), rateCurrency)}<Text style={cc.unit}>/day</Text></Text>
           </View>
         ) : (
-          <Text style={cc.price}>{fmtPrice(item.dailyRate, item.currency)}<Text style={cc.unit}>/day</Text></Text>
+          <Text style={cc.price}>{fmtPrice(carRate, rateCurrency)}<Text style={cc.unit}>/day</Text></Text>
         )}
       </View>
       <Ionicons name="chevron-forward" size={18} color={K.colors.border} />
@@ -848,6 +859,7 @@ const fsb = StyleSheet.create({
 export default function HomeScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const localCurrency = useAuthStore((s) => s.localCurrency);
   const firstName = user?.firstName ?? "Traveller";
 
   // Detected location (IP-based, cached 24 h)
@@ -864,7 +876,10 @@ export default function HomeScreen() {
   // ── Queries ────────────────────────────────────────────────────────────────
 
   const { data: hotelsData, isLoading: hotelsLoading, refetch: refetchHotels } = useQuery<SearchResult[]>({
-    queryKey: ["home-hotels", homeLat, homeLng],
+    // Prices are localized per currency by the API, so the currency is part of
+    // the cache identity — without it a currency change serves cached amounts
+    // still labelled with the previous currency.
+    queryKey: ["home-hotels", homeLat, homeLng, localCurrency],
     queryFn: async () => {
       const res = await listingApi.get<SearchResponse>(
         `/search?category=hotel&lat=${homeLat}&lng=${homeLng}&radius_km=20000&sort=recommended&limit=20`
@@ -875,7 +890,7 @@ export default function HomeScreen() {
   });
 
   const { data: apartmentsData, isLoading: aptsLoading, refetch: refetchApts } = useQuery<SearchResult[]>({
-    queryKey: ["home-apartments", homeLat, homeLng],
+    queryKey: ["home-apartments", homeLat, homeLng, localCurrency],
     queryFn: async () => {
       const res = await listingApi.get<SearchResponse>(
         `/search?category=apartment&lat=${homeLat}&lng=${homeLng}&radius_km=20000&sort=recommended&limit=10`
@@ -886,7 +901,7 @@ export default function HomeScreen() {
   });
 
   const { data: carsData, refetch: refetchCars } = useQuery<SearchResult[]>({
-    queryKey: ["home-cars", homeLat, homeLng],
+    queryKey: ["home-cars", homeLat, homeLng, localCurrency],
     queryFn: async () => {
       const res = await listingApi.get<SearchResponse>(
         `/search?category=car&lat=${homeLat}&lng=${homeLng}&radius_km=20000&sort=recommended&limit=10`
@@ -945,7 +960,7 @@ export default function HomeScreen() {
   });
 
   const { data: recentlyViewed, refetch: refetchRecentlyViewed } = useQuery<SearchResult[]>({
-    queryKey: ["recently-viewed"],
+    queryKey: ["recently-viewed", localCurrency],
     queryFn: async () => {
       try {
         const res = await listingApi.get<{ data: { listings: SearchResult[] } }>("/guests/me/recently-viewed");

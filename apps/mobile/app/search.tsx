@@ -147,6 +147,11 @@ interface SearchResult {
   nightlyRate: number | null;
   dailyRate: number | null;
   currency: string;
+  // Prices converted to the guest's local currency by the API. Absent when no
+  // currency was requested or no rate exists, so always fall back to the base.
+  localizedNightlyRate?: number | null;
+  localizedDailyRate?: number | null;
+  localizedCurrency?: string | null;
   cancellationPolicy: string;
   minStayNights: number | null;
   starRating: number | null;
@@ -359,7 +364,10 @@ const ResultCard = memo(function ResultCard({
   const user = useAuthStore((s) => s.user);
   const [imgError, setImgError] = useState(false);
   const isCar = category === "car";
-  const price = isCar ? item.dailyRate : item.nightlyRate;
+  const price = isCar
+    ? (item.localizedDailyRate ?? item.dailyRate)
+    : (item.localizedNightlyRate ?? item.nightlyRate);
+  const priceCurrency = item.localizedCurrency ?? item.currency;
   const priceLabel = isCar ? "/day" : "/night";
 
   // Derive promotion: item.promoBadge takes priority over global active promotion
@@ -603,14 +611,14 @@ const ResultCard = memo(function ResultCard({
                   }}
                 >
                   <Text style={cardStyles.originalPrice}>
-                    {item.currency} {price.toLocaleString()}
+                    {priceCurrency} {price.toLocaleString()}
                   </Text>
                   <Text style={cardStyles.promoBadge}>
                     🔥 {promoted.labelText}
                   </Text>
                 </View>
                 <Text style={cardStyles.price}>
-                  <Text style={cardStyles.priceCurrency}>{item.currency} </Text>
+                  <Text style={cardStyles.priceCurrency}>{priceCurrency} </Text>
                   {Math.round(promoted.discountedPrice).toLocaleString()}
                   <Text style={cardStyles.priceUnit}>{priceLabel}</Text>
                 </Text>
@@ -620,7 +628,7 @@ const ResultCard = memo(function ResultCard({
                 {item.roomTypes && item.roomTypes.length > 1 ? (
                   <Text style={{ fontSize: 11, color: MUTED, fontWeight: "500" }}>From </Text>
                 ) : null}
-                <Text style={cardStyles.priceCurrency}>{item.currency} </Text>
+                <Text style={cardStyles.priceCurrency}>{priceCurrency} </Text>
                 {price.toLocaleString()}
                 <Text style={cardStyles.priceUnit}>{priceLabel}</Text>
               </Text>
@@ -742,6 +750,7 @@ const cardStyles = StyleSheet.create({
 
 export default function SearchScreen() {
   const router = useRouter();
+  const localCurrency = useAuthStore((s) => s.localCurrency);
   const params = useLocalSearchParams<{
     category: string;
     placeName: string;
@@ -1019,6 +1028,10 @@ export default function SearchScreen() {
     airConditioning,
     seatsMin,
     driverAge,
+    // Prices are localized per currency by the API, so the currency is part of
+    // the cache identity — without it a currency change serves cached amounts
+    // still labelled with the previous currency.
+    localCurrency,
   ];
 
   const {
