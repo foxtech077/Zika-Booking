@@ -178,44 +178,69 @@ export async function convertFromDb(
 }
 
 /**
+ * Resolve the conversion context for a target display currency.
+ *
+ * - No target, or target === base → `{ currency: base, rate: null }` (identity:
+ *   localized values are the base values, labeled with the base currency).
+ * - Rate available → `{ currency: target, rate }` (localized values convert).
+ * - Rate missing/stale → `{ currency: null, rate: null }` (localized values are
+ *   null — never show a base amount mislabeled as the target currency).
+ */
+export async function getLocalizedContext(
+  baseCurrency: string,
+  target: string | null | undefined
+): Promise<{ currency: string | null; rate: number | null }> {
+  const targetNorm = target?.toUpperCase() || null;
+  const baseNorm = baseCurrency.toUpperCase();
+
+  if (!targetNorm || targetNorm === baseNorm) {
+    return { currency: baseNorm, rate: null };
+  }
+
+  const rate = await getExchangeRate(baseNorm, targetNorm);
+  if (rate === null) {
+    return { currency: null, rate: null };
+  }
+
+  return { currency: targetNorm, rate };
+}
+
+/**
  * Convert a set of amount fields from `baseCurrency` into `target`, producing
  * `localized` equivalents that never replace the originals.
  *
- * - If no target, target === baseCurrency, or the rate is missing/stale
- *   (`getExchangeRate` returns null), the values are returned unchanged.
- * - Otherwise each non-null value is ceiling-rounded to the target currency's
- *   precision via `ceilingForCurrency`.
+ * - Identity (no target / target === base): values are the base amounts and
+ *   `currency` is the base currency.
+ * - Conversion available: values are ceiling-rounded to the target currency's
+ *   precision and `currency` is the target.
+ * - Conversion unavailable (missing/stale rate): every value is `null` and
+ *   `currency` is `null`, so callers never emit a mislabeled amount.
  * - Only a single rate lookup is performed per call.
  */
 export async function getConvertedAmounts(
   baseCurrency: string,
   target: string | null | undefined,
   amounts: Record<string, number | null | undefined>
-): Promise<Record<string, number | null>> {
-  const out: Record<string, number | null> = {};
-  const targetNorm = target?.toUpperCase() || null;
-  const baseNorm = baseCurrency.toUpperCase();
+): Promise<{ currency: string | null; values: Record<string, number | null> }> {
+  const ctx = await getLocalizedContext(baseCurrency, target);
+  const values: Record<string, number | null> = {};
 
-  const convertAll = (rate: number) => {
-    for (const key of Object.keys(amounts)) {
-      const v = amounts[key];
-      out[key] = v == null ? null : ceilingForCurrency(v * rate, targetNorm!);
+  for (const key of Object.keys(amounts)) {
+    const v = amounts[key];
+    if (v == null) {
+      values[key] = null;
+    } else if (ctx.currency === null) {
+      // Conversion requested but unavailable — never emit a wrong amount.
+      values[key] = null;
+    } else if (ctx.rate !== null) {
+      values[key] = ceilingForCurrency(v * ctx.rate, ctx.currency);
+    } else {
+      // Identity — same currency, no conversion applied.
+      values[key] = v;
     }
-  };
-
-  if (!targetNorm || targetNorm === baseNorm) {
-    for (const key of Object.keys(amounts)) out[key] = amounts[key] ?? null;
-    return out;
   }
 
-  const rate = await getExchangeRate(baseNorm, targetNorm);
-  if (rate === null) {
-    for (const key of Object.keys(amounts)) out[key] = amounts[key] ?? null;
-    return out;
-  }
-
-  convertAll(rate);
-  return out;
+  return { currency: ctx.currency, values };
 }
 
 /**
