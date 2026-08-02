@@ -160,6 +160,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         currency,
         chargedAmount: eur.amountEur,
         chargedCurrency: "EUR",
+        chargedRate: eur.rate,
         idempotencyKey: `sess-${bookingId}-${Date.now()}`,
         providerPaymentId: null,
       },
@@ -210,7 +211,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     const bookingReference = (booking["reference"] as string | undefined) ?? bookingId;
     const bookingCountry = (booking["listing"] as any)?.country ?? extractCountryCode(bookingReference) ?? null;
 
-    let charge: { amountXaf: number; phoneCountry: string };
+    let charge: { amountXaf: number; rate: number; phoneCountry: string };
     try {
       charge = await computeTaraCharge({
         totalAmount: amount,
@@ -238,6 +239,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         currency,
         chargedAmount: charge.amountXaf,
         chargedCurrency: "XAF",
+        chargedRate: charge.rate,
         idempotencyKey: `tara-link-${bookingId}-${Date.now()}`,
       },
     });
@@ -296,7 +298,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     const bookingReference = (booking["reference"] as string | undefined) ?? bookingId;
     const bookingCountry = (booking["listing"] as any)?.country ?? extractCountryCode(bookingReference) ?? null;
 
-    let charge: { amountXaf: number; phoneCountry: string };
+    let charge: { amountXaf: number; rate: number; phoneCountry: string };
     try {
       charge = await computeTaraCharge({
         totalAmount: Number(booking["totalAmount"]),
@@ -347,6 +349,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         providerPaymentId: taraResult.taraReference,
         chargedAmount: charge.amountXaf,
         chargedCurrency: "XAF",
+        chargedRate: charge.rate,
       },
     });
 
@@ -470,6 +473,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         currency,
         chargedAmount: eur.amountEur,
         chargedCurrency: "EUR",
+        chargedRate: eur.rate,
         idempotencyKey: `pi-${bookingId}`,
       },
     });
@@ -664,7 +668,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         status: "initiated",
         amount,
         currency,
-        ...(eur ? { chargedAmount: eur.amountEur, chargedCurrency: "EUR" } : {}),
+        ...(eur ? { chargedAmount: eur.amountEur, chargedCurrency: "EUR", chargedRate: eur.rate } : {}),
         attemptNumber,
         idempotencyKey,
       },
@@ -772,7 +776,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         const bookingReference = (booking["reference"] as string | undefined) ?? bookingId;
         const bookingCountry = (booking["listing"] as any)?.country ?? extractCountryCode(bookingReference) ?? null;
 
-        let charge: { amountXaf: number; phoneCountry: string };
+        let charge: { amountXaf: number; rate: number; phoneCountry: string };
         try {
           charge = await computeTaraCharge({
             totalAmount: Number(amount),
@@ -810,6 +814,7 @@ export async function paymentRoutes(app: FastifyInstance) {
             idempotencyKey: `${bookingReference}-${attemptNumber}`,
             chargedAmount: charge.amountXaf,
             chargedCurrency: "XAF",
+            chargedRate: charge.rate,
           },
         });
 

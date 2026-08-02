@@ -1,4 +1,5 @@
 import sgMail from "@sendgrid/mail";
+import { money, fmtMoney as fmt } from "./currency-format.js";
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
 
@@ -34,8 +35,10 @@ export async function sendGuestEmail(
     ? `Pick-up: ${booking.pickupDatetime ? new Date(booking.pickupDatetime).toLocaleString("en-GB") : "—"}<br>Return: ${booking.returnDatetime ? new Date(booking.returnDatetime).toLocaleString("en-GB") : "—"}`
     : `Check-in: ${booking.checkIn ? new Date(booking.checkIn).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—"}<br>Check-out: ${booking.checkOut ? new Date(booking.checkOut).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—"}`;
   const commissionPct = booking.commissionRate ? Math.round(Number(booking.commissionRate) * 100) : 0;
-  const currency = booking.currency ?? "";
-  const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  const listingCurrency = invoice.listingCurrency ?? (booking.currency ?? "").toUpperCase();
+  const platformCurrency = invoice.platform?.currency ?? listingCurrency;
+  const platformAmount = invoice.platform?.amount ?? invoice.total;
+  const listingTotal = invoice.total;
   const nightlyRate = Number(booking.nightlyRate ?? booking.dailyRate ?? 0);
 
   await sgMail.send({
@@ -58,13 +61,19 @@ export async function sendGuestEmail(
 
       <h3 style="color:#1e293b;font-size:14px;margin:20px 0 8px">Receipt</h3>
       <table style="width:100%;border-collapse:collapse;margin:8px 0">
-        <tr><td style="padding:6px 8px;color:#6b7280">${currency} ${fmt(nightlyRate)} × ${booking.nightsOrDays} ${unitLabel}${booking.nightsOrDays !== 1 ? "s" : ""}</td><td style="padding:6px 8px;text-align:right">${currency} ${fmt(invoice.baseAmount)}</td></tr>
-        ${Number(invoice.discount) > 0 ? `<tr><td style="padding:6px 8px;color:#15803d">Discount</td><td style="padding:6px 8px;text-align:right;color:#15803d">−${currency} ${fmt(invoice.discount)}</td></tr>` : ''}
-        <tr><td style="padding:6px 8px;border-top:1px solid #e5e7eb;color:#6b7280">Subtotal</td><td style="padding:6px 8px;border-top:1px solid #e5e7eb;text-align:right">${currency} ${fmt(invoice.subtotal)}</td></tr>
-        <tr><td style="padding:6px 8px;color:#6b7280">Service fee${commissionPct > 0 ? ` (${commissionPct}%)` : ''}</td><td style="padding:6px 8px;text-align:right">${currency} ${fmt(invoice.serviceFee)}</td></tr>
-        ${Number(invoice.tax) > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Taxes</td><td style="padding:6px 8px;text-align:right">${currency} ${fmt(invoice.tax)}</td></tr>` : ''}
-        ${isCar && Number(invoice.securityDeposit) > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Security deposit</td><td style="padding:6px 8px;text-align:right">${currency} ${fmt(invoice.securityDeposit)}</td></tr>` : ''}
-        <tr><td style="padding:8px;border-top:2px solid #1e293b;font-weight:bold;color:#1e293b">Total Paid</td><td style="padding:8px;border-top:2px solid #1e293b;font-weight:bold;text-align:right">${currency} ${fmt(invoice.total)}</td></tr>
+        <tr><td style="padding:6px 8px;color:#6b7280">${listingCurrency} ${fmt(nightlyRate)} × ${booking.nightsOrDays} ${unitLabel}${booking.nightsOrDays !== 1 ? "s" : ""}</td><td style="padding:6px 8px;text-align:right">${money(invoice.baseAmount, listingCurrency)}</td></tr>
+        ${Number(invoice.discount) > 0 ? `<tr><td style="padding:6px 8px;color:#15803d">Discount</td><td style="padding:6px 8px;text-align:right;color:#15803d">−${money(invoice.discount, listingCurrency)}</td></tr>` : ''}
+        <tr><td style="padding:6px 8px;border-top:1px solid #e5e7eb;color:#6b7280">Subtotal</td><td style="padding:6px 8px;border-top:1px solid #e5e7eb;text-align:right">${money(invoice.subtotal, listingCurrency)}</td></tr>
+        <tr><td style="padding:6px 8px;color:#6b7280">Service fee${commissionPct > 0 ? ` (${commissionPct}%)` : ''}</td><td style="padding:6px 8px;text-align:right">${money(invoice.serviceFee, listingCurrency)}</td></tr>
+        ${Number(invoice.tax) > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Taxes</td><td style="padding:6px 8px;text-align:right">${money(invoice.tax, listingCurrency)}</td></tr>` : ''}
+        ${isCar && Number(invoice.securityDeposit) > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Security deposit</td><td style="padding:6px 8px;text-align:right">${money(invoice.securityDeposit, listingCurrency)}</td></tr>` : ''}
+        <tr>
+          <td style="padding:8px;border-top:2px solid #1e293b;font-weight:bold;color:#1e293b">Total Paid</td>
+          <td style="padding:8px;border-top:2px solid #1e293b;font-weight:bold;text-align:right;color:#1e293b">
+            ${money(platformAmount, platformCurrency)}
+            ${listingCurrency !== platformCurrency ? `<div style="font-weight:normal;color:#9ca3af;font-size:12px">≈ ${money(listingTotal, listingCurrency)}</div>` : ''}
+          </td>
+        </tr>
       </table>
 
       <h3 style="color:#374151;font-size:14px;margin:20px 0 8px">Payment Information</h3>

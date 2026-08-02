@@ -38,7 +38,7 @@ export async function computeTaraCharge(opts: {
   currency: string;
   listingCountry: string | null | undefined;
   phoneCountry: string | null;
-}): Promise<{ amountXaf: number; phoneCountry: string }> {
+}): Promise<{ amountXaf: number; rate: number; phoneCountry: string }> {
   if (!opts.phoneCountry || !isTaraCountry(opts.phoneCountry)) {
     throw new TaraNotAllowedError(
       "UNSUPPORTED_COUNTRY",
@@ -55,6 +55,7 @@ export async function computeTaraCharge(opts: {
 
   const currency = (opts.currency ?? "").toUpperCase();
   let amountXaf: number;
+  let rate = 1;
 
   if (currency === "XAF") {
     // XAF is a 0-decimal currency — Tara expects a whole amount.
@@ -69,7 +70,7 @@ export async function computeTaraCharge(opts: {
       body: JSON.stringify({ amount: opts.totalAmount, from: currency, to: "XAF" }),
       signal: AbortSignal.timeout(10_000),
     });
-    const json = (await res.json().catch(() => ({}))) as { success?: boolean; data?: { converted?: number } };
+    const json = (await res.json().catch(() => ({}))) as { success?: boolean; data?: { converted?: number; rate?: number } };
     if (!res.ok || !json.success || json.data?.converted == null) {
       throw new TaraNotAllowedError(
         "FX_UNAVAILABLE",
@@ -77,11 +78,12 @@ export async function computeTaraCharge(opts: {
       );
     }
     amountXaf = Number(json.data.converted);
+    rate = json.data.rate != null ? Number(json.data.rate) : 1;
   }
 
   if (!Number.isFinite(amountXaf) || amountXaf <= 0) {
     throw new TaraNotAllowedError("INVALID_AMOUNT", "The converted payment amount is invalid.");
   }
 
-  return { amountXaf, phoneCountry: opts.phoneCountry };
+  return { amountXaf, rate, phoneCountry: opts.phoneCountry };
 }

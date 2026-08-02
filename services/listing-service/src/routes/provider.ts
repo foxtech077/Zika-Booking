@@ -300,6 +300,7 @@ export async function providerRoutes(app: FastifyInstance) {
           providerPayout:     Number(b.providerPayout),
           commissionAmount:   Number(b.commissionAmount),
           currency:           b.currency,
+          priceBreakdownJson: (b as any).priceBreakdownJson ?? null,
           status:             b.status,
           cancellationPolicy: b.cancellationPolicy,
           specialRequests:    b.specialRequests,
