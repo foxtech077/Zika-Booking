@@ -76,6 +76,18 @@ export function registerBullBoard(app: any) {
 const FX_REFRESH_JOB_ID = "exchange-rate-refresh-next";
 
 /**
+ * Enqueue an immediate ExchangeRateRefresher job (deduplicated), used on-demand
+ * by the /internal/fx/refresh endpoint when a stale-rate failure occurs.
+ */
+export async function enqueueExchangeRateRefresh(): Promise<void> {
+  const existing = await queue.getJob(FX_REFRESH_JOB_ID);
+  if (existing) {
+    await existing.remove();
+  }
+  await queue.add(ListingJob.ExchangeRateRefresher, {}, { jobId: FX_REFRESH_JOB_ID });
+}
+
+/**
  * Schedule the next exchange rate refresh based on expiresAt.
  * If rates are stale or missing, refresh immediately.
  * Otherwise, schedule a one-time job for expiresAt + 1 minute.

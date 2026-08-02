@@ -507,6 +507,10 @@ enum BookingStatus {
     currency        String   @db.Char(3)
     securityDeposit Decimal? @map("security_deposit") @db.Decimal(12, 2)
 
+    // Money-amount + currency snapshot captured at booking/payment time.
+    // Display (listing/base + localized) and EUR charged equivalents.
+    priceBreakdownJson Json?  @map("price_breakdown_json")
+
     commissionRate   Decimal @map("commission_rate") @db.Decimal(6, 4)
     commissionAmount Decimal @map("commission_amount") @db.Decimal(12, 2)
     providerPayout   Decimal @map("provider_payout") @db.Decimal(12, 2)

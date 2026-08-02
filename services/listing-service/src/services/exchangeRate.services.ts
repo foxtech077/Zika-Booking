@@ -178,6 +178,83 @@ export async function convertFromDb(
 }
 
 /**
+ * Resolve the conversion context for a target display currency.
+ *
+ * - No target, or target === base → `{ currency: base, rate: null }` (identity:
+ *   localized values are the base values, labeled with the base currency).
+ * - Rate available → `{ currency: target, rate }` (localized values convert).
+ * - Rate missing/stale → `{ currency: null, rate: null }` (localized values are
+ *   null — never show a base amount mislabeled as the target currency).
+ */
+export async function getLocalizedContext(
+  baseCurrency: string,
+  target: string | null | undefined
+): Promise<{ currency: string | null; rate: number | null }> {
+  const targetNorm = target?.toUpperCase() || null;
+  const baseNorm = baseCurrency.toUpperCase();
+
+  if (!targetNorm || targetNorm === baseNorm) {
+    return { currency: baseNorm, rate: null };
+  }
+
+  const rate = await getExchangeRate(baseNorm, targetNorm);
+  if (rate === null) {
+    return { currency: null, rate: null };
+  }
+
+  return { currency: targetNorm, rate };
+}
+
+/**
+ * Convert a set of amount fields from `baseCurrency` into `target`, producing
+ * `localized` equivalents that never replace the originals.
+ *
+ * - Identity (no target / target === base): values are the base amounts and
+ *   `currency` is the base currency.
+ * - Conversion available: values are ceiling-rounded to the target currency's
+ *   precision and `currency` is the target.
+ * - Conversion unavailable (missing/stale rate): every value is `null` and
+ *   `currency` is `null`, so callers never emit a mislabeled amount.
+ * - Only a single rate lookup is performed per call.
+ */
+export async function getConvertedAmounts(
+  baseCurrency: string,
+  target: string | null | undefined,
+  amounts: Record<string, number | null | undefined>
+): Promise<{ currency: string | null; values: Record<string, number | null> }> {
+  const ctx = await getLocalizedContext(baseCurrency, target);
+  const values: Record<string, number | null> = {};
+
+  for (const key of Object.keys(amounts)) {
+    const v = amounts[key];
+    if (v == null) {
+      values[key] = null;
+    } else if (ctx.currency === null) {
+      // Conversion requested but unavailable — never emit a wrong amount.
+      values[key] = null;
+    } else if (ctx.rate !== null) {
+      values[key] = ceilingForCurrency(v * ctx.rate, ctx.currency);
+    } else {
+      // Identity — same currency, no conversion applied.
+      values[key] = v;
+    }
+  }
+
+  return { currency: ctx.currency, values };
+}
+
+/**
+ * Strict DB-only rate for converting a currency into EUR for charging/payout.
+ * Returns null when the rate is stale or missing so the caller can fail with
+ * TEMPORARILY_UNAVAILABLE instead of using a fallback or a wrong amount.
+ */
+export async function getEurRateOrNull(from: string): Promise<number | null> {
+  const fromNorm = from.toUpperCase();
+  if (fromNorm === "EUR") return 1;
+  return getExchangeRate(fromNorm, "EUR");
+}
+
+/**
  * Fetch rates for multiple source currencies → one target currency in a single query.
  * All rates are USD-based, so: rate(from→to) = rate(USD→to) / rate(USD→from)
  * Returns a map like { "KES": 155.28, "NGN": 1540.5, ... }

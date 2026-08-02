@@ -171,6 +171,9 @@ model Payout {
   providerId       String
   amount           Decimal       @db.Decimal(12, 2)
   currency         String        @db.Char(3)
+  // Money-amount + currency snapshot captured at payout time (listing/base
+  // detail plus the EUR transferred equivalent).
+  priceBreakdownJson Json?       @map("price_breakdown_json")
   status           PayoutStatus  @default(pending)
   scheduledAt      DateTime?
   processedAt      DateTime?

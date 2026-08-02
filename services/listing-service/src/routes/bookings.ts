@@ -14,6 +14,7 @@ import { getTaxRate } from "../services/getTaxRate.services.js";
 import { VoucherDiscountType } from "../generated/index.js";
 import { logLoyaltyTransaction } from "./loyalty.js";
 import { convertCurrency } from "../services/fx.services";
+import { getConvertedAmounts } from "../services/exchangeRate.services.js";
 
 const LOCK_TTL_MS = 300_000; // 5 minutes
 
@@ -304,10 +305,24 @@ export async function bookingRoutes(app: FastifyInstance) {
         const pricing = await getPricing(basePrice, baseCurrency, targetCurrency);
         const paymentProvider = getPaymentProvider(country);
 
+        // Localized equivalents (additive, ceiling-rounded) for the quote's
+        // money fields in the guest's display currency. Null when the rate is
+        // unavailable — never a mislabeled base amount.
+        const localized = await getConvertedAmounts(baseCurrency, targetCurrency, {
+          nightlyRate: listing.pricePerNight != null ? Number(listing.pricePerNight) : null,
+          dailyRate: listing.pricePerDay != null ? Number(listing.pricePerDay) : null,
+          securityDeposit: listing.securityDeposit != null ? Number(listing.securityDeposit) : null,
+          deliveryFee: listing.deliveryFee != null ? Number(listing.deliveryFee) : null,
+        });
+
         return reply.send({
           success: true,
           data: {
             ...pricing,
+            localizedNightlyRate: localized.values.nightlyRate,
+            localizedDailyRate: localized.values.dailyRate,
+            localizedSecurityDeposit: localized.values.securityDeposit,
+            localizedDeliveryFee: localized.values.deliveryFee,
 
             country,
             paymentProvider,
@@ -583,6 +598,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     returnDatetime?: string;
     guests?: number;
     deliveryRequested?: boolean;
+    currency?: string;
   }) {
     const listing = await prisma.listing.findUnique({
       where: { id: body.listingId, deletedAt: null },
@@ -665,11 +681,44 @@ export async function bookingRoutes(app: FastifyInstance) {
       currency: listing.currency,
       commissionRate,
       taxRate: getTaxRate(listing.country),
+      ...(await buildLocalizedBreakdown(
+        listing.currency ?? "USD",
+        body.currency,
+        {
+          baseAmount: billing.baseAmount,
+          nightlyRate: baseRate,
+          promotionDiscount: billing.promotionDiscount,
+          voucherDiscount: billing.voucherDiscount,
+          serviceFee: billing.serviceFee,
+          taxAmount: billing.taxAmount,
+          deliveryFee: billing.deliveryFee,
+          securityDeposit: billing.securityDeposit,
+          totalAmount: billing.totalAmount,
+        }
+      )),
       ...(roomTypeRecord && {
         roomType: roomTypeRecord.roomType,
         roomTypeName: roomTypeRecord.name,
       }),
     };
+  }
+
+  // Convert a pricing/breakdown object into additive `localized*` equivalents
+  // using the rate-once helper. Also emits `localizedCurrency` (null when the
+  // conversion is unavailable so callers never show a mislabeled amount).
+  async function buildLocalizedBreakdown(
+    baseCurrency: string,
+    target: string | undefined,
+    amounts: Record<string, number>
+  ): Promise<Record<string, unknown>> {
+    const converted = await getConvertedAmounts(baseCurrency, target, amounts);
+    const localized = Object.fromEntries(
+      Object.entries(converted.values).map(([k, v]) => [
+        `localized${k.charAt(0).toUpperCase()}${k.slice(1)}`,
+        v,
+      ])
+    );
+    return { ...localized, localizedCurrency: converted.currency };
   }
 
   // ── POST /bookings/initiate — acquire reservation lock ──────────────────────
@@ -1058,6 +1107,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             returnDatetime: { type: "string", format: "date-time" },
             guests: { type: "integer", minimum: 1 },
             deliveryRequested: { type: "boolean", default: false },
+            currency: { type: "string", description: "ISO 4217 currency code for localized breakdown (e.g. KES, INR, EUR)" },
           },
         },
         response: {
@@ -1087,6 +1137,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         returnDatetime?: string;
         guests?: number;
         deliveryRequested?: boolean;
+        currency?: string;
       };
 
       try {
@@ -1265,6 +1316,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             driverAge: { type: "integer", minimum: 18 },
             voucherCode: { type: "string", maxLength: 30 },
             redeemPoints: { type: "integer", minimum: 0, description: "Amount of loyalty points to redeem" },
+            currency: { type: "string", description: "ISO 4217 display currency for the localized snapshot (e.g. KES, INR)" },
           },
         },
         response: {
@@ -1320,6 +1372,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         driverAge?: number;
         voucherCode?: string;
         redeemPoints?: number;
+        currency?: string;
       };
 
       try {
@@ -1546,6 +1599,50 @@ export async function bookingRoutes(app: FastifyInstance) {
         const discountAmount = finalBilling.discount;
         const appliedVoucherDiscount = voucherDiscount >= promotionDiscount ? voucherDiscount : 0;
 
+        // Build the persistence-ready price breakdown snapshot (display only —
+        // the EUR money-of-record is captured on the payment at charge time).
+        const breakdownBase: Record<string, number> = {
+          nightlyRate: listing.category !== "car" ? rate : 0,
+          dailyRate: listing.category === "car" ? rate : 0,
+          units: finalBilling.units,
+          subtotal,
+          promotionDiscount,
+          voucherDiscount: appliedVoucherDiscount,
+          pointsDiscount,
+          serviceFee: finalBilling.serviceFee,
+          taxAmount: finalBilling.taxAmount,
+          deliveryFee,
+          securityDeposit,
+          discountAmount,
+          totalAmount,
+          commissionAmount,
+          providerPayout,
+        };
+        const displayCurrency = (listing.currency ?? "USD").toUpperCase();
+        const wantLocalized =
+          !!body.currency && body.currency.toUpperCase() !== displayCurrency;
+        const localizedSnap = wantLocalized
+          ? await getConvertedAmounts(displayCurrency, body.currency, breakdownBase)
+          : null;
+        const localizedSnapKeys = localizedSnap
+          ? Object.fromEntries(
+              Object.entries(localizedSnap.values).map(([k, v]) => [
+                `localized${k.charAt(0).toUpperCase()}${k.slice(1)}`,
+                v,
+              ])
+            )
+          : {};
+        const priceBreakdownJson = {
+          currency: displayCurrency,
+          baseCurrency: displayCurrency,
+          ...(localizedSnap
+            ? { localizedCurrency: localizedSnap.currency, ...localizedSnapKeys }
+            : {}),
+          breakdown: breakdownBase,
+          capturedAt: new Date().toISOString(),
+          source: "booking_create",
+        };
+
 
         // 5. BOOKING
 
@@ -1604,6 +1701,8 @@ export async function bookingRoutes(app: FastifyInstance) {
             commissionRate,
             commissionAmount,
             providerPayout,
+
+            priceBreakdownJson,
 
             cancellationPolicy: listing.cancellationPolicy ?? "moderate",
 

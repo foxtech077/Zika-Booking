@@ -9,6 +9,7 @@ import { calculateAlreadyRefunded } from "../services/refund.service.js";
 import { initiateTaraPayment, initiateTaraReversal } from "../lib/tara.js";
 import { computeTaraCharge, getTaraPhoneCountry, TaraNotAllowedError } from "../lib/taraEligibility.js";
 import { sendPaymentLinkEmail } from "../services/email.services.js";
+import { resolveEurCharge, EurQuoteUnavailableError, type EurChargeResult } from "../services/eurCharge.service.js";
 import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
 import { extractCountryCode, generateDisplayId } from "../lib/paymentReference.js";
 
@@ -111,15 +112,26 @@ export async function paymentRoutes(app: FastifyInstance) {
     const amount = Number(booking["totalAmount"]);
     const currency = (booking["currency"] as string).toLowerCase();
 
-    // Step 1: Create Stripe Checkout Session
+    // EUR is the money-of-record for Stripe charges (booking price is display-only).
+    let eur: EurChargeResult;
+    try {
+      eur = await resolveEurCharge(amount, currency);
+    } catch (err: any) {
+      if (err instanceof EurQuoteUnavailableError) {
+        return sendError(reply, 503, err.code, err.message);
+      }
+      throw err;
+    }
+
+    // Step 1: Create Stripe Checkout Session (charged in EUR)
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       line_items: [
         {
           price_data: {
-            currency,
+            currency: "eur",
             product_data: { name: `Booking ${booking["reference"]}` },
-            unit_amount: toStripeAmount(amount, currency),
+            unit_amount: toStripeAmount(eur.amountEur, "EUR"),
           },
           quantity: 1,
         },
@@ -146,6 +158,8 @@ export async function paymentRoutes(app: FastifyInstance) {
         status: "initiated",
         amount,
         currency,
+        chargedAmount: eur.amountEur,
+        chargedCurrency: "EUR",
         idempotencyKey: `sess-${bookingId}-${Date.now()}`,
         providerPaymentId: null,
       },
@@ -155,8 +169,8 @@ export async function paymentRoutes(app: FastifyInstance) {
     await sendPaymentLinkEmail(
       booking["guestEmail"] as string,
       booking["guestFirstName"] as string,
-      amount,
-      currency,
+      eur.amountEur,
+      "EUR",
       session.url,
       booking["reference"] as string
     );
@@ -369,6 +383,17 @@ export async function paymentRoutes(app: FastifyInstance) {
       return sendError(reply, 400, "INVALID_AMOUNT", "Payment amount must be greater than 0.");
     }
 
+    // EUR is the money-of-record for Stripe charges (booking price is display-only).
+    let eur: EurChargeResult;
+    try {
+      eur = await resolveEurCharge(amount, currency);
+    } catch (err: any) {
+      if (err instanceof EurQuoteUnavailableError) {
+        return sendError(reply, 503, err.code, err.message);
+      }
+      throw err;
+    }
+
     // ── 2. Idempotency check ────────────────────────────────────────────────
     const existingPayment = await prisma.payment.findFirst({
       where: {
@@ -443,15 +468,17 @@ export async function paymentRoutes(app: FastifyInstance) {
         status: "initiated",
         amount,
         currency,
+        chargedAmount: eur.amountEur,
+        chargedCurrency: "EUR",
         idempotencyKey: `pi-${bookingId}`,
       },
     });
 
-    // ── 5. Create Stripe intent ─────────────────────────────────────────────
+    // ── 5. Create Stripe intent (charged in EUR) ─────────────────────────────
     const intent = await stripe.paymentIntents.create(
       {
-        amount: toStripeAmount(Number(amount), currency),
-        currency,
+        amount: toStripeAmount(eur.amountEur, "EUR"),
+        currency: "eur",
         customer: customerAccount.providerCustomerId,
         automatic_payment_methods: { enabled: true },
         metadata: { bookingId },
@@ -590,6 +617,19 @@ export async function paymentRoutes(app: FastifyInstance) {
     const amount = booking["totalAmount"] as number;
     const currency = (booking["currency"] as string).toLowerCase();
 
+    // EUR is the money-of-record for Stripe charges (booking price is display-only).
+    let eur: EurChargeResult | null = null;
+    if (paymentProvider === "stripe") {
+      try {
+        eur = await resolveEurCharge(amount, currency);
+      } catch (err: any) {
+        if (err instanceof EurQuoteUnavailableError) {
+          return sendError(reply, 503, err.code, err.message);
+        }
+        throw err;
+      }
+    }
+
     // ── 3. Idempotency check ──────────────────────────────────────────────
     const existingPayment = await prisma.payment.findFirst({
       where: {
@@ -624,6 +664,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         status: "initiated",
         amount,
         currency,
+        ...(eur ? { chargedAmount: eur.amountEur, chargedCurrency: "EUR" } : {}),
         attemptNumber,
         idempotencyKey,
       },
@@ -671,8 +712,8 @@ export async function paymentRoutes(app: FastifyInstance) {
         try {
           intent = await stripe.paymentIntents.create(
             {
-              amount: toStripeAmount(Number(amount), currency),
-              currency,
+              amount: eur ? toStripeAmount(eur.amountEur, "EUR") : toStripeAmount(Number(amount), currency),
+              currency: eur ? "eur" : currency,
               customer: customerAccount.providerCustomerId,
               payment_method: savedMethod.providerPmId,
               off_session: true,

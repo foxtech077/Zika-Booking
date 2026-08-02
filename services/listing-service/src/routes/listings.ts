@@ -18,7 +18,7 @@ import {
 } from "../lib/s3.js";
 import { geocodePlaceId, geocodeAddress, reverseGeocode } from "../lib/geocoding.js";
 import { sendListingSubmittedEmail, sendListingActivatedEmail } from "../lib/email.js";
-import { getExchangeRate, ceilingForCurrency } from "../services/exchangeRate.services.js";
+import { ceilingForCurrency, getConvertedAmounts, getLocalizedContext } from "../services/exchangeRate.services.js";
 
 const MAX_PHOTOS = 30;
 
@@ -367,16 +367,13 @@ export async function listingRoutes(app: FastifyInstance) {
           const baseCurrency = l.currency ?? "USD";
           const nightlyRate = l.pricePerNight ? Number(l.pricePerNight) : null;
           const dailyRate = l.pricePerDay ? Number(l.pricePerDay) : null;
-          let localizedNightlyRate = nightlyRate;
-          let localizedDailyRate = dailyRate;
-
-          if (target && target !== baseCurrency) {
-            const rate = await getExchangeRate(baseCurrency, target);
-            if (rate !== null) {
-              if (localizedNightlyRate !== null) localizedNightlyRate = ceilingForCurrency(localizedNightlyRate * rate, target);
-              if (localizedDailyRate !== null) localizedDailyRate = ceilingForCurrency(localizedDailyRate * rate, target);
-            }
-          }
+          const ctx = await getLocalizedContext(baseCurrency, target);
+          const localizedNightlyRate =
+            ctx.currency === null ? null
+            : (ctx.rate !== null && nightlyRate !== null ? ceilingForCurrency(nightlyRate * ctx.rate, ctx.currency) : nightlyRate);
+          const localizedDailyRate =
+            ctx.currency === null ? null
+            : (ctx.rate !== null && dailyRate !== null ? ceilingForCurrency(dailyRate * ctx.rate, ctx.currency) : dailyRate);
 
           return {
             ...l,
@@ -384,7 +381,7 @@ export async function listingRoutes(app: FastifyInstance) {
             dailyRate,
             localizedNightlyRate,
             localizedDailyRate,
-            localizedCurrency: target ?? baseCurrency,
+            localizedCurrency: ctx.currency,
             photos: l.photos,
           };
         }),
@@ -465,16 +462,34 @@ export async function listingRoutes(app: FastifyInstance) {
       const baseCurrency = listing.currency ?? "USD";
       const nightlyRate = listing.pricePerNight ? Number(listing.pricePerNight) : null;
       const dailyRate = listing.pricePerDay ? Number(listing.pricePerDay) : null;
-      let localizedNightlyRate = nightlyRate;
-      let localizedDailyRate = dailyRate;
+      const ctx = await getLocalizedContext(baseCurrency, target);
+      const localizedNightlyRate =
+        ctx.currency === null ? null
+        : (ctx.rate !== null && nightlyRate !== null ? ceilingForCurrency(nightlyRate * ctx.rate, ctx.currency) : nightlyRate);
+      const localizedDailyRate =
+        ctx.currency === null ? null
+        : (ctx.rate !== null && dailyRate !== null ? ceilingForCurrency(dailyRate * ctx.rate, ctx.currency) : dailyRate);
 
-      if (target && target !== baseCurrency) {
-        const rate = await getExchangeRate(baseCurrency, target);
-        if (rate !== null) {
-          if (localizedNightlyRate !== null) localizedNightlyRate = ceilingForCurrency(localizedNightlyRate * rate, target);
-          if (localizedDailyRate !== null) localizedDailyRate = ceilingForCurrency(localizedDailyRate * rate, target);
-        }
-      }
+      // Localized equivalents for absolute-money fee fields (additive only).
+      const feeAmounts: Record<string, number | null> = {
+        securityDeposit: listing.securityDeposit != null ? Number(listing.securityDeposit) : null,
+        deliveryFee: listing.deliveryFee != null ? Number(listing.deliveryFee) : null,
+        cleaningFee: listing.cleaningFee != null ? Number(listing.cleaningFee) : null,
+        extraGuestFee: listing.extraGuestFee != null ? Number(listing.extraGuestFee) : null,
+        earlyCheckinFee: listing.earlyCheckinFee != null ? Number(listing.earlyCheckinFee) : null,
+        lateCheckoutFee: listing.lateCheckoutFee != null ? Number(listing.lateCheckoutFee) : null,
+        extraKmRate: listing.extraKmRate != null ? Number(listing.extraKmRate) : null,
+        ...(listing.childPriceType === "flat" && listing.childPriceValue != null
+          ? { childPrice: Number(listing.childPriceValue) }
+          : {}),
+      };
+      const localizedFee = await getConvertedAmounts(baseCurrency, target, feeAmounts);
+      const localizedFeeFields = Object.fromEntries(
+        Object.entries(localizedFee.values).map(([k, v]) => [
+          `localized${k.charAt(0).toUpperCase()}${k.slice(1)}`,
+          v,
+        ])
+      );
 
       const formattedListing = {
         ...listing,
@@ -488,7 +503,8 @@ export async function listingRoutes(app: FastifyInstance) {
         dailyRate,
         localizedNightlyRate,
         localizedDailyRate,
-        localizedCurrency: target ?? baseCurrency,
+        localizedCurrency: ctx.currency,
+        ...localizedFeeFields,
       };
 
       return sendSuccess(reply, 200, formattedListing);
