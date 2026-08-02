@@ -219,19 +219,23 @@ export async function searchRoutes(app: FastifyInstance) {
     // PostGIS geo filter — replaces in-memory Haversine
     const candidateIds = candidates.map((l) => l.id) as string[];
     let distanceMap = new Map<string, number>();
+    let coordsMap = new Map<string, { lat: number | null; lng: number | null }>();
     if (candidateIds.length > 0) {
-      const geoResults = await prisma.$queryRaw<Array<{ id: string; distance_km: number }>>`
+      const geoResults = await prisma.$queryRaw<Array<{ id: string; distance_km: number; lat: number | null; lng: number | null }>>`
         SELECT l.id,
-          COALESCE(public.ST_Distance(l.location, public.ST_SetSRID(public.ST_MakePoint(${lng}::double precision, ${lat}::double precision), 4326)::public.geography) / 1000, 999999) AS distance_km
+          COALESCE(public.ST_Distance(l.location, public.ST_SetSRID(public.ST_MakePoint(${lng}::double precision, ${lat}::double precision), 4326)::public.geography) / 1000, 999999) AS distance_km,
+          public.ST_Y(l.location::public.geometry) AS lat,
+          public.ST_X(l.location::public.geometry) AS lng
         FROM listing.listings l
         WHERE l.id = ANY(${candidateIds})
           AND (l.location IS NULL OR public.ST_DWithin(l.location, public.ST_SetSRID(public.ST_MakePoint(${lng}::double precision, ${lat}::double precision), 4326)::public.geography, ${radiusKm * 1000}::double precision))
       `;
       distanceMap = new Map(geoResults.map((r) => [r.id, Number(r.distance_km)]));
+      coordsMap = new Map(geoResults.map((r) => [r.id, { lat: r.lat, lng: r.lng }]));
     }
     const withDistance = candidates
       .filter((l) => distanceMap.has(l.id))
-      .map((l) => ({ ...l, distanceKm: distanceMap.get(l.id) ?? 0 }));
+      .map((l) => ({ ...l, distanceKm: distanceMap.get(l.id) ?? 0, ...(coordsMap.get(l.id) ?? {}) }));
 
     // Availability filter (when dates provided)
     const availIds = withDistance.map((l) => l.id);
@@ -364,6 +368,8 @@ export async function searchRoutes(app: FastifyInstance) {
         neighborhood: l.neighborhood,
         countryCode: l.country,
         distanceKm: Math.round(l.distanceKm * 10) / 10,
+        lat: (l as any).lat ?? null,
+        lng: (l as any).lng ?? null,
         primaryPhotoUrl: l.photos[0]?.cdnUrl ?? null,
         nightlyRate,
         dailyRate: l.category === "car" && l.pricePerDay ? Number(l.pricePerDay) : null,
@@ -518,6 +524,12 @@ export async function searchRoutes(app: FastifyInstance) {
 
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
+      const coords = await prisma.$queryRaw<Array<{ lat: number | null; lng: number | null }>>`
+        SELECT public.ST_Y(location::public.geometry) AS lat, public.ST_X(location::public.geometry) AS lng
+        FROM listing.listings
+        WHERE id = ${id}
+      `;
+
       const validStatuses = ["approved", "active"];
       if (!validStatuses.includes(listing.status)) {
         return reply.status(410).send({
@@ -612,6 +624,8 @@ export async function searchRoutes(app: FastifyInstance) {
         neighborhood: listing.neighborhood,
         countryCode: listing.country,
         primaryPhotoUrl: listingPhotos[0]?.cdnUrl ?? null,
+        lat: coords[0]?.lat ?? null,
+        lng: coords[0]?.lng ?? null,
         nightlyRate: listing.category !== "car"
           ? (listing.category === "hotel" && listing.hotelRoomTypes.length > 0
               ? Math.min(...listing.hotelRoomTypes.map((rt) => Number(rt.pricePerNight)))
