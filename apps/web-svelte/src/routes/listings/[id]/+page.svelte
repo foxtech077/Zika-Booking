@@ -84,15 +84,18 @@
 			} else if (detail.securityDeposit != null && detail.securityDeposit > 0) {
 				rows.push({
 					label: 'Deposit',
-					value: `${detail.currency} ${detail.securityDeposit.toLocaleString()}`
+					value: `${detail.localizedCurrency ?? detail.currency} ${(
+						detail.localizedSecurityDeposit ?? detail.securityDeposit
+					).toLocaleString()}`
 				});
 			}
 			if (detail.deliveryAvailable) {
-				const fee =
-					detail.deliveryFee != null && detail.deliveryFee > 0
-						? ` · ${detail.currency} ${detail.deliveryFee}`
+				const fee = detail.localizedDeliveryFee ?? detail.deliveryFee;
+				const feeText =
+					fee != null && fee > 0
+						? ` · ${detail.localizedCurrency ?? detail.currency} ${fee.toLocaleString()}`
 						: ' · Free';
-				rows.push({ label: 'Delivery', value: `Available${fee}` });
+				rows.push({ label: 'Delivery', value: `Available${feeText}` });
 			}
 		}
 		rows.push({ label: 'Cancellation', value: detail.cancellationPolicy.replace(/_/g, ' ') });

@@ -44,6 +44,11 @@ export interface PublicListingDetail extends PublicListing {
 	deliveryAvailable?: boolean;
 	deliveryFee?: number | null;
 	deliveryRadiusKm?: number | null;
+	cleaningFee?: number | null;
+	extraGuestFee?: number | null;
+	earlyCheckinFee?: number | null;
+	lateCheckoutFee?: number | null;
+	extraKmRate?: number | null;
 	photos: ListingPhoto[];
 	amenities: string[];
 	description: string;
@@ -61,6 +66,14 @@ export interface PublicListingDetail extends PublicListing {
 	localizedNightlyRate?: number;
 	localizedDailyRate?: number;
 	localizedCurrency?: string;
+	localizedSecurityDeposit?: number | null;
+	localizedDeliveryFee?: number | null;
+	localizedCleaningFee?: number | null;
+	localizedExtraGuestFee?: number | null;
+	localizedEarlyCheckinFee?: number | null;
+	localizedLateCheckoutFee?: number | null;
+	localizedExtraKmRate?: number | null;
+	localizedChildPrice?: number | null;
 }
 
 export interface ListingRoomType {
@@ -242,7 +255,19 @@ export function mapListingDetail(
 		localizedNightlyRate:
 			l?.localizedNightlyRate != null ? Number(l.localizedNightlyRate) : undefined,
 		localizedDailyRate: l?.localizedDailyRate != null ? Number(l.localizedDailyRate) : undefined,
-		localizedCurrency: l?.localizedCurrency as string | undefined
+		localizedCurrency: l?.localizedCurrency as string | undefined,
+		localizedSecurityDeposit:
+			l?.localizedSecurityDeposit != null ? Number(l.localizedSecurityDeposit) : null,
+		localizedDeliveryFee: l?.localizedDeliveryFee != null ? Number(l.localizedDeliveryFee) : null,
+		localizedCleaningFee: l?.localizedCleaningFee != null ? Number(l.localizedCleaningFee) : null,
+		localizedExtraGuestFee:
+			l?.localizedExtraGuestFee != null ? Number(l.localizedExtraGuestFee) : null,
+		localizedEarlyCheckinFee:
+			l?.localizedEarlyCheckinFee != null ? Number(l.localizedEarlyCheckinFee) : null,
+		localizedLateCheckoutFee:
+			l?.localizedLateCheckoutFee != null ? Number(l.localizedLateCheckoutFee) : null,
+		localizedExtraKmRate: l?.localizedExtraKmRate != null ? Number(l.localizedExtraKmRate) : null,
+		localizedChildPrice: l?.localizedChildPrice != null ? Number(l.localizedChildPrice) : null
 	};
 }
 

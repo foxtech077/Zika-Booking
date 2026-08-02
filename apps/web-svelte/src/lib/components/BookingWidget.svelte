@@ -32,6 +32,10 @@
 			listing.pricePerNight
 	);
 	const sym = $derived(currencySymbol(listing.localizedCurrency ?? listing.currency));
+	const securityDeposit = $derived(
+		listing.localizedSecurityDeposit ?? listing.securityDeposit ?? 0
+	);
+	const deliveryFee = $derived(listing.localizedDeliveryFee ?? listing.deliveryFee ?? 0);
 
 	let checkIn = $state('');
 	let checkOut = $state('');
@@ -52,8 +56,8 @@
 					commissionRate: listing.commissionRate,
 					taxRate: getTaxRate(listing.country),
 					category: listing.category,
-					deliveryFee: deliveryRequested ? (listing.deliveryFee ?? 0) : 0,
-					securityDeposit: listing.securityDeposit ?? 0,
+					deliveryFee: deliveryRequested ? deliveryFee : 0,
+					securityDeposit,
 					driverProvided: listing.driverProvided
 				})
 			: null
@@ -152,7 +156,7 @@
 			<span class="shrink-0 font-bold text-amber-600">🔒</span>
 			<span
 				><strong>Security deposit:</strong>
-				{sym}{listing.securityDeposit.toLocaleString()} — collected at booking.</span
+				{sym}{(securityDeposit ?? 0).toLocaleString()} — collected at booking.</span
 			>
 		</div>
 	{/if}
@@ -175,8 +179,8 @@
 					<div>
 						<p class="text-sm font-semibold text-slate-800">Request vehicle delivery</p>
 						<p class="mt-0.5 text-xs text-slate-400">
-							{#if (listing.deliveryFee ?? 0) > 0}
-								{sym}{listing.deliveryFee?.toLocaleString() ?? '0'} delivery fee · within
+							{#if deliveryFee > 0}
+								{sym}{deliveryFee.toLocaleString()} delivery fee · within
 								{listing.deliveryRadiusKm ?? '—'} km
 							{:else}
 								Free delivery · within {listing.deliveryRadiusKm ?? '—'} km
