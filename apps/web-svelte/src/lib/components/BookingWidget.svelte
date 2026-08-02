@@ -26,6 +26,7 @@
 	let checkIn = $state('');
 	let checkOut = $state('');
 	let guests = $state(2);
+	let deliveryRequested = $state(false);
 	let availData = $state<
 		| { unavailableRanges: { start: string; end: string }[]; roomTypeAvailability?: unknown[] }
 		| null
@@ -39,7 +40,11 @@
 					checkIn,
 					checkOut,
 					commissionRate: listing.commissionRate,
-					taxRate: getTaxRate(listing.country)
+					taxRate: getTaxRate(listing.country),
+					category: listing.category,
+					deliveryFee: deliveryRequested ? (listing.deliveryFee ?? 0) : 0,
+					securityDeposit: listing.securityDeposit ?? 0,
+					driverProvided: listing.driverProvided
 				})
 			: null
 	);
@@ -120,6 +125,28 @@
 		</p>
 	{/if}
 
+	{#if isCar && listing.driverProvided}
+		<div
+			class="mt-3 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs text-emerald-800"
+		>
+			<span class="shrink-0">🧑‍✈️</span>
+			<span
+				><strong>Driver included:</strong> a driver is provided with this vehicle — no security deposit
+				is required.</span
+			>
+		</div>
+	{:else if isCar && listing.securityDeposit != null && listing.securityDeposit > 0}
+		<div
+			class="mt-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-slate-600"
+		>
+			<span class="shrink-0 font-bold text-amber-600">🔒</span>
+			<span
+				><strong>Security deposit:</strong>
+				{sym}{listing.securityDeposit.toLocaleString()} — collected at booking.</span
+			>
+		</div>
+	{/if}
+
 	<div class="mt-4 space-y-3">
 		<DateRangePicker
 			startDate={checkIn}
@@ -131,6 +158,29 @@
 				checkOut = e;
 			}}
 		/>
+
+		{#if isCar && listing.deliveryAvailable}
+			<div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+				<label class="flex cursor-pointer items-center justify-between gap-2 select-none">
+					<div>
+						<p class="text-sm font-semibold text-slate-800">Request vehicle delivery</p>
+						<p class="mt-0.5 text-xs text-slate-400">
+							{#if (listing.deliveryFee ?? 0) > 0}
+								{sym}{listing.deliveryFee?.toLocaleString() ?? '0'} delivery fee · within
+								{listing.deliveryRadiusKm ?? '—'} km
+							{:else}
+								Free delivery · within {listing.deliveryRadiusKm ?? '—'} km
+							{/if}
+						</p>
+					</div>
+					<input
+						type="checkbox"
+						bind:checked={deliveryRequested}
+						class="rounded border-slate-300 text-[#1D8D2B] focus:ring-[#1D8D2B]"
+					/>
+				</label>
+			</div>
+		{/if}
 
 		<div>
 			<span class="mb-1 block text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
@@ -185,6 +235,18 @@
 				<div class="flex justify-between">
 					<span>Taxes ({Math.round(getTaxRate(listing.country) * 100)}%)</span>
 					<span>{sym}{breakdown.taxAmount.toLocaleString()}</span>
+				</div>
+			{/if}
+			{#if breakdown.deliveryFee > 0}
+				<div class="flex justify-between">
+					<span>Delivery fee</span>
+					<span>{sym}{breakdown.deliveryFee.toLocaleString()}</span>
+				</div>
+			{/if}
+			{#if breakdown.securityDeposit > 0}
+				<div class="flex justify-between text-slate-600">
+					<span>Security deposit</span>
+					<span>{sym}{breakdown.securityDeposit.toLocaleString()}</span>
 				</div>
 			{/if}
 			<div

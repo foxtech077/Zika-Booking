@@ -79,6 +79,14 @@
 			if (detail.fuelType) rows.push({ label: 'Fuel type', value: detail.fuelType });
 			if (detail.seats) rows.push({ label: 'Seats', value: String(detail.seats) });
 			if (detail.mileagePolicy) rows.push({ label: 'Mileage', value: detail.mileagePolicy });
+			if (detail.driverProvided) {
+				rows.push({ label: 'Driver', value: 'Included' });
+			} else if (detail.securityDeposit != null && detail.securityDeposit > 0) {
+				rows.push({
+					label: 'Deposit',
+					value: `${detail.currency} ${detail.securityDeposit.toLocaleString()}`
+				});
+			}
 			if (detail.deliveryAvailable) {
 				const fee =
 					detail.deliveryFee != null && detail.deliveryFee > 0
