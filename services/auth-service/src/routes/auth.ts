@@ -16,9 +16,11 @@ import { generateToken, hashToken } from "../lib/crypto";
 import { z } from "zod";
 import {
   signAccessToken,
+  signGuestToken,
   generateRefreshToken,
   verifyAccessToken,
 } from "../lib/jwt";
+import { randomUUID, createHash } from "crypto";
 import {
   sendVerificationEmail,
   sendWelcomeEmail,
@@ -39,6 +41,28 @@ const COOKIE_OPTS = {
   maxAge: REFRESH_TTL,
   path: "/",
 };
+
+const GUEST_TOKEN_TTL = Number(process.env["JWT_GUEST_ACCESS_TTL_SECONDS"] ?? 1800);
+const LISTING_API_URL = process.env["LISTING_API_URL"] ?? "http://localhost:3003";
+
+// ── Guest booking claim (best-effort, fire-and-forget) ───────────────────────
+// After a successful login/register the freshly-minted access token is used to
+// re-point every anonymous booking that carries the same email onto the real
+// user (adopt-by-email). Failures are logged and never block auth.
+async function fireAndForgetBookingClaim(email: string, accessToken: string) {
+  try {
+    await fetch(`${LISTING_API_URL}/bookings/claim`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ email }),
+    });
+  } catch (err) {
+    console.error("[Auth] Booking claim failed (non-fatal):", (err as Error)?.message ?? err);
+  }
+}
 
 
 // POST schema - only photoUrl is allowed
@@ -345,6 +369,8 @@ export async function authRoutes(app: FastifyInstance) {
           user.country
         );
 
+        fireAndForgetBookingClaim(email, tokens.accessToken);
+
         return sendSuccess(reply, 201, {
           user: publicUser(user),
           tokens
@@ -411,6 +437,55 @@ export async function authRoutes(app: FastifyInstance) {
       });
     } catch (err) {
       return sendError(reply, 400, "REGISTRATION_FAILED", "Registration could not be completed. Please try again.");
+    }
+  });
+
+  // ── POST /auth/guest-token  (Guest checkout — no sign-in required) ─────────
+  app.post("/auth/guest-token", {
+    schema: {
+      tags: ["User Auth"],
+      summary: "Mint a stateless guest access token for anonymous checkout",
+      body: {
+        type: "object",
+        properties: {
+          deviceId: {
+            type: "string",
+            description: "Optional stable device identifier. When present the anon id is derived from it so retries reuse the same id.",
+          },
+        },
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      // Public endpoint → conservative per-IP rate limit.
+      const rlCount = await incrementCounter(`rl:guest-token:${req.ip}`, 3600);
+      if (rlCount > 120) {
+        return sendError(reply, 429, "RATE_LIMITED", "Too many guest tokens requested. Please try again later.");
+      }
+
+      const body = (req.body ?? {}) as { deviceId?: string };
+      let sub: string;
+      if (body.deviceId && typeof body.deviceId === "string" && body.deviceId.trim()) {
+        // Stable anon id derived from the device so a refresh resumes the same checkout.
+        sub = `guest_${createHash("sha256").update(body.deviceId.trim()).digest("hex").slice(0, 24)}`;
+      } else {
+        // Fresh anon id per mint — the client must persist and reuse the token.
+        sub = `guest_${randomUUID().replace(/-/g, "")}`;
+      }
+
+      const accessToken = await signGuestToken({
+        sub,
+        type: "guest",
+        status: "active",
+      });
+
+      return sendSuccess(reply, 200, {
+        accessToken,
+        expiresIn: GUEST_TOKEN_TTL,
+      });
+    } catch (err) {
+      req.log.error({ err }, "Failed to mint guest token");
+      return sendError(reply, 500, "GUEST_TOKEN_FAILED", "Could not issue a guest token. Please try again.");
     }
   });
 
@@ -634,6 +709,8 @@ export async function authRoutes(app: FastifyInstance) {
             record.user.country
           );
 
+          fireAndForgetBookingClaim(record.user.email, tokens.accessToken);
+
           return sendSuccess(reply, 200, {
             message: "You're already verified. Welcome back!",
             user: publicUser(record.user),
@@ -672,6 +749,8 @@ export async function authRoutes(app: FastifyInstance) {
             "active",
             updatedUser.country
           );
+
+          fireAndForgetBookingClaim(updatedUser.email, tokens.accessToken);
 
           return sendSuccess(reply, 200, {
             message: "Email verified — welcome to Kainook!",
@@ -831,6 +910,8 @@ export async function authRoutes(app: FastifyInstance) {
 
       console.log("[Login] SUCCESS → issuing tokens for user:", user.id);
       const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
+      // Adopt-by-email: attach any anonymous bookings made under this email.
+      fireAndForgetBookingClaim(email, tokens.accessToken);
       return sendSuccess(reply, 200, { user: publicUser(user), tokens });
     } catch {
       return sendError(reply, 400, "LOGIN_FAILED", "Unable to complete sign-in. Please check your credentials and try again.");
@@ -1067,6 +1148,8 @@ export async function authRoutes(app: FastifyInstance) {
 
         const updatedUser = await prisma.user.findUniqueOrThrow({ where: { id: record.userId } });
         const tokens = await issueTokens(reply, updatedUser.id, updatedUser.userType, updatedUser.status, updatedUser.country);
+
+        fireAndForgetBookingClaim(updatedUser.email, tokens.accessToken);
 
         return sendSuccess(reply, 200, { message: "Your password has been updated. You're now signed in.", user: publicUser(updatedUser), tokens });
       } catch (err: any) {
@@ -1590,6 +1673,7 @@ export async function authRoutes(app: FastifyInstance) {
         });
         await sendWelcomeEmail(email, user.firstName).catch(() => null);
         const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
+        fireAndForgetBookingClaim(email, tokens.accessToken);
         return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType: false });
       }
 
@@ -1638,6 +1722,7 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
+      fireAndForgetBookingClaim(user.email, tokens.accessToken);
       return sendSuccess(reply, 200, { user: publicUser(user), tokens, needsAccountType: false });
     } catch (err) {
       return sendError(reply, 400, "OAUTH_FAILED", "Sign in with Google could not be completed. Please try again.");
@@ -1724,6 +1809,7 @@ export async function authRoutes(app: FastifyInstance) {
         });
         await sendWelcomeEmail(appleEmail, user.firstName).catch(() => null);
         const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
+        fireAndForgetBookingClaim(user.email, tokens.accessToken);
         return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType: !userType });
       }
       if (user.status === "pending_verification") {
@@ -1733,6 +1819,7 @@ export async function authRoutes(app: FastifyInstance) {
       if (user.status === "banned") return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
 
       const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
+      fireAndForgetBookingClaim(user.email, tokens.accessToken);
       return sendSuccess(reply, 200, { user: publicUser(user), tokens, needsAccountType: false });
     } catch (err) {
       return sendError(reply, 400, "OAUTH_FAILED", "Sign in with Apple could not be completed. Please try again.");
@@ -1908,6 +1995,7 @@ export async function authRoutes(app: FastifyInstance) {
 
       // Issue Zika tokens and set HTTP-only cookie
       const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
+      fireAndForgetBookingClaim(user.email, tokens.accessToken);
 
       // Return a beautiful loading HTML that initializes sessionStorage and redirects
       reply.type("text/html").send(`

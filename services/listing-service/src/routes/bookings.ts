@@ -1749,7 +1749,7 @@ export async function bookingRoutes(app: FastifyInstance) {
 
             guestFirstName: body.guestFirstName,
             guestLastName: body.guestLastName,
-            guestEmail: body.guestEmail,
+            guestEmail: body.guestEmail.trim().toLowerCase(),
             guestPhone: body.guestPhone,
 
             adults: body.adults,
@@ -3119,6 +3119,74 @@ export async function bookingRoutes(app: FastifyInstance) {
       } catch (err) {
         req.log.error({ err }, "Failed to bind commission rate to booking");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while binding the commission rate.");
+      }
+    }
+  );
+
+  // ── POST /bookings/claim  (adopt-by-email) ─────────────────────────────────
+  // Re-points anonymous (guest-token) bookings onto a real user after they sign
+  // in or register with the same email. Called best-effort by the auth service;
+  // never fails the auth flow when the listing service is unreachable.
+  app.post(
+    "/bookings/claim",
+    {
+      schema: {
+        tags: ["Bookings"],
+        summary: "Attach anonymous bookings made under an email to the authenticated user",
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: "object",
+          required: ["email"],
+          properties: {
+            email: { type: "string", format: "email" },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              success: { type: "boolean" },
+              data: {
+                type: "object",
+                properties: {
+                  claimed: { type: "integer" },
+                },
+                required: ["claimed"],
+              },
+            },
+          },
+          400: errSchema,
+          401: errSchema,
+        },
+      },
+      preHandler: [requireProvider],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const claimerId = (req as ProviderRequest).providerId;
+      const body = (req.body ?? {}) as { email?: string };
+
+      if (!body.email || typeof body.email !== "string" || !body.email.trim()) {
+        return sendError(reply, 400, "VALIDATION_ERROR", "Email is required.");
+      }
+
+      const email = body.email.trim().toLowerCase();
+
+      try {
+        // Only adopt anonymous bookings (guest_* ids). Real-user bookings that
+        // happen to share the email are left untouched, as is anything already
+        // owned by the claimer.
+        const result = await prisma.booking.updateMany({
+          where: {
+            guestEmail: { equals: email, mode: "insensitive" },
+            guestId: { startsWith: "guest_", not: claimerId },
+          },
+          data: { guestId: claimerId },
+        });
+
+        return sendSuccess(reply, 200, { claimed: result.count });
+      } catch (err) {
+        req.log.error({ err }, "Failed to claim guest bookings");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while claiming bookings.");
       }
     }
   );

@@ -21,6 +21,23 @@ export async function signAccessToken(
     .sign(getSecret("JWT_SECRET"));
 }
 
+/**
+ * Stateless guest token for anonymous checkouts (see guest_booking.md).
+ * Same signing key/algorithm as a regular access token so listing and payment
+ * services validate it with no changes, but minted with its own TTL that must
+ * span the whole lock → payment flow (guests have no refresh token).
+ */
+export async function signGuestToken(
+  payload: Omit<JwtPayload, "iat" | "exp" | "jti">,
+): Promise<string> {
+  const ttl = Number(process.env["JWT_GUEST_ACCESS_TTL_SECONDS"] ?? 1800);
+  return new SignJWT({ ...payload, jti: generateCode(8) })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(`${ttl}s`)
+    .sign(getSecret("JWT_SECRET"));
+}
+
 export async function verifyAccessToken(token: string): Promise<JwtPayload> {
   const { payload } = await jwtVerify(token, getSecret("JWT_SECRET"));
   return payload as unknown as JwtPayload;
