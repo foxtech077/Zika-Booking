@@ -29,6 +29,7 @@ interface SearchResult {
   id: string; listingType: string; title: string; city: string; countryCode: string;
   distanceKm: number; primaryPhotoUrl: string | null; nightlyRate: number | null;
   dailyRate: number | null; currency: string; starRating: number | null;
+  lat?: number | null; lng?: number | null;
   // Localized by the API when a currency is requested; display-only.
   localizedNightlyRate?: number | null; localizedDailyRate?: number | null;
   localizedCurrency?: string | null;
