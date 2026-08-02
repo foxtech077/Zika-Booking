@@ -148,7 +148,9 @@
 			start: checkIn,
 			end: checkOut,
 			guests: String(guests),
-			nights: String(breakdown?.nights ?? 0)
+			nights: String(breakdown?.nights ?? 0),
+			currency: listing.localizedCurrency ?? listing.currency,
+			...(cheapestRoom?.id ? { roomTypeId: cheapestRoom.id } : {})
 		});
 		void goto(`/booking/review?${params.toString()}`);
 	}

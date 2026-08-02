@@ -15,3 +15,43 @@ export function fmtDates(start: string, end: string): string {
 	if (a && b) return `${a} – ${b}`;
 	return a || b || '—';
 }
+
+export interface PlatformInfo {
+	platformCurrency: string;
+	platformAmount: number;
+	listingCurrency: string;
+	listingTotal: number;
+	platformRate: number | null;
+}
+
+/**
+ * Derive the platform (charge) currency and amount from a pricing preview,
+ * falling back to the listing currency/total for older previews that lack a
+ * platform snapshot.
+ */
+export function derivePlatform(
+	pp:
+		| { platformCurrency?: string; platformAmount?: number; platformRate?: number }
+		| null
+		| undefined,
+	listingCurrency: string,
+	listingTotal: number
+): PlatformInfo {
+	return {
+		platformCurrency: pp?.platformCurrency ?? listingCurrency,
+		platformAmount: pp?.platformAmount != null ? pp.platformAmount : listingTotal,
+		listingCurrency,
+		listingTotal,
+		platformRate: pp?.platformRate ?? null
+	};
+}
+
+/** Format an amount in a platform currency ("EUR 1.64", "XAF 1"). */
+export function fmtPlatform(amount: number, currency: string): string {
+	const code = (currency ?? '').toUpperCase();
+	const decimals = code === 'XAF' ? 0 : 2;
+	return `${code} ${(amount ?? 0).toLocaleString(undefined, {
+		minimumFractionDigits: decimals,
+		maximumFractionDigits: decimals
+	})}`;
+}
