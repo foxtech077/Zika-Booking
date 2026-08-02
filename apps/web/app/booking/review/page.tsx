@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import { storeLatestReviewContext } from "@/services/traveller";
 import { useAuthStore } from "@/stores/auth";
 import { capitalize } from "@/lib/utils";
+import { derivePlatform, fmtMoney } from "@/lib/platform-currency";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,12 @@ interface PricingPreview {
   totalAmount: number;
   commissionRate?: number;
   taxRate?: number;
+  /** Platform (charge) currency — EUR for Stripe, XAF for Tara. */
+  platformCurrency?: string;
+  /** Amount actually charged in the platform currency (EUR includes the buffer). */
+  platformAmount?: number;
+  /** Exchange rate listingCurrency → platformCurrency at lock time. */
+  platformRate?: number;
 }
 
 interface CheckoutCtx {
@@ -124,7 +131,31 @@ function getPricing(ctx: CheckoutCtx) {
     : (pp.promotionDiscount ?? 0);
   const subtotal = Math.max(0, base - totalDiscount);
   const total = subtotal + serviceFee + taxAmount + deliveryFee + securityDeposit;
-  return { base, discount: totalDiscount, subtotal, serviceFee, taxes: taxAmount, deliveryFee, securityDeposit, total };
+  // The end amount the guest pays is the platform-currency total (EUR for
+  // Stripe, XAF for Tara) returned by the booking API. Breakdown lines stay in
+  // the listing currency; only this converted total is shown in the platform
+  // currency. Fall back to the listing total for older checkout sessions.
+  const info = derivePlatform(pp, ctx.currency, total);
+  return {
+    base, discount: totalDiscount, subtotal, serviceFee, taxes: taxAmount,
+    deliveryFee, securityDeposit, total,
+    platformCurrency: info.platformCurrency,
+    platformAmount: info.platformAmount,
+    platformRate: info.platformRate,
+    listingCurrency: ctx.currency,
+  };
+}
+
+/** Platform amount as primary value with the listing amount muted underneath. */
+function MoneyValue({ platform, listing, currency, listingCurrency }: { platform: number; listing: number; currency: string; listingCurrency: string }) {
+  return (
+    <span className="text-right">
+      <div>{fmtMoney(platform, currency)}</div>
+      {currency !== listingCurrency && (
+        <div className="text-[10px] font-normal text-slate-400">Billed as approx. {fmtMoney(listing, listingCurrency)}</div>
+      )}
+    </span>
+  );
 }
 
 function fmtDate(d?: string) {
@@ -751,8 +782,13 @@ export default function BookingReviewPage() {
                     disabled={submitting}
                     className="mt-5 w-full py-3.5 bg-[#0B1E3F] hover:bg-[#07152B] disabled:opacity-50 text-white font-bold rounded-xl transition text-sm"
                   >
-                    {submitting ? "Processing…" : `Pay ${ctx.currency} ${fmt(pricing!.total)}`}
+                    {submitting ? "Processing…" : `Pay ${pricing!.platformCurrency} ${fmt(pricing!.platformAmount)}`}
                   </button>
+                  {pricing!.platformCurrency !== ctx.currency && (
+                    <p className="text-xs text-slate-400 mt-2">
+                      Billed as approx. {ctx.currency} {fmt(pricing!.total)} · charged in {pricing!.platformCurrency}
+                    </p>
+                  )}
                 </SectionCard>
               </div>
               <PriceSummary ctx={ctx} pricing={pricing!} />
@@ -1104,9 +1140,14 @@ export default function BookingReviewPage() {
                         disabled={submitting || (needsTermsAcceptance && !payTermsAccepted)}
                         className="flex-[2] py-3.5 bg-[#0B1E3F] hover:bg-[#07152B] disabled:opacity-50 text-white font-bold rounded-xl transition text-sm"
                       >
-                        {submitting ? "Please wait…" : provider === "tara" ? "Send Payment Request" : "Pay Now"}
+                        {submitting ? "Please wait…" : provider === "tara" ? "Send Payment Request" : `Pay ${pricing!.platformCurrency} ${fmt(pricing!.platformAmount)}`}
                       </button>
                     </div>
+                    {provider === "stripe" && pricing!.platformCurrency !== ctx.currency && (
+                      <p className="text-xs text-slate-400 mt-2 text-center">
+                        Billed as approx. {ctx.currency} {fmt(pricing!.total)} · charged in {pricing!.platformCurrency}
+                      </p>
+                    )}
                   </>
                 )}
               </div>
@@ -1244,7 +1285,7 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
           </div>
         </div>
 
-        {/* Line items */}
+        {/* Line items in listing currency; the total is shown in the platform currency */}
         <div className="space-y-2.5 text-sm">
           <div className="flex justify-between text-slate-600">
             <span>{ctx.currency} {fmt(ctx.pricingPreview?.nightlyRate ?? ctx.pricePerNight)} × {ctx.pricingPreview?.units ?? ctx.nightsOrDays} {isCar ? "day" : "night"}{(ctx.pricingPreview?.units ?? ctx.nightsOrDays) !== 1 ? "s" : ""}</span>
@@ -1270,9 +1311,6 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
               <span>{ctx.currency} {fmt(pricing.taxes)}</span>
             </div>
           )}
-          {/* Delivery is already inside pricing.total (see getPricing). Without
-              this row the payment page showed a total that did not reconcile
-              with the lines above it. */}
           {pricing.deliveryFee > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Delivery fee</span>
@@ -1287,7 +1325,7 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
           )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
             <span>Total</span>
-            <span>{ctx.currency} {fmt(pricing.total)}</span>
+            <MoneyValue platform={pricing.platformAmount} listing={pricing.total} currency={pricing.platformCurrency} listingCurrency={pricing.listingCurrency} />
           </div>
         </div>
       </div>
@@ -1306,6 +1344,9 @@ function ConfirmedView({
   onViewBookings: () => void;
 }) {
   const isCar = ctx.listingCategory === "car";
+  const info = derivePlatform(ctx.pricingPreview, confirmed.currency, confirmed.totalAmount);
+  const platformCurrency = info.platformCurrency;
+  const platformAmount = info.platformAmount;
   return (
     <div className="max-w-2xl mx-auto space-y-6">
 
@@ -1349,48 +1390,48 @@ function ConfirmedView({
         </div>
       </div>
 
-      {/* Receipt */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
-        <h3 className="font-bold text-slate-800">Receipt</h3>
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between text-slate-600">
-            <span>Base amount</span>
-            <span>{confirmed.currency} {fmt(confirmed.baseAmount)}</span>
-          </div>
-          {confirmed.discount > 0 && (
-            <div className="flex justify-between text-emerald-600">
-              <span>{ctx.discountSource === "promotion" ? "Promotional discount" : "Voucher discount"}</span>
-              <span>−{confirmed.currency} {fmt(confirmed.discount)}</span>
-            </div>
-          )}
-          <div className="flex justify-between text-slate-600">
-            <span>Service fee{confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}</span>
-            <span>{confirmed.currency} {fmt(confirmed.serviceFee)}</span>
-          </div>
-          {confirmed.taxes > 0 && (
+        {/* Receipt */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+          <h3 className="font-bold text-slate-800">Receipt</h3>
+          <div className="space-y-2 text-sm">
             <div className="flex justify-between text-slate-600">
-              <span>Taxes{confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}</span>
-              <span>{confirmed.currency} {fmt(confirmed.taxes)}</span>
+              <span>Base amount</span>
+              <span>{confirmed.currency} {fmt(confirmed.baseAmount)}</span>
             </div>
-          )}
-          {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && (
+            {confirmed.discount > 0 && (
+              <div className="flex justify-between text-emerald-600">
+                <span>{ctx.discountSource === "promotion" ? "Promotional discount" : "Voucher discount"}</span>
+                <span>−{confirmed.currency} {fmt(confirmed.discount)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-slate-600">
-              <span>Security deposit</span>
-              <span>{confirmed.currency} {fmt(confirmed.securityDeposit)}</span>
+              <span>Service fee{confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}</span>
+              <span>{confirmed.currency} {fmt(confirmed.serviceFee)}</span>
             </div>
-          )}
-          {confirmed.deliveryFee != null && confirmed.deliveryFee > 0 && (
-            <div className="flex justify-between text-slate-600">
-              <span>Delivery fee</span>
-              <span>{confirmed.currency} {fmt(confirmed.deliveryFee)}</span>
+            {confirmed.taxes > 0 && (
+              <div className="flex justify-between text-slate-600">
+                <span>Taxes{confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}</span>
+                <span>{confirmed.currency} {fmt(confirmed.taxes)}</span>
+              </div>
+            )}
+            {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && (
+              <div className="flex justify-between text-slate-600">
+                <span>Security deposit</span>
+                <span>{confirmed.currency} {fmt(confirmed.securityDeposit)}</span>
+              </div>
+            )}
+            {confirmed.deliveryFee != null && confirmed.deliveryFee > 0 && (
+              <div className="flex justify-between text-slate-600">
+                <span>Delivery fee</span>
+                <span>{confirmed.currency} {fmt(confirmed.deliveryFee)}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
+              <span>Total Paid</span>
+              <MoneyValue platform={platformAmount} listing={confirmed.totalAmount} currency={platformCurrency} listingCurrency={confirmed.currency} />
             </div>
-          )}
-          <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
-            <span>Total Paid</span>
-            <span>{confirmed.currency} {fmt(confirmed.totalAmount)}</span>
           </div>
         </div>
-      </div>
 
       {/* Payment info */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
@@ -1448,6 +1489,13 @@ function VoucherLayout({
   ctx: CheckoutCtx;
 }) {
   const isCar = ctx.listingCategory === "car";
+  const info = derivePlatform(ctx.pricingPreview, confirmed.currency, confirmed.totalAmount);
+  const platformCurrency = info.platformCurrency;
+  const platformAmount = info.platformAmount;
+  const lv = (value: number) => `${confirmed.currency} ${fmt(value)}`;
+  const totalDisplay = platformCurrency === confirmed.currency
+    ? lv(platformAmount)
+    : `${fmtMoney(platformAmount, platformCurrency)}  (Billed as approx. ${lv(confirmed.totalAmount)})`;
   return (
     <div style={{ fontFamily: "sans-serif", maxWidth: 680, margin: "0 auto", color: "#1e293b" }}>
       {/* Header */}
@@ -1491,12 +1539,12 @@ function VoucherLayout({
 
       {/* Receipt */}
       <VoucherSection title="Itemised Receipt">
-        <VoucherRow label="Base amount" value={`${confirmed.currency} ${fmt(confirmed.baseAmount)}`} />
-        {confirmed.discount > 0 && <VoucherRow label="Discount" value={`−${confirmed.currency} ${fmt(confirmed.discount)}`} />}
-        <VoucherRow label={`Service fee${confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}`} value={`${confirmed.currency} ${fmt(confirmed.serviceFee)}`} />
-        {confirmed.taxes > 0 && <VoucherRow label={`Taxes${confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}`} value={`${confirmed.currency} ${fmt(confirmed.taxes)}`} />}
-        {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && <VoucherRow label="Security deposit" value={`${confirmed.currency} ${fmt(confirmed.securityDeposit)}`} />}
-        <VoucherRow label="Total Paid" value={`${confirmed.currency} ${fmt(confirmed.totalAmount)}`} bold />
+        <VoucherRow label="Base amount" value={lv(confirmed.baseAmount)} />
+        {confirmed.discount > 0 && <VoucherRow label="Discount" value={`−${lv(confirmed.discount)}`} />}
+        <VoucherRow label={`Service fee${confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}`} value={lv(confirmed.serviceFee)} />
+        {confirmed.taxes > 0 && <VoucherRow label={`Taxes${confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}`} value={lv(confirmed.taxes)} />}
+        {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && <VoucherRow label="Security deposit" value={lv(confirmed.securityDeposit)} />}
+        <VoucherRow label="Total Paid" value={totalDisplay} bold />
       </VoucherSection>
 
       {/* Payment Info */}
