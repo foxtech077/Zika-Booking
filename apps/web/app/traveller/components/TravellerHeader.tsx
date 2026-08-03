@@ -100,8 +100,19 @@ export function TravellerHeader({
   const isWishlistActive = pathname?.startsWith(TRAVELLER_ROUTES.wishlist);
   const isProfileActive = pathname?.startsWith(TRAVELLER_ROUTES.profile);
   const isListingsActive = pathname?.startsWith("/dashboard");
-  const listingsHref = hasListings ? TRAVELLER_ROUTES.manageListings : TRAVELLER_ROUTES.createListing;
-  const listingsLabel = hasListings ? "Manage Listings" : "Create Listing";
+  // Users without an approved host profile are routed through the host
+  // onboarding flow before they can create/manage listings.
+  const canHost = user?.hostStatus === "approved";
+  const listingsHref = !canHost
+    ? "/dashboard/host"
+    : hasListings
+      ? TRAVELLER_ROUTES.manageListings
+      : TRAVELLER_ROUTES.createListing;
+  const listingsLabel = !canHost
+    ? "Become a Host"
+    : hasListings
+      ? "Manage Listings"
+      : "Create Listing";
 
   const lockTimer =
     lockSecondsLeft != null

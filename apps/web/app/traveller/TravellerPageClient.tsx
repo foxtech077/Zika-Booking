@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";           // auth-service: POST /auth/logout only
 import { listingApi } from "@/lib/listing-api";
+import { ensureAnonymousToken } from "@/lib/anonymous";
 import { paymentApi } from "@/lib/payment-api";
 import { fetchFavourites, fetchRecentlyViewed } from "@/services/traveller";
 import ListingImage from "./components/ListingImage";
@@ -45,7 +46,7 @@ interface User {
   firstName: string;
   lastName: string;
   email: string;
-  userType: string;
+  hostStatus?: "approved" | "pending" | "rejected" | null;
   currentTier: "bronze" | "silver" | "gold" | "diamond";
   loyaltyPoints: number;
 }
@@ -1345,7 +1346,10 @@ export default function TravellerDashboard() {
     } catch (err: any) {
       const code = err?.response?.data?.error?.code;
       if (code === "NO_TOKEN" || err?.response?.status === 401) {
-        router.push("/auth/login");
+        // The public detail endpoint is accessible without a token; a 401 here
+        // only means a stale/expired account token. Bounce only signed-in users
+        // to login — visitors can keep browsing anonymously.
+        if (isAuthenticated) router.push("/auth/login");
         return;
       }
       setDetailListing(null);
@@ -1543,6 +1547,12 @@ export default function TravellerDashboard() {
     if (!detailListing) return;
     setLockingListing(true);
     setBookingError("");
+
+    // Anonymous checkout: mint a stateless anonymous token so visitors can
+    // lock a booking without an account. Booking/payment endpoints accept it.
+    if (!isAuthenticated) {
+      await ensureAnonymousToken();
+    }
 
     const body: Record<string, any> = {
       listingId: detailListing.id,
@@ -1976,11 +1986,20 @@ export default function TravellerDashboard() {
   }
 
   // 8b. Save context to sessionStorage and navigate to /booking/review
-  function handleContinueToReview() {
+  async function handleContinueToReview() {
     if (!detailListing || !lockToken) return;
     if (!firstName || !lastName || !email) {
       setBookingError("Please fill in your name and email.");
       return;
+    }
+    // Ensure an anonymous token exists before checkout so the booking and
+    // payment calls (which require a token) succeed for non-accounts.
+    if (!isAuthenticated) {
+      const anon = await ensureAnonymousToken();
+      if (!anon) {
+        setBookingError("Unable to start checkout. Please try again.");
+        return;
+      }
     }
     const isCar = detailListing.category === "car";
     const isHotel = detailListing.category === "hotel";

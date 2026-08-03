@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { clearAnonymousToken } from "@/lib/anonymous";
 
 export interface AuthUser {
   id: string;
@@ -16,6 +17,8 @@ export interface AuthUser {
   emailVerified: boolean;
   currentTier: string;
   loyaltyPoints: number;
+  /** Host profile (Accreditation) status. Only 'approved' may manage listings. */
+  hostStatus?: "approved" | "pending" | "rejected" | null;
   /** Set by the API when the user has never accepted the Terms/Privacy Policy,
    *  or accepted a superseded version. Gates entry to the app. */
   requiresTermsAcceptance?: boolean;
@@ -47,6 +50,10 @@ export const useAuthStore = create<AuthState>()(
       setHasHydrated: (val) => set({ _hasHydrated: val }),
 
       setSession: (token, user) => {
+        // A freshly minted anonymous token (if any) must not outlive a login —
+        // otherwise after logout the interceptors would fall back to it and the
+        // stale anon session would masquerade as the account.
+        clearAnonymousToken();
         // Write to both localStorage (via persist) and sessionStorage (fast access by interceptors)
         if (typeof window !== "undefined") {
           sessionStorage.setItem(TOKEN_KEY, token);
@@ -59,6 +66,9 @@ export const useAuthStore = create<AuthState>()(
           sessionStorage.removeItem(TOKEN_KEY);
           localStorage.removeItem(TOKEN_KEY);
         }
+        // Clear any anonymous checkout session too, so a logged-out user never
+        // accidentally keeps acting as a prior anonymous session.
+        clearAnonymousToken();
         set({ token: null, user: null, isAuthenticated: false });
       },
 

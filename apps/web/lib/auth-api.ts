@@ -1,4 +1,5 @@
 import axios from "axios";
+import { clearAnonymousToken } from "@/lib/anonymous";
 
 const AUTH_BASE = `${process.env.NEXT_PUBLIC_AUTH_API_URL ?? "https://api.kainook.com/auth"}/`;
 
@@ -22,21 +23,21 @@ authApi.interceptors.response.use(
   (err) => {
     if (err.response?.status === 401 && typeof window !== "undefined") {
       sessionStorage.removeItem("zika:access_token");
+      clearAnonymousToken();
     }
     return Promise.reject(err);
   }
 );
 
-/** Register a new guest */
+/** Register a new user */
 export async function registerGuest(payload: {
   firstName: string;
   lastName: string;
   email: string;
   password: string;
   confirmPassword: string;
-  userType: "guest";
   businessName?: string;
-  country: string;
+  country?: string;
 }) {
   return authApi.post("auth/register", payload);
 }
