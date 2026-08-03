@@ -2,6 +2,7 @@
 	import type { PageProps } from './$types';
 	import HeroSearch from '$lib/components/HeroSearch.svelte';
 	import ListingCard from '$lib/components/ListingCard.svelte';
+	import ShimmerImage from '$lib/components/ShimmerImage.svelte';
 
 	let { data }: PageProps = $props();
 
@@ -112,9 +113,10 @@
 <!-- ── HERO ── -->
 <div class="relative z-20 flex w-full items-center justify-center" style="min-height: 85vh">
 	<div class="absolute inset-0 overflow-hidden">
-		<img
+		<ShimmerImage
 			src="https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1920&q=95"
 			alt="Lakeside hotel at evening"
+			loading="eager"
 			class="absolute inset-0 h-full w-full object-cover object-center"
 		/>
 		<div class="absolute inset-0 bg-gradient-to-b from-black/55 via-black/35 to-black/75"></div>
@@ -180,7 +182,7 @@
 					class="group relative block cursor-pointer overflow-hidden rounded-2xl shadow-md transition-all duration-300 hover:shadow-xl"
 					style="min-height: 420px"
 				>
-					<img
+					<ShimmerImage
 						src={world.img}
 						alt={world.name}
 						class="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
@@ -204,7 +206,7 @@
 						class="group relative block cursor-pointer overflow-hidden rounded-2xl shadow-md transition-all duration-300 hover:shadow-xl"
 						style="min-height: 198px"
 					>
-						<img
+						<ShimmerImage
 							src={world.img}
 							alt={world.name}
 							class="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"

@@ -2,6 +2,7 @@ import { browser } from '$app/environment';
 import { AUTH_API_URL, LISTING_API_URL } from '$lib/config';
 
 const TOKEN_KEY = 'kainook:access_token';
+const DEVICE_ID_KEY = 'kainook:device_id';
 const REQUEST_TIMEOUT_MS = 12_000;
 
 export interface PricingPreview {
@@ -88,15 +89,66 @@ function setToken(token: string): void {
 	}
 }
 
-async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
+export function clearToken(): void {
+	if (!browser) return;
+	try {
+		sessionStorage.removeItem(TOKEN_KEY);
+		localStorage.removeItem(TOKEN_KEY);
+	} catch {
+		// ignore storage errors
+	}
+}
+
+/** Best-effort JWT payload decode (client-side, no signature verification). */
+function decodeJwtPayload(token: string): { exp?: number; type?: string; sub?: string } | null {
+	if (typeof atob !== 'function') return null;
+	try {
+		const parts = token.split('.');
+		if (parts.length < 2) return null;
+		const json = atob(parts[1]!.replace(/-/g, '+').replace(/_/g, '/'));
+		return JSON.parse(json) as { exp?: number; type?: string; sub?: string };
+	} catch {
+		return null;
+	}
+}
+
+/** True when the token is missing, malformed, not anonymous, or past its exp. */
+export function isAnonymousTokenValid(token: string | null | undefined): boolean {
+	if (!token) return false;
+	const payload = decodeJwtPayload(token);
+	if (!payload || payload.type !== 'anonymous' || !payload.exp) return false;
+	return payload.exp * 1000 > Date.now();
+}
+
+/** Returns a stable device id so re-minted anonymous tokens keep the same sub. */
+function getOrCreateDeviceId(): string {
+	if (!browser) return '';
+	try {
+		let id = localStorage.getItem(DEVICE_ID_KEY);
+		if (!id) {
+			id = crypto.randomUUID();
+			localStorage.setItem(DEVICE_ID_KEY, id);
+		}
+		return id;
+	} catch {
+		return '';
+	}
+}
+
+type RequestInitWithRetry = RequestInit & { _retried?: boolean };
+
+async function request<T>(url: string, init: RequestInitWithRetry = {}): Promise<T> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 	try {
 		const headers: Record<string, string> = {
-			'Content-Type': 'application/json',
 			Accept: 'application/json',
 			...(init.headers as Record<string, string> | undefined)
 		};
+		// Only advertise a JSON body when one is actually sent — a body-less
+		// request (e.g. DELETE lock) with Content-Type set fails Fastify with
+		// FST_ERR_CTP_EMPTY_JSON_BODY.
+		if (init.body) headers['Content-Type'] = 'application/json';
 		const token = getToken();
 		if (token) headers.Authorization = `Bearer ${token}`;
 		const res = await fetch(url, { ...init, headers, signal: controller.signal });
@@ -111,6 +163,17 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
 			const err = new Error(message) as Error & { code?: string; status?: number };
 			err.code = code;
 			err.status = res.status;
+			// An expired/invalid anonymous token trips 401 on protected endpoints.
+			// Mint a fresh anonymous token (same stable sub) and retry once —
+			// never on the token-mint endpoint itself, and never twice.
+			if (res.status === 401 && !init._retried && !url.includes('/auth/anonymous-token')) {
+				clearToken();
+				const { accessToken } = await requestAnonymousToken();
+				if (accessToken) {
+					init._retried = true;
+					return request<T>(url, init);
+				}
+			}
 			throw err;
 		}
 		return json.data as T;
@@ -119,12 +182,11 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
 	}
 }
 
-/** Mints a stateless guest access token for anonymous checkout (no sign-in). */
-export async function requestGuestToken(
-	deviceId?: string
-): Promise<{ accessToken: string; expiresIn: number }> {
+/** Mints a stateless anonymous access token for checkout (no sign-in). */
+export async function requestAnonymousToken(): Promise<{ accessToken: string; expiresIn: number }> {
+	const deviceId = getOrCreateDeviceId();
 	const data = await request<{ accessToken: string; expiresIn: number }>(
-		`${AUTH_API_URL}/auth/guest-token`,
+		`${AUTH_API_URL}/auth/anonymous-token`,
 		{
 			method: 'POST',
 			body: JSON.stringify(deviceId ? { deviceId } : {})
@@ -134,11 +196,15 @@ export async function requestGuestToken(
 	return data;
 }
 
-/** Ensures a token exists (reuses an existing one; otherwise mints a guest token). */
-export async function ensureGuestToken(): Promise<string> {
+/**
+ * Ensures a valid anonymous token exists. Reuses the stored token when it is
+ * still valid; otherwise discards it and mints a fresh one (same stable sub).
+ */
+export async function ensureAnonymousToken(): Promise<string> {
 	const existing = getToken();
-	if (existing) return existing;
-	const { accessToken } = await requestGuestToken();
+	if (isAnonymousTokenValid(existing)) return existing!;
+	clearToken();
+	const { accessToken } = await requestAnonymousToken();
 	return accessToken;
 }
 
@@ -151,6 +217,7 @@ export interface InitiateBookingInput {
 	returnDatetime?: string;
 	guests?: number;
 	deliveryRequested?: boolean;
+	deliveryAddress?: string;
 	currency?: string;
 }
 

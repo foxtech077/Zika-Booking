@@ -1,17 +1,20 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { PageProps } from './$types';
 	import { currencySymbol } from '$lib/utils';
 	import { fmtDates, derivePlatform, fmtPlatform } from '$lib/booking-utils';
+	import ShimmerImage from '$lib/components/ShimmerImage.svelte';
 	import {
-		ensureGuestToken,
+		ensureAnonymousToken,
 		initiateBooking,
 		createBooking,
 		renewLock,
 		releaseLock,
 		validateVoucher,
+		clearToken,
 		type PricingPreview,
 		type CreateBookingResult
 	} from '$lib/booking-api';
@@ -37,6 +40,7 @@
 	let secondsLeft = $state<number | null>(null);
 	let renewed = $state(false);
 	let showExpiry = $state(false);
+	let sessionExpired = $state(false);
 	let initError = $state('');
 	let initializing = $state(true);
 
@@ -46,6 +50,13 @@
 	let email = $state('');
 	let phone = $state('');
 	let specialRequests = $state('');
+
+	// ── Car rental form ──────────────────────────────────────────────────────
+	let driverFirstName = $state('');
+	let driverLastName = $state('');
+	let driverAge = $state<string>('');
+	let deliveryRequested = $state(false);
+	let deliveryAddress = $state('');
 
 	// ── Voucher state ────────────────────────────────────────────────────────
 	let voucherCode = $state('');
@@ -60,6 +71,13 @@
 	let confirmed = $state<CreateBookingResult | null>(null);
 
 	const unit = $derived(isCar ? 'day' : 'night');
+
+	/** Converts a YYYY-MM-DD date to an ISO datetime (as the booking API expects for car rentals). */
+	function toIsoDatetime(dateStr: string): string {
+		if (!dateStr) return '';
+		if (dateStr.includes('T')) return dateStr;
+		return new Date(dateStr + 'T00:00:00Z').toISOString();
+	}
 
 	/** Symbol for the listing currency — the line items are billed in it. */
 	const sym = $derived(currencySymbol(detail.currency));
@@ -97,38 +115,78 @@
 		};
 	});
 
-	// ── Lock acquisition on mount (client only) ──────────────────────────────
-	$effect(() => {
-		if (!browser || !listingId || lockToken || confirmed) return;
-		let cancelled = false;
-		initializing = true;
-		initError = '';
-		(async () => {
-			try {
-				await ensureGuestToken();
-				const res = await initiateBooking({
-					listingId,
-					roomTypeId: roomTypeId || undefined,
-					checkIn: isCar ? undefined : start,
-					checkOut: isCar ? undefined : end,
-					guests,
-					currency
-				});
-				if (cancelled) return;
-				lockToken = res.lockToken;
-				lockExpiresAt = new Date(res.expiresAt).getTime();
-				pricingPreview = res.pricingPreview;
-				secondsLeft = Math.max(0, Math.floor((lockExpiresAt - Date.now()) / 1000));
-			} catch (err) {
-				if (cancelled) return;
+	// ── Lock acquisition (client only) ───────────────────────────────────────
+	// The initial lock is acquired once on mount. The car delivery toggle
+	// releases and re-acquires explicitly, so the two never race.
+
+	/** True when the API rejected the request with an auth error after the
+	 *  auto-retry already ran — at that point the anonymous session is gone. */
+	function isAuthFailure(err: unknown): boolean {
+		const e = err as Error & { code?: string; status?: number };
+		return e?.status === 401 || e?.code === 'NO_TOKEN' || e?.code === 'INVALID_TOKEN';
+	}
+
+	// Quiet re-lock used after the delivery toggle — it updates the lock and
+	// pricing without flashing the full-page skeleton (showSkeleton=false), and
+	// surfaces errors via initError rather than leaving the form blank.
+	async function acquireLock(showSkeleton = true): Promise<void> {
+		if (!browser || !listingId) return;
+		if (showSkeleton) {
+			initializing = true;
+			initError = '';
+		}
+		try {
+			await ensureAnonymousToken();
+			const res = await initiateBooking({
+				listingId,
+				roomTypeId: roomTypeId || undefined,
+				checkIn: isCar ? undefined : start,
+				checkOut: isCar ? undefined : end,
+				pickupDatetime: isCar ? toIsoDatetime(start) || undefined : undefined,
+				returnDatetime: isCar ? toIsoDatetime(end) || undefined : undefined,
+				deliveryRequested: isCar ? deliveryRequested || undefined : undefined,
+				guests,
+				currency
+			});
+			lockToken = res.lockToken;
+			lockExpiresAt = new Date(res.expiresAt).getTime();
+			pricingPreview = res.pricingPreview;
+			secondsLeft = Math.max(0, Math.floor((lockExpiresAt - Date.now()) / 1000));
+		} catch (err) {
+			if (isAuthFailure(err)) {
+				clearToken();
+				sessionExpired = true;
+			} else {
 				initError = (err as Error)?.message ?? 'Unable to secure these dates. Please try again.';
-			} finally {
-				if (!cancelled) initializing = false;
 			}
+		} finally {
+			if (showSkeleton) initializing = false;
+		}
+	}
+
+	onMount(() => {
+		if (!browser || !listingId) return;
+		void acquireLock(true);
+	});
+
+	// When the guest toggles car delivery after locking, release the old lock
+	// and then re-acquire with the new preference. The re-lock runs quietly
+	// (no skeleton) so the form doesn't jump away while pricing updates.
+	let lockedDelivery = $state(false);
+
+	$effect(() => {
+		if (!browser || !isCar || !lockToken || confirmed) return;
+		if (lockedDelivery === deliveryRequested) return;
+		lockedDelivery = deliveryRequested;
+		initError = '';
+		const token = lockToken;
+		lockToken = null;
+		pricingPreview = null;
+		secondsLeft = null;
+		void (async () => {
+			await releaseLock(token);
+			await acquireLock(false);
 		})();
-		return () => {
-			cancelled = true;
-		};
 	});
 
 	// ── Countdown timer ──────────────────────────────────────────────────────
@@ -246,6 +304,21 @@
 			submitError = 'Please fill in your name and email.';
 			return;
 		}
+		if (isCar && (!driverFirstName.trim() || !driverLastName.trim())) {
+			submitError = 'Please fill in the driver name.';
+			return;
+		}
+		if (isCar && driverAge.trim()) {
+			const age = Number(driverAge);
+			if (isNaN(age) || age < 18) {
+				submitError = 'Driver must be at least 18 years old.';
+				return;
+			}
+		}
+		if (isCar && deliveryRequested && !deliveryAddress.trim()) {
+			submitError = 'Please enter a delivery address.';
+			return;
+		}
 		submitting = true;
 		submitError = '';
 		try {
@@ -255,6 +328,8 @@
 				roomTypeId: roomTypeId || undefined,
 				checkIn: isCar ? undefined : start,
 				checkOut: isCar ? undefined : end,
+				pickupDatetime: isCar ? toIsoDatetime(start) || undefined : undefined,
+				returnDatetime: isCar ? toIsoDatetime(end) || undefined : undefined,
 				guestFirstName: firstName.trim(),
 				guestLastName: lastName.trim(),
 				guestEmail: email.trim(),
@@ -262,6 +337,12 @@
 				adults: guests,
 				children: 0,
 				specialRequests: specialRequests.trim() || undefined,
+				driverFirstName: isCar ? driverFirstName.trim() : undefined,
+				driverLastName: isCar ? driverLastName.trim() : undefined,
+				driverAge: isCar && driverAge.trim() ? Number(driverAge) : undefined,
+				deliveryRequested: isCar ? deliveryRequested : undefined,
+				deliveryAddress:
+					isCar && deliveryRequested ? deliveryAddress.trim() || undefined : undefined,
 				voucherCode: voucherApplied ? voucherCode : undefined,
 				currency
 			});
@@ -271,6 +352,9 @@
 			const code = (err as Error & { code?: string })?.code;
 			if (code === 'LOCK_EXPIRED') {
 				showExpiry = true;
+			} else if (isAuthFailure(err)) {
+				clearToken();
+				sessionExpired = true;
 			} else {
 				submitError =
 					(err as Error)?.message ?? 'Could not complete your booking. Please try again.';
@@ -440,7 +524,7 @@
 						<h3 class="mb-4 flex items-center gap-2 font-bold text-slate-800">Your Booking</h3>
 						<div class="flex gap-4">
 							{#if detail.primaryPhotoUrl}
-								<img
+								<ShimmerImage
 									src={detail.primaryPhotoUrl}
 									alt={detail.name}
 									class="h-20 w-24 shrink-0 rounded-xl object-cover"
@@ -468,14 +552,25 @@
 							</div>
 						</div>
 						<div class="mt-4 grid grid-cols-2 gap-3 text-sm">
-							<div>
-								<p class="mb-0.5 text-xs font-medium text-slate-400">Check-in</p>
-								<p class="font-semibold text-slate-700">{fmtDates(start, '')}</p>
-							</div>
-							<div>
-								<p class="mb-0.5 text-xs font-medium text-slate-400">Check-out</p>
-								<p class="font-semibold text-slate-700">{fmtDates('', end)}</p>
-							</div>
+							{#if isCar}
+								<div>
+									<p class="mb-0.5 text-xs font-medium text-slate-400">Pick-up</p>
+									<p class="font-semibold text-slate-700">{fmtDates(start, '')}</p>
+								</div>
+								<div>
+									<p class="mb-0.5 text-xs font-medium text-slate-400">Return</p>
+									<p class="font-semibold text-slate-700">{fmtDates('', end)}</p>
+								</div>
+							{:else}
+								<div>
+									<p class="mb-0.5 text-xs font-medium text-slate-400">Check-in</p>
+									<p class="font-semibold text-slate-700">{fmtDates(start, '')}</p>
+								</div>
+								<div>
+									<p class="mb-0.5 text-xs font-medium text-slate-400">Check-out</p>
+									<p class="font-semibold text-slate-700">{fmtDates('', end)}</p>
+								</div>
+							{/if}
 							<div>
 								<p class="mb-0.5 text-xs font-medium text-slate-400">Duration</p>
 								<p class="font-semibold text-slate-700">
@@ -554,6 +649,85 @@
 									class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-[#1D8D2B]"
 								></textarea>
 							</div>
+
+							{#if isCar}
+								<div class="sm:col-span-2">
+									<p
+										class="mb-2 border-t border-slate-100 pt-3 text-xs font-semibold tracking-wider text-slate-400 uppercase"
+									>
+										Driver details
+									</p>
+								</div>
+								<div>
+									<label for="driver-first" class="mb-1 block text-xs font-semibold text-slate-600"
+										>Driver first name</label
+									>
+									<input
+										id="driver-first"
+										type="text"
+										bind:value={driverFirstName}
+										placeholder="Driver first name"
+										class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-[#1D8D2B]"
+									/>
+								</div>
+								<div>
+									<label for="driver-last" class="mb-1 block text-xs font-semibold text-slate-600"
+										>Driver last name</label
+									>
+									<input
+										id="driver-last"
+										type="text"
+										bind:value={driverLastName}
+										placeholder="Driver last name"
+										class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-[#1D8D2B]"
+									/>
+								</div>
+								<div>
+									<label for="driver-age" class="mb-1 block text-xs font-semibold text-slate-600"
+										>Driver age (optional)</label
+									>
+									<input
+										id="driver-age"
+										type="number"
+										min="18"
+										bind:value={driverAge}
+										placeholder="18"
+										class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-[#1D8D2B]"
+									/>
+								</div>
+
+								{#if detail.deliveryAvailable}
+									<div class="rounded-xl border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
+										<label
+											class="flex cursor-pointer items-center justify-between gap-2 select-none"
+										>
+											<div>
+												<p class="text-sm font-semibold text-slate-800">Request vehicle delivery</p>
+												<p class="mt-0.5 text-xs text-slate-400">
+													{detail.deliveryFee != null && detail.deliveryFee > 0
+														? `${sym}${detail.deliveryFee.toLocaleString()} delivery fee`
+														: 'Free delivery'}
+													{detail.deliveryRadiusKm ? ` · within ${detail.deliveryRadiusKm} km` : ''}
+												</p>
+											</div>
+											<input
+												type="checkbox"
+												bind:checked={deliveryRequested}
+												class="rounded border-slate-300 text-[#1D8D2B] focus:ring-[#1D8D2B]"
+											/>
+										</label>
+										{#if deliveryRequested}
+											<input
+												id="delivery-address"
+												type="text"
+												bind:value={deliveryAddress}
+												placeholder="Delivery address"
+												class="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-[#1D8D2B]"
+											/>
+										{/if}
+									</div>
+								{/if}
+							{/if}
 						</div>
 					</section>
 
@@ -646,7 +820,7 @@
 
 						<div class="flex gap-3 border-b border-slate-100 pb-4">
 							{#if detail.primaryPhotoUrl}
-								<img
+								<ShimmerImage
 									src={detail.primaryPhotoUrl}
 									alt=""
 									class="h-14 w-16 shrink-0 rounded-xl object-cover"
@@ -748,6 +922,40 @@
 		{/if}
 	{/if}
 </div>
+
+<!-- ── Session Expired Modal ── -->
+{#if sessionExpired}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
+	>
+		<div class="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
+			<div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
+				<span class="text-3xl">🕐</span>
+			</div>
+			<h2 class="mt-4 text-xl font-bold text-slate-800">Your session has expired</h2>
+			<p class="mt-2 text-sm leading-relaxed text-slate-500">
+				You were away for a while and your checkout session expired. Please start your booking
+				again.
+			</p>
+			<div class="mt-4 flex gap-3">
+				<button
+					type="button"
+					onclick={() => expiryAction('/')}
+					class="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+				>
+					Search again
+				</button>
+				<button
+					type="button"
+					onclick={() => expiryAction(`/listings/${listingId}`)}
+					class="flex-1 rounded-xl bg-[#0B1E3F] py-2.5 text-sm font-bold text-white transition hover:bg-[#07152B]"
+				>
+					Try to rebook
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <!-- ── Expiry Modal ── -->
 {#if showExpiry}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { getInitials } from '$lib/utils';
+	import ShimmerImage from './ShimmerImage.svelte';
 
 	const COLORS = [
 		'bg-green-500',
@@ -40,7 +41,7 @@
 </script>
 
 {#if src}
-	<img {src} alt={name} class="{SIZES[size]} rounded-full object-cover {className}" />
+	<ShimmerImage {src} alt={name} class="{SIZES[size]} rounded-full object-cover {className}" />
 {:else}
 	<div
 		class="flex items-center justify-center rounded-full font-semibold text-white select-none {getColor(

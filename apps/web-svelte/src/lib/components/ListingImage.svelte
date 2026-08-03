@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { cn } from '$lib/utils';
 	import type { ListingCategory } from '$lib/listing-api';
+	import ShimmerImage from './ShimmerImage.svelte';
 
 	let {
 		src,
@@ -16,7 +17,7 @@
 </script>
 
 {#if src}
-	<img {src} {alt} loading="lazy" class={cls} />
+	<ShimmerImage {src} {alt} loading="lazy" class={cls} />
 {:else}
 	<div
 		class={cn(

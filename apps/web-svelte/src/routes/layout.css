@@ -29,6 +29,37 @@
 	}
 }
 
+/* Shimmer placeholder shown while an image is still loading. Applied to the
+   <img> element itself as a background, so it is covered as soon as the photo
+   paints — no alt-text flash or layout shift. */
+.shimmer {
+	background-color: #e2e8f0;
+	background-image: linear-gradient(
+		100deg,
+		transparent 30%,
+		rgba(255, 255, 255, 0.55) 50%,
+		transparent 70%
+	);
+	background-size: 200% 100%;
+	background-repeat: no-repeat;
+	animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+	0% {
+		background-position: 200% 0;
+	}
+	100% {
+		background-position: -200% 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.shimmer {
+		animation: none;
+	}
+}
+
 html {
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
