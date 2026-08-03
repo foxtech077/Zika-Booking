@@ -56,7 +56,7 @@ export default function RecentlyViewedPage() {
         {/* Page header */}
         <div className="flex items-center gap-4 mb-8">
           <Link
-            href="/traveller"
+            href="/"
             className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-[#1D8D2B] transition uppercase tracking-wide"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -85,7 +85,7 @@ export default function RecentlyViewedPage() {
               <p className="text-slate-400 text-sm mt-1">Listings you open will appear here.</p>
             </div>
             <Link
-              href="/traveller"
+              href="/"
               className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 bg-[#0c2614] text-white text-sm font-semibold rounded-full hover:bg-[#1D8D2B] transition"
             >
               <Search className="w-4 h-4" />
@@ -136,11 +136,12 @@ export default function RecentlyViewedPage() {
                           {l.currency ?? "KES"} {l.nightlyRate ? l.nightlyRate.toLocaleString() : "—"}
                         </p>
                       </div>
+                      {/* Address the listing in the URL. This used to stash the
+                          id under "zika:open_listing" and navigate to the bare
+                          home page, but nothing ever read that key, so "View"
+                          just dropped the guest on the landing page. */}
                       <Link
-                        href="/traveller"
-                        onClick={() => {
-                          sessionStorage.setItem("zika:open_listing", l.id);
-                        }}
+                        href={`/?listing=${l.id}`}
                         className="text-[11px] font-semibold px-3 py-1.5 rounded-xl bg-[#0c2614] text-white hover:bg-[#1D8D2B] transition"
                       >
                         View
