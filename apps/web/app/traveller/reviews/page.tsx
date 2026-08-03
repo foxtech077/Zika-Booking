@@ -371,7 +371,7 @@ export default function TravellerReviewsPage() {
                   Open this page from a checkout confirmation or a review link from your most recent completed booking.
                 </p>
                 <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                  <Button variant="outline" onClick={() => router.push("/traveller")}>
+                  <Button variant="outline" onClick={() => router.push("/")}>
                     Browse listings
                   </Button>
                   <Button variant="ghost" onClick={() => router.push("/traveller/messages")}>

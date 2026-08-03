@@ -348,7 +348,7 @@ export default function TravellerMessagesPage() {
                   title="No conversations yet"
                   message={search ? "No conversations match your search." : "Start a conversation from a listing to see it here."}
                   action={
-                    <Button variant="outline" onClick={() => router.push("/traveller")}>
+                    <Button variant="outline" onClick={() => router.push("/")}>
                       Browse listings
                     </Button>
                   }
@@ -442,7 +442,7 @@ export default function TravellerMessagesPage() {
                     Start a conversation from any listing by clicking{" "}
                     <span className="font-semibold text-slate-800">Message Provider</span>.
                   </p>
-                  <Button variant="primary" className="mt-6" onClick={() => router.push("/traveller")}>
+                  <Button variant="primary" className="mt-6" onClick={() => router.push("/")}>
                     Explore Listings
                   </Button>
                 </div>
@@ -451,7 +451,7 @@ export default function TravellerMessagesPage() {
                   title="Select a conversation"
                   message="Choose a thread from the left to view the message history and reply from here."
                   action={
-                    <Button variant="outline" onClick={() => router.push("/traveller")}>
+                    <Button variant="outline" onClick={() => router.push("/")}>
                       Back to listings
                     </Button>
                   }
