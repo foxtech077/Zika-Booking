@@ -3,7 +3,7 @@ import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireProvider, type ProviderRequest } from "../middleware/auth.js";
+import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getRedis } from "../lib/redis.js";
 import { uploadBuffer, createPresignedDownloadUrl } from "../lib/s3.js";
 
@@ -263,10 +263,10 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
 
       try {
@@ -415,10 +415,10 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
 
       try {
@@ -499,10 +499,10 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
 
       try {

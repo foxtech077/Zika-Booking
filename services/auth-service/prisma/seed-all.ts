@@ -96,41 +96,50 @@ async function main() {
   console.log("  ✔ devadmin@zika.com  (password: AdminPassword123!)");
 
   // ── 2. Guest user ───────────────────────────────────────────────────────────
-  console.log("\nSeeding test guest & provider users...");
+  console.log("\nSeeding test user accounts...");
   await authPrisma.user.upsert({
     where: { id: "cmosebuyd000ej9kcyqnm3ha3" },
     update: {
       firstName: "John", lastName: "Doe", email: "guest1@test.com",
-      passwordHash: userPasswordHash, status: "active", userType: "guest",
+      passwordHash: userPasswordHash, status: "active", userType: "user",
       emailVerified: true, currentTier: "silver", loyaltyPoints: 1555,
     },
     create: {
       id: "cmosebuyd000ej9kcyqnm3ha3",
       firstName: "John", lastName: "Doe", email: "guest1@test.com",
-      passwordHash: userPasswordHash, status: "active", userType: "guest",
+      passwordHash: userPasswordHash, status: "active", userType: "user",
       emailVerified: true, currentTier: "silver", loyaltyPoints: 1555,
     },
   });
   console.log("  ✔ guest1@test.com  (password: Password123!)");
 
-  // ── 3. Provider user ────────────────────────────────────────────────────────
+  // ── 3. Host user (was provider) ─────────────────────────────────────────────
   await authPrisma.user.upsert({
     where: { id: "cmos7y8zp0009j9kc5o4ed3c0" },
     update: {
       firstName: "Test", lastName: "Provider", email: "testprovider99@zika.com",
-      passwordHash: userPasswordHash, status: "active", userType: "provider",
+      passwordHash: userPasswordHash, status: "active", userType: "user",
       businessName: "Kainook Rentals Ltd", country: "KE",
       emailVerified: true, currentTier: "bronze", loyaltyPoints: 0,
     },
     create: {
       id: "cmos7y8zp0009j9kc5o4ed3c0",
       firstName: "Test", lastName: "Provider", email: "testprovider99@zika.com",
-      passwordHash: userPasswordHash, status: "active", userType: "provider",
+      passwordHash: userPasswordHash, status: "active", userType: "user",
       businessName: "Kainook Rentals Ltd", country: "KE",
       emailVerified: true, currentTier: "bronze", loyaltyPoints: 0,
     },
   });
-  console.log("  ✔ testprovider99@zika.com  (password: Password123!)");
+  await authPrisma.accreditation.upsert({
+    where: { providerId: "cmos7y8zp0009j9kc5o4ed3c0" },
+    update: { status: "approved", businessName: "Kainook Rentals Ltd" },
+    create: {
+      providerId: "cmos7y8zp0009j9kc5o4ed3c0",
+      status: "approved",
+      businessName: "Kainook Rentals Ltd",
+    },
+  });
+  console.log("  ✔ testprovider99@zika.com  (password: Password123!, host approved)");
 
   // ── 4. listings schema — execute seed.sql ──────────────────────────────────
   console.log("\nExecuting seed.sql into listings schema...");
@@ -187,9 +196,9 @@ main()
   .then(() => {
     console.log("\n✅ All schemas seeded successfully!\n");
     console.log("  Accounts:");
-    console.log("    Admin  → devadmin@zika.com          / AdminPassword123!");
-    console.log("    Guest  → guest1@test.com             / Password123!");
-    console.log("    Provider → testprovider99@zika.com  / Password123!\n");
+  console.log("    Admin  → devadmin@zika.com          / AdminPassword123!");
+  console.log("    User   → guest1@test.com             / Password123!");
+  console.log("    Host   → testprovider99@zika.com  / Password123! (host approved)\n");
   })
   .catch((e) => {
     console.error("\n❌ Seeding failed:", e);

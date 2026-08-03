@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireProvider, optionalGuest, type GuestRequest } from "../middleware/auth.js";
+import { requireUser, authenticate, type AuthRequest } from "../middleware/auth.js";
 import { getCommissionRate } from "./bookings.js";
 import { getRatesBatch, ceilingForCurrency, getConvertedAmounts, getLocalizedContext } from "../services/exchangeRate.services.js";
 
@@ -59,7 +59,7 @@ export async function searchRoutes(app: FastifyInstance) {
   // handler at both /search and /listings/search to cover both paths.
   async function handleSearch(req: FastifyRequest, reply: FastifyReply) {
     try {
-      const guestId = (req as GuestRequest).guestId;
+      const guestId = (req as AuthRequest).authId;
       const q = req.query as Record<string, string>;
 
     const category = q["category"] as string | undefined;
@@ -479,7 +479,7 @@ export async function searchRoutes(app: FastifyInstance) {
         required: ["category", "lat", "lng"],
       },
     },
-    preHandler: [optionalGuest],
+    preHandler: [authenticate],
   };
   app.get("/search", searchOpts, handleSearch);
   app.get("/listings/search", searchOpts, handleSearch);
@@ -504,11 +504,11 @@ export async function searchRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [optionalGuest],
+      preHandler: [authenticate],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const guestId = (req as GuestRequest).guestId;
+        const guestId = (req as AuthRequest).authId;
         const { id } = req.params as { id: string };
         const { currency: targetCurrency } = (req.query as Record<string, string>) ?? {};
 
@@ -975,11 +975,11 @@ export async function searchRoutes(app: FastifyInstance) {
           required: ["listingId"],
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const userId = (req as any).providerId as string;
+        const userId = (req as AuthRequest).authId as string;
         const { listingId } = req.body as { listingId: string };
 
       const listing = await prisma.listing.findUnique({ where: { id: listingId, deletedAt: null } });
@@ -1012,11 +1012,11 @@ export async function searchRoutes(app: FastifyInstance) {
           required: ["listingId"],
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const userId = (req as any).providerId as string;
+        const userId = (req as AuthRequest).authId as string;
         const { listingId } = req.params as { listingId: string };
 
       await prisma.userFavourite.deleteMany({ where: { userId, listingId } });
@@ -1041,11 +1041,11 @@ export async function searchRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const userId = (req as any).providerId as string;
+        const userId = (req as AuthRequest).authId as string;
         const q = req.query as Record<string, string>;
       const cursor = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
       const target = q["currency"]?.toUpperCase() || null;
@@ -1118,11 +1118,11 @@ export async function searchRoutes(app: FastifyInstance) {
           required: ["listingId"],
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const userId = (req as any).providerId as string;
+        const userId = (req as AuthRequest).authId as string;
         const { listingId } = req.body as { listingId: string };
 
       const listing = await prisma.listing.findUnique({ where: { id: listingId, deletedAt: null } });
@@ -1165,11 +1165,11 @@ export async function searchRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const userId = (req as any).providerId as string;
+        const userId = (req as AuthRequest).authId as string;
         const q = req.query as Record<string, string>;
         const target = q["currency"]?.toUpperCase() || null;
 
@@ -1244,11 +1244,11 @@ export async function searchRoutes(app: FastifyInstance) {
           required: ["items"],
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const userId = (req as any).providerId as string;
+        const userId = (req as AuthRequest).authId as string;
         const { items } = req.body as { items: { listingId: string; viewedAt: string }[] };
 
       if (!Array.isArray(items)) return sendError(reply, 400, "INVALID_BODY", "items array required.");

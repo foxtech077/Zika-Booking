@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { stripe } from "../lib/stripe.js";
-import { requireUser, requireAdmin, type GuestRequest, type AdminRequest } from "../middleware/auth.js";
+import { requireAccount, requireAdmin, type GuestRequest, type AdminRequest } from "../middleware/auth.js";
 import { sendError } from "../lib/errors.js";
 
 const PROVIDER_BASE_URL = process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005";
@@ -15,11 +15,9 @@ export async function merchantRoutes(app: FastifyInstance) {
       description: "Get the authenticated provider's merchant profile",
       security: [{ bearerAuth: [] }],
     },
-    preHandler: [requireUser],
+    preHandler: [requireAccount],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { userId, userType } = req as GuestRequest;
-    if (userType !== "provider") return sendError(reply, 403, "FORBIDDEN", "Provider access required.");
-
+    const { userId } = req as GuestRequest;
     const merchant = await prisma.merchant.upsert({
       where: { userId },
       create: { userId },
@@ -51,11 +49,9 @@ export async function merchantRoutes(app: FastifyInstance) {
         },
       },
     },
-    preHandler: [requireUser],
+    preHandler: [requireAccount],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { userId, userType } = req as GuestRequest;
-    if (userType !== "provider") return sendError(reply, 403, "FORBIDDEN", "Provider access required.");
-
+    const { userId } = req as GuestRequest;
     const body = req.body as {
       businessName?: string;
       country?: string;
@@ -194,11 +190,9 @@ export async function merchantRoutes(app: FastifyInstance) {
       description: "Start Stripe Connect onboarding — returns a Stripe-hosted onboarding URL",
       security: [{ bearerAuth: [] }],
     },
-    preHandler: [requireUser],
+    preHandler: [requireAccount],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { userId, userType } = req as GuestRequest;
-    if (userType !== "provider") return sendError(reply, 403, "FORBIDDEN", "Provider access required.");
-
+    const { userId } = req as GuestRequest;
     // Upsert merchant row so we always have one to update
     let merchant = await prisma.merchant.upsert({
       where: { userId },
@@ -252,11 +246,9 @@ export async function merchantRoutes(app: FastifyInstance) {
       description: "Re-generate an expired Stripe Connect onboarding link",
       security: [{ bearerAuth: [] }],
     },
-    preHandler: [requireUser],
+    preHandler: [requireAccount],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { userId, userType } = req as GuestRequest;
-    if (userType !== "provider") return sendError(reply, 403, "FORBIDDEN", "Provider access required.");
-
+    const { userId } = req as GuestRequest;
     const merchant = await prisma.merchant.findUnique({ where: { userId } });
     if (!merchant?.stripeConnectAccountId) {
       return sendError(reply, 400, "NO_STRIPE_ACCOUNT", "No Stripe Connect account found. Call POST /merchant/me/stripe/connect first.");
@@ -284,11 +276,9 @@ export async function merchantRoutes(app: FastifyInstance) {
       description: "Check Stripe Connect onboarding status and activate the payout method if complete",
       security: [{ bearerAuth: [] }],
     },
-    preHandler: [requireUser],
+    preHandler: [requireAccount],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { userId, userType } = req as GuestRequest;
-    if (userType !== "provider") return sendError(reply, 403, "FORBIDDEN", "Provider access required.");
-
+    const { userId } = req as GuestRequest;
     const merchant = await prisma.merchant.findUnique({ where: { userId } });
     if (!merchant?.stripeConnectAccountId) {
       return sendError(reply, 400, "NO_STRIPE_ACCOUNT", "No Stripe Connect account found. Call POST /merchant/me/stripe/connect first.");

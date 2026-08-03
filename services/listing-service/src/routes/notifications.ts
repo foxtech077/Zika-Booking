@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireProvider, type ProviderRequest } from "../middleware/auth.js";
+import { requireUser, type AuthRequest } from "../middleware/auth.js";
 
 const PLATFORMS = ["fcm", "apns", "web"] as const;
 type Platform = (typeof PLATFORMS)[number];
@@ -24,11 +24,11 @@ export async function notificationRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const userId = (req as ProviderRequest).providerId;
+        const userId = (req as AuthRequest).authId;
         const { token, platform } = req.body as { token: string; platform: Platform };
 
         await (prisma as any).deviceToken.upsert({
@@ -60,11 +60,11 @@ export async function notificationRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const userId = (req as ProviderRequest).providerId;
+        const userId = (req as AuthRequest).authId;
         const { token } = req.body as { token: string };
 
         await (prisma as any).deviceToken.deleteMany({ where: { userId, token } });
@@ -92,11 +92,11 @@ export async function notificationRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const userId = (req as ProviderRequest).providerId;
+        const userId = (req as AuthRequest).authId;
         const q      = req.query as Record<string, string>;
         const limit  = Math.min(50, Math.max(1, parseInt(q["limit"] ?? "20", 10)));
         const cursor = q["cursor"] ?? undefined;
@@ -135,11 +135,11 @@ export async function notificationRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const userId         = (req as ProviderRequest).providerId;
+        const userId         = (req as AuthRequest).authId;
         const { notificationId } = req.params as { notificationId: string };
 
         const updated = await (prisma as any).notification.updateMany({
@@ -167,11 +167,11 @@ export async function notificationRoutes(app: FastifyInstance) {
         tags: ["Notifications"],
         description: "Mark all notifications as read for the logged-in user",
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const userId = (req as ProviderRequest).providerId;
+        const userId = (req as AuthRequest).authId;
 
         await (prisma as any).notification.updateMany({
           where: { userId, isRead: false },
@@ -194,11 +194,11 @@ export async function notificationRoutes(app: FastifyInstance) {
         tags: ["Notifications"],
         description: "Return the count of unread notifications for the logged-in user",
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const userId = (req as ProviderRequest).providerId;
+        const userId = (req as AuthRequest).authId;
 
         const count = await (prisma as any).notification.count({
           where: { userId, isRead: false },

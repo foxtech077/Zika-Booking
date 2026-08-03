@@ -6,12 +6,15 @@ const JWT_SECRET = new TextEncoder().encode(process.env["JWT_SECRET"] ?? "");
 
 export interface GuestRequest extends FastifyRequest {
   userId: string;
-  userType: string;
+  userType: "user" | "anonymous";
 }
 
 /**
  * requireUser — verifies the JWT from the Authorization header.
  * Sets req.userId (from payload.sub) and req.userType on the request.
+ * Accepts both real-user and anonymous tokens (anonymous checkout must be
+ * able to pay). Guard user-data features (merchant, payouts) on
+ * userType !== "anonymous" where required.
  */
 export async function requireUser(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const token = req.headers.authorization?.slice(7);
@@ -25,9 +28,21 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply): Pro
     (req as GuestRequest).userId = payload.sub;
     // JWT tokens use "type" as the claim name; fall back to "userType" for compatibility
     const p = payload as { type?: string; userType?: string };
-    (req as GuestRequest).userType = p.type ?? p.userType ?? "guest";
+    (req as GuestRequest).userType = p.type === "anonymous" ? "anonymous" : "user";
   } catch {
     sendError(reply, 401, "INVALID_TOKEN", "Token invalid or expired.");
+  }
+}
+
+/**
+ * requireAccount — a real registered account is required; anonymous tokens
+ * are rejected. Use for merchant, payout and other account-scoped endpoints.
+ */
+export async function requireAccount(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  await requireUser(req, reply);
+  if (reply.sent) return;
+  if ((req as GuestRequest).userType === "anonymous") {
+    sendError(reply, 403, "ACCOUNT_REQUIRED", "An account is required to access this feature.");
   }
 }
 

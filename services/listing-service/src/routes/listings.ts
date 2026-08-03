@@ -2,8 +2,8 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
-import { requireProviderRole, type ProviderRequest } from "../middleware/auth.js";
-import { requireProvider } from "../middleware/auth.js";
+import { requireHost, type AuthRequest } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
 import {
   createPresignedUploadUrl,
   createPresignedDownloadUrl,
@@ -224,7 +224,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings — Create new draft (UC-2.1)
   app.post("/listings", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["Listings"],
       body: {
@@ -254,7 +254,7 @@ export async function listingRoutes(app: FastifyInstance) {
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { providerId } = req as ProviderRequest;
+      const { authId: providerId } = req as AuthRequest;
       const { category = "hotel" } = req.body as { category?: string };
 
       if (!["hotel", "apartment", "car"].includes(category)) {
@@ -274,7 +274,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // GET /listings — My listings (UC-2.6 entry point)
   app.get("/listings", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["Listings"],
       querystring: {
@@ -312,7 +312,7 @@ export async function listingRoutes(app: FastifyInstance) {
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { providerId } = req as ProviderRequest;
+      const { authId: providerId } = req as AuthRequest;
       const { status, geoPending, page = "1", limit = "20", currency: targetCurrency } = req.query as Record<string, string>;
       const target = targetCurrency?.toUpperCase() || null;
 
@@ -395,7 +395,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // GET /listings/:id — Get listing detail (UC-2.6)
   app.get("/listings/:id", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["Listings"],
       params: {
@@ -415,7 +415,7 @@ export async function listingRoutes(app: FastifyInstance) {
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { providerId } = req as ProviderRequest;
+      const { authId: providerId } = req as AuthRequest;
       const { id } = req.params as { id: string };
       const { currency: targetCurrency } = (req.query as Record<string, string>) ?? {};
       const target = targetCurrency?.toUpperCase() || null;
@@ -516,7 +516,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // PATCH /listings/:id — Update listing fields (UC-2.2 auto-save)
   app.patch("/listings/:id", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["Listings"],
       params: {
@@ -596,7 +596,7 @@ export async function listingRoutes(app: FastifyInstance) {
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { providerId } = req as ProviderRequest;
+      const { authId: providerId } = req as AuthRequest;
       const { id } = req.params as { id: string };
 
       const listing = await assertOwner(id, providerId, reply);
@@ -801,10 +801,10 @@ export async function listingRoutes(app: FastifyInstance) {
         },
       },
     },
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { providerId } = req as ProviderRequest;
+      const { authId: providerId } = req as AuthRequest;
       const { id } = req.params as { id: string };
 
       const listing = await prisma.listing.findFirst({
@@ -900,7 +900,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings/:id/activate — Apartment auto-activation (UC-3.5) + Car activation (UC-4.5)
   app.post("/listings/:id/activate", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["Listings"],
       params: {
@@ -930,7 +930,7 @@ export async function listingRoutes(app: FastifyInstance) {
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { providerId } = req as ProviderRequest;
+      const { authId: providerId } = req as AuthRequest;
       const { id } = req.params as { id: string };
       const currentYear = new Date().getFullYear();
 
@@ -1099,7 +1099,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings/:id/deactivate — UC-2.13 / UC-3.7
   app.post("/listings/:id/deactivate", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1128,7 +1128,7 @@ export async function listingRoutes(app: FastifyInstance) {
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { providerId } = req as ProviderRequest;
+      const { authId: providerId } = req as AuthRequest;
       const { id } = req.params as { id: string };
 
       const listing = await assertOwner(id, providerId, reply);
@@ -1149,7 +1149,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings/:id/reactivate — UC-2.13 A1 / UC-3.7
   app.post("/listings/:id/reactivate", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1178,7 +1178,7 @@ export async function listingRoutes(app: FastifyInstance) {
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { providerId } = req as ProviderRequest;
+      const { authId: providerId } = req as AuthRequest;
       const { id } = req.params as { id: string };
       const currentYear = new Date().getFullYear();
 
@@ -1303,7 +1303,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // DELETE /listings/:id — Soft-delete draft (UC-2.13 A2)
   app.delete("/listings/:id", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1332,7 +1332,7 @@ export async function listingRoutes(app: FastifyInstance) {
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { providerId } = req as ProviderRequest;
+      const { authId: providerId } = req as AuthRequest;
       const { id } = req.params as { id: string };
 
       const listing = await assertOwner(id, providerId, reply);
@@ -1354,7 +1354,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings/:id/photos/presign — Request presigned S3 upload URL
   app.post("/listings/:id/photos/presign", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1393,7 +1393,7 @@ export async function listingRoutes(app: FastifyInstance) {
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { providerId } = req as ProviderRequest;
+      const { authId: providerId } = req as AuthRequest;
       const { id } = req.params as { id: string };
       const { contentType, filename, fileSize } = req.body as { contentType: string; filename: string; fileSize?: number };
 
@@ -1425,7 +1425,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings/:id/photos/confirm — Register photo after S3 upload
   app.post("/listings/:id/photos/confirm", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1463,7 +1463,7 @@ export async function listingRoutes(app: FastifyInstance) {
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { providerId } = req as ProviderRequest;
+      const { authId: providerId } = req as AuthRequest;
       const { id } = req.params as { id: string };
       const { s3Key } = req.body as { s3Key: string };
 
@@ -1494,7 +1494,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // PATCH /listings/:id/photos/reorder — Update photo positions (UC-2.5 A1, A2)
   app.patch("/listings/:id/photos/reorder", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1530,7 +1530,7 @@ export async function listingRoutes(app: FastifyInstance) {
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { providerId } = req as ProviderRequest;
+      const { authId: providerId } = req as AuthRequest;
       const { id } = req.params as { id: string };
       const { order } = req.body as { order: string[] }; // array of photo IDs in new order
 
@@ -1555,7 +1555,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // DELETE /listings/:id/photos/:photoId — Remove photo (UC-2.5 A3)
   app.delete("/listings/:id/photos/:photoId", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1585,7 +1585,7 @@ export async function listingRoutes(app: FastifyInstance) {
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { providerId } = req as ProviderRequest;
+      const { authId: providerId } = req as AuthRequest;
       const { id, photoId } = req.params as { id: string; photoId: string };
 
       const listing = await assertOwner(id, providerId, reply);
@@ -1620,7 +1620,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings/:id/documents/presign — Request presigned S3 URL for document
   app.post("/listings/:id/documents/presign", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1658,7 +1658,7 @@ export async function listingRoutes(app: FastifyInstance) {
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { providerId } = req as ProviderRequest;
+      const { authId: providerId } = req as AuthRequest;
       const { id } = req.params as { id: string };
       const { contentType, documentType } = req.body as { contentType: string; documentType: string };
 
@@ -1684,7 +1684,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings/:id/documents/confirm — Register document after S3 upload
   app.post("/listings/:id/documents/confirm", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1725,7 +1725,7 @@ export async function listingRoutes(app: FastifyInstance) {
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { providerId } = req as ProviderRequest;
+      const { authId: providerId } = req as AuthRequest;
       const { id } = req.params as { id: string };
       const { s3Key, documentType, contentType } = req.body as { s3Key: string; documentType: string; contentType: string };
 
@@ -1783,7 +1783,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // DELETE /listings/:id/documents/:docId — Remove document before submission
   app.delete("/listings/:id/documents/:docId", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1813,7 +1813,7 @@ export async function listingRoutes(app: FastifyInstance) {
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const { providerId } = req as ProviderRequest;
+      const { authId: providerId } = req as AuthRequest;
       const { id, docId } = req.params as { id: string; docId: string };
 
       const listing = await assertOwner(id, providerId, reply);
@@ -1837,7 +1837,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // GET /geocode — Geocoding proxy; accepts placeId, address, or lat+lng (UC-2.3)
   app.get("/geocode", {
-    preHandler: [requireProvider],
+    preHandler: [requireAuth],
     schema: {
       tags: ["Listings"],
       querystring: {
