@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireProvider, type ProviderRequest } from "../middleware/auth.js";
+import { requireUser, type AuthRequest } from "../middleware/auth.js";
 import { fireNotification } from "../lib/notifications.js";
 import { sendNewMessageEmail } from "../lib/email.js";
 import { getRedis } from "../lib/redis.js";
@@ -48,11 +48,11 @@ app.post(
         }
       }
     },
-    preHandler: [requireProvider]
+    preHandler: [requireUser]
   },
   async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const user = req as ProviderRequest;
+      const user = req as AuthRequest;
       const body = req.body as { listingId: string; bookingId?: string };
 
       if (!body.listingId) {
@@ -69,7 +69,7 @@ app.post(
         return sendError(reply, 403, "FORBIDDEN", "This listing does not allow pre-booking enquiries.");
       }
 
-      const guestId = user.providerId;
+      const guestId = user.authId;
       const providerId = listing.providerId;
 
       // Guests can't message their own listings
@@ -107,9 +107,9 @@ app.post(
   });
 
   // ── GET /conversations — list conversations for the current user ───────
-  app.get("/conversations", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/conversations", { schema: { tags: ["Messaging"] }, preHandler: [requireUser] }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const userId = (req as ProviderRequest).providerId;
+      const userId = (req as AuthRequest).authId;
       const { page = "1", limit = "20" } = req.query as { page?: string; limit?: string };
       const skip = (Number(page) - 1) * Number(limit);
 
@@ -197,10 +197,10 @@ app.post(
   });
 
   // ── GET /conversations/:id/messages — get messages in a conversation ───
-  app.get("/conversations/:id/messages", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/conversations/:id/messages", { schema: { tags: ["Messaging"] }, preHandler: [requireUser] }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = req.params as { id: string };
-      const userId = (req as ProviderRequest).providerId;
+      const userId = (req as AuthRequest).authId;
       const { before, limit = "50" } = req.query as { before?: string; limit?: string };
 
       const convo = await prisma.conversation.findUnique({ where: { id } });
@@ -281,12 +281,12 @@ app.post(
         }
       }
     },
-    preHandler: [requireProvider]
+    preHandler: [requireUser]
   },
   async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = req.params as { id: string };
-      const userId = (req as ProviderRequest).providerId;
+      const userId = (req as AuthRequest).authId;
       const body = req.body as { body: string };
 
       if (!body.body || !body.body.trim()) {
@@ -414,10 +414,10 @@ app.post(
   // ── OPTIONS handler for CORS preflight on alias route
 
   // ── Alias GET /listings/conversations/unread-count — same as above for compatibility
-  app.get("/conversations/unread-count", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/conversations/unread-count", { schema: { tags: ["Messaging"] }, preHandler: [requireUser] }, async (req: FastifyRequest, reply: FastifyReply) => {
     // Reuse the same logic as the original route
     try {
-      const userId = (req as ProviderRequest).providerId;
+      const userId = (req as AuthRequest).authId;
 
       const count = await prisma.message.count({
         where: {

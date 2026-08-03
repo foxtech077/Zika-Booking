@@ -1,5 +1,6 @@
 export type UserStatus = "pending_verification" | "active" | "suspended" | "banned";
-export type UserType = "guest" | "provider";
+export type UserType = "user";
+export type HostStatus = "approved" | "pending" | "rejected" | null;
 export type OAuthProvider = "google" | "apple";
 export type LoyaltyTier = "bronze" | "silver" | "gold" | "diamond";
 

@@ -56,8 +56,7 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
       const whereDate = hasDateFilter ? { createdAt: dateFilter } : {};
 
       // Auth schema
-      const totalProviders = await prisma.user.count({ where: { userType: "provider", ...whereDate } });
-      const totalGuests = await prisma.user.count({ where: { userType: "guest", ...whereDate } });
+      const totalUsers = await prisma.user.count({ where: { ...whereDate } });
       const totalAdmins = await prisma.adminUser.count({ where: whereDate });
       const totalAudits = await prisma.auditLog.count({ where: hasDateFilter ? { timestamp: dateFilter } : {} });
       const accreditationCount = await prisma.accreditation.count({ where: hasDateFilter ? { submittedAt: dateFilter } : {} });
@@ -105,8 +104,8 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
         totalAccreditations: accreditationCount,
         totalBookings: bookingCount,
         totalRevenue: paymentTotal,
-        totalProviders,
-        totalUsers: totalGuests + totalProviders + totalAdmins,
+        totalProviders: totalUsers,
+        totalUsers: totalUsers + totalAdmins,
         totalPayments: paymentCount,
         totalReports: reportCount,
         totalAudits,
@@ -381,9 +380,8 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
         }
       });
 
-      const totalProviders = await prisma.user.count({
+      const totalUsers = await prisma.user.count({
         where: {
-          userType: "provider",
           country: { in: countryScope },
         }
       });
@@ -401,8 +399,8 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
         totalRevenue,
         totalPayments,
         totalAccreditations,
-        totalProviders,
-        totalUsers: totalProviders,
+        totalProviders: totalUsers,
+        totalUsers,
         totalReports,
       });
     } catch (err: any) {
@@ -658,8 +656,7 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
 
       const whereDate = hasDateFilter ? { createdAt: dateFilter } : {};
 
-      const totalProviders = await prisma.user.count({ where: { userType: "provider", ...whereDate } });
-      const totalGuests = await prisma.user.count({ where: { userType: "guest", ...whereDate } });
+      const totalUsers = await prisma.user.count({ where: { ...whereDate } });
       const totalAdmins = await prisma.adminUser.count({ where: whereDate });
       const totalAudits = await prisma.auditLog.count({ where: hasDateFilter ? { timestamp: dateFilter } : {} });
       const accreditationCount = await prisma.accreditation.count({ where: hasDateFilter ? { submittedAt: dateFilter } : {} });
@@ -706,8 +703,8 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
         totalAccreditations: accreditationCount,
         totalBookings: bookingCount,
         totalRevenue: paymentTotal,
-        totalProviders,
-        totalUsers: totalGuests + totalProviders + totalAdmins,
+        totalProviders: totalUsers,
+        totalUsers: totalUsers + totalAdmins,
         totalPayments: paymentCount,
         totalReports: reportCount,
         totalAudits,

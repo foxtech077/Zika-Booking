@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireProvider, requireAdmin, type ProviderRequest, type AdminRequest } from "../middleware/auth.js";
+import { requireUser, requireAdmin, type AuthRequest, type AdminRequest } from "../middleware/auth.js";
 
 // ── Shared helper: insert a loyalty transaction row ───────────────────────────
 export async function logLoyaltyTransaction(opts: {
@@ -63,10 +63,10 @@ export async function loyaltyRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const userId = (req as ProviderRequest).providerId;
+      const userId = (req as AuthRequest).authId;
 
       const rows = await prisma.$queryRawUnsafe<
         { loyaltyPoints: number; currentTier: string }[]
@@ -173,10 +173,10 @@ export async function loyaltyRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const userId = (req as ProviderRequest).providerId;
+      const userId = (req as AuthRequest).authId;
       const q      = req.query as { page?: number; limit?: number };
       const page   = Number(q.page  ?? 1);
       const limit  = Number(q.limit ?? 20);

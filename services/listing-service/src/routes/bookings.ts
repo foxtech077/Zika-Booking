@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError, BookingNotFoundError, isPrismaUniqueViolation } from "../lib/errors.js";
-import { requireProvider, requireProviderRole, type ProviderRequest } from "../middleware/auth.js";
+import { requireAuth, requireUser, requireHost, type AuthRequest } from "../middleware/auth.js";
 import { getRedis } from "../lib/redis.js";
 import { randomUUID } from "crypto";
 import { sendBookingConfirmationEmail, sendBookingCancellationEmail } from "../lib/email.js";
@@ -794,10 +794,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           429: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
 
       const body = req.body as {
         listingId: string;
@@ -1181,7 +1181,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const body = req.body as {
@@ -1237,10 +1237,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const { lockToken } = req.body as { lockToken: string };
 
       try {
@@ -1306,10 +1306,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           403: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const { lockToken } = req.params as { lockToken: string };
 
       try {
@@ -1402,10 +1402,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           410: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const body = req.body as {
         lockToken: string;
         listingId: string;
@@ -2331,10 +2331,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
       const { reason } = req.body as { reason?: string };
 
@@ -2494,10 +2494,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const providerId = (req as ProviderRequest).providerId;
+      const providerId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
       const { reasonCode, reasonText } = req.body as {
         reasonCode: string;
@@ -2640,10 +2640,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const providerId = (req as ProviderRequest).providerId;
+      const providerId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
       const body = req.body as { checkedInAt?: string } | undefined;
       const checkedInAt = body?.checkedInAt ?? new Date().toISOString();
@@ -2741,10 +2741,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const providerId = (req as ProviderRequest).providerId;
+      const providerId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
       const body = req.body as { checkedOutAt?: string } | undefined;
       const checkedOutAt = body?.checkedOutAt ?? new Date().toISOString();
@@ -2813,8 +2813,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ["Bookings"],
-        summary: "Get the authenticated guest's booking history",
-        security: [{ bearerAuth: [] }],
+        summary: "Get the authenticated guest's booking history",        security: [{ bearerAuth: [] }],
         querystring: {
           type: "object",
           properties: {
@@ -2845,10 +2844,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const q = req.query as Record<string, string>;
       const status = q["status"];
       const searchRef = q["q"];
@@ -2951,10 +2950,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           404: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
 
       try {
@@ -3047,10 +3046,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           required: ["id"],
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
 
       try {
@@ -3124,7 +3123,7 @@ export async function bookingRoutes(app: FastifyInstance) {
   );
 
   // ── POST /bookings/claim  (adopt-by-email) ─────────────────────────────────
-  // Re-points anonymous (guest-token) bookings onto a real user after they sign
+  // Re-points anonymous (anonymous-token) bookings onto a real user after they sign
   // in or register with the same email. Called best-effort by the auth service;
   // never fails the auth flow when the listing service is unreachable.
   app.post(
@@ -3159,10 +3158,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           401: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const claimerId = (req as ProviderRequest).providerId;
+      const claimerId = (req as AuthRequest).authId;
       const body = (req.body ?? {}) as { email?: string };
 
       if (!body.email || typeof body.email !== "string" || !body.email.trim()) {
@@ -3172,13 +3171,13 @@ export async function bookingRoutes(app: FastifyInstance) {
       const email = body.email.trim().toLowerCase();
 
       try {
-        // Only adopt anonymous bookings (guest_* ids). Real-user bookings that
+        // Only adopt anonymous bookings (anon_* ids). Real-user bookings that
         // happen to share the email are left untouched, as is anything already
         // owned by the claimer.
         const result = await prisma.booking.updateMany({
           where: {
             guestEmail: { equals: email, mode: "insensitive" },
-            guestId: { startsWith: "guest_", not: claimerId },
+            guestId: { startsWith: "anon_", not: claimerId },
           },
           data: { guestId: claimerId },
         });

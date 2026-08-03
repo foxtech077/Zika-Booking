@@ -192,11 +192,11 @@ async function run() {
     throw new Error("Final login failed after approval");
   }
 
-  // 9. Test POST /auth/account-type transition (guest -> provider)
-  console.log("\n--- Step 9: Testing account-type change (guest -> provider) ---");
+  // 9. Test host profile (POST /auth/host/profile) — any user can become a host
+  console.log("\n--- Step 9: Testing host profile submission ---");
   const guestEmail = `guest_test_${Date.now()}@example.com`;
   
-  // Register guest
+  // Register guest (uniform onboarding — no userType)
   await fetch("http://localhost:3001/auth/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -205,8 +205,7 @@ async function run() {
       password,
       confirmPassword: password,
       firstName: "Jane",
-      lastName: "Doe",
-      userType: "guest"
+      lastName: "Doe"
     })
   });
 
@@ -240,40 +239,34 @@ async function run() {
 
   // Check state before
   const beforeGuest = await prisma.user.findUniqueOrThrow({ where: { id: guest.id } });
-  console.log("Guest before type change:", { userType: beforeGuest.userType, status: beforeGuest.status });
+  console.log("Guest before host profile:", { userType: beforeGuest.userType, status: beforeGuest.status });
 
-  // Update type to provider
-  const accTypeRes = await fetch("http://localhost:3001/auth/account-type", {
+  // Submit host profile (replaces old account-type transition)
+  const hostRes = await fetch("http://localhost:3001/auth/host/profile", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${guestAccessToken}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      userType: "provider",
       businessName: "Jane's B&B",
       country: "US"
     })
   });
-  const accTypeData = await accTypeRes.json();
-  console.log("Account Type Response Status:", accTypeRes.status);
-  console.log("Account Type Response Body:", JSON.stringify(accTypeData, null, 2));
+  const hostData = await hostRes.json();
+  console.log("Host Profile Response Status:", hostRes.status);
+  console.log("Host Profile Response Body:", JSON.stringify(hostData, null, 2));
 
-  // Check state after
+  // Check state after — userType stays "user", accreditation is pending
   const afterGuest = await prisma.user.findUniqueOrThrow({ where: { id: guest.id } });
-  console.log("Guest after type change:", { userType: afterGuest.userType, status: afterGuest.status });
+  const afterAcc = await prisma.accreditation.findUnique({ where: { providerId: guest.id } });
+  console.log("Guest after host profile:", { userType: afterGuest.userType, status: afterGuest.status, accreditationStatus: afterAcc?.status });
 
-  if (afterGuest.userType !== "provider" || afterGuest.status !== "pending_verification") {
-    throw new Error("Guest was not correctly promoted to provider or status was not reset to pending_verification");
+  if (afterGuest.userType !== "user" || afterGuest.status !== "active") {
+    throw new Error("User type/status not preserved after host profile submission");
   }
-
-  // Check session revocation
-  const activeSessionsCount = await prisma.session.count({
-    where: { userId: guest.id, revoked: false }
-  });
-  console.log("Active sessions remaining for guest user:", activeSessionsCount);
-  if (activeSessionsCount !== 0) {
-    throw new Error("Guest active sessions were not revoked upon provider transition");
+  if (!afterAcc || afterAcc.status !== "pending") {
+    throw new Error("Host profile was not created with pending status");
   }
 
   console.log("\n=== ALL INTEGRATION TESTS PASSED SUCCESSFULLY! ===");

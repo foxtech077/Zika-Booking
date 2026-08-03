@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireProvider, requireProviderRole, type ProviderRequest } from "../middleware/auth.js";
+import { requireUser, requireHost, type AuthRequest } from "../middleware/auth.js";
 import { requireAdmin } from "../middleware/auth.js";
 import { fireNotification } from "../lib/notifications.js";
 import { sendListingAutoSuspendedEmail } from "../lib/email.js";
@@ -84,10 +84,10 @@ export async function reviewRoutes(app: FastifyInstance) {
         }
       }
     },
-    preHandler: [requireProvider]
+    preHandler: [requireUser]
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const body = req.body as {
       bookingId: string;
       rating: number;
@@ -420,10 +420,10 @@ async function fetchProviderEmail(providerId: string): Promise<string | null> {
         }
       }
     },
-    preHandler: [requireProviderRole]
+    preHandler: [requireHost]
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const providerId = (req as ProviderRequest).providerId;
+      const providerId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
     const body = req.body as { reply: string };
 
@@ -500,10 +500,10 @@ async function fetchProviderEmail(providerId: string): Promise<string | null> {
         }
       }
     },
-    preHandler: [requireProvider]
+    preHandler: [requireUser]
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
 
       const reviews = await prisma.listingReview.findMany({
       where: { guestId },

@@ -7,7 +7,7 @@ import {
   isValidPhotoType,
   fileExtFromContentType,
 } from "../lib/s3.js";
-import { requireProvider, type ProviderRequest } from "../middleware/auth.js";
+import { requireUser, type AuthRequest } from "../middleware/auth.js";
 
 export async function profilePhotoRoutes(app: FastifyInstance) {
   app.post(
@@ -51,10 +51,10 @@ export async function profilePhotoRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const userId = (req as ProviderRequest).providerId;
+      const userId = (req as AuthRequest).authId;
       const { contentType } = req.body as { contentType: string };
 
       if (!isValidPhotoType(contentType)) {

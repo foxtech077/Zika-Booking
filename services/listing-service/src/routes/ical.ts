@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireProviderRole, type ProviderRequest } from "../middleware/auth.js";
+import { requireHost, type AuthRequest } from "../middleware/auth.js";
 
 // ── Minimal iCal parser ───────────────────────────────────────────────────────
 
@@ -205,7 +205,7 @@ export async function icalRoutes(app: FastifyInstance) {
 
   // ── GET /listings/:id/ical-feeds ──────────────────────────────────────
   app.get("/listings/:id/ical-feeds", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["iCal Calendar Sync"],
       params: {
@@ -250,7 +250,7 @@ export async function icalRoutes(app: FastifyInstance) {
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = req.params as { id: string };
-      const providerId = (req as ProviderRequest).providerId;
+      const providerId = (req as AuthRequest).authId;
 
       const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
@@ -281,7 +281,7 @@ export async function icalRoutes(app: FastifyInstance) {
 
   // ── POST /listings/:id/ical-feeds ─────────────────────────────────────
   app.post("/listings/:id/ical-feeds", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["iCal Calendar Sync"],
       params: {
@@ -323,7 +323,7 @@ export async function icalRoutes(app: FastifyInstance) {
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
-    const providerId = (req as ProviderRequest).providerId;
+    const providerId = (req as AuthRequest).authId;
     const body = req.body as { platform: string; feedUrl: string };
 
     if (!body.platform || !body.feedUrl) {
@@ -374,7 +374,7 @@ export async function icalRoutes(app: FastifyInstance) {
 
   // ── DELETE /listings/:id/ical-feeds/:feedId ───────────────────────────
   app.delete("/listings/:id/ical-feeds/:feedId", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["iCal Calendar Sync"],
       params: {
@@ -403,7 +403,7 @@ export async function icalRoutes(app: FastifyInstance) {
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id, feedId } = req.params as { id: string; feedId: string };
-      const providerId = (req as ProviderRequest).providerId;
+      const providerId = (req as AuthRequest).authId;
 
       const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
@@ -422,7 +422,7 @@ export async function icalRoutes(app: FastifyInstance) {
 
   // ── POST /listings/:id/ical-feeds/:feedId/sync ────────────────────────
   app.post("/listings/:id/ical-feeds/:feedId/sync", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["iCal Calendar Sync"],
       params: {
@@ -455,7 +455,7 @@ export async function icalRoutes(app: FastifyInstance) {
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id, feedId } = req.params as { id: string; feedId: string };
-      const providerId = (req as ProviderRequest).providerId;
+      const providerId = (req as AuthRequest).authId;
 
       const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
@@ -618,7 +618,7 @@ export async function icalRoutes(app: FastifyInstance) {
 
   // ── GET /listings/:id/channel-status ──────────────────────────────────
   app.get("/listings/:id/channel-status", {
-    preHandler: [requireProviderRole],
+    preHandler: [requireHost],
     schema: {
       tags: ["iCal Calendar Sync"],
       params: {
@@ -662,7 +662,7 @@ export async function icalRoutes(app: FastifyInstance) {
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = req.params as { id: string };
-      const providerId = (req as ProviderRequest).providerId;
+      const providerId = (req as AuthRequest).authId;
 
       const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");

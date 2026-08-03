@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireProviderRole, type ProviderRequest } from "../middleware/auth.js";
+import { requireHost, type AuthRequest } from "../middleware/auth.js";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -24,11 +24,11 @@ export async function providerRoutes(app: FastifyInstance) {
         tags: ["Provider Portal"],
         description: "Get provider dashboard summary including earnings, bookings, and recent activity",
       },
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const providerId = (req as ProviderRequest).providerId;
+        const providerId = (req as AuthRequest).authId;
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
@@ -165,11 +165,11 @@ export async function providerRoutes(app: FastifyInstance) {
         tags: ["Provider Portal"],
         description: "Get a summary of all provider listings with revenue and rating stats",
       },
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const providerId = (req as ProviderRequest).providerId;
+        const providerId = (req as AuthRequest).authId;
 
         const listings = await prisma.listing.findMany({
         where: { providerId, deletedAt: null },
@@ -239,11 +239,11 @@ export async function providerRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const providerId = (req as ProviderRequest).providerId;
+        const providerId = (req as AuthRequest).authId;
         const q = req.query as Record<string, string>;
       const offset   = Math.max(0, parseInt(q["offset"] ?? "0", 10));
       const limit    = Math.min(50, Math.max(1, parseInt(q["limit"] ?? "20", 10)));
@@ -342,11 +342,11 @@ export async function providerRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const providerId = (req as ProviderRequest).providerId;
+        const providerId = (req as AuthRequest).authId;
         const q = req.query as Record<string, string>;
       const offset   = Math.max(0, parseInt(q["offset"] ?? "0", 10));
       const limit    = Math.min(50, Math.max(1, parseInt(q["limit"] ?? "20", 10)));
@@ -424,11 +424,11 @@ export async function providerRoutes(app: FastifyInstance) {
         tags: ["Provider Portal"],
         description: "Get provider earnings breakdown — all-time totals, last 12 months monthly, and recent payouts",
       },
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const providerId = (req as ProviderRequest).providerId;
+        const providerId = (req as AuthRequest).authId;
         const now        = new Date();
 
       // Last 12 months monthly breakdown
@@ -528,11 +528,11 @@ export async function providerRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const providerId    = (req as ProviderRequest).providerId;
+        const providerId    = (req as AuthRequest).authId;
         const { listingId } = req.params as { listingId: string };
       const { from, to }  = req.query as { from?: string; to?: string };
 

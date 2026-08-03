@@ -36,8 +36,7 @@ enum AccreditationStatus {
 }
 
 enum UserType {
-  guest
-  provider
+  user
 
   @@schema("auth")
 }
@@ -107,10 +106,10 @@ model User {
   email           String        @unique @db.VarChar(255)
   passwordHash    String?       @db.VarChar(255)   // null for OAuth-only accounts
   status          UserStatus    @default(pending_verification)
-  userType        UserType
-   businessName    String?       @db.VarChar(255)   // providers only
-   country         String?       @db.Char(2)         // providers only (ISO 3166-1)
-   phone           String?       @db.VarChar(30)
+  userType        UserType      @default(user)
+  businessName    String?       @db.VarChar(255)   // host onboarding details
+  country         String?       @db.Char(2)         // ISO 3166-1
+  phone           String?       @db.VarChar(30)
   emailVerified   Boolean       @default(false)
   emailVerifiedAt DateTime?
   oauthProvider   OAuthProvider?
