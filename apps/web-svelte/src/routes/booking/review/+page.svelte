@@ -4,6 +4,9 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { PageProps } from './$types';
+	import { parsePhoneNumber } from 'libphonenumber-js';
+	import { isTaraCountry } from '$lib/tara';
+	import type { Stripe, StripeCardElement } from '@stripe/stripe-js';
 	import { currencySymbol } from '$lib/utils';
 	import { fmtDates, derivePlatform, fmtPlatform } from '$lib/booking-utils';
 	import ShimmerImage from '$lib/components/ShimmerImage.svelte';
@@ -18,6 +21,14 @@
 		type PricingPreview,
 		type CreateBookingResult
 	} from '$lib/booking-api';
+	import {
+		createPaymentIntent,
+		initiatePayment,
+		fetchPaymentStatus,
+		cancelPayment,
+		convertFx,
+		type CreateIntentResult
+	} from '$lib/payment-api';
 
 	let { data }: PageProps = $props();
 
@@ -69,6 +80,92 @@
 	let submitting = $state(false);
 	let submitError = $state('');
 	let confirmed = $state<CreateBookingResult | null>(null);
+
+	// ── Payment state ───────────────────────────────────────────────────────
+	type PayStep = 'payment' | 'stripe_card' | 'polling' | 'confirmed';
+	let payStep = $state<PayStep | null>(null);
+	let payProvider = $state<'stripe' | 'tara'>('stripe');
+	let bookingId = $state('');
+	let bookingRef = $state('');
+	let bookingTotal = $state(0);
+	let mobileNumber = $state('');
+	let payError = $state('');
+	let paymentId = $state<string | null>(null);
+	let taraXafAmount = $state<number | null>(null);
+	let taraXafLoading = $state(false);
+	let confirmedPayment = $state<{
+		reference: string;
+		paymentMethod: string;
+		transactionId: string;
+		totalAmount: number;
+		currency: string;
+		baseAmount: number;
+		serviceFee: number;
+		taxes: number;
+		discount: number;
+		securityDeposit?: number;
+		deliveryFee?: number;
+	} | null>(null);
+	let stripeInstance = $state.raw<Stripe | null>(null);
+	let stripeCardElement = $state.raw<StripeCardElement | null>(null);
+	let stripeClientSecret = $state('');
+	let cardRef = $state<HTMLDivElement | null>(null);
+	let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+	const taraEligible = $derived(isTaraCountry(detail.country));
+
+	// Fetch the XAF amount shown when Tara is selected and the listing currency
+	// is not already XAF (Tara only charges in XAF).
+	$effect(() => {
+		if (payProvider !== 'tara' || !confirmed || !breakdown) {
+			taraXafAmount = null;
+			taraXafLoading = false;
+			return;
+		}
+		if ((breakdown.listingCurrency ?? '').toUpperCase() === 'XAF') {
+			taraXafAmount = null;
+			taraXafLoading = false;
+			return;
+		}
+		let cancelled = false;
+		taraXafLoading = true;
+		void convertFx(breakdown.total, breakdown.listingCurrency, 'XAF')
+			.then((res) => {
+				if (!cancelled) taraXafAmount = res?.converted ?? null;
+			})
+			.catch(() => {
+				if (!cancelled) taraXafAmount = null;
+			})
+			.finally(() => {
+				if (!cancelled) taraXafLoading = false;
+			});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	// Mount the Stripe card element once we reach the card step.
+	$effect(() => {
+		if (payStep !== 'stripe_card' || !stripeInstance || !cardRef) return;
+		const elements = stripeInstance.elements() as unknown as {
+			create(type: 'card', options?: Record<string, unknown>): StripeCardElement;
+		};
+		const card = elements.create('card', {
+			style: {
+				base: { fontSize: '15px', color: '#1e293b', fontFamily: 'inherit' },
+				'::placeholder': { color: '#94a3b8' }
+			}
+		});
+		card.mount(cardRef);
+		stripeCardElement = card;
+		return () => {
+			try {
+				card.destroy();
+			} catch {
+				// ignore teardown errors
+			}
+		};
+	});
 
 	const unit = $derived(isCar ? 'day' : 'night');
 
@@ -212,6 +309,19 @@
 		return () => window.removeEventListener('pagehide', onUnload);
 	});
 
+	// Cancel an open Stripe payment when the guest leaves mid-checkout.
+	$effect(() => {
+		if (!browser || !paymentId || payProvider !== 'stripe') return;
+		const onUnload = () => firePaymentCancel();
+		const onBeforeUnload = () => firePaymentCancel();
+		window.addEventListener('pagehide', onUnload);
+		window.addEventListener('beforeunload', onBeforeUnload);
+		return () => {
+			window.removeEventListener('pagehide', onUnload);
+			window.removeEventListener('beforeunload', onBeforeUnload);
+		};
+	});
+
 	function timerColor(): string {
 		if (secondsLeft === null) return 'text-slate-500';
 		if (secondsLeft > 120) return 'text-emerald-600';
@@ -347,7 +457,13 @@
 				currency
 			});
 			confirmed = res;
+			bookingId = res.bookingId;
+			bookingRef = res.bookingReference;
+			bookingTotal = Number(res.totalAmount) || (breakdown?.total ?? 0);
 			lockToken = null;
+			secondsLeft = null;
+			payError = '';
+			payStep = 'payment';
 		} catch (err) {
 			const code = (err as Error & { code?: string })?.code;
 			if (code === 'LOCK_EXPIRED') {
@@ -364,6 +480,163 @@
 		}
 	}
 
+	// ── Payment handlers ─────────────────────────────────────────────────────
+	function clearPoll(): void {
+		if (pollTimer) {
+			clearInterval(pollTimer);
+			pollTimer = null;
+		}
+	}
+
+	function startPolling(method: string): void {
+		if (!paymentId) return;
+		clearPoll();
+		const pmId = paymentId;
+		const startedAt = Date.now();
+		pollTimer = setInterval(async () => {
+			if (Date.now() - startedAt > 120_000) {
+				clearPoll();
+				payError = 'Payment took too long. Please try again.';
+				payStep = 'payment';
+				return;
+			}
+			try {
+				const status = await fetchPaymentStatus(pmId);
+				if (status.status === 'captured') {
+					clearPoll();
+					paymentResolvedRef.current = true;
+					confirmedPayment = {
+						reference: bookingRef,
+						paymentMethod: method,
+						transactionId: status.transactionId ?? status.displayId ?? pmId,
+						totalAmount: Number(status.amount) || bookingTotal,
+						currency: status.currency || currency,
+						baseAmount: breakdown?.base ?? 0,
+						serviceFee: breakdown?.serviceFee ?? 0,
+						taxes: breakdown?.taxes ?? 0,
+						discount: breakdown?.discount ?? 0,
+						securityDeposit: breakdown?.securityDeposit,
+						deliveryFee: breakdown?.deliveryFee
+					};
+					payStep = 'confirmed';
+				} else if (status.status === 'failed' || status.status === 'timed_out') {
+					clearPoll();
+					paymentResolvedRef.current = true;
+					payError = 'Payment failed. Please try again.';
+					payStep = 'payment';
+				}
+			} catch {
+				// keep polling on transient errors
+			}
+		}, 3000);
+	}
+
+	async function handlePay(): Promise<void> {
+		if (!bookingId || submitting) return;
+		submitting = true;
+		payError = '';
+		try {
+			if (payProvider === 'stripe') {
+				const intent: CreateIntentResult = await createPaymentIntent(bookingId);
+				paymentId = intent.paymentId;
+				stripeClientSecret = intent.clientSecret;
+				const publishableKey =
+					intent.publishableKey ?? import.meta.env.PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
+				const { loadStripe } = await import('@stripe/stripe-js');
+				const stripe = await loadStripe(publishableKey);
+				if (!stripe) {
+					payError = 'Could not load the payment provider. Please try again.';
+					return;
+				}
+				stripeInstance = stripe;
+				payStep = 'stripe_card';
+			} else {
+				// Tara mobile money
+				const trimmed = mobileNumber.trim();
+				if (!trimmed) {
+					payError = 'Please enter your mobile number.';
+					return;
+				}
+				let phoneCountry = '';
+				try {
+					phoneCountry = parsePhoneNumber(trimmed)?.country ?? '';
+				} catch {
+					phoneCountry = '';
+				}
+				if (!phoneCountry || !isTaraCountry(phoneCountry)) {
+					payError =
+						'Mobile money is only available for supported African countries. Please use card payment instead.';
+					return;
+				}
+				const payRes = await initiatePayment({
+					bookingId,
+					paymentProvider: 'tara',
+					mobileNumber: trimmed
+				});
+				paymentId = payRes.paymentId;
+				payStep = 'polling';
+				startPolling('Mobile Money');
+			}
+		} catch (err) {
+			if (isAuthFailure(err)) {
+				clearToken();
+				sessionExpired = true;
+			} else {
+				payError = (err as Error)?.message ?? 'Payment initiation failed. Please try again.';
+			}
+		} finally {
+			submitting = false;
+		}
+	}
+
+	async function handleStripeConfirm(): Promise<void> {
+		if (!stripeInstance || !stripeCardElement || !stripeClientSecret) return;
+		submitting = true;
+		payError = '';
+		try {
+			const result = await stripeInstance.confirmCardPayment(stripeClientSecret, {
+				payment_method: { card: stripeCardElement }
+			});
+			if (result.error) {
+				payError = result.error.message ?? 'Card payment failed. Please check your details.';
+			} else {
+				payStep = 'polling';
+				startPolling('Card');
+			}
+		} catch (err) {
+			payError = (err as Error)?.message ?? 'Card payment failed.';
+		} finally {
+			submitting = false;
+		}
+	}
+
+	// Cancel the open Stripe payment if the guest leaves mid-checkout (idempotent).
+	const paymentResolvedRef = { current: false };
+	let lastCancelledPaymentRef: string | null = null;
+
+	function firePaymentCancel(): void {
+		const pmId = paymentId;
+		if (!pmId || payProvider !== 'stripe' || paymentResolvedRef.current) return;
+		if (lastCancelledPaymentRef === pmId) return;
+		lastCancelledPaymentRef = pmId;
+		void cancelPayment(pmId);
+	}
+
+	function handlePaymentBack(): void {
+		if (payStep === 'stripe_card' || payStep === 'polling') {
+			firePaymentCancel();
+			clearPoll();
+		}
+		payStep = 'payment';
+		payError = '';
+	}
+
+	function handleCancelAfterBooking(): void {
+		firePaymentCancel();
+		clearPoll();
+		void goto(`/listings/${listingId}`);
+	}
+
 	function expiryAction(path: string): void {
 		if (lockToken) void releaseLock(lockToken);
 		void goto(path);
@@ -377,7 +650,7 @@
 </svelte:head>
 
 <div class="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-	{#if confirmed}
+	{#if confirmedPayment && payStep === 'confirmed'}
 		<!-- ── Confirmation ── -->
 		<div class="mx-auto max-w-2xl space-y-6">
 			<div class="py-8 text-center">
@@ -406,7 +679,7 @@
 						>Booking reference</span
 					>
 					<span class="font-mono text-lg font-bold text-[#0B1E3F]"
-						>{confirmed.bookingReference}</span
+						>{confirmedPayment.reference}</span
 					>
 				</div>
 				<dl class="mt-4 space-y-2 text-sm">
@@ -425,17 +698,18 @@
 					<div class="flex justify-between">
 						<dt class="text-slate-400">Total</dt>
 						<dd class="font-semibold text-slate-700">
-							{fmtPlatform(confirmed.totalAmount, confirmed.currency)}
+							{fmtPlatform(confirmedPayment.totalAmount, confirmedPayment.currency)}
 						</dd>
 					</div>
+					<div class="flex justify-between">
+						<dt class="text-slate-400">Paid with</dt>
+						<dd class="font-semibold text-slate-700">{confirmedPayment.paymentMethod}</dd>
+					</div>
+					<div class="flex justify-between">
+						<dt class="text-slate-400">Transaction</dt>
+						<dd class="font-mono text-slate-700">{confirmedPayment.transactionId}</dd>
+					</div>
 				</dl>
-			</div>
-
-			<div
-				class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-xs leading-relaxed text-amber-800"
-			>
-				This booking is awaiting payment. Payment options are coming soon — you will be able to
-				complete payment before your stay.
 			</div>
 
 			<div class="flex items-center justify-center gap-3">
@@ -496,7 +770,7 @@
 					Back to listing
 				</button>
 			</div>
-		{:else}
+		{:else if !payStep}
 			<div class="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_380px]">
 				<!-- ── Left column: listing + guest details + voucher ── -->
 				<div class="space-y-6">
@@ -806,10 +1080,10 @@
 						disabled={submitting || secondsLeft === null || secondsLeft <= 0}
 						class="w-full rounded-xl bg-[#0B1E3F] py-3.5 text-sm font-bold text-white transition hover:bg-[#07152B] disabled:cursor-not-allowed disabled:opacity-50"
 					>
-						{submitting ? 'Completing booking…' : 'Complete booking'}
+						{submitting ? 'Completing booking…' : 'Continue to payment'}
 					</button>
 					<p class="text-center text-xs text-slate-400">
-						You won't be charged yet — payment is coming soon.
+						Your dates are held. Payment is taken after you confirm.
 					</p>
 				</div>
 
@@ -918,6 +1192,336 @@
 						{/if}
 					</div>
 				</aside>
+			</div>
+		{:else if payStep === 'payment'}
+			<!-- ── PAYMENT step ── -->
+			<div class="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_380px]">
+				<div class="space-y-6">
+					<!-- Step indicator -->
+					<div class="flex items-center gap-0">
+						<div class="flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
+							<span
+								class="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-white"
+								>✓</span
+							>
+							Review
+						</div>
+						<div class="mx-2 h-px w-12 bg-slate-200"></div>
+						<div class="flex items-center gap-1.5 text-xs font-semibold text-[#0B1E3F]">
+							<span
+								class="flex h-6 w-6 items-center justify-center rounded-full bg-[#0B1E3F] text-[10px] font-bold text-white"
+								>2</span
+							>
+							Payment
+						</div>
+					</div>
+
+					<!-- Payment method selector -->
+					<section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+						<h3 class="mb-4 flex items-center gap-2 font-bold text-slate-800">Payment Method</h3>
+						<div class="grid grid-cols-2 gap-3">
+							<button
+								type="button"
+								onclick={() => (payProvider = 'stripe')}
+								class={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 text-sm font-semibold transition ${
+									payProvider === 'stripe'
+										? 'border-[#0B1E3F] bg-[#0B1E3F]/5 text-[#0B1E3F]'
+										: 'border-slate-200 text-slate-500 hover:border-slate-300'
+								}`}
+							>
+								<span class="text-2xl">💳</span>
+								<span>Card & Digital Wallets</span>
+								{#if !taraEligible}
+									<span
+										class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700"
+									>
+										Recommended
+									</span>
+								{/if}
+							</button>
+							{#if taraEligible}
+								<button
+									type="button"
+									onclick={() => (payProvider = 'tara')}
+									class={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 text-sm font-semibold transition ${
+										payProvider === 'tara'
+											? 'border-[#0B1E3F] bg-[#0B1E3F]/5 text-[#0B1E3F]'
+											: 'border-slate-200 text-slate-500 hover:border-slate-300'
+									}`}
+								>
+									<span class="text-2xl">📱</span>
+									<span>Mobile Money</span>
+									<span
+										class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700"
+									>
+										Recommended
+									</span>
+								</button>
+							{/if}
+						</div>
+					</section>
+
+					{#if payProvider === 'tara'}
+						<!-- Mobile Money -->
+						<section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+							<h3 class="mb-4 flex items-center gap-2 font-bold text-slate-800">Mobile Money</h3>
+							<label for="tara-phone" class="mb-1.5 block text-sm font-medium text-slate-700"
+								>Mobile Number</label
+							>
+							<input
+								id="tara-phone"
+								type="tel"
+								bind:value={mobileNumber}
+								placeholder="+254 700 000 000"
+								class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[#0B1E3F]"
+							/>
+							{#if taraXafLoading}
+								<p class="mt-2 text-xs text-slate-400">Converting to XAF…</p>
+							{:else if taraXafAmount != null}
+								<p class="mt-2 text-xs text-slate-500">
+									You'll pay approximately {taraXafAmount.toLocaleString()} XAF (mobile money is charged
+									in XAF).
+								</p>
+							{:else if (breakdown?.listingCurrency ?? '').toUpperCase() !== 'XAF'}
+								<p class="mt-2 text-xs text-slate-500">
+									Mobile money is charged in XAF (Central African CFA Franc).
+								</p>
+							{/if}
+							<p class="mt-2 text-xs text-slate-400">
+								You will receive a payment prompt on this number.
+							</p>
+						</section>
+					{:else}
+						<!-- Card & digital wallets -->
+						<section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+							<h3 class="mb-4 flex items-center gap-2 font-bold text-slate-800">Secure Payment</h3>
+							<p class="mb-4 flex items-center gap-1.5 text-sm text-slate-500">
+								<span class="text-emerald-500">✓</span> Your payment is processed securely.
+							</p>
+							<div class="flex flex-wrap gap-2">
+								{#each ['Visa', 'Mastercard', 'Amex', 'Apple Pay', 'Google Pay', 'PayPal'] as c (c)}
+									<span
+										class="rounded border border-slate-200 bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500"
+									>
+										{c}
+									</span>
+								{/each}
+							</div>
+							<p class="mt-3 text-xs text-slate-400">
+								You will be prompted to enter your card details on the next step.
+							</p>
+						</section>
+					{/if}
+
+					{#if payError}
+						<div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+							{payError}
+						</div>
+					{/if}
+
+					<div class="flex gap-3">
+						<button
+							type="button"
+							onclick={handlePaymentBack}
+							class="flex-1 rounded-xl border border-slate-200 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+						>
+							← Back
+						</button>
+						<button
+							type="button"
+							onclick={() => void handlePay()}
+							disabled={submitting}
+							class="flex-[2] rounded-xl bg-[#0B1E3F] py-3.5 text-sm font-bold text-white transition hover:bg-[#07152B] disabled:opacity-50"
+						>
+							{submitting
+								? 'Please wait…'
+								: payProvider === 'tara'
+									? 'Send Payment Request'
+									: breakdown
+										? `Pay ${fmtPlatform(breakdown.platformAmount, breakdown.platformCurrency)}`
+										: 'Pay'}
+						</button>
+					</div>
+					<button
+						type="button"
+						onclick={handleCancelAfterBooking}
+						class="w-full text-center text-xs font-semibold text-slate-400 transition hover:text-red-500"
+					>
+						Cancel booking
+					</button>
+				</div>
+
+				<!-- Right column: price summary -->
+				<aside class="lg:sticky lg:top-20 lg:self-start">
+					<div class="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+						<h3 class="font-bold text-slate-800">Price Breakdown</h3>
+						<div class="flex gap-3 border-b border-slate-100 pb-4">
+							{#if detail.primaryPhotoUrl}
+								<ShimmerImage
+									src={detail.primaryPhotoUrl}
+									alt=""
+									class="h-14 w-16 shrink-0 rounded-xl object-cover"
+								/>
+							{:else}
+								<div
+									class="flex h-14 w-16 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-xl"
+								>
+									{isCar ? '🚗' : '🏨'}
+								</div>
+							{/if}
+							<div class="min-w-0">
+								<p class="text-xs font-semibold tracking-wider text-slate-400 uppercase">
+									{detail.category}
+								</p>
+								<p class="truncate text-sm font-bold text-slate-800">{detail.name}</p>
+							</div>
+						</div>
+						{#if breakdown}
+							<div class="space-y-2.5 text-sm">
+								<div class="flex justify-between text-slate-600">
+									<span>Base amount</span>
+									<span>{fmtPlatform(breakdown.base, breakdown.listingCurrency)}</span>
+								</div>
+								{#if breakdown.discount > 0}
+									<div class="flex justify-between font-semibold text-emerald-600">
+										<span>{voucherApplied ? 'Voucher discount' : 'Promotional discount'}</span>
+										<span>−{fmtPlatform(breakdown.discount, breakdown.listingCurrency)}</span>
+									</div>
+								{/if}
+								<div class="flex justify-between text-slate-600">
+									<span>Service fee</span>
+									<span>{fmtPlatform(breakdown.serviceFee, breakdown.listingCurrency)}</span>
+								</div>
+								{#if breakdown.taxes > 0}
+									<div class="flex justify-between text-slate-600">
+										<span>Taxes</span>
+										<span>{fmtPlatform(breakdown.taxes, breakdown.listingCurrency)}</span>
+									</div>
+								{/if}
+								{#if breakdown.deliveryFee > 0}
+									<div class="flex justify-between text-slate-600">
+										<span>Delivery fee</span>
+										<span>{fmtPlatform(breakdown.deliveryFee, breakdown.listingCurrency)}</span>
+									</div>
+								{/if}
+								{#if breakdown.securityDeposit > 0}
+									<div class="flex justify-between text-slate-600">
+										<span>Security deposit</span>
+										<span>{fmtPlatform(breakdown.securityDeposit, breakdown.listingCurrency)}</span>
+									</div>
+								{/if}
+								<div
+									class="flex items-baseline justify-between border-t border-slate-200 pt-3 text-base font-bold text-slate-900"
+								>
+									<span>Total</span>
+									<span class="text-right">
+										<div>{fmtPlatform(breakdown.platformAmount, breakdown.platformCurrency)}</div>
+										{#if breakdown.platformCurrency !== breakdown.listingCurrency}
+											<div class="text-[10px] font-normal text-slate-400">
+												Billed as approx.
+												{fmtPlatform(breakdown.total, breakdown.listingCurrency)}
+											</div>
+										{/if}
+									</span>
+								</div>
+							</div>
+						{:else}
+							<p class="text-sm text-slate-400">Loading price…</p>
+						{/if}
+					</div>
+				</aside>
+			</div>
+		{:else if payStep === 'stripe_card'}
+			<!-- ── STRIPE CARD step ── -->
+			<div class="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_380px]">
+				<div class="space-y-6">
+					<section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+						<h3 class="mb-4 flex items-center gap-2 font-bold text-slate-800">Secure Payment</h3>
+						<p class="mb-4 flex items-center gap-1.5 text-sm text-slate-500">
+							<span class="text-emerald-500">✓</span> Your payment is processed securely.
+						</p>
+						<div class="flex flex-wrap gap-2">
+							{#each ['Visa', 'Mastercard', 'Amex', 'UnionPay', 'Apple Pay', 'Google Pay', 'PayPal', 'Bank Debit', 'Klarna'] as c (c)}
+								<span
+									class="rounded border border-slate-200 bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500"
+								>
+									{c}
+								</span>
+							{/each}
+						</div>
+						<div
+							bind:this={cardRef}
+							class="min-h-[44px] rounded-xl border border-slate-200 bg-white p-4"
+						></div>
+						{#if payError}
+							<p class="mt-3 text-sm text-red-600">{payError}</p>
+						{/if}
+						<button
+							type="button"
+							onclick={() => void handleStripeConfirm()}
+							disabled={submitting}
+							class="mt-5 w-full rounded-xl bg-[#0B1E3F] py-3.5 text-sm font-bold text-white transition hover:bg-[#07152B] disabled:opacity-50"
+						>
+							{submitting
+								? 'Processing…'
+								: `Pay ${breakdown ? fmtPlatform(breakdown.platformAmount, breakdown.platformCurrency) : ''}`}
+						</button>
+						{#if breakdown && breakdown.platformCurrency !== breakdown.listingCurrency}
+							<p class="mt-2 text-xs text-slate-400">
+								Billed as approx. {fmtPlatform(breakdown.total, breakdown.listingCurrency)} · charged
+								in {breakdown.platformCurrency}
+							</p>
+						{/if}
+					</section>
+					<button
+						type="button"
+						onclick={handlePaymentBack}
+						class="text-xs font-semibold text-slate-500 transition hover:text-red-500"
+					>
+						← Back to payment methods
+					</button>
+				</div>
+				<aside class="lg:sticky lg:top-20 lg:self-start">
+					<div class="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+						<h3 class="font-bold text-slate-800">Price Breakdown</h3>
+						{#if breakdown}
+							<div class="space-y-2.5 text-sm">
+								<div class="flex justify-between font-bold text-slate-900">
+									<span>Total</span>
+									<span class="text-right">
+										<div>{fmtPlatform(breakdown.platformAmount, breakdown.platformCurrency)}</div>
+										{#if breakdown.platformCurrency !== breakdown.listingCurrency}
+											<div class="text-[10px] font-normal text-slate-400">
+												Billed as approx.
+												{fmtPlatform(breakdown.total, breakdown.listingCurrency)}
+											</div>
+										{/if}
+									</span>
+								</div>
+							</div>
+						{/if}
+					</div>
+				</aside>
+			</div>
+		{:else if payStep === 'polling'}
+			<!-- ── POLLING ── -->
+			<div class="mx-auto max-w-md py-20 text-center">
+				<div class="relative mx-auto h-20 w-20">
+					<div class="absolute inset-0 rounded-full border-4 border-slate-200"></div>
+					<div class="absolute inset-0 animate-spin rounded-full border-4 border-t-[#0B1E3F]"></div>
+				</div>
+				<h2 class="mt-6 text-xl font-bold text-slate-800">
+					{payProvider === 'tara' ? 'Payment Request Sent' : 'Processing Payment'}
+				</h2>
+				<p class="mt-2 text-sm leading-relaxed text-slate-500">
+					{payProvider === 'tara'
+						? 'A payment request has been sent to your phone. Please approve it to complete your booking.'
+						: 'Please wait while we confirm your payment.'}
+				</p>
+				<p class="mt-3 animate-pulse text-xs text-slate-400">Waiting for payment confirmation…</p>
+				{#if payError}
+					<p class="mt-4 text-sm text-red-600">{payError}</p>
+				{/if}
 			</div>
 		{/if}
 	{/if}

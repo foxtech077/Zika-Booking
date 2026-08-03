@@ -1,8 +1,14 @@
-import { PUBLIC_LISTING_API_URL, PUBLIC_AUTH_API_URL } from '$env/static/public';
+import {
+	PUBLIC_LISTING_API_URL,
+	PUBLIC_AUTH_API_URL,
+	PUBLIC_PAYMENT_API_URL
+} from '$env/static/public';
 
 export const LISTING_API_URL = PUBLIC_LISTING_API_URL;
 
 export const AUTH_API_URL = PUBLIC_AUTH_API_URL;
+
+export const PAYMENT_API_URL = PUBLIC_PAYMENT_API_URL;
 
 export const DEFAULT_COORDS = { lat: -1.2921, lng: 36.8219 };
 

@@ -420,9 +420,15 @@ importers:
 
   apps/web-svelte:
     dependencies:
+      '@stripe/stripe-js':
+        specifier: ^9.7.0
+        version: 9.8.0
       leaflet:
         specifier: ^1.9.4
         version: 1.9.4
+      libphonenumber-js:
+        specifier: ^1.13.8
+        version: 1.13.8
       world-countries:
         specifier: ^5.1.0
         version: 5.1.0
