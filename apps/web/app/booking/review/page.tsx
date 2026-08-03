@@ -312,7 +312,7 @@ export default function BookingReviewPage() {
 
   useEffect(() => {
     const raw = sessionStorage.getItem("zika:checkout");
-    if (!raw) { router.replace("/traveller"); return; }
+    if (!raw) { router.replace("/"); return; }
     try {
       const data: CheckoutCtx = JSON.parse(raw);
       setCtx(data);
@@ -346,7 +346,7 @@ export default function BookingReviewPage() {
         .catch(() => {})
         .finally(() => setLoadingWalletVouchers(false));
     } catch {
-      router.replace("/traveller");
+      router.replace("/");
     }
   }, []);
 
@@ -617,7 +617,7 @@ export default function BookingReviewPage() {
     sessionStorage.removeItem("zika:checkout");
     if (pollRef.current) clearInterval(pollRef.current);
     setShowCancelConfirm(false);
-    router.push("/traveller");
+    router.push("/");
   }
 
   async function handleReviewVoucherApply(codeOverride?: string) {
@@ -693,7 +693,7 @@ export default function BookingReviewPage() {
 
         {/* ── Header ── */}
         <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between shadow-sm">
-          <Link href="/traveller" className="flex items-center">
+          <Link href="/" className="flex items-center">
             <img src="/images/kainook-logo.jpeg" alt="Kainook" className="h-9 w-auto object-contain" />
           </Link>
 
@@ -736,7 +736,7 @@ export default function BookingReviewPage() {
               confirmed={confirmed}
               ctx={ctx}
               onDownload={handleDownloadPDF}
-              onViewBookings={() => router.push("/traveller?tab=bookings")}
+              onViewBookings={() => router.push("/?tab=bookings")}
             />
           )}
 
@@ -1170,13 +1170,13 @@ export default function BookingReviewPage() {
             <p className="text-slate-500 text-sm leading-relaxed">Your reservation hold has expired and is no longer available.</p>
             <div className="flex gap-3 pt-2">
               <button
-                onClick={() => { sessionStorage.removeItem("zika:checkout"); router.push("/traveller"); }}
+                onClick={() => { sessionStorage.removeItem("zika:checkout"); router.push("/"); }}
                 className="flex-1 py-2.5 border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition text-sm"
               >
                 Search again
               </button>
               <button
-                onClick={() => { sessionStorage.removeItem("zika:checkout"); router.push(`/traveller?listing=${ctx.listingId}`); }}
+                onClick={() => { sessionStorage.removeItem("zika:checkout"); router.push(`/?listing=${ctx.listingId}`); }}
                 className="flex-1 py-2.5 bg-[#0B1E3F] text-white font-bold rounded-xl hover:bg-[#07152B] transition text-sm"
               >
                 Try to rebook

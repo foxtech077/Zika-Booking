@@ -408,7 +408,7 @@ export default function FAQPage() {
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/traveller" className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3">
             <Image
               src="/images/kainook-logo.jpeg"
               alt="Kainook Logo"
