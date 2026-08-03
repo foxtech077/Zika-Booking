@@ -72,14 +72,11 @@ const refundSchema = z.object({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function fetchBooking(bookingId: string, authHeader: string) {
-  const res = await fetch(`${BOOKING_SERVICE_URL}/guests/me/bookings/${bookingId}`, {
-    headers: { Authorization: authHeader },
-  });
-  if (!res.ok) return null;
-  const json = (await res.json()) as { success: boolean; data?: Record<string, unknown> };
-  if (!json.success || !json.data) return null;
-  return json.data;
+async function fetchBooking(bookingId: string, userId: string) {
+  const booking = await fetchBookingInternal(bookingId);
+  if (!booking) return null;
+  if (booking["guestId"] !== userId) return null;
+  return booking;
 }
 
 // ── Route plugin ──────────────────────────────────────────────────────────────
@@ -371,10 +368,9 @@ export async function paymentRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const { userId } = req as GuestRequest;
     const { bookingId } = req.body as { bookingId: string };
-    const authHeader = req.headers.authorization ?? "";
 
     // ── 1. Fetch booking ────────────────────────────────────────────────────
-    const booking = await fetchBooking(bookingId, authHeader);
+    const booking = await fetchBooking(bookingId, userId);
     if (!booking) {
       return sendError(reply, 404, "BOOKING_NOT_FOUND", "Booking not found.");
     }
@@ -612,8 +608,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     const { bookingId, paymentProvider, paymentMethodId, mobileNumber, network } = parsed.data;
 
     // ── 2. Fetch booking ──────────────────────────────────────────────────
-    const authHeader = req.headers.authorization ?? "";
-    const booking = await fetchBooking(bookingId, authHeader);
+    const booking = await fetchBooking(bookingId, userId);
     if (!booking) {
       return sendError(reply, 404, "BOOKING_NOT_FOUND", "Booking not found.");
     }
@@ -852,7 +847,6 @@ export async function paymentRoutes(app: FastifyInstance) {
 
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { userId } = req as GuestRequest;
-    const authHeader = req.headers.authorization ?? "";
     const { id } = req.params as { id: string };
 
     const payment = await prisma.payment.findUnique({ where: { id } });
@@ -861,14 +855,10 @@ export async function paymentRoutes(app: FastifyInstance) {
     }
 
     // Verify ownership by checking booking belongs to user
-    const booking = await fetchBooking(payment.bookingId, authHeader);
+    const booking = await fetchBooking(payment.bookingId, userId);
     if (!booking) {
       return sendError(reply, 403, "FORBIDDEN", "You do not have access to this payment.");
     }
-
-    // The booking service returns the booking only if it belongs to the authenticated user
-    // If userId in token doesn't match booking guestId the booking service returns 403/404
-    void userId; // ownership is enforced by booking service
 
     return sendSuccess(reply, 200, {
       id: payment.id,
@@ -900,7 +890,6 @@ export async function paymentRoutes(app: FastifyInstance) {
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { userId } = req as GuestRequest;
-    const authHeader = req.headers.authorization ?? "";
     const { id } = req.params as { id: string };
 
     const payment = await prisma.payment.findUnique({ where: { id } });
@@ -913,7 +902,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     }
 
     // Verify ownership by checking booking belongs to user
-    const booking = await fetchBooking(payment.bookingId, authHeader);
+    const booking = await fetchBooking(payment.bookingId, userId);
     if (!booking) {
       return sendError(reply, 403, "FORBIDDEN", "You do not have access to this payment.");
     }
