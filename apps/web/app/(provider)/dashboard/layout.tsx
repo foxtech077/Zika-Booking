@@ -26,7 +26,7 @@ export default function ProviderDashboardLayout({ children }: { children: ReactN
         .get("/auth/me")
         .then((res) => {
           const u = res.data?.data?.user ?? res.data?.user;
-          if (u && u.userType === "provider") {
+          if (u) {
             setSession(token, u);
           } else {
             clearSession();
@@ -39,12 +39,9 @@ export default function ProviderDashboardLayout({ children }: { children: ReactN
         });
       return;
     }
-
-    // Block travellers from accessing provider routes
-    if (user.userType !== "provider") {
-      router.replace("/traveller");
-    }
-  }, [_hasHydrated, isAuthenticated, token, user?.id, user?.userType, setSession, clearSession, router]);
+    // No further gate: any signed-in user may manage listings. "Provider" is
+    // just whoever owns one, not an account type to be blocked on.
+  }, [_hasHydrated, isAuthenticated, token, user?.id, setSession, clearSession, router]);
 
   if (!_hasHydrated) {
     return (
@@ -62,7 +59,7 @@ export default function ProviderDashboardLayout({ children }: { children: ReactN
     );
   }
 
-  if (!user?.id || user.userType !== "provider") {
+  if (!user?.id) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface-subtle">
         <Spinner size="lg" />
