@@ -29,6 +29,15 @@ listingApi.interceptors.response.use(
     const original = err.config as typeof err.config & { _retry?: boolean };
 
     if (err.response?.status === 401 && !original._retry && typeof window !== "undefined") {
+      // Only a request that actually carried a token represents an expired
+      // session worth refreshing. A logged-out visitor has nothing to refresh,
+      // and treating their 401 as an expiry used to clear storage and hard
+      // redirect to /auth/login — so simply browsing a listing kicked guests
+      // out. Let the caller's own error handling deal with it instead.
+      const hadToken =
+        sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
+      if (!hadToken) return Promise.reject(err);
+
       original._retry = true;
 
       const newToken = await refreshAccessToken();
