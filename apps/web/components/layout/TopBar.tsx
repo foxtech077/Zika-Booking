@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, LogOut, User, ChevronDown, HelpCircle, Menu } from "lucide-react";
+import { Bell, LogOut, User, ChevronDown, HelpCircle, Menu, Home } from "lucide-react";
 import { listingsService } from "@/services/listings";
 import { useAuthStore } from "@/stores/auth";
 import { Avatar } from "@/components/ui/Avatar";
@@ -97,7 +97,7 @@ export function TopBar({ onToggleSidebar }: TopBarProps) {
         )}
         
         {/* Logo - Mobile Only */}
-        <Link href="/dashboard" className="flex md:hidden items-center gap-2">
+        <Link href="/" className="flex md:hidden items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/15 shrink-0 overflow-hidden">
             <img
               src="/images/kainook-logo.jpeg"
@@ -149,6 +149,13 @@ export function TopBar({ onToggleSidebar }: TopBarProps) {
                   <p className="text-sm font-semibold text-slate-800">{name}</p>
                   <p className="text-xs text-slate-400 truncate mt-0.5">{user?.email}</p>
                 </div>
+                <button
+                  onClick={() => { setMenuOpen(false); router.push("/"); }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all"
+                >
+                  <Home className="w-4 h-4 text-green-600" />
+                  Back to Kainook
+                </button>
                 <button
                   onClick={() => { setMenuOpen(false); router.push("/dashboard/settings"); }}
                   className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all"

@@ -104,7 +104,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
         >
           {/* Full logo — hidden when collapsed on desktop */}
           <div className={cn("flex items-center gap-3", collapsed && "md:hidden")}>
-            <Link href="/dashboard" className="flex items-center gap-3">
+            <Link href="/" className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 shrink-0 overflow-hidden">
                 <img
                   src="/images/kainook-logo.jpeg"
@@ -122,7 +122,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
           {/* Icon-only logo — shown when collapsed on desktop */}
           {collapsed && (
             <Link
-              href="/dashboard"
+              href="/"
               className="hidden md:flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 overflow-hidden"
             >
               <img
