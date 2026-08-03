@@ -8,12 +8,8 @@ import { registerSchema } from "@zika/validators";
 import { api, storeToken } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth";
 import { FormField } from "@/components/ui/FormField";
-import { CountryCombobox } from "@/components/ui/CountryCombobox";
 import type { ApiResponse, AuthResponse } from "@zika/types";
-import { Select } from "@/components/ui/Input";
-import { ALL_COUNTRIES } from "@/lib/countries";
 
-type UserType = "guest" | "provider";
 type FieldErrors = Record<string, string | undefined> & { general?: string };
 
 function InputIcon({ children }: { children: React.ReactNode }) {
@@ -27,22 +23,13 @@ function InputIcon({ children }: { children: React.ReactNode }) {
 export default function RegisterPage() {
   const router = useRouter();
   const { setSession } = useAuthStore();
-  const [userType, setUserType] = useState<UserType>("guest");
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "",
     password: "", confirmPassword: "",
-    businessName: "", country: "", phone: "",
     dob: "",
   });
 
-  const [phoneCountryCode, setPhoneCountryCode] = useState("+254");
 
-  const countryDialOptions = useMemo(() => {
-    return ALL_COUNTRIES.map((c) => ({
-      value: c.dialCode,
-      label: `${c.flag} ${c.dialCode}`,
-    }));
-  }, []);
 
   const is18OrOver = useMemo(() => {
     if (!form.dob) return false;
@@ -71,10 +58,9 @@ export default function RegisterPage() {
     mutationFn: async () => {
       const payload = {
         ...form,
-        userType,
-        phone: userType === "provider" ? (form.phone ? `${phoneCountryCode}${form.phone.replace(/^0+/, "").replace(/[^0-9]/g, "")}` : undefined) : undefined,
-        businessName: userType === "provider" ? form.businessName : undefined,
-        country: userType === "provider" ? form.country || undefined : undefined,
+        // No account type is chosen at signup — the API defaults to guest and
+        // promotes on first listing. Business name / country / phone are
+        // collected later, during listing creation.
         // Registration records Privacy Policy acceptance only; the Terms are
         // accepted at checkout. Field name must match the API contract — the
         // previous `agreedToPrivacy`/`agreedAt` keys were silently dropped by
@@ -89,7 +75,7 @@ export default function RegisterPage() {
       if (data?.tokens?.accessToken && data.user) {
         storeToken(data.tokens.accessToken);
         setSession(data.tokens.accessToken, data.user as any);
-        router.replace(data.user.userType === "provider" ? "/dashboard" : "/traveller");
+        router.replace("/");
         return;
       }
       setSubmitted(true);
@@ -104,10 +90,6 @@ export default function RegisterPage() {
     e.preventDefault();
     const payload = {
       ...form,
-      userType,
-      phone: userType === "provider" ? (form.phone ? `${phoneCountryCode}${form.phone.replace(/^0+/, "").replace(/[^0-9]/g, "")}` : undefined) : undefined,
-      businessName: userType === "provider" ? form.businessName : undefined,
-      country: userType === "provider" ? form.country || undefined : undefined,
     };
     const result = registerSchema.safeParse(payload);
     if (!result.success) {
@@ -127,7 +109,6 @@ export default function RegisterPage() {
     mutation.mutate();
   }
 
-  const isProvider = userType === "provider";
 
   /* ── Email-sent success state ── */
   if (submitted) {
@@ -197,19 +178,19 @@ export default function RegisterPage() {
 
           <div className="max-w-md">
             <h2 className="text-4xl font-bold leading-[1.08] tracking-tight text-white xl:text-5xl">
-              {isProvider ? "Grow with Kainook." : "Start exploring."}
+              Start exploring.
             </h2>
             <p className="mt-4 text-base leading-relaxed text-white/75">
-              {isProvider
-                ? "List your property or fleet and reach travellers across Africa and beyond."
-                : "Create your account to book stays, homes and car rentals in minutes."}
+              Create your account to book stays, homes and car rentals in minutes.
+              You can start hosting any time by listing a property.
             </p>
 
             <ul className="mt-10 space-y-3.5">
-              {(isProvider
-                ? ["Reach travellers across every market", "Manage listings, calendar and payouts", "Transparent, country-specific commission"]
-                : ["Free to join — no booking fees to sign up", "Verified stays, homes and car rentals", "Earn rewards on every booking"]
-              ).map((point) => (
+              {[
+                "Free to join — no booking fees to sign up",
+                "Verified stays, homes and car rentals",
+                "List your own property whenever you're ready",
+              ].map((point) => (
                 <li key={point} className="flex items-center gap-3 text-sm text-white/80">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#4ade80]/15 ring-1 ring-[#4ade80]/30">
                     <svg className="h-3.5 w-3.5 text-[#4ade80]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -257,28 +238,10 @@ export default function RegisterPage() {
           <div className="mb-6">
             <h1 className="text-[26px] font-bold tracking-tight text-gray-900">Create your account</h1>
             <p className="mt-1.5 text-sm text-gray-500">
-              {isProvider
-                ? "Register as a partner host to start listing."
-                : "It takes less than a minute to get started."}
+              It takes less than a minute to get started.
             </p>
           </div>
 
-          {/* Account type */}
-          <div className="mb-6 flex gap-1 rounded-xl bg-gray-100 p-1">
-            {(["guest", "provider"] as UserType[]).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => { setUserType(t); setErrors({}); }}
-                className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all duration-200 ${userType === t
-                  ? "bg-white text-primary shadow-sm ring-1 ring-black/5"
-                  : "text-gray-500 hover:text-gray-700"
-                  }`}
-              >
-                {t === "guest" ? "🧳  Traveller" : "🏨  Provider / Host"}
-              </button>
-            ))}
-          </div>
           <form onSubmit={handleSubmit} noValidate>
             {/* First name */}
             <div className="mb-3">
@@ -344,9 +307,8 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* Date of Birth (Guest/Traveller only) */}
-            {userType === "guest" && (
-              <div className="mb-3">
+            {/* Date of Birth — required for everyone (18+ gate) */}
+            <div className="mb-3">
                 <label htmlFor="reg-dob" className="block text-xs font-medium text-gray-700 mb-1.5">Date of Birth</label>
                 <div className="relative">
                   <InputIcon>
@@ -366,74 +328,7 @@ export default function RegisterPage() {
                     <p className="text-xs text-red-500 mt-1">You must be 18 years or older to register.</p>
                   )}
                 </div>
-              </div>
-            )}
-
-            {/* Provider-only fields */}
-            {userType === "provider" && (
-              <div className="space-y-3 mb-3">
-                <div>
-                  <label htmlFor="reg-business" className="block text-xs font-medium text-gray-700 mb-1.5">Business name</label>
-                  <div className="relative">
-                    <InputIcon>
-                      <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
-                      </svg>
-                    </InputIcon>
-                    <input
-                      id="reg-business"
-                      value={form.businessName}
-                      onChange={set("businessName")}
-                      placeholder="Serena Hotels Ltd."
-                      className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.businessName ? "border-red-400" : "border-gray-200"}`}
-                    />
-                    {errors.businessName && <p className="text-xs text-red-500 mt-1">{errors.businessName}</p>}
-                  </div>
-                </div>
-                <div>
-                  <CountryCombobox
-                    label="Country"
-                    value={form.country}
-                    onChange={(code) => {
-                      setForm((p) => ({ ...p, country: code }));
-                      setErrors((p) => ({ ...p, country: undefined }));
-                    }}
-                    error={errors.country}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="reg-phone" className="block text-xs font-medium text-gray-700 mb-1.5">Phone number</label>
-                  <div className="flex gap-2">
-                    <div className="w-[100px] shrink-0">
-                      <Select
-                        value={phoneCountryCode}
-                        onChange={(e) => {
-                          setPhoneCountryCode(e.target.value);
-                          setErrors((p) => ({ ...p, phone: undefined }));
-                        }}
-                        options={countryDialOptions}
-                        className="!h-[42px] !rounded-xl !bg-[#f6fdf8] !border-gray-200 focus:!ring-primary/30 focus:!border-primary"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <input
-                        id="reg-phone"
-                        value={form.phone}
-                        onChange={(e) => {
-                          const cleaned = e.target.value.replace(/[^0-9]/g, "");
-                          setForm((p) => ({ ...p, phone: cleaned }));
-                          setErrors((p) => ({ ...p, phone: undefined }));
-                        }}
-                        placeholder="712345678"
-                        type="tel"
-                        className={`w-full h-[42px] px-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.phone ? "border-red-400" : "border-gray-200"}`}
-                      />
-                    </div>
-                  </div>
-                  {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
-                </div>
-              </div>
-            )}
+            </div>
 
             {/* Password */}
             <div className="mb-3">
@@ -534,7 +429,7 @@ export default function RegisterPage() {
             <button
               id="register-submit-btn"
               type="submit"
-              disabled={mutation.isPending || !agreedToPrivacy || (userType === "guest" && !is18OrOver)}
+              disabled={mutation.isPending || !agreedToPrivacy || !is18OrOver}
               className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
             >
               {mutation.isPending ? (
