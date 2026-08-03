@@ -19,24 +19,29 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
+import { useListingSummary } from "@/hooks/listings";
 
 interface NavItem {
   label: string;
   href: string;
   icon: React.ReactNode;
   badge?: string | number;
+  // Meaningless with zero listings — nothing to book, review, sync, or pay out
+  // on. Hidden until the portfolio has at least one, so a brand-new host sees
+  // only what they can actually use instead of a wall of empty pages.
+  requiresListing?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard",    href: "/dashboard",           icon: <LayoutDashboard /> },
   { label: "Listings",     href: "/dashboard/listings",  icon: <Building2 /> },
-  { label: "Bookings",     href: "/dashboard/bookings",  icon: <BookOpen /> },
-  { label: "Calendar",     href: "/dashboard/calendar",  icon: <CalendarDays /> },
-  { label: "Reviews",      href: "/dashboard/reviews",   icon: <Star /> },
-  { label: "Payments",     href: "/dashboard/payments",  icon: <CreditCard /> },
-  { label: "Messages",     href: "/dashboard/messaging", icon: <MessageSquare /> },
-  { label: "Earnings",     href: "/dashboard/earnings",  icon: <DollarSign /> },
-  { label: "Channel Sync", href: "/dashboard/channel",   icon: <Globe2 /> },
+  { label: "Bookings",     href: "/dashboard/bookings",  icon: <BookOpen />,        requiresListing: true },
+  { label: "Calendar",     href: "/dashboard/calendar",  icon: <CalendarDays />,    requiresListing: true },
+  { label: "Reviews",      href: "/dashboard/reviews",   icon: <Star />,            requiresListing: true },
+  { label: "Payments",     href: "/dashboard/payments",  icon: <CreditCard />,      requiresListing: true },
+  { label: "Messages",     href: "/dashboard/messaging", icon: <MessageSquare />,   requiresListing: true },
+  { label: "Earnings",     href: "/dashboard/earnings",  icon: <DollarSign />,      requiresListing: true },
+  { label: "Channel Sync", href: "/dashboard/channel",   icon: <Globe2 />,          requiresListing: true },
   { label: "Settings",     href: "/dashboard/settings",  icon: <Settings /> },
 ];
 
@@ -49,6 +54,13 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
   const pathname = usePathname();
   const prevPathname = useRef(pathname);
   const [collapsed, setCollapsed] = useState(false);
+  const { data: listingSummaryData } = useListingSummary();
+  // Default to hiding the listing-dependent items until the portfolio is
+  // confirmed non-empty — while loading, on error, or genuinely at zero, this
+  // stays false. That means the sidebar can only grow once data resolves, never
+  // flash a full list and then collapse it out from under the user.
+  const hasListings = (listingSummaryData?.listings.length ?? 0) > 0;
+  const navItems = NAV_ITEMS.filter((item) => !item.requiresListing || hasListings);
 
   // Close sidebar only when the route actually changes (not when mobileOpen toggles)
   useEffect(() => {
@@ -134,7 +146,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden py-4 scrollbar-hide">
           <ul className={cn("space-y-0.5", collapsed ? "px-2" : "px-3")}>
-            {NAV_ITEMS.map((item) => {
+            {navItems.map((item) => {
               const isActive =
                 item.href === "/dashboard"
                   ? pathname === "/dashboard"
