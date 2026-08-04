@@ -1021,21 +1021,22 @@ export default function TravellerDashboard() {
 
     try {
       // Geocode destination → lat/lng via Nominatim (free, no API key).
-      // NOTE: geocoding is used ONLY to seed the lat/lng the API requires.
-      // It is NOT the primary matching mechanism — the `q` param and the
-      // client-side text filter handle actual text relevance.
+      // Geocoding succeeding means the typed destination is a real place, which
+      // unlocks the backend's "nearby" fallback. If it fails, the search runs
+      // text-only so an unresolved/junk term never returns the whole category.
       let lat: number | undefined;
       let lng: number | undefined;
+      let geoResolved = false;
 
       const destinationLower = queryText.toLowerCase();
 
       // Fast-path for common cities — avoids a network round-trip
       if (destinationLower.includes("mombasa")) {
-        lat = -3.9820; lng = 39.7260;
+        lat = -3.9820; lng = 39.7260; geoResolved = true;
       } else if (destinationLower.includes("nairobi") || destinationLower.includes("kenya")) {
-        lat = -1.2921; lng = 36.8219;
+        lat = -1.2921; lng = 36.8219; geoResolved = true;
       } else if (destinationLower.includes("paris")) {
-        lat = 48.8566; lng = 2.3522;
+        lat = 48.8566; lng = 2.3522; geoResolved = true;
       }
 
       if (queryText && lat === undefined) {
@@ -1048,38 +1049,40 @@ export default function TravellerDashboard() {
           if (geoData && geoData.length > 0) {
             lat = parseFloat(geoData[0].lat);
             lng = parseFloat(geoData[0].lon);
+            geoResolved = true;
           }
         } catch {
-          // Geocoding failed — fall through to default coords
+          // Geocoding failed — destination stays unresolved
         }
       }
 
-      // Final fallback — always send valid coords to the backend
-      if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng)) {
-        lat = -1.2921;
-        lng = 36.8219;
-      }
-
       // Build search params.
-      // For ALL text searches (hotel name, apartment name, car name, city, country, etc.):
-      //   - Use radius_km = 20 000 (global) so results are NOT constrained by geography.
-      //   - Pass `q` and `name` so the backend's full-text index can match on listing names.
-      // For programmatic global browse (no user text): also use 20 000 km radius.
+      //   Text search, resolved place  → q + place_resolved=true + geocoded
+      //     coords → backend ranks exact → partial → nearby around the place.
+      //   Text search, unresolved term → q + place_resolved=false, no coords →
+      //     backend returns exact/partial text matches only (never the category).
+      //   Programmatic global browse   → global radius, nearest-first.
       const isGlobalBrowse = !e && !searchDestination.trim() && !destinationOverride;
       const params: Record<string, any> = {
         category: activeCategory,
         limit: 100, // Fetch a large batch so the client-side filter has enough candidates
-        lat,
-        lng,
-        // Always use global radius — text searches must not be geographically constrained.
-        radius_km: 20000,
       };
 
-      // Pass the user's raw search term as both `q` (standard) and `name` (some backends).
-      // This is the primary mechanism for finding listings by name, town, or country.
       if (isTextSearch) {
+        // Pass the user's raw search term as both `q` (standard) and `name` (some backends).
         params.q = queryText;
         params.name = queryText;
+        params.place_resolved = geoResolved ? "true" : "false";
+        if (geoResolved && lat !== undefined && lng !== undefined) {
+          params.lat = lat;
+          params.lng = lng;
+          // Nearby fallback is global — ranked nearest-first around the place
+          params.radius_km = 20000;
+        }
+      } else {
+        params.lat = lat ?? -1.2921;
+        params.lng = lng ?? 36.8219;
+        params.radius_km = 20000;
       }
 
       if (searchGuests > 1) params.guests = searchGuests;
@@ -1111,7 +1114,7 @@ export default function TravellerDashboard() {
       //   Hotels / Apartments: name, town, country, address, description
       //   Cars:                name, town, country, address, description, carMake, carModel
       let displayListings = mapped;
-      if (isTextSearch) {
+      if (isTextSearch && !geoResolved) {
         const term = queryText.toLowerCase().trim();
         displayListings = mapped.filter((listing) => {
           const fields: (string | undefined | null)[] = [
@@ -1156,21 +1159,26 @@ export default function TravellerDashboard() {
     try {
       const destinationLower = activeQuery.toLowerCase();
       let lat = -1.2921, lng = 36.8219;
-      if (destinationLower.includes("mombasa")) { lat = -3.982; lng = 39.726; }
-      else if (destinationLower.includes("paris")) { lat = 48.8566; lng = 2.3522; }
+      let geoResolved = false;
+      if (destinationLower.includes("mombasa")) { lat = -3.982; lng = 39.726; geoResolved = true; }
+      else if (destinationLower.includes("paris")) { lat = 48.8566; lng = 2.3522; geoResolved = true; }
+      else if (destinationLower.includes("nairobi") || destinationLower.includes("kenya")) { lat = -1.2921; lng = 36.8219; geoResolved = true; }
       else if (activeQuery) {
         try {
           const g = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(activeQuery)}&format=json&limit=1`, { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } });
           const gd = await g.json();
-          if (gd?.[0]) { lat = parseFloat(gd[0].lat); lng = parseFloat(gd[0].lon); }
+          if (gd?.[0]) { lat = parseFloat(gd[0].lat); lng = parseFloat(gd[0].lon); geoResolved = true; }
         } catch { }
       }
-      // Always use global radius and pass the search term so Load More stays
-      // scoped to the active query — never falls back to the full inventory.
-      const params: Record<string, any> = { category: searchCategory, limit: 100, offset: nextOffset, lat, lng, radius_km: 20000 };
+      // Stay scoped to the active query — never falls back to the full inventory.
+      const params: Record<string, any> = { category: searchCategory, limit: 100, offset: nextOffset };
       if (activeQuery) {
         params.q = activeQuery;
         params.name = activeQuery;
+        params.place_resolved = geoResolved ? "true" : "false";
+        if (geoResolved) { params.lat = lat; params.lng = lng; params.radius_km = 20000; }
+      } else {
+        params.lat = lat; params.lng = lng; params.radius_km = 20000;
       }
       if (searchGuests > 1) params.guests = searchGuests;
       if (searchRooms > 1) params.rooms = searchRooms;
@@ -1192,7 +1200,8 @@ export default function TravellerDashboard() {
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
       const mapped = results.map(mapSearchResult);
       // Apply the same client-side text filter so appended pages are also accurate
-      const filtered = activeQuery
+      // (skipped for resolved place searches — backend ranking handles relevance)
+      const filtered = activeQuery && !geoResolved
         ? mapped.filter((listing) => {
           const term = activeQuery.toLowerCase();
           const fields: (string | undefined | null)[] = [

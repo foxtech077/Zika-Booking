@@ -22,11 +22,14 @@ export async function searchRoutes(app: FastifyInstance) {
     const lat = parseFloat(q["lat"] ?? "");
     const lng = parseFloat(q["lng"] ?? "");
     const placeName = q["place_name"] ?? "";
-    // Free-text search. `place_name` was accepted but only echoed back in the
-    // response, never used as a filter — so typing anything in the destination
-    // box returned the entire category. Matches listing name as well as
-    // location fields, because the box is commonly used for both.
+    // Free-text search. Matches listing name as well as location fields,
+    // because the box is commonly used for both.
     const textQuery = (q["q"] ?? "").trim();
+    // Whether the typed destination resolved to a real geocoded location.
+    // Only a resolved place unlocks the "nearby" fallback; an unresolved
+    // text query returns exact/partial matches only so junk never returns
+    // the entire category.
+    const placeResolved = q["place_resolved"] === "true";
     // Radius is optional — when omitted, results are ranked nearest-first with
     // no distance cap (the historical 20000km default that faked a global sort).
     const radiusKm = q["radius_km"] ? parseInt(q["radius_km"], 10) : undefined;
@@ -196,7 +199,14 @@ export async function searchRoutes(app: FastifyInstance) {
     // Geo anchor (optional) — distance ranking needs both coordinates. No
     // artificial radius cap: radius_km narrows only when explicitly chosen,
     // otherwise results sort nearest-first.
-    const hasGeo = Number.isFinite(lat) && Number.isFinite(lng);
+    //
+    // For a text query the anchor is only trustworthy when the typed place
+    // actually resolved (place_resolved=true) — otherwise we run in text-only
+    // mode (exact/partial matches only) so an unresolved/junk term never
+    // returns the whole category disguised as "nearby".
+    const hasGeoCoords = Number.isFinite(lat) && Number.isFinite(lng);
+    const textOnly = !!textQuery && !(placeResolved && hasGeoCoords);
+    const hasGeo = hasGeoCoords && !textOnly;
     let lngRef: string | null = null;
     let latRef: string | null = null;
     if (hasGeo) {
@@ -222,6 +232,11 @@ export async function searchRoutes(app: FastifyInstance) {
       const exact = fields.map((f) => `public.f_unaccent(lower(${f})) = ${normQ}`);
       const partial = fields.map((f) => `public.f_unaccent(lower(${f})) LIKE '%' || ${normQ} || '%'`);
       textRankExpr = `CASE WHEN ${exact.join(" OR ")} THEN 0 WHEN ${partial.join(" OR ")} THEN 1 ELSE 2 END AS text_rank`;
+      // Text-only mode: the destination did not resolve to a real location, so
+      // only genuine text matches (exact/partial) are eligible — no nearby fill.
+      if (textOnly) {
+        push(`(${exact.join(" OR ")} OR ${partial.join(" OR ")})`);
+      }
     }
 
     const pointExpr = hasGeo && lngRef && latRef
@@ -254,9 +269,10 @@ export async function searchRoutes(app: FastifyInstance) {
     `;
     params.push(limit, cursor);
 
-    // The text-query param only appears in the SELECT (text_rank), never in the
-    // WHERE — so the COUNT query must exclude it or Postgres rejects the bind.
-    const countParamCount = paginationStart - (textQuery ? 1 : 0);
+    // The text-query param appears in the COUNT's WHERE only in text-only mode;
+    // in resolved mode it lives only in the SELECT (text_rank), so the COUNT
+    // must exclude it there or Postgres rejects the bind.
+    const countParamCount = paginationStart - (textQuery && !textOnly ? 1 : 0);
 
     const [pageRows, countRows] = await Promise.all([
       prisma.$queryRawUnsafe<Array<{ id: string; distance_km: number | null; lat: number | null; lng: number | null }>>(
@@ -455,6 +471,7 @@ export async function searchRoutes(app: FastifyInstance) {
           lat: { type: "number", description: "Latitude of search centre — optional; omitted → no distance ranking" },
           lng: { type: "number", description: "Longitude of search centre — optional; omitted → no distance ranking" },
           q: { type: "string", description: "Free-text destination search — matches listing name/location fields accent-insensitively; exact → partial → nearby ranked" },
+          place_resolved: { type: "string", enum: ["true", "false"], description: "Set true only when the typed destination resolved to a real geocoded location; unlocks the nearby fallback for q. When false/absent, q returns exact/partial text matches only." },
           place_name: { type: "string", description: "Human-readable place name (for logging)" },
           radius_km: { type: "integer", description: "Search radius in km — only applied when explicitly provided; omitted → nearest-first without a cap" },
           check_in: { type: "string", description: "Hotel/apartment check-in date (YYYY-MM-DD)" },
