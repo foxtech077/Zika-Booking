@@ -1,5 +1,6 @@
 import { AUTH_API_URL } from '$lib/config';
 import type { AuthUser } from '$lib/stores/auth.svelte';
+import { getToken } from '$lib/http';
 
 /**
  * Auth-service client.
@@ -53,6 +54,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 			...(init.headers as Record<string, string> | undefined)
 		};
 		if (init.body) headers['Content-Type'] = 'application/json';
+		const token = getToken();
+		if (token) headers.Authorization = `Bearer ${token}`;
 
 		const res = await fetch(`${AUTH_API_URL}${path}`, {
 			...init,
@@ -157,6 +160,94 @@ export async function logout(): Promise<void> {
 	} catch {
 		// best-effort — local session is cleared regardless
 	}
+}
+
+/** Fetch the current user's full profile. */
+export async function getMe(): Promise<AuthUser> {
+	const data = await request<{ user: AuthUser }>('/auth/me', { method: 'GET' });
+	return data.user;
+}
+
+/** Update the current user's profile (name / country). */
+export async function updateProfile(payload: {
+	firstName: string;
+	lastName: string;
+	country?: string | null;
+}): Promise<AuthUser> {
+	const data = await request<{ user: AuthUser }>('/auth/profile', {
+		method: 'PATCH',
+		body: JSON.stringify({
+			firstName: payload.firstName,
+			lastName: payload.lastName,
+			...(payload.country ? { country: payload.country } : { country: null })
+		})
+	});
+	return data.user;
+}
+
+/** Change the current user's password while signed in. */
+export function changePassword(payload: {
+	currentPassword: string;
+	newPassword: string;
+	confirmPassword: string;
+}): Promise<{ message?: string }> {
+	return request('/auth/change-password', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+/** Fetch the current user's host profile (accreditation) + status. */
+export async function getHostProfile(): Promise<{
+	status: 'approved' | 'pending' | 'rejected' | null;
+	businessName: string | null;
+	registrationNo: string | null;
+	taxId: string | null;
+	documentsUrl: string | null;
+	submittedAt: string | null;
+	reviewedAt: string | null;
+	rejectionReason: string | null;
+} | null> {
+	const data = await request<{ hostProfile: unknown }>('/auth/host/profile', { method: 'GET' });
+	const p = data.hostProfile as {
+		status?: 'approved' | 'pending' | 'rejected' | null;
+		businessName?: string | null;
+		registrationNo?: string | null;
+		taxId?: string | null;
+		documentsUrl?: string | null;
+		submittedAt?: string | null;
+		reviewedAt?: string | null;
+		rejectionReason?: string | null;
+	} | null;
+	if (!p) return null;
+	return {
+		status: p.status ?? null,
+		businessName: p.businessName ?? null,
+		registrationNo: p.registrationNo ?? null,
+		taxId: p.taxId ?? null,
+		documentsUrl: p.documentsUrl ?? null,
+		submittedAt: p.submittedAt ?? null,
+		reviewedAt: p.reviewedAt ?? null,
+		rejectionReason: p.rejectionReason ?? null
+	};
+}
+
+/** Submit or update the current user's host profile (accreditation → pending). */
+export async function submitHostProfile(payload: {
+	businessName: string;
+	registrationNo?: string;
+	taxId?: string;
+	documentsUrl?: string;
+}): Promise<{ message: string; hostProfile: unknown }> {
+	return request('/auth/host/profile', {
+		method: 'POST',
+		body: JSON.stringify({
+			businessName: payload.businessName,
+			...(payload.registrationNo ? { registrationNo: payload.registrationNo } : {}),
+			...(payload.taxId ? { taxId: payload.taxId } : {}),
+			...(payload.documentsUrl ? { documentsUrl: payload.documentsUrl } : {})
+		})
+	});
 }
 
 // ── Inline validators (mirror @zika/validators rules) ─────────────────────────

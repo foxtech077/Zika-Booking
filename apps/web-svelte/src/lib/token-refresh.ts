@@ -66,13 +66,18 @@ export async function refreshAccessToken(): Promise<string | null> {
  */
 export function decodeJwtPayload(
 	token: string
-): { exp?: number; type?: string; sub?: string } | null {
+): { exp?: number; type?: string; sub?: string; hostStatus?: string | null } | null {
 	if (typeof atob !== 'function') return null;
 	try {
 		const parts = token.split('.');
 		if (parts.length < 2) return null;
 		const json = atob(parts[1]!.replace(/-/g, '+').replace(/_/g, '/'));
-		return JSON.parse(json) as { exp?: number; type?: string; sub?: string };
+		return JSON.parse(json) as {
+			exp?: number;
+			type?: string;
+			sub?: string;
+			hostStatus?: string | null;
+		};
 	} catch {
 		return null;
 	}

@@ -54,3 +54,36 @@ export function todayString(): string {
 	const day = String(d.getDate()).padStart(2, '0');
 	return `${d.getFullYear()}-${m}-${day}`;
 }
+
+export function formatDate(
+	iso: string | null | undefined,
+	opts: Intl.DateTimeFormatOptions = {}
+): string {
+	if (!iso) return '—';
+	const d = new Date(iso);
+	if (isNaN(d.getTime())) return '—';
+	return d.toLocaleDateString('en', {
+		month: 'short',
+		day: 'numeric',
+		year: 'numeric',
+		...opts
+	});
+}
+
+/** Compact relative time, e.g. "2h ago", "3d ago", "just now". */
+export function formatRelativeTime(iso: string | null | undefined): string {
+	if (!iso) return '';
+	const then = new Date(iso).getTime();
+	if (isNaN(then)) return '';
+	const diff = Date.now() - then;
+	if (diff < 60_000) return 'just now';
+	const minutes = Math.floor(diff / 60_000);
+	if (minutes < 60) return `${minutes}m ago`;
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) return `${hours}h ago`;
+	const days = Math.floor(hours / 24);
+	if (days < 7) return `${days}d ago`;
+	const weeks = Math.floor(days / 7);
+	if (weeks < 5) return `${weeks}w ago`;
+	return formatDate(iso);
+}

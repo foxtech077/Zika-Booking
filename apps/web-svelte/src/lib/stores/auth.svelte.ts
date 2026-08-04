@@ -25,6 +25,8 @@ export interface AuthUser {
 	emailVerified: boolean;
 	currentTier: string;
 	loyaltyPoints: number;
+	/** Host profile (Accreditation) status. Only 'approved' may manage listings. */
+	hostStatus?: 'approved' | 'pending' | 'rejected' | null;
 	/** Set by the API when the user has never accepted the Privacy Policy or
 	 *  accepted a superseded version. Gates entry to the app. */
 	requiresPrivacyAcceptance?: boolean;
@@ -80,8 +82,15 @@ export function initAuth(): void {
 	if (initialized || !browser) return;
 	initialized = true;
 	const { user: storedUser } = readPersisted();
-	auth.user = storedUser;
+	auth.user = storedUser ? normalizeUser(storedUser) : null;
 	auth.isAuthenticated = !!storedUser || hasToken();
+}
+
+/** Email addresses are case-insensitive — normalise to lowercase for display
+ *  and matching (the auth service lowercases on registration too). */
+function normalizeUser(user: AuthUser): AuthUser {
+	if (user.email) return { ...user, email: user.email.trim().toLowerCase() };
+	return user;
 }
 
 export function setSession(token: string, user: AuthUser): void {
@@ -94,14 +103,15 @@ export function setSession(token: string, user: AuthUser): void {
 	}
 	// A freshly minted anonymous token must not outlive a login — otherwise the
 	// booking request helpers would fall back to it and masquerade as the guest.
-	persistUser(user);
-	auth.user = user;
+	const normalized = normalizeUser(user);
+	persistUser(normalized);
+	auth.user = normalized;
 	auth.isAuthenticated = true;
 }
 
 export function updateUser(updates: Partial<AuthUser>): void {
 	if (!auth.user) return;
-	const next = { ...auth.user, ...updates };
+	const next = normalizeUser({ ...auth.user, ...updates });
 	persistUser(next);
 	auth.user = next;
 }

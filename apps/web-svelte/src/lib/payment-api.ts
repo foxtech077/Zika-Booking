@@ -1,9 +1,5 @@
 import { PAYMENT_API_URL, LISTING_API_URL } from '$lib/config';
-import { getToken, clearToken, requestAnonymousToken } from '$lib/booking-api';
-import { refreshAccessToken, hasAccountToken } from '$lib/token-refresh';
-import { clearSession } from '$lib/stores/auth.svelte';
-
-const REQUEST_TIMEOUT_MS = 15_000;
+import { apiRequest } from '$lib/http';
 
 export interface CreateIntentResult {
 	paymentId: string;
@@ -40,72 +36,9 @@ export interface FxConvertResult {
 	to: string;
 }
 
-type RequestInitWithRetry = RequestInit & { _retried?: boolean };
-
-/** Shared request helper for the payment service (and listing-service FX). */
-async function request<T>(url: string, init: RequestInitWithRetry = {}): Promise<T> {
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-	try {
-		const headers: Record<string, string> = {
-			Accept: 'application/json',
-			...(init.headers as Record<string, string> | undefined)
-		};
-		if (init.body) headers['Content-Type'] = 'application/json';
-		const token = getToken();
-		if (token) headers.Authorization = `Bearer ${token}`;
-		const res = await fetch(url, { ...init, headers, signal: controller.signal });
-		const json = (await res.json().catch(() => ({}))) as {
-			success?: boolean;
-			data?: unknown;
-			error?: { code?: string; message?: string };
-		};
-		if (!res.ok || json?.success === false) {
-			const code = json?.error?.code;
-			const message = json?.error?.message ?? `Request failed (${res.status})`;
-			const err = new Error(message) as Error & { code?: string; status?: number };
-			err.code = code;
-			err.status = res.status;
-			// A 401 means the bearer token expired (or is invalid). Recover once:
-			//   • account token → refresh it via the auth-service proxy, retry
-			//   • anonymous / no token → mint a fresh anonymous token (same
-			//     stable sub), retry
-			if (res.status === 401 && !init._retried) {
-				const hadAccountToken = hasAccountToken(getToken());
-				init._retried = true;
-				if (hadAccountToken) {
-					const newToken = await refreshAccessToken();
-					if (newToken) {
-						init.headers = {
-							...(init.headers as Record<string, string>),
-							Authorization: `Bearer ${newToken}`
-						};
-						return request<T>(url, init);
-					}
-					clearSession();
-				} else {
-					clearToken();
-					const { accessToken } = await requestAnonymousToken();
-					if (accessToken) {
-						init.headers = {
-							...(init.headers as Record<string, string>),
-							Authorization: `Bearer ${accessToken}`
-						};
-						return request<T>(url, init);
-					}
-				}
-			}
-			throw err;
-		}
-		return json.data as T;
-	} finally {
-		clearTimeout(timer);
-	}
-}
-
 /** Creates a Stripe PaymentIntent for a freshly-created booking. */
 export async function createPaymentIntent(bookingId: string): Promise<CreateIntentResult> {
-	return request<CreateIntentResult>(`${PAYMENT_API_URL}/payments/create-intent`, {
+	return apiRequest<CreateIntentResult>(PAYMENT_API_URL, '/payments/create-intent', {
 		method: 'POST',
 		body: JSON.stringify({ bookingId })
 	});
@@ -118,7 +51,7 @@ export async function initiatePayment(input: {
 	mobileNumber?: string;
 	paymentMethodId?: string;
 }): Promise<InitiatePaymentResult> {
-	return request<InitiatePaymentResult>(`${PAYMENT_API_URL}/payments/initiate`, {
+	return apiRequest<InitiatePaymentResult>(PAYMENT_API_URL, '/payments/initiate', {
 		method: 'POST',
 		body: JSON.stringify(input)
 	});
@@ -126,8 +59,9 @@ export async function initiatePayment(input: {
 
 /** Polls the status of a payment until captured/failed/timed out. */
 export async function fetchPaymentStatus(paymentId: string): Promise<PaymentStatus> {
-	return request<PaymentStatus>(
-		`${PAYMENT_API_URL}/payments/${encodeURIComponent(paymentId)}/status`,
+	return apiRequest<PaymentStatus>(
+		PAYMENT_API_URL,
+		`/payments/${encodeURIComponent(paymentId)}/status`,
 		{
 			method: 'GET'
 		}
@@ -137,7 +71,7 @@ export async function fetchPaymentStatus(paymentId: string): Promise<PaymentStat
 /** Cancels an abandoned Stripe payment (idempotent, best-effort). */
 export async function cancelPayment(paymentId: string): Promise<void> {
 	try {
-		await request<null>(`${PAYMENT_API_URL}/payments/${encodeURIComponent(paymentId)}/cancel`, {
+		await apiRequest<null>(PAYMENT_API_URL, `/payments/${encodeURIComponent(paymentId)}/cancel`, {
 			method: 'POST',
 			body: JSON.stringify({})
 		});
@@ -154,7 +88,7 @@ export async function convertFx(
 ): Promise<FxConvertResult | null> {
 	try {
 		const query = new URLSearchParams({ amount: String(amount), from, to });
-		return await request<FxConvertResult>(`${LISTING_API_URL}/fx/convert?${query.toString()}`, {
+		return await apiRequest<FxConvertResult>(LISTING_API_URL, `/fx/convert?${query.toString()}`, {
 			method: 'GET'
 		});
 	} catch {

@@ -9,12 +9,30 @@
 	// below would otherwise shadow them (crawlers use the first occurrence).
 	const isListingDetail = $derived(/^\/listings\/[^/]+\/?$/.test(page.url.pathname));
 
+	// Account pages share a single layout with an in-page tab bar. Switching
+	// tabs is a same-shell navigation, so a full-document cross-fade is
+	// distracting — the account layout fades only its content instead.
+	const ACCOUNT_PREFIXES = [
+		'/bookings',
+		'/messages',
+		'/wishlist',
+		'/reviews',
+		'/profile',
+		'/notifications'
+	];
+	function isAccountPath(path: string): boolean {
+		return ACCOUNT_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
+	}
+
 	// Cross-fade between pages using the native View Transitions API, so the
 	// whole page doesn't hard-swap on client-side navigation. Wrapped in the
 	// document to keep the same element (e.g. the header) from flashing.
 	onNavigate((navigation) => {
 		const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 		if (reduceMotion || !('startViewTransition' in document)) return;
+		const from = navigation.from?.url.pathname ?? '';
+		const to = navigation.to?.url.pathname ?? '';
+		if (isAccountPath(from) && isAccountPath(to)) return;
 		return new Promise<void>((resolve) => {
 			document.startViewTransition(() => {
 				resolve();

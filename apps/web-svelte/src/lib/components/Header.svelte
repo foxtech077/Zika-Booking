@@ -1,8 +1,12 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { auth, clearSession } from '$lib/stores/auth.svelte';
 	import { logout } from '$lib/auth-api';
+	import { getUnreadNotificationCount, getUnreadConversationCount } from '$lib/account-api';
+	import { getToken } from '$lib/http';
+	import { decodeJwtPayload } from '$lib/token-refresh';
 	import Avatar from './Avatar.svelte';
 	import CountrySelector from './CountrySelector.svelte';
 	import { cn } from '$lib/utils';
@@ -24,15 +28,59 @@
 	let mobileMenuOpen = $state(false);
 	let dropdownRef = $state<HTMLDivElement | null>(null);
 
+	let unreadNotifications = $state(0);
+	let unreadMessages = $state(0);
+	let notifTimer: ReturnType<typeof setInterval> | null = null;
+	let msgTimer: ReturnType<typeof setInterval> | null = null;
+
 	const pathname = $derived(String(page.url.pathname));
 	const searchParams = $derived(page.url.searchParams);
 	const searchSignature = $derived(searchParams.toString());
+
+	// Host status comes from the JWT claim (issued at login/refresh), so the
+	// header can gate the "Become a Host" entry without an extra API call.
+	const hostStatus = $derived(decodeJwtPayload(getToken() ?? '')?.hostStatus ?? null);
+	const hostLabel = $derived(
+		hostStatus === 'approved'
+			? 'Manage Hosting'
+			: hostStatus === 'pending'
+				? 'Host application pending'
+				: hostStatus === 'rejected'
+					? 'Reapply to host'
+					: 'Become a Host'
+	);
+
+	function refreshUnread(): void {
+		void (async () => {
+			try {
+				unreadNotifications = await getUnreadNotificationCount();
+			} catch {
+				// non-fatal — keep the previous badge
+			}
+			try {
+				unreadMessages = await getUnreadConversationCount();
+			} catch {
+				// non-fatal
+			}
+		})();
+	}
+
+	onMount(() => {
+		if (!auth.isAuthenticated) return;
+		refreshUnread();
+		notifTimer = setInterval(refreshUnread, 30_000);
+		msgTimer = setInterval(refreshUnread, 30_000);
+		return () => {
+			if (notifTimer) clearInterval(notifTimer);
+			if (msgTimer) clearInterval(msgTimer);
+		};
+	});
 
 	const isDestinationsActive = $derived(pathname === '/' && searchParams.get('tab') !== 'bookings');
 	const isHotelsActive = $derived(pathname === ROUTES.hotels);
 	const isApartmentsActive = $derived(pathname === ROUTES.apartments);
 	const isCarsActive = $derived(pathname === ROUTES.cars);
-	const isBookingsActive = $derived(pathname === '/' && searchParams.get('tab') === 'bookings');
+	const isBookingsActive = $derived(pathname.startsWith(ROUTES.bookings));
 	const isMessagesActive = $derived(pathname.startsWith(ROUTES.messages));
 	const isReviewsActive = $derived(pathname.startsWith(ROUTES.reviews));
 	const isWishlistActive = $derived(pathname.startsWith(ROUTES.wishlist));
@@ -175,6 +223,13 @@
 								d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
 							/>
 						</svg>
+						{#if unreadNotifications > 0}
+							<span
+								class="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] leading-none font-bold text-white"
+							>
+								{unreadNotifications > 9 ? '9+' : unreadNotifications}
+							</span>
+						{/if}
 					</a>
 
 					<!-- Avatar dropdown -->
@@ -196,7 +251,7 @@
 								<p
 									class={cn(
 										'max-w-[100px] truncate text-xs leading-none font-semibold',
-										menuOpen ? 'text-white' : 'text-slate-800'
+										menuOpen || isProfileActive ? 'text-white' : 'text-slate-800'
 									)}
 								>
 									{fullName}
@@ -204,7 +259,7 @@
 								<p
 									class={cn(
 										'mt-0.5 max-w-[100px] truncate text-[10px]',
-										menuOpen ? 'text-green-200/80' : 'text-slate-400'
+										menuOpen || isProfileActive ? 'text-green-200/80' : 'text-slate-400'
 									)}
 								>
 									{email}
@@ -213,7 +268,8 @@
 							<svg
 								class={cn(
 									'h-3.5 w-3.5 transition-transform',
-									menuOpen ? 'rotate-180 text-white/70' : 'text-slate-400'
+									menuOpen ? 'rotate-180' : '',
+									menuOpen || isProfileActive ? 'text-white/70' : 'text-slate-400'
 								)}
 								fill="none"
 								stroke="currentColor"
@@ -257,6 +313,27 @@
 										/>
 									</svg>
 									Profile
+								</a>
+
+								<a
+									href="/host"
+									onclick={() => (menuOpen = false)}
+									class="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-slate-600 transition-all hover:bg-slate-50 hover:text-slate-900"
+								>
+									<svg
+										class="h-4 w-4 text-green-600"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										viewBox="0 0 24 24"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72m-13.5 8.65h3.75a.75.75 0 00.75-.75V13.5a.75.75 0 00-.75-.75H6.75a.75.75 0 00-.75.75v3.75c0 .414.336.75.75.75z"
+										/>
+									</svg>
+									{hostLabel}
 								</a>
 
 								<div class="my-1 border-t border-slate-100"></div>
@@ -311,6 +388,13 @@
 										/>
 									</svg>
 									<span class="flex-1">Messages</span>
+									{#if unreadMessages > 0}
+										<span
+											class="flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] leading-none font-bold text-white"
+										>
+											{unreadMessages > 9 ? '9+' : unreadMessages}
+										</span>
+									{/if}
 								</a>
 
 								<a
@@ -524,6 +608,13 @@
 							{@render mobileNavBtn('Wishlist', ROUTES.wishlist, isWishlistActive)}
 							{@render mobileNavBtn('My Reviews', ROUTES.reviews, isReviewsActive)}
 							{@render mobileNavBtn('Profile', ROUTES.profile, isProfileActive)}
+							<a
+								href="/host"
+								onclick={() => (mobileMenuOpen = false)}
+								class="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1D8D2B] hover:text-[#0c2614]"
+							>
+								<span>{hostLabel}</span>
+							</a>
 							<button
 								type="button"
 								onclick={handleLogout}
