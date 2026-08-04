@@ -19,6 +19,7 @@ export interface User {
   currentTier: LoyaltyTier;
   loyaltyPoints: number;
   createdAt: string;
+  hostStatus?: HostStatus;
 }
 
 export interface PublicUser {
@@ -34,6 +35,7 @@ export interface PublicUser {
   currentTier: LoyaltyTier;
   loyaltyPoints: number;
   photoUrl?: string | null;
+  hostStatus?: HostStatus;
   requiresTermsAcceptance?: boolean;
   requiresPrivacyAcceptance?: boolean;
   termsAcceptedAt?: string | Date | null;
