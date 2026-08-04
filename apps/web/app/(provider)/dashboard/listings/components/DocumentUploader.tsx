@@ -35,7 +35,8 @@ const refreshAccessToken = async () => {
         throw new Error("Refresh succeeded, but no access token was returned.");
       if (typeof window !== "undefined") sessionStorage.setItem(TOKEN_KEY, accessToken);
       const { user, setSession } = useAuthStore.getState();
-      if (user) setSession(accessToken, user);
+      const refreshedUser = body?.data?.user ?? body?.user ?? user;
+      if (refreshedUser) setSession(accessToken, refreshedUser);
       return accessToken as string;
     })().finally(() => {
       refreshPromise = null;

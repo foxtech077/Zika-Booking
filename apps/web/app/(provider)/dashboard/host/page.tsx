@@ -54,20 +54,15 @@ export default function HostOnboardingPage() {
     }
   }, [hostProfile]);
 
-  // Sync the live host status into the auth store. The JWT claim is minted at
-  // login/refresh, so a freshly-approved host would otherwise still look like
-  // `null` to the dashboard layout and get bounced straight back here.
+  // A freshly-approved host's JWT claim is stale (null) until re-minted, and
+  // the backend gates listing endpoints on that claim — without a refresh,
+  // /provider/* and /listings still 403 HOST_REQUIRED after approval. Refresh
+  // the access token once; /auth/refresh now returns the fresh user object
+  // (including hostStatus), so the auth store is updated by the refresh helper
+  // and the dashboard gate no longer bounces an approved host back here.
   const refreshedApprovalRef = useRef(false);
   useEffect(() => {
-    if (!hostProfile?.status) return;
-    if (hostProfile.status !== (user?.hostStatus ?? null)) {
-      updateUser({ hostStatus: hostProfile.status } as never);
-    }
-    // The backend also gates listing endpoints on the hostStatus claim inside
-    // the JWT, which is stale (null) for a just-approved host. Refresh the
-    // access token once so it is re-minted with hostStatus: approved — without
-    // this, /provider/* and /listings still 403 HOST_REQUIRED after approval.
-    if (hostProfile.status === "approved" && user?.hostStatus !== "approved" && !refreshedApprovalRef.current) {
+    if (hostProfile?.status === "approved" && user?.hostStatus !== "approved" && !refreshedApprovalRef.current) {
       refreshedApprovalRef.current = true;
       refreshAccessToken().catch(() => {});
     }
