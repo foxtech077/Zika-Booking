@@ -45,12 +45,13 @@
 				taxId = p.taxId ?? '';
 				documentsUrl = p.documentsUrl ?? '';
 			}
-			// Keep the store + JWT in sync so the header shows the right state.
-			if (p?.status) {
-				updateUser({ hostStatus: p.status });
-				if (p.status === 'approved' && auth.user?.hostStatus !== 'approved') {
-					void refreshAccessToken().catch(() => {});
-				}
+			// hostStatus is now a normal profile field populated from /auth/me
+			// and the refresh response, so no manual store patch is needed for
+			// the header. A just-approved host still needs a token refresh — the
+			// backend listing routes gate on the hostStatus JWT claim, which was
+			// minted before the approval.
+			if (p?.status === 'approved' && auth.user?.hostStatus !== 'approved') {
+				void refreshAccessToken().catch(() => {});
 			}
 		} catch {
 			loadingError = 'Could not load your host profile.';
@@ -82,6 +83,8 @@
 				});
 				const p = res.hostProfile as HostProfile | null;
 				hostProfile = p;
+				// Submitting always moves the accreditation to pending — keep the
+				// profile field in sync so the header reflects it immediately.
 				updateUser({ hostStatus: 'pending' });
 			} catch (e) {
 				submitError =
@@ -101,7 +104,9 @@
 		}
 	}
 
-	const status = $derived(hostProfile?.status ?? null);
+	// hostStatus is a normal profile field now — read it from the user object
+	// (the backend REST body) so the banner and header always agree.
+	const status = $derived(auth.user?.hostStatus ?? null);
 </script>
 
 <div class="mx-auto w-full max-w-3xl space-y-6">

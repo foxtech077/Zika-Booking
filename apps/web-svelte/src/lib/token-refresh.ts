@@ -8,7 +8,7 @@
  */
 
 import { browser } from '$app/environment';
-import { setSession } from '$lib/stores/auth.svelte';
+import { setSession, type AuthUser } from '$lib/stores/auth.svelte';
 
 const TOKEN_KEY = 'kainook:access_token';
 
@@ -32,7 +32,7 @@ export async function refreshAccessToken(): Promise<string | null> {
 			if (!res.ok) return null;
 
 			const body = (await res.json().catch(() => ({}))) as {
-				data?: { tokens?: { accessToken?: string } };
+				data?: { tokens?: { accessToken?: string }; user?: AuthUser };
 			};
 
 			const newToken: string | undefined = body?.data?.tokens?.accessToken;
@@ -43,11 +43,13 @@ export async function refreshAccessToken(): Promise<string | null> {
 				localStorage.setItem(TOKEN_KEY, newToken);
 			}
 
-			// Refresh the persisted user profile too — the store rehydrates from
-			// storage, so keep it in sync with the freshly-minted session.
+			// The auth service returns a fresh user alongside the rotated tokens
+			// (including hostStatus), so persist it — otherwise an approved host
+			// would keep a stale profile until the next full login.
 			const { auth } = await import('$lib/stores/auth.svelte');
-			if (auth.user) {
-				setSession(newToken, auth.user);
+			const freshUser = body?.data?.user ?? auth.user;
+			if (freshUser) {
+				setSession(newToken, freshUser);
 			}
 
 			return newToken;
@@ -63,21 +65,18 @@ export async function refreshAccessToken(): Promise<string | null> {
 
 /**
  * Best-effort JWT payload decode (client-side, no signature verification).
+ * Used only to distinguish account vs anonymous tokens — host status is a
+ * regular profile field now, not read from the JWT.
  */
 export function decodeJwtPayload(
 	token: string
-): { exp?: number; type?: string; sub?: string; hostStatus?: string | null } | null {
+): { exp?: number; type?: string; sub?: string } | null {
 	if (typeof atob !== 'function') return null;
 	try {
 		const parts = token.split('.');
 		if (parts.length < 2) return null;
 		const json = atob(parts[1]!.replace(/-/g, '+').replace(/_/g, '/'));
-		return JSON.parse(json) as {
-			exp?: number;
-			type?: string;
-			sub?: string;
-			hostStatus?: string | null;
-		};
+		return JSON.parse(json) as { exp?: number; type?: string; sub?: string };
 	} catch {
 		return null;
 	}

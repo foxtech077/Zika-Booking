@@ -5,8 +5,6 @@
 	import { auth, clearSession } from '$lib/stores/auth.svelte';
 	import { logout } from '$lib/auth-api';
 	import { getUnreadNotificationCount, getUnreadConversationCount } from '$lib/account-api';
-	import { getToken } from '$lib/http';
-	import { decodeJwtPayload } from '$lib/token-refresh';
 	import Avatar from './Avatar.svelte';
 	import CountrySelector from './CountrySelector.svelte';
 	import { cn } from '$lib/utils';
@@ -37,9 +35,10 @@
 	const searchParams = $derived(page.url.searchParams);
 	const searchSignature = $derived(searchParams.toString());
 
-	// Host status comes from the JWT claim (issued at login/refresh), so the
-	// header can gate the "Become a Host" entry without an extra API call.
-	const hostStatus = $derived(decodeJwtPayload(getToken() ?? '')?.hostStatus ?? null);
+	// Host status is now a normal profile field from the auth service REST
+	// body (publicUser), so the header reads it from the user object — no JWT
+	// decode needed.
+	const hostStatus = $derived(auth.user?.hostStatus ?? null);
 	const hostLabel = $derived(
 		hostStatus === 'approved'
 			? 'Manage Hosting'
