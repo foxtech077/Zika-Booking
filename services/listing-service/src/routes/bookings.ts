@@ -1182,7 +1182,8 @@ export async function bookingRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireAuth],
+      // Read-only price preview — no identity needed. Guests must be able to
+      // see a price while browsing without minting an anonymous session.
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const body = req.body as {

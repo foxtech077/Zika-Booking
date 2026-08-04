@@ -1,6 +1,6 @@
 import axios from "axios";
 import { refreshAccessToken, clearAuthSession } from "@/lib/token-refresh";
-import { getAnonymousToken } from "@/lib/anonymous";
+import { getAnonymousToken, ensureAnonymousToken } from "@/lib/anonymous";
 
 const TOKEN_KEY = "zika:access_token";
 
@@ -40,19 +40,27 @@ listingApi.interceptors.response.use(
     const original = err.config as typeof err.config & { _retry?: boolean; _anon?: boolean };
 
     if (err.response?.status === 401 && !original._retry && typeof window !== "undefined") {
-      // Anonymous tokens are stateless — there is no refresh cookie to exchange,
-      // so treat their 401 as a plain failure and let the caller handle it.
-      if (original._anon) return Promise.reject(err);
-
-      // Only a request that actually carried a token represents an expired
-      // session worth refreshing. A logged-out visitor has nothing to refresh,
-      // and treating their 401 as an expiry used to clear storage and hard
-      // redirect to /auth/login — so simply browsing a listing kicked guests
-      // out. Let the caller's own error handling deal with it instead.
-      const hadToken =
+      const hadAccountToken =
         sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
-      if (!hadToken) return Promise.reject(err);
 
+      // Guest / anonymous-token request. The anonymous token is stateless with
+      // no refresh cookie, and may be missing (a guest browsing before ever
+      // starting a booking) or expired (30-min TTL). Re-mint it and retry once
+      // so a stale anon token never surfaces as a hard 401 to the caller.
+      if (!hadAccountToken || original._anon) {
+        original._retry = true;
+        const freshAnon = await ensureAnonymousToken();
+        if (freshAnon) {
+          original.headers = { ...original.headers, Authorization: `Bearer ${freshAnon}` };
+          return listingApi(original);
+        }
+        return Promise.reject(err);
+      }
+
+      // Signed-in session: only a request that actually carried an account
+      // token represents an expired session worth refreshing. Treating the
+      // absence of a token as an expiry used to clear storage and hard-redirect
+      // to /auth/login, which kicked logged-out visitors mid-browse.
       original._retry = true;
 
       const newToken = await refreshAccessToken();

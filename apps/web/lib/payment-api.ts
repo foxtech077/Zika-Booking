@@ -1,6 +1,6 @@
 import axios from "axios";
 import { refreshAccessToken, clearAuthSession } from "@/lib/token-refresh";
-import { getAnonymousToken } from "@/lib/anonymous";
+import { getAnonymousToken, ensureAnonymousToken } from "@/lib/anonymous";
 
 const TOKEN_KEY = "zika:access_token";
 
@@ -39,13 +39,21 @@ paymentApi.interceptors.response.use(
     const original = err.config as typeof err.config & { _retry?: boolean; _anon?: boolean };
 
     if (err.response?.status === 401 && !original._retry && typeof window !== "undefined") {
-      // Anonymous tokens are stateless — no refresh cookie to exchange — so a
-      // 401 is a plain failure, not an expired session worth refreshing.
-      if (original._anon) return Promise.reject(err);
-
-      const hadToken =
+      const hadAccountToken =
         sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
-      if (!hadToken) return Promise.reject(err);
+
+      // Guest / anonymous-token request. The anonymous token is stateless with
+      // no refresh cookie and a short TTL — re-mint it and retry once so a
+      // stale anon token never surfaces as a hard 401 to the caller.
+      if (!hadAccountToken || original._anon) {
+        original._retry = true;
+        const freshAnon = await ensureAnonymousToken();
+        if (freshAnon) {
+          original.headers = { ...original.headers, Authorization: `Bearer ${freshAnon}` };
+          return paymentApi(original);
+        }
+        return Promise.reject(err);
+      }
 
       original._retry = true;
 

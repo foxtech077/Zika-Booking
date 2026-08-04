@@ -49,12 +49,46 @@ export function clearAnonymousToken() {
 }
 
 /**
- * Returns an existing anonymous token, or mints a fresh one. Best-effort:
- * a failure returns null and the caller falls back to its normal auth flow.
+ * The anonymous token is short-lived (JWT exp) with no refresh path, so a
+ * stored token can be dead while still present. Re-mint whenever it is
+ * missing, expired, or expiring within the skew window. The anon sub is
+ * derived from the stable deviceId, so re-minting keeps the same guestId and
+ * any in-flight anonymous booking stays linked.
+ */
+function base64UrlDecode(input: string): string {
+  const base64 = input.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  return atob(padded);
+}
+
+const ANON_TOKEN_EXPIRY_SKEW_MS = 60 * 1000;
+
+function isAnonymousTokenExpired(token: string): boolean {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return true;
+    const decoded = JSON.parse(base64UrlDecode(payload));
+    if (typeof decoded?.exp !== "number") return true;
+    return decoded.exp * 1000 - ANON_TOKEN_EXPIRY_SKEW_MS <= Date.now();
+  } catch {
+    // Any decode failure is treated as expired so a stale token is never reused.
+    return true;
+  }
+}
+
+/**
+ * Returns a valid anonymous token (re-minting when missing or expired), or
+ * null on failure. Best-effort: a failure returns null and the caller falls
+ * back to its normal auth flow.
  */
 export async function ensureAnonymousToken(): Promise<string | null> {
   const existing = getAnonymousToken();
-  if (existing) return existing;
+  if (existing && !isAnonymousTokenExpired(existing)) return existing;
+
+  // A stored token here is expired/stale — drop it before minting so a failed
+  // mint never leaves a dead token for the request interceptor to keep
+  // attaching.
+  if (existing) clearAnonymousToken();
 
   try {
     const AUTH_BASE = process.env.NEXT_PUBLIC_API_URL;
