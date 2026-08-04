@@ -358,6 +358,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         where: { id: req.params.id },
         select: {
           id: true,
+          guestId: true,
           status: true,
           completedAt: true, 
           totalAmount: true,

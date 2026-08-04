@@ -312,7 +312,7 @@ export default function BookingReviewPage() {
 
   useEffect(() => {
     const raw = sessionStorage.getItem("zika:checkout");
-    if (!raw) { router.replace("/traveller"); return; }
+    if (!raw) { router.replace("/"); return; }
     try {
       const data: CheckoutCtx = JSON.parse(raw);
       setCtx(data);
@@ -346,7 +346,7 @@ export default function BookingReviewPage() {
         .catch(() => {})
         .finally(() => setLoadingWalletVouchers(false));
     } catch {
-      router.replace("/traveller");
+      router.replace("/");
     }
   }, []);
 
@@ -485,7 +485,9 @@ export default function BookingReviewPage() {
     // Record the acceptance the guest just gave, once. Best-effort: a failure
     // must not cost them their reservation lock, so it is logged and the
     // payment proceeds — the checkbox itself is still an enforced gate.
-    if (needsTermsAcceptance) {
+    // Anonymous guests have no account to record acceptance against, so the
+    // call is skipped (the backend would reject it with ACCOUNT_REQUIRED).
+    if (needsTermsAcceptance && user) {
       void api
         .post("/auth/accept-terms", { acceptedTerms: true })
         .then(() => updateUser({ requiresTermsAcceptance: false }))
@@ -617,7 +619,7 @@ export default function BookingReviewPage() {
     sessionStorage.removeItem("zika:checkout");
     if (pollRef.current) clearInterval(pollRef.current);
     setShowCancelConfirm(false);
-    router.push("/traveller");
+    router.push("/");
   }
 
   async function handleReviewVoucherApply(codeOverride?: string) {
@@ -693,7 +695,7 @@ export default function BookingReviewPage() {
 
         {/* ── Header ── */}
         <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between shadow-sm">
-          <Link href="/traveller" className="flex items-center">
+          <Link href="/" className="flex items-center">
             <img src="/images/kainook-logo.jpeg" alt="Kainook" className="h-9 w-auto object-contain" />
           </Link>
 
@@ -736,7 +738,8 @@ export default function BookingReviewPage() {
               confirmed={confirmed}
               ctx={ctx}
               onDownload={handleDownloadPDF}
-              onViewBookings={() => router.push("/traveller?tab=bookings")}
+              onViewBookings={() => router.push("/?tab=bookings")}
+              isAuthenticated={!!user}
             />
           )}
 
@@ -1170,13 +1173,13 @@ export default function BookingReviewPage() {
             <p className="text-slate-500 text-sm leading-relaxed">Your reservation hold has expired and is no longer available.</p>
             <div className="flex gap-3 pt-2">
               <button
-                onClick={() => { sessionStorage.removeItem("zika:checkout"); router.push("/traveller"); }}
+                onClick={() => { sessionStorage.removeItem("zika:checkout"); router.push("/"); }}
                 className="flex-1 py-2.5 border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition text-sm"
               >
                 Search again
               </button>
               <button
-                onClick={() => { sessionStorage.removeItem("zika:checkout"); router.push(`/traveller?listing=${ctx.listingId}`); }}
+                onClick={() => { sessionStorage.removeItem("zika:checkout"); router.push(`/?listing=${ctx.listingId}`); }}
                 className="flex-1 py-2.5 bg-[#0B1E3F] text-white font-bold rounded-xl hover:bg-[#07152B] transition text-sm"
               >
                 Try to rebook
@@ -1336,12 +1339,13 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
 // ─── Confirmed View ───────────────────────────────────────────────────────────
 
 function ConfirmedView({
-  confirmed, ctx, onDownload, onViewBookings,
+  confirmed, ctx, onDownload, onViewBookings, isAuthenticated,
 }: {
   confirmed: ConfirmedBooking;
   ctx: CheckoutCtx;
   onDownload: () => void;
   onViewBookings: () => void;
+  isAuthenticated: boolean;
 }) {
   const isCar = ctx.listingCategory === "car";
   const info = derivePlatform(ctx.pricingPreview, confirmed.currency, confirmed.totalAmount);
@@ -1364,6 +1368,35 @@ function ConfirmedView({
         </div>
         <p className="text-slate-500 text-sm">A confirmation email with your PDF voucher has been sent to <strong>{ctx.email}</strong>.</p>
       </div>
+
+      {/* Anonymous → create an account banner. Adopt-by-email attaches this
+          booking to the account automatically on sign-up/login with the same
+          email, so the guest does not lose access. */}
+      {!isAuthenticated && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 space-y-3">
+          <div>
+            <h3 className="font-bold text-amber-900 text-sm">Want to keep your bookings in one place?</h3>
+            <p className="text-amber-800 text-xs leading-relaxed mt-1">
+              Create a free account with <strong>{ctx.email}</strong> and this booking will be attached to it
+              automatically. You'll be able to view your reservations, save favourites, and earn rewards.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href={`/auth/register?email=${encodeURIComponent(ctx.email)}`}
+              className="inline-flex items-center justify-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg transition"
+            >
+              Create an account
+            </a>
+            <button
+              onClick={onViewBookings}
+              className="inline-flex items-center justify-center px-4 py-2 border border-amber-300 text-amber-800 hover:bg-amber-100 text-xs font-semibold rounded-lg transition"
+            >
+              Continue browsing
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Booking info */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">

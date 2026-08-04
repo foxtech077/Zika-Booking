@@ -243,7 +243,7 @@ export default function AccreditationPage() {
     queryKey: ["admin-providers-list"],
     queryFn: () =>
       api
-        .get("/admin/users", { params: { userType: "provider", limit: "1000" } })
+        .get("/admin/users", { params: { hostStatus: "approved", limit: "1000" } })
         .then((r) => r.data.data ?? r.data),
     enabled: !!token,
   });

@@ -73,7 +73,7 @@ export function TravellerWorkspaceNav({
 
   const items: NavItem[] = [
     ...(showHome
-      ? [{ href: "/traveller", label: "Explore", icon: <Home className="h-4 w-4" /> }]
+      ? [{ href: "/", label: "Explore", icon: <Home className="h-4 w-4" /> }]
       : []),
     {
       href: "/traveller/messages",
@@ -112,8 +112,8 @@ export function TravellerWorkspaceNav({
       {/* Nav links */}
       {items.map((item) => {
         const isActive =
-          item.href === "/traveller"
-            ? pathname === "/traveller"
+          item.href === "/"
+            ? pathname === "/"
             : pathname.startsWith(item.href);
 
         return (

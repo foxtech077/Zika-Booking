@@ -4,24 +4,27 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
-import { ChevronDown, Heart, LogOut, Menu, MessageSquare, Star, User, HelpCircle, Shield, FileText, Bell } from "lucide-react";
+import { ChevronDown, Heart, LogOut, Menu, MessageSquare, Star, User, HelpCircle, Shield, FileText, Bell, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAuthStore } from "@/stores/auth";
 import { fetchUnreadConversationCount } from "@/services/traveller";
 import { useUnreadNotificationCount } from "@/hooks/useNotifications";
+import { useListingSummary } from "@/hooks/listings";
 
 const TRAVELLER_ROUTES = {
-  destinations: "/traveller",
+  destinations: "/",
   hotels: "/traveller/hotels",
   apartments: "/traveller/apartments",
   cars: "/traveller/cars",
-  bookings: "/traveller?tab=bookings",
+  bookings: "/?tab=bookings",
   wishlist: "/traveller/wishlist",
   messages: "/traveller/messages",
   reviews: "/traveller/reviews",
   profile: "/traveller/profile",
   faq: "/faq",
+  createListing: "/dashboard/listings/new",
+  manageListings: "/dashboard",
 } as const;
 
 interface TravellerHeaderProps {
@@ -57,6 +60,10 @@ export function TravellerHeader({
   });
 
   const { data: unreadNotifData } = useUnreadNotificationCount(!!user);
+  // Decides which of "Create Listing" / "Manage Listings" to show. Never fires
+  // for a signed-out visitor.
+  const { data: listingSummaryData } = useListingSummary(!!user);
+  const hasListings = (listingSummaryData?.listings.length ?? 0) > 0;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -92,6 +99,20 @@ export function TravellerHeader({
   const isReviewsActive = pathname?.startsWith(TRAVELLER_ROUTES.reviews);
   const isWishlistActive = pathname?.startsWith(TRAVELLER_ROUTES.wishlist);
   const isProfileActive = pathname?.startsWith(TRAVELLER_ROUTES.profile);
+  const isListingsActive = pathname?.startsWith("/dashboard");
+  // Users without an approved host profile are routed through the host
+  // onboarding flow before they can create/manage listings.
+  const canHost = user?.hostStatus === "approved";
+  const listingsHref = !canHost
+    ? "/dashboard/host"
+    : hasListings
+      ? TRAVELLER_ROUTES.manageListings
+      : TRAVELLER_ROUTES.createListing;
+  const listingsLabel = !canHost
+    ? "Become a Host"
+    : hasListings
+      ? "Manage Listings"
+      : "Create Listing";
 
   const lockTimer =
     lockSecondsLeft != null
@@ -217,7 +238,7 @@ export function TravellerHeader({
                   Sign In
                 </Link>
                 <Link
-                  href="/auth/login"
+                  href="/auth/register"
                   className="rounded-full bg-[#0c2614] px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#081b0d]"
                 >
                   Sign Up
@@ -304,6 +325,20 @@ export function TravellerHeader({
                       >
                         <User className="h-4 w-4 text-green-600" />
                         Profile
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          router.push(listingsHref);
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
+                          isListingsActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                        )}
+                      >
+                        <Building2 className="h-4 w-4 text-green-600" />
+                        {listingsLabel}
                       </button>
                       <div className="my-1 border-t border-slate-100" />
                       <button
@@ -456,6 +491,7 @@ export function TravellerHeader({
                     {mobileNavBtn("Wishlist", TRAVELLER_ROUTES.wishlist, isWishlistActive)}
                     {mobileNavBtn("My Reviews", TRAVELLER_ROUTES.reviews, isReviewsActive)}
                     {mobileNavBtn("Profile", TRAVELLER_ROUTES.profile, isProfileActive)}
+                    {mobileNavBtn(listingsLabel, listingsHref, isListingsActive)}
                     <Link
                       href="/legal/privacy"
                       target="_blank"
@@ -494,7 +530,7 @@ export function TravellerHeader({
                       Sign In
                     </Link>
                     <Link
-                      href="/auth/login"
+                      href="/auth/register"
                       className="rounded-xl bg-[#0c2614] px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-[#081b0d]"
                       onClick={() => setMobileMenuOpen(false)}
                     >

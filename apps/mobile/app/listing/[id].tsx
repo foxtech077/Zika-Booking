@@ -723,11 +723,11 @@ export default function ListingDetailScreen() {
       : Number(listing.nightlyRate ?? listing.pricePerNight ?? 0);
 
   const rateLabel = isCar ? "per day" : "per night";
-  // Shares the web listing URL. `/traveller?listing=<id>` is the canonical
+  // Shares the web listing URL. `/?listing=<id>` is the canonical
   // public link — the web app emits Open Graph tags for exactly that shape,
   // so the shared link previews with the listing photo and title.
   async function handleShare() {
-    const url = `${WEB_BASE_URL}/traveller?listing=${id}`;
+    const url = `${WEB_BASE_URL}/?listing=${id}`;
     const title = listing?.name ?? "this listing";
     try {
       await Share.share(

@@ -1,21 +1,31 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import TravellerDashboard from "./TravellerPageClient";
+import TravellerDashboard from "../traveller/TravellerPageClient";
 
 interface PageProps {
   searchParams: { listing?: string };
 }
 
+/**
+ * `?listing=` is attacker-controllable and is interpolated into a server-side
+ * request to the internal listing API, so it is checked against the id format
+ * before it is used. Without this, a crafted value containing path separators
+ * could redirect that request at a different endpoint and reflect whatever came
+ * back into this page's title and description tags.
+ */
+const LISTING_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function generateMetadata({ searchParams }: PageProps): Promise<Metadata> {
   const listingId = searchParams.listing;
 
-  if (!listingId) {
+  if (!listingId || !LISTING_ID_PATTERN.test(listingId)) {
     return {};
   }
 
   try {
     const apiUrl = process.env.NEXT_PUBLIC_LISTING_API_URL ?? "http://localhost:3003";
-    const res = await fetch(`${apiUrl}/listings/${listingId}/public`, {
+    const res = await fetch(`${apiUrl}/listings/${encodeURIComponent(listingId)}/public`, {
       next: { revalidate: 60 },
     });
 

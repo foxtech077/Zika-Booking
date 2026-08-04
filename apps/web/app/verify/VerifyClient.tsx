@@ -28,7 +28,7 @@ export function VerifyClient() {
         const msg = res.data.data.message;
         setState(msg.includes("already") ? "already_verified" : "success");
         setEmail(user.email);
-        setTimeout(() => router.replace(user.userType === "provider" ? "/dashboard" : "/traveller"), 2000);
+        setTimeout(() => router.replace("/"), 2000);
       })
       .catch((err: { response?: { data?: ApiResponse<{ email?: string }>; status?: number } }) => {
         const errorBody = (err.response?.data as { error?: { code?: string; fields?: { email?: string } } } | undefined)?.error;

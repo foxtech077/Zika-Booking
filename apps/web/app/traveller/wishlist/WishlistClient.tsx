@@ -159,7 +159,7 @@ export default function WishlistClient() {
   }
 
   function handleSelectListing(id: string) {
-    router.push(`/traveller?listing=${id}`);
+    router.push(`/?listing=${id}`);
   }
 
   const filtered = activeTab === "all"
@@ -187,7 +187,7 @@ export default function WishlistClient() {
       {/* ── Header ── */}
       {/* <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-6 lg:px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-8">
-          <Link href="/traveller" className="text-xl font-bold text-[#0c2614] tracking-tight shrink-0">
+          <Link href="/" className="text-xl font-bold text-[#0c2614] tracking-tight shrink-0">
             Kainook
           </Link>
           <nav className="hidden md:flex items-center gap-1">
@@ -292,7 +292,7 @@ export default function WishlistClient() {
                 : `Browse ${activeTab}s and tap the heart to save them here.`}
             </p>
             <Link
-              href={activeTab === "all" ? "/traveller" : `/traveller/${activeTab}s`}
+              href={activeTab === "all" ? "/" : `/traveller/${activeTab}s`}
               className="px-6 py-2.5 bg-[#0c2614] text-white text-sm font-bold rounded-xl hover:bg-[#1D8D2B] transition"
             >
               {activeTab === "all" ? "Explore Listings" : `Browse ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}s`}

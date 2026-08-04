@@ -7,6 +7,8 @@
  * receive the same new access token.
  */
 
+import { clearAnonymousToken } from "@/lib/anonymous";
+
 const TOKEN_KEY = "zika:access_token";
 
 let refreshInFlight: Promise<string | null> | null = null;
@@ -69,6 +71,7 @@ export function clearAuthSession(): void {
 
   sessionStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(TOKEN_KEY);
+  clearAnonymousToken();
 
   import("@/stores/auth")
     .then(({ useAuthStore }) => useAuthStore.getState().clearSession())

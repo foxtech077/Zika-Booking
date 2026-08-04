@@ -34,15 +34,17 @@ const GOOGLE_CLIENT_ID_WEB =
   "1022728776661-50ctighki9jm25ig10b39matcr0ihslr.apps.googleusercontent.com";
 
 function getPostLoginPath(user: AuthResponse["user"]) {
+  // Every account lands on the same home page — there is no separate provider
+  // destination. "Provider" is just whoever owns a listing, not a role.
+  //
   // Accounts created through Google/Apple never see a consent checkbox — this
   // is the only signup path on web, since the register page has no social
   // button. Gate on the Privacy Policy, which the client requires at
   // registration; the Terms are collected later, at checkout.
   if ((user as { requiresPrivacyAcceptance?: boolean }).requiresPrivacyAcceptance) {
-    const next = user.userType === "provider" ? "/dashboard" : "/traveller";
-    return `/auth/accept-terms?next=${encodeURIComponent(next)}`;
+    return `/auth/accept-terms?next=${encodeURIComponent("/")}`;
   }
-  return user.userType === "provider" ? "/dashboard" : "/traveller";
+  return "/";
 }
 
 function getAccountAccessError(user: AuthResponse["user"]) {

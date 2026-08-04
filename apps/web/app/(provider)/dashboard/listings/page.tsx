@@ -929,7 +929,7 @@ export default function ListingsPage() {
     },
     onError: (err: any) => {
       if (err.message === "AUTH_REQUIRED") {
-        setCreateError("Authentication required. Please sign in again as a provider.");
+        setCreateError("Please sign in again.");
         router.replace("/auth/login");
         return;
       }

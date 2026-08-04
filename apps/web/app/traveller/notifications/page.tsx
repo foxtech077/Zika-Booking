@@ -98,11 +98,13 @@ export default function TravellerNotificationsPage() {
 
     const { bookingId, conversationId, listingId } = item.data ?? {};
     if (bookingId) {
-      router.push(`/traveller?tab=bookings&bookingId=${bookingId}`);
+      router.push(`/?tab=bookings&bookingId=${bookingId}`);
     } else if (conversationId) {
       router.push(`/traveller/messages`);
     } else if (listingId) {
-      router.push(`/traveller`);
+      // Open the listing the notification is about. This previously navigated
+      // to the bare home page, discarding the id the notification carried.
+      router.push(`/?listing=${listingId}`);
     }
   };
 

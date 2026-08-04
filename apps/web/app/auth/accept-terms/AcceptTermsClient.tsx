@@ -35,7 +35,7 @@ export default function AcceptTermsClient() {
   // button for a frame while the redirect is still in flight.
   const [redirecting, setRedirecting] = useState(false);
 
-  const next = params.get("next") || (user?.userType === "provider" ? "/dashboard" : "/traveller");
+  const next = params.get("next") || "/";
 
   const mutation = useMutation({
     mutationFn: async () => {

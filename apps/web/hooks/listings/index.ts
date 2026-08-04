@@ -36,11 +36,12 @@ export function useListing(id: string | null) {
   });
 }
 
-export function useListingSummary() {
+export function useListingSummary(enabled = true) {
   return useQuery({
     queryKey: LISTING_QK.summary(),
     queryFn: () => listingsService.getSummary(),
     staleTime: 60_000,
+    enabled,
     retry: 1,
     refetchOnWindowFocus: false,
   });

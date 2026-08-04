@@ -151,16 +151,10 @@ export default function DashboardPage() {
       iconBg: "bg-teal-100",
     },
     {
-      title: "Total Providers",
-      value: summaryData?.totalProviders ?? 0,
+      title: "Total Hosts",
+      value: summaryData?.totalAccreditations ?? 0,
       icon: <BadgeCheck className="h-4 w-4 text-indigo-600" />,
       iconBg: "bg-indigo-100",
-    },
-    {
-      title: "Accreditation Applications",
-      value: summaryData?.totalAccreditations ?? 0,
-      icon: <BadgeCheck className="h-4 w-4 text-warning" />,
-      iconBg: "bg-warning/10",
     },
     {
       title: "Total Payments",
@@ -190,8 +184,8 @@ export default function DashboardPage() {
       id: "accreditation-reviews",
       title: "Accreditation Reviews",
       count: pendingData?.pendingAccreditationReviews ?? 0,
-      description: "Provider accreditation applications waiting for verification",
-      link: "/dashboard/accreditation",
+      description: "Host applications waiting for verification",
+      link: "/dashboard/host-accreditations",
       badgeColor: "bg-purple-100 text-purple-800 border-purple-200",
     },
     {

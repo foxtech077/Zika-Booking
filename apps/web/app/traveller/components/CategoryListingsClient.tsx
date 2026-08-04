@@ -1090,7 +1090,7 @@ export default function CategoryListingsClient({ category }: Props) {
       if (checkOut) params.set("checkout", checkOut);
     }
     if (guests > 0) params.set("guests", String(guests));
-    router.push(`/traveller?${params.toString()}`);
+    router.push(`/?${params.toString()}`);
   }
 
   async function handleToggleFavourite(listingId: string) {
@@ -1113,7 +1113,7 @@ export default function CategoryListingsClient({ category }: Props) {
       {/*
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-6 lg:px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-8 lg:gap-10">
-          <Link href="/traveller" className="text-xl font-bold text-[#0c2614] tracking-tight shrink-0">
+          <Link href="/" className="text-xl font-bold text-[#0c2614] tracking-tight shrink-0">
             Kainook
           </Link>
           <nav className="hidden md:flex items-center gap-1">

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";           // auth-service: POST /auth/logout only
 import { listingApi } from "@/lib/listing-api";
+import { ensureAnonymousToken } from "@/lib/anonymous";
 import { paymentApi } from "@/lib/payment-api";
 import { fetchFavourites, fetchRecentlyViewed } from "@/services/traveller";
 import ListingImage from "./components/ListingImage";
@@ -45,7 +46,7 @@ interface User {
   firstName: string;
   lastName: string;
   email: string;
-  userType: string;
+  hostStatus?: "approved" | "pending" | "rejected" | null;
   currentTier: "bronze" | "silver" | "gold" | "diamond";
   loyaltyPoints: number;
 }
@@ -281,6 +282,13 @@ export default function TravellerDashboard() {
   // Details & Checkout context
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
   const selectedListingIdRef = useRef<string | null>(null);
+  // Last ?listing= value this component read from or wrote to the URL, used to
+  // tell an external URL change (Back/Forward, deep link) from our own.
+  const listingUrlRef = useRef<string | null>(null);
+  // Set by handlers that close the listing and navigate somewhere themselves,
+  // so the URL-sync effect below stands down for that one pass instead of
+  // racing them back to "/".
+  const navHandlesUrlRef = useRef(false);
   const [detailListing, setDetailListing] = useState<PublicListingDetail | null>(null);
   const [selectedRoomTypeId, setSelectedRoomTypeId] = useState<string | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -404,10 +412,80 @@ export default function TravellerDashboard() {
       setActiveTab("home");
     }
 
-    if (listingId && listingId !== selectedListingId) {
-      handleSelectListing(listingId);
+    // Adopt the URL's listing only when it changed from outside this component
+    // — a deep link, a shared link, or Back/Forward. Comparing against the last
+    // value we synced (rather than against state) is what makes that
+    // distinction possible: right after a card click, state leads and the URL
+    // has not caught up yet, and treating that lag as an external "close" would
+    // dismiss the detail the instant it opened.
+    if (listingId !== listingUrlRef.current) {
+      listingUrlRef.current = listingId;
+      if (listingId) {
+        handleSelectListing(listingId);
+      } else if (selectedListingIdRef.current) {
+        // Back out of the detail the same way the "Back to Search Results"
+        // button does, so a browser Back leaves no half-torn-down checkout.
+        setSelectedListingId(null);
+        selectedListingIdRef.current = null;
+        setDetailListing(null);
+        abandonLock();
+      }
     }
   }, [ready, searchParams, user?.id, activeTab, selectedListingId]);
+
+  // Mirror the open listing into the URL.
+  //
+  // The detail view is state-driven rather than a route of its own, so opening
+  // one from a card used to leave the address bar on "/" — the view could not
+  // be linked to or shared from the address bar, Back skipped straight off the
+  // page, and a refresh silently dropped back to the list.
+  //
+  // This is the write half of the effect above. Neither loops: this one only
+  // acts when the URL disagrees with state, and the read half only acts when
+  // the URL differs from what was last synced.
+  useEffect(() => {
+    if (!ready) return;
+
+    // Claim the one-shot flag before anything can return early. Clearing it
+    // only inside the close branch would let a handler that fired while no
+    // listing was open leave it set, and the next genuine close would then be
+    // swallowed — the detail would shut with ?listing= still in the address bar.
+    const handlerOwnsUrl = navHandlesUrlRef.current;
+    navHandlesUrlRef.current = false;
+
+    // Search results live on the same "/" URL as the top picks, so they need
+    // the same treatment. Only the bookings tab is excluded: it drives ?tab=
+    // itself, and a listing param has no meaning alongside it.
+    if (activeTab === "bookings") return;
+
+    const urlListing = searchParams.get("listing");
+    // Compare against the ref, not the state: when the read half above adopts a
+    // deep link it sets the ref synchronously but the state only on the next
+    // render, so reading state here would see "nothing open" alongside a
+    // populated URL and wrongly strip the listing back off it.
+    const openListing = selectedListingIdRef.current;
+    if (urlListing === openListing) return;
+
+    // A handler that closed the listing on its way elsewhere has already set
+    // the destination; steering back to "/" here would undo that navigation.
+    if (!openListing && handlerOwnsUrl) return;
+
+    listingUrlRef.current = openListing;
+
+    // Rewrite only the listing param. The category pages hand over
+    // checkin/checkout/guests alongside it, and rebuilding the URL from scratch
+    // would throw away the dates the guest had just picked.
+    const params = new URLSearchParams(searchParams.toString());
+    if (openListing) params.set("listing", openListing);
+    else params.delete("listing");
+    const query = params.toString();
+    const href = query ? `/?${query}` : "/";
+
+    // push on open so Back closes the detail; replace on close so Back does not
+    // immediately reopen what was just closed.
+    if (openListing) router.push(href);
+    else router.replace(href);
+  }, [ready, selectedListingId, activeTab, searchParams]);
 
   // Success state
   const [bookingSuccessModal, setBookingSuccessModal] = useState<{
@@ -489,14 +567,6 @@ export default function TravellerDashboard() {
     ),
     colour: activePromotion.labelColour || "#C84B2F",
   } : undefined;
-
-  // 1. Redirect provider accounts away from traveller page
-  useEffect(() => {
-    if (!_hasHydrated) return;
-    if (user && user.userType === "provider") {
-      router.replace("/dashboard");
-    }
-  }, [_hasHydrated, user?.userType]);
 
   // Load recently-viewed and favourites from backend on mount (when authenticated)
   useEffect(() => {
@@ -1129,15 +1199,15 @@ export default function TravellerDashboard() {
     }
   }
 
-  // Share the listing. `/traveller?listing=<id>` is the canonical public URL —
-  // generateMetadata in traveller/page.tsx already emits Open Graph tags for
+  // Share the listing. `/?listing=<id>` is the canonical public URL —
+  // generateMetadata in (home)/page.tsx already emits Open Graph tags for
   // exactly this shape, so shared links render a rich preview.
   //
   // Uses the native share sheet where the browser offers one (mobile, Safari)
   // and falls back to copying the link on desktop, which has no share sheet.
   async function handleShareListing() {
     if (!detailListing) return;
-    const url = `${window.location.origin}/traveller?listing=${detailListing.id}`;
+    const url = `${window.location.origin}/?listing=${detailListing.id}`;
     const title = detailListing.name;
 
     try {
@@ -1260,7 +1330,13 @@ export default function TravellerDashboard() {
         setSelectedRoomTypeId(cheapestRtId);
 
         addToRecentlyViewed(details);
-        listingApi.post("/guests/me/recently-viewed", { listingId: id }).catch(() => { });
+        // Server-side history is per-account, so only record it when signed in.
+        // Guests keep the local list from addToRecentlyViewed above; calling
+        // this endpoint without a token returns 401 and used to bounce them to
+        // the login page mid-browse.
+        if (isAuthenticated) {
+          listingApi.post("/guests/me/recently-viewed", { listingId: id }).catch(() => { });
+        }
         // Fetch all pricing data atomically — promotions, pricing estimate, and vouchers.
         // The UI will only show pricing after all calls succeed.
         fetchAllPricing();
@@ -1270,7 +1346,10 @@ export default function TravellerDashboard() {
     } catch (err: any) {
       const code = err?.response?.data?.error?.code;
       if (code === "NO_TOKEN" || err?.response?.status === 401) {
-        router.push("/auth/login");
+        // The public detail endpoint is accessible without a token; a 401 here
+        // only means a stale/expired account token. Bounce only signed-in users
+        // to login — visitors can keep browsing anonymously.
+        if (isAuthenticated) router.push("/auth/login");
         return;
       }
       setDetailListing(null);
@@ -1468,6 +1547,12 @@ export default function TravellerDashboard() {
     if (!detailListing) return;
     setLockingListing(true);
     setBookingError("");
+
+    // Anonymous checkout: mint a stateless anonymous token so visitors can
+    // lock a booking without an account. Booking/payment endpoints accept it.
+    if (!isAuthenticated) {
+      await ensureAnonymousToken();
+    }
 
     const body: Record<string, any> = {
       listingId: detailListing.id,
@@ -1901,11 +1986,20 @@ export default function TravellerDashboard() {
   }
 
   // 8b. Save context to sessionStorage and navigate to /booking/review
-  function handleContinueToReview() {
+  async function handleContinueToReview() {
     if (!detailListing || !lockToken) return;
     if (!firstName || !lastName || !email) {
       setBookingError("Please fill in your name and email.");
       return;
+    }
+    // Ensure an anonymous token exists before checkout so the booking and
+    // payment calls (which require a token) succeed for non-accounts.
+    if (!isAuthenticated) {
+      const anon = await ensureAnonymousToken();
+      if (!anon) {
+        setBookingError("Unable to start checkout. Please try again.");
+        return;
+      }
     }
     const isCar = detailListing.category === "car";
     const isHotel = detailListing.category === "hotel";
@@ -4231,7 +4325,7 @@ export default function TravellerDashboard() {
             <nav className="flex flex-col gap-1 p-4 flex-1 overflow-y-auto">
               <TravellerWorkspaceNav orientation="stack" showHome={false} showAvatar={false} className="mb-3" />
               <button
-                onClick={() => { setSelectedListingId(null); selectedListingIdRef.current = null; setMobileNavOpen(false); router.push("/traveller"); }}
+                onClick={() => { setSelectedListingId(null); selectedListingIdRef.current = null; setMobileNavOpen(false); router.push("/"); }}
                 className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "home" ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
               >
                 Destinations
@@ -4241,6 +4335,7 @@ export default function TravellerDashboard() {
                   key={cat}
                   onClick={() => {
                     setSelectedListingId(null); selectedListingIdRef.current = null;
+                    navHandlesUrlRef.current = true;
                     setMobileNavOpen(false);
                     router.push(cat === "hotel" ? "/traveller/hotels" : cat === "apartment" ? "/traveller/apartments" : "/traveller/cars");
                   }}
@@ -4251,7 +4346,7 @@ export default function TravellerDashboard() {
               ))}
               {user && (
                 <button
-                  onClick={() => { setSelectedListingId(null); selectedListingIdRef.current = null; setMobileNavOpen(false); router.push("/traveller?tab=bookings"); }}
+                  onClick={() => { setSelectedListingId(null); selectedListingIdRef.current = null; navHandlesUrlRef.current = true; setMobileNavOpen(false); router.push("/?tab=bookings"); }}
                   className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "bookings" ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
                 >
                   My Reservations

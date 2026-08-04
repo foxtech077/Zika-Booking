@@ -1,5 +1,6 @@
 import axios from "axios";
 import { refreshAccessToken, clearAuthSession } from "@/lib/token-refresh";
+import { getAnonymousToken } from "@/lib/anonymous";
 
 const TOKEN_KEY = "zika:access_token";
 
@@ -9,13 +10,23 @@ export const paymentApi = axios.create({
   timeout: 30_000,
 });
 
-// Attach token on every request — checks sessionStorage first, then falls back to localStorage
+// Attach token on every request — checks sessionStorage first, then falls back
+// to localStorage. When no account token exists, attach an anonymous checkout
+// token if one has been minted (marked with _anon so it is never refreshed).
 paymentApi.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     const token =
       sessionStorage.getItem(TOKEN_KEY) ??
       localStorage.getItem(TOKEN_KEY);
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      const anon = getAnonymousToken();
+      if (anon) {
+        config.headers.Authorization = `Bearer ${anon}`;
+        (config as any)._anon = true;
+      }
+    }
   }
   return config;
 });
@@ -25,9 +36,17 @@ paymentApi.interceptors.request.use((config) => {
 paymentApi.interceptors.response.use(
   (r) => r,
   async (err) => {
-    const original = err.config as typeof err.config & { _retry?: boolean };
+    const original = err.config as typeof err.config & { _retry?: boolean; _anon?: boolean };
 
     if (err.response?.status === 401 && !original._retry && typeof window !== "undefined") {
+      // Anonymous tokens are stateless — no refresh cookie to exchange — so a
+      // 401 is a plain failure, not an expired session worth refreshing.
+      if (original._anon) return Promise.reject(err);
+
+      const hadToken =
+        sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
+      if (!hadToken) return Promise.reject(err);
+
       original._retry = true;
 
       const newToken = await refreshAccessToken();
