@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -199,8 +199,52 @@ function getPaymentErrorMessage(err: unknown): string {
 
 export default function PaymentScreen() {
   const router = useRouter();
-  const { bookingId, lockExpiresAt } = useLocalSearchParams<{ bookingId: string; lockExpiresAt?: string }>();
+  const params = useLocalSearchParams<{
+    bookingId: string;
+    lockExpiresAt?: string;
+    bookingReference?: string;
+    bookingStatus?: string;
+    bookingTotal?: string;
+    bookingCurrency?: string;
+    bookingListingType?: string;
+    bookingListingId?: string;
+    bookingListingTitle?: string;
+    bookingListingCountry?: string;
+    bookingCheckIn?: string;
+    bookingCheckOut?: string;
+    bookingPickupDatetime?: string;
+    bookingReturnDatetime?: string;
+    bookingAdults?: string;
+    bookingChildren?: string;
+  }>();
+  const { bookingId, lockExpiresAt } = params;
   const navigation = useNavigation();
+
+  // When the pay screen is reached straight from booking creation the summary is
+  // passed via navigation params, so anonymous guests never hit the user-scoped
+  // GET /guests/me/bookings/:id (which rejects anonymous tokens with 403
+  // ACCOUNT_REQUIRED). Ownership is still enforced server-side at payment time.
+  const bookingFromParams = useMemo<BookingDetail | null>(() => {
+    if (!bookingId || !params.bookingReference || !params.bookingTotal) return null;
+    return {
+      id: bookingId,
+      totalAmount: Number(params.bookingTotal),
+      currency: params.bookingCurrency ?? "",
+      reference: params.bookingReference,
+      listingType: params.bookingListingType ?? "",
+      listingTitle: params.bookingListingTitle ?? "",
+      status: params.bookingStatus ?? "pending_payment",
+      createdAt: new Date().toISOString(),
+      listingId: params.bookingListingId ?? "",
+      listing: { country: params.bookingListingCountry ?? null },
+      ...(params.bookingCheckIn ? { checkIn: params.bookingCheckIn } : {}),
+      ...(params.bookingCheckOut ? { checkOut: params.bookingCheckOut } : {}),
+      ...(params.bookingPickupDatetime ? { pickupDatetime: params.bookingPickupDatetime } : {}),
+      ...(params.bookingReturnDatetime ? { returnDatetime: params.bookingReturnDatetime } : {}),
+      ...(params.bookingAdults ? { adults: parseInt(params.bookingAdults, 10) } : {}),
+      ...(params.bookingChildren ? { children: parseInt(params.bookingChildren, 10) } : {}),
+    };
+  }, [bookingId, params]);
 
   // ── Stripe Payment Sheet ──────────────────────────────────────────────────
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
@@ -250,6 +294,9 @@ export default function PaymentScreen() {
 
 
   // ── Fetch booking detail ──────────────────────────────────────────────────
+  // With a params-provided summary (fresh anonymous checkout) the fetch is
+  // skipped entirely; without params (e.g. resume payment for a signed-in user)
+  // it falls back to the booking-detail endpoint.
   const { data: booking, isLoading: bookingLoading, error: bookingError } = useQuery<BookingDetail>({
     queryKey: ["booking-for-payment", bookingId],
     queryFn: async () => {
@@ -278,7 +325,8 @@ export default function PaymentScreen() {
         throw err;
       }
     },
-    enabled: !!bookingId,
+    enabled: !!bookingId && !bookingFromParams,
+    initialData: bookingFromParams ?? undefined,
     retry: 1,
   });
 
@@ -536,15 +584,6 @@ export default function PaymentScreen() {
           clearPolling();
           setFailureReason("Payment failed. Please try again.");
           setView("failure");
-          return;
-        }
-
-        const bookingRes = await listingApi.get<{ data: { status: string } }>(`/guests/me/bookings/${bookingId}`);
-        if (!stripePollingActiveRef.current) return;
-        if (bookingRes.data.data.status === "confirmed") {
-          payLog("success", "STRIPE-POLL", "Booking confirmed — navigating to success");
-          clearPolling();
-          navigateToSuccess();
           return;
         }
       } catch (pollErr: any) {

@@ -86,7 +86,7 @@ export interface MyReview {
   createdAt: string;
 }
 
-export function useMyReviews() {
+export function useMyReviews(enabled = true) {
   return useQuery<MyReview[]>({
     queryKey: REVIEW_QK.me,
     queryFn: async () => {
@@ -94,6 +94,7 @@ export function useMyReviews() {
       if (!res.data.success) throw res.data;
       return res.data.data.reviews;
     },
+    enabled,
     staleTime: 30_000,
   });
 }
@@ -101,8 +102,9 @@ export function useMyReviews() {
 // The booking-detail endpoint (GET /guests/me/bookings/:id) doesn't actually
 // return a hasReview/reviewId flag, so "has this booking already been
 // reviewed?" is derived here from the guest's own review list instead.
-export function useReviewedBookingIds(): Set<string> {
-  const { data } = useMyReviews();
+// Reviews are account-scoped, so pass enabled={false} for anonymous sessions.
+export function useReviewedBookingIds(enabled = true): Set<string> {
+  const { data } = useMyReviews(enabled);
   return new Set((data ?? []).map((r) => r.bookingId));
 }
 

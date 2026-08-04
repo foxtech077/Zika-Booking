@@ -99,9 +99,14 @@ Endpoint-level impact:
 - **Booking** (`/bookings/initiate`, `/bookings/pricing-estimate`,
   `/bookings/lock/*`, `/bookings`, `/bookings/:id/cancel`) — still works for
   anonymous. **No change**.
-- **My reservations** (`GET /guests/me/bookings`,
-  `GET /guests/me/bookings/:id`) — **now requires a registered user**.
+- **My reservations** (`GET /guests/me/bookings`) — **now requires a registered user**.
   Anonymous gets `403 ACCOUNT_REQUIRED`.
+- **Single booking detail** (`GET /guests/me/bookings/:id`) — accepts a `user`
+  **or** `anonymous` token, but only for the session that owns the booking
+  (the guestId owner check rejects any other session). This lets anonymous
+  guests view their own payment confirmation, matching how booking documents
+  (receipt / voucher / QR) already behave. The list endpoint above stays
+  user-only.
 - **Favourites / Recently-viewed** (`/guests/me/favourites*`,
   `/guests/me/recently-viewed*`) — **now require a registered user**.
 - **Loyalty** (`/guests/me/loyalty`, `/guests/me/points-history`),

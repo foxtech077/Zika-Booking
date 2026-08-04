@@ -307,6 +307,7 @@ export default function BookingDetailScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const insets = useSafeAreaInsets();
+  const user = useAuthStore((s) => s.user);
   const [imgError, setImgError] = useState(false);
   // Stable flag: true only for the lifetime of this screen instance when arriving from payment
   const [justPaid] = useState(() => fromPayment === "true");
@@ -341,8 +342,9 @@ export default function BookingDetailScreen() {
 
   // GET /guests/me/bookings/:id doesn't actually return hasReview/reviewId —
   // whether this booking has been reviewed is derived from the guest's own
-  // review list (GET /reviews/me) instead.
-  const reviewedBookingIds = useReviewedBookingIds();
+  // review list (GET /reviews/me) instead. Reviews are account-scoped, so
+  // anonymous sessions skip the lookup.
+  const reviewedBookingIds = useReviewedBookingIds(!!user);
 
   // Fetch signed cover photo via /listings/:id/public (listing.primaryPhotoUrl may be an unsigned S3 URL)
   const { data: signedCoverPhoto } = useQuery<string | null>({

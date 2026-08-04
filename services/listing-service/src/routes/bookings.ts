@@ -2927,6 +2927,10 @@ export async function bookingRoutes(app: FastifyInstance) {
   );
 
   // ── GET /guests/me/bookings/:id — booking detail ───────────────────────────
+  // requireAuth (user OR anonymous): the guestId ownership check below limits
+  // reads to the session that created the booking, so anonymous payers can view
+  // their own confirmation (mirrors the booking-document endpoints). The list
+  // endpoint /guests/me/bookings stays requireUser.
   app.get(
     "/guests/me/bookings/:id",
     {
@@ -2951,7 +2955,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           404: errSchema,
         },
       },
-      preHandler: [requireUser],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const guestId = (req as AuthRequest).authId;

@@ -158,6 +158,7 @@ export default function BookingFlowScreen() {
     guests?: string;
     listingTitle?: string;
     listingCategory?: string;
+    listingCountry?: string;
   }>();
 
   const {
@@ -170,6 +171,7 @@ export default function BookingFlowScreen() {
     guests,
     listingTitle,
     listingCategory,
+    listingCountry,
   } = params;
 
   const checkoutPromo = useActivePromotion(listingCategory ?? null);
@@ -688,6 +690,20 @@ export default function BookingFlowScreen() {
         params: {
           bookingId: data.bookingId,
           lockExpiresAt: lockState?.expiresAt ?? "",
+          bookingReference: data.bookingReference,
+          bookingStatus: data.status,
+          bookingTotal: String(data.totalAmount),
+          bookingCurrency: data.currency,
+          bookingListingType: listingCategory,
+          bookingListingId: listingId,
+          bookingListingTitle: listingTitle ?? "",
+          bookingListingCountry: listingCountry ?? "",
+          ...(checkIn ? { bookingCheckIn: checkIn } : {}),
+          ...(checkOut ? { bookingCheckOut: checkOut } : {}),
+          ...(pickupDatetime ? { bookingPickupDatetime: pickupDatetime } : {}),
+          ...(returnDatetime ? { bookingReturnDatetime: returnDatetime } : {}),
+          bookingAdults: String(adults),
+          bookingChildren: String(children),
         },
       });
     },
