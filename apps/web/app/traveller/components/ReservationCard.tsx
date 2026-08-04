@@ -19,6 +19,8 @@ interface Booking {
   nightsOrDays: number;
   primaryPhotoUrl?: string | null;
   canCancel: boolean;
+  adults?: number | null;
+  children?: number | null;
 }
 
 interface Props {
@@ -62,6 +64,7 @@ export default function ReservationCard({ booking, onCancel, cancellingId, highl
   const statusStyle = STATUS_STYLES[booking.status] ?? "bg-slate-100 text-slate-600 border-slate-200";
   const statusLabel = STATUS_LABEL[booking.status] ?? booking.status;
   const isCar = booking.listingCategory === "car";
+  const totalGuests = Number(booking.adults ?? 0) + Number(booking.children ?? 0);
 
   const cardRef = React.useRef<HTMLDivElement>(null);
 
@@ -94,6 +97,7 @@ export default function ReservationCard({ booking, onCancel, cancellingId, highl
         <div className="w-24 h-24 shrink-0 bg-slate-100 overflow-hidden">
           <ListingImage
             listingId={booking.listingId}
+            src={booking.primaryPhotoUrl ?? undefined}
             alt={booking.listingTitle}
             className="w-full h-full object-cover"
             fallbackNode={
@@ -146,6 +150,12 @@ export default function ReservationCard({ booking, onCancel, cancellingId, highl
                 <p className="text-[9px] text-slate-400 uppercase tracking-wider">Duration</p>
                 <p className="text-xs font-semibold text-slate-700">{durationLabel}</p>
               </div>
+              {!isCar && totalGuests > 0 && (
+                <div>
+                  <p className="text-[9px] text-slate-400 uppercase tracking-wider">Guests</p>
+                  <p className="text-xs font-semibold text-slate-700">{totalGuests} guest{totalGuests !== 1 ? "s" : ""}</p>
+                </div>
+              )}
             </div>
           )}
 
