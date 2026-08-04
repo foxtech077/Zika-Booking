@@ -2902,6 +2902,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             id: b.id,
             reference: b.reference,
             status: b.status,
+            listingId: b.listingId,
             listingType: b.listingType,
             listingTitle: b.listing.name,
             listingPrimaryPhotoUrl: b.listing.photos[0]?.cdnUrl ?? null,
@@ -2916,6 +2917,8 @@ export async function bookingRoutes(app: FastifyInstance) {
             pointsDiscount: (b as any).pointsDiscount ? Number((b as any).pointsDiscount) : undefined,
             earnedPoints: (b as any).earnedPoints ? Number((b as any).earnedPoints) : undefined,
             redeemPoints: (b as any).redeemPoints ? Number((b as any).redeemPoints) : undefined,
+            adults: b.adults,
+            children: b.children,
             createdAt: b.createdAt,
           })),
         });
