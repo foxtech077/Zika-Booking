@@ -8,6 +8,17 @@ import os from "os";
 
 const BOOKING_BASE_URL = process.env["BOOKING_PUBLIC_URL"] ?? "https://kainook.com/bookings";
 
+function formatDate(dateStr?: string | null): string {
+  if (!dateStr) return "—";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  } catch {
+    return dateStr;
+  }
+}
+
 export async function generateVoucherPDF(booking: any, invoice: any) {
   const fileName = `KAIN-${booking.code}.pdf`;
   const filePath = path.join(os.tmpdir(), fileName);
@@ -69,9 +80,9 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
   leftY += 16;
   doc.font("Helvetica-Bold").fontSize(10).fillColor(TEXT_DARK).text(booking.listing.title, col1X, leftY);
   leftY += 14;
-  doc.font("Helvetica").fontSize(9).fillColor(TEXT_MUTED).text(`Check-in: ${booking.checkIn}`, col1X, leftY);
+  doc.font("Helvetica").fontSize(9).fillColor(TEXT_MUTED).text(`Check-in: ${formatDate(booking.checkIn)}`, col1X, leftY);
   leftY += 14;
-  doc.font("Helvetica").fontSize(9).fillColor(TEXT_MUTED).text(`Check-out: ${booking.checkOut}`, col1X, leftY);
+  doc.font("Helvetica").fontSize(9).fillColor(TEXT_MUTED).text(`Check-out: ${formatDate(booking.checkOut)}`, col1X, leftY);
 
   // Right Column: Payment & Status info
   let rightY = y;
