@@ -152,7 +152,7 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
   y += 16;
 
   if (listingCurrency !== platformCurrency) {
-    const exchangeStr = `≈ ${money(invoice.total, listingCurrency)}`;
+    const exchangeStr = `~ ${money(invoice.total, listingCurrency)}`;
     doc.font("Helvetica-Oblique").fontSize(9).fillColor(TEXT_MUTED).text(exchangeStr, col2X, y, { width: colWidth, align: "right" });
     y += 16;
   }

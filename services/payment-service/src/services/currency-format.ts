@@ -30,8 +30,8 @@ export function fmtMoney(n: number): string {
   return Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
-/** Render an amount as "SYM ISO amount", e.g. "€ EUR 45" or "FCFA XAF 25,000". */
+/** Render an amount as "ISO amount", e.g. "EUR 45" or "XAF 25,000". */
 export function money(amount: number, currency: string): string {
   const code = (currency ?? "").toUpperCase() || "USD";
-  return `${currencySymbol(code)} ${code} ${fmtMoney(amount)}`;
+  return `${code} ${fmtMoney(amount)}`;
 }
