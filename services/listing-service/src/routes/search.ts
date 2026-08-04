@@ -5,50 +5,6 @@ import { requireUser, authenticate, type AuthRequest } from "../middleware/auth.
 import { getCommissionRate } from "./bookings.js";
 import { getRatesBatch, ceilingForCurrency, getConvertedAmounts, getLocalizedContext } from "../services/exchangeRate.services.js";
 
-import { DriveType, FuelType } from "../generated/index.js";
-
-// ── Availability check ────────────────────────────────────────────────────────
-
-async function getBookedListingIds(
-  listingIds: string[],
-  checkIn?: string,
-  checkOut?: string,
-  pickupDatetime?: string,
-  returnDatetime?: string,
-): Promise<Set<string>> {
-  if (!listingIds.length) return new Set();
-
-  // Hotels/apartments: date overlap
-  if (checkIn && checkOut) {
-    const booked = await prisma.booking.findMany({
-      where: {
-        listingId: { in: listingIds },
-        status: { in: ["pending_payment", "confirmed"] as any },
-        checkIn: { lt: new Date(checkOut) },
-        checkOut: { gt: new Date(checkIn) },
-      },
-      select: { listingId: true },
-    });
-    return new Set(booked.map((b) => b.listingId));
-  }
-
-  // Cars: datetime overlap
-  if (pickupDatetime && returnDatetime) {
-    const booked = await prisma.booking.findMany({
-      where: {
-        listingId: { in: listingIds },
-        status: { in: ["pending_payment", "confirmed"] as any },
-        pickupDatetime: { lt: new Date(returnDatetime) },
-        returnDatetime: { gt: new Date(pickupDatetime) },
-      },
-      select: { listingId: true },
-    });
-    return new Set(booked.map((b) => b.listingId));
-  }
-
-  return new Set();
-}
-
 // ── Route plugin ─────────────────────────────────────────────────────────────
 
 export async function searchRoutes(app: FastifyInstance) {
@@ -71,7 +27,9 @@ export async function searchRoutes(app: FastifyInstance) {
     // box returned the entire category. Matches listing name as well as
     // location fields, because the box is commonly used for both.
     const textQuery = (q["q"] ?? "").trim();
-    const radiusKm = parseInt(q["radius_km"] ?? "25", 10);
+    // Radius is optional — when omitted, results are ranked nearest-first with
+    // no distance cap (the historical 20000km default that faked a global sort).
+    const radiusKm = q["radius_km"] ? parseInt(q["radius_km"], 10) : undefined;
     const checkIn = q["check_in"];
     const checkOut = q["check_out"];
     const pickupDatetime = q["pickup_datetime"];
@@ -113,73 +71,78 @@ export async function searchRoutes(app: FastifyInstance) {
     const delivery = q["delivery"];
     const targetCurrency = q["currency"]?.toUpperCase() || null;
 
-    if (!category || isNaN(lat) || isNaN(lng)) {
-      return sendError(reply, 400, "INVALID_PARAMS", "category, lat, and lng are required.");
+    if (!category) {
+      return sendError(reply, 400, "INVALID_PARAMS", "category is required.");
     }
 
     // Determine valid statuses per category
     const validStatuses = category === "hotel" ? ["approved"] : ["active"];
 
-    // Build Prisma where clause
-    const where: any = {
-      deletedAt: null,
-      category,
-      status: { in: validStatuses },
+    // ── Single SQL search core ──────────────────────────────────────────────
+    // All filtering, ranking (exact → partial → nearby), availability and
+    // rating are computed in Postgres. Only the requested page is ever held in
+    // memory — no wide-net candidate load.
+    const priceCol = category === "car" ? "price_per_day" : "price_per_night";
+
+    let p = 0;
+    const next = () => `$${++p}`;
+    const params: unknown[] = [];
+    const where: string[] = ["l.deleted_at IS NULL"];
+    const push = (cond: string, ...vals: unknown[]) => {
+      where.push(cond);
+      params.push(...vals);
     };
+
+    push(`l.category = ${next()}`, category);
+    push(`l.status = ANY(${next()})`, validStatuses);
+
     // Category-aware price filtering
-    const priceField = category === "car" ? "pricePerDay" : "pricePerNight";
-    if (priceMin !== undefined) where[priceField] = { ...where[priceField], gte: priceMin };
-    if (priceMax !== undefined) where[priceField] = { ...where[priceField], lte: priceMax };
-    if (cancellationPolicy) where.cancellationPolicy = cancellationPolicy;
+    if (priceMin !== undefined) push(`l.${priceCol} >= ${next()}`, priceMin);
+    if (priceMax !== undefined) push(`l.${priceCol} <= ${next()}`, priceMax);
+    if (cancellationPolicy) push(`l.cancellation_policy = ${next()}`, cancellationPolicy);
     if (roomType) {
       if (category === "hotel") {
-        where.hotelRoomTypes = { some: { roomType: roomType as any, isActive: true } };
+        push(
+          `EXISTS (SELECT 1 FROM listing.hotel_room_types hrt WHERE hrt.listing_id = l.id AND hrt.room_type = ${next()} AND hrt.is_active = true)`,
+          roomType,
+        );
       } else {
-        where.roomType = roomType;
+        push(`l.room_type = ${next()}`, roomType);
       }
     }
-    if (smokingAllowed !== undefined) where.smokingAllowed = smokingAllowed === "true";
-    if (petsAllowed !== undefined) where.petsAllowed = petsAllowed === "true";
-    // Free-text: match the listing's own name or any of its location fields.
-    if (textQuery) {
-      const contains = { contains: textQuery, mode: "insensitive" as const };
-      where.OR = [
-        { name: contains },
-        { town: contains },
-        { neighborhood: contains },
-        { address: contains },
-      ];
-    }
+    if (smokingAllowed !== undefined) push(`l.smoking_allowed = ${next()}`, smokingAllowed === "true");
+    if (petsAllowed !== undefined) push(`l.pets_allowed = ${next()}`, petsAllowed === "true");
     // Hotel
-    if (starRatings?.length) where.starRating = { in: starRatings };
+    if (starRatings?.length) {
+      const ph = starRatings.map(() => next()).join(", ");
+      push(`l.star_rating IN (${ph})`, ...starRatings);
+    }
     // Apartment
-    if (bedroomsMin !== undefined) where.bedrooms = { gte: bedroomsMin };
-    if (bathroomsMin !== undefined) where.bathrooms = { gte: bathroomsMin };
-    if (maxGuestsMin !== undefined) where.maxGuests = { gte: maxGuestsMin };
-    if (longStayDiscount) where.longStayEnabled = true;
+    if (bedroomsMin !== undefined) push(`l.bedrooms >= ${next()}`, bedroomsMin);
+    if (bathroomsMin !== undefined) push(`l.bathrooms >= ${next()}`, bathroomsMin);
+    if (maxGuestsMin !== undefined) push(`l.max_guests >= ${next()}`, maxGuestsMin);
+    if (longStayDiscount) push(`l.long_stay_discount_enabled = true`);
     // Car
-    if (carMake) where.carMake = { contains: carMake, mode: "insensitive" };
-    if (carModel) where.carModel = { contains: carModel, mode: "insensitive" };
-    if (transmission) where.transmission = transmission;
+    if (carMake) push(`l.car_make ILIKE ${next()}`, `%${carMake}%`);
+    if (carModel) push(`l.car_model ILIKE ${next()}`, `%${carModel}%`);
+    if (transmission) push(`l.transmission = ${next()}`, transmission);
     if (fuelType) {
-      const ftMap: Record<string, FuelType> = {
-        petrol: FuelType.petrol, diesel: FuelType.diesel, electric: FuelType.electric,
-        hybrid: FuelType.hybrid, lpg: FuelType.lpg,
+      const ftMap: Record<string, string> = {
+        petrol: "petrol", diesel: "diesel", electric: "electric",
+        hybrid: "hybrid", lpg: "lpg",
       };
-      if (ftMap[fuelType]) where.fuelType = ftMap[fuelType];
+      if (ftMap[fuelType]) push(`l.fuel_type = ${next()}`, ftMap[fuelType]);
     }
-    if (seatsMin !== undefined) where.seats = { gte: seatsMin };
-    if (mileagePolicy) where.mileagePolicy = mileagePolicy;
-    if (carCategory) where.carCategory = carCategory;
+    if (seatsMin !== undefined) push(`l.seats >= ${next()}`, seatsMin);
+    if (mileagePolicy) push(`l.mileage_policy = ${next()}`, mileagePolicy);
+    if (carCategory) push(`l.car_category = ${next()}`, carCategory);
     if (driveType) {
-      if (driveType === "2WD") where.driveType = DriveType.TWO_WD;
-      else if (driveType === "4WD") where.driveType = DriveType.FOUR_WD;
-      else if (driveType === "AWD") where.driveType = DriveType.AWD;
+      const driveMap: Record<string, string> = { "2WD": "2WD", "4WD": "4WD", AWD: "AWD" };
+      if (driveMap[driveType]) push(`l.drive_type = ${next()}`, driveMap[driveType]);
     }
-    if (airConditioning !== undefined) where.airConditioning = airConditioning === "true";
-    if (delivery !== undefined) where.deliveryEnabled = delivery === "true";
-    // Nullable range guards — combined into AND so they don't overwrite each other
-    const andClauses: any[] = [];
+    if (airConditioning !== undefined) push(`l.air_conditioning = ${next()}`, airConditioning === "true");
+    if (delivery !== undefined) push(`l.delivery_enabled = ${next()}`, delivery === "true");
+    // Amenities — each requested key is an EXISTS over the join table
     if (amenityIds?.length) {
       const PREFIXES = ["Connectivity", "Food & Drink", "Wellness", "Comfort", "Services"];
       const seen = new Set<string>();
@@ -188,87 +151,149 @@ export async function searchRoutes(app: FastifyInstance) {
         const base = col === -1 ? id : id.slice(col + 1);
         if (!seen.has(base)) {
           seen.add(base);
-          andClauses.push({
-            amenities: { some: { amenityKey: { in: [base, ...PREFIXES.map(p => `${p}:${base}`)] } } }
-          });
+          const keys = [base, ...PREFIXES.map((prefix) => `${prefix}:${base}`)];
+          const ph = keys.map(() => next()).join(", ");
+          push(
+            `EXISTS (SELECT 1 FROM listing.listing_amenities la WHERE la.listing_id = l.id AND la.amenity_key IN (${ph}))`,
+            ...keys,
+          );
         }
       }
     }
-    if (driverAge !== undefined) {
-      andClauses.push({ OR: [{ minimumDriverAge: null }, { minimumDriverAge: { lte: driverAge } }] });
-    }
-    if (minRentalDays !== undefined) {
-      andClauses.push({ OR: [{ minimumRentalDays: null }, { minimumRentalDays: { lte: minRentalDays } }] });
-    }
-    if (minStayNights !== undefined) {
-      andClauses.push({ OR: [{ minStayNights: null }, { minStayNights: { lte: minStayNights } }] });
-    }
-    if (andClauses.length) where.AND = andClauses;
+    // Nullable range guards
+    if (driverAge !== undefined) push(`(l.minimum_driver_age IS NULL OR l.minimum_driver_age <= ${next()})`, driverAge);
+    if (minRentalDays !== undefined) push(`(l.minimum_rental_days IS NULL OR l.minimum_rental_days <= ${next()})`, minRentalDays);
+    if (minStayNights !== undefined) push(`(l.min_stay_nights IS NULL OR l.min_stay_nights <= ${next()})`, minStayNights);
 
-    // Fetch candidates (wide net — geo filter in JS)
-    const candidates = await prisma.listing.findMany({
-      where,
+    // Availability — overlapping bookings excluded at the SQL level
+    if (checkIn && checkOut) {
+      const inRef = next();
+      const outRef = next();
+      push(
+        `NOT EXISTS (SELECT 1 FROM listing.bookings b WHERE b.listing_id = l.id AND b.status IN ('pending_payment', 'confirmed') AND b.check_in < ${outRef} AND b.check_out > ${inRef})`,
+        new Date(checkIn),
+        new Date(checkOut),
+      );
+    }
+    if (pickupDatetime && returnDatetime) {
+      const inRef = next();
+      const outRef = next();
+      push(
+        `NOT EXISTS (SELECT 1 FROM listing.bookings b WHERE b.listing_id = l.id AND b.status IN ('pending_payment', 'confirmed') AND b.pickup_datetime < ${outRef} AND b.return_datetime > ${inRef})`,
+        new Date(pickupDatetime),
+        new Date(returnDatetime),
+      );
+    }
+
+    // Review rating — correlated subquery keeps the count query correct beside LIMIT/OFFSET
+    if (ratingMin !== undefined) {
+      push(
+        `(SELECT AVG(r.rating) FROM listing.listing_reviews r WHERE r.listing_id = l.id AND r.is_hidden = false) >= ${next()}`,
+        ratingMin,
+      );
+    }
+
+    // Geo anchor (optional) — distance ranking needs both coordinates. No
+    // artificial radius cap: radius_km narrows only when explicitly chosen,
+    // otherwise results sort nearest-first.
+    const hasGeo = Number.isFinite(lat) && Number.isFinite(lng);
+    let lngRef: string | null = null;
+    let latRef: string | null = null;
+    if (hasGeo) {
+      lngRef = next();
+      params.push(lng);
+      latRef = next();
+      params.push(lat);
+      if (radiusKm) {
+        push(
+          `(l.location IS NULL OR public.ST_DWithin(l.location, public.ST_SetSRID(public.ST_MakePoint(${lngRef}, ${latRef}), 4326)::public.geography, ${next()}))`,
+          radiusKm * 1000,
+        );
+      }
+    }
+
+    // Free-text rank — accent-insensitive via unaccent: exact → partial → nearby
+    let textRankExpr = "0 AS text_rank";
+    if (textQuery) {
+      const normQ = `public.unaccent(lower(${next()}))`;
+      params.push(textQuery);
+      const fields = ["l.name", "l.town", "l.neighborhood", "l.address"];
+      const exact = fields.map((f) => `public.unaccent(lower(${f})) = ${normQ}`);
+      const partial = fields.map((f) => `public.unaccent(lower(${f})) LIKE '%' || ${normQ} || '%'`);
+      textRankExpr = `CASE WHEN ${exact.join(" OR ")} THEN 0 WHEN ${partial.join(" OR ")} THEN 1 ELSE 2 END AS text_rank`;
+    }
+
+    const pointExpr = hasGeo && lngRef && latRef
+      ? `public.ST_SetSRID(public.ST_MakePoint(${lngRef}, ${latRef}), 4326)::public.geography`
+      : null;
+    const distanceExpr = pointExpr
+      ? `COALESCE(public.ST_Distance(l.location, ${pointExpr}) / 1000, 999999) AS distance_km`
+      : "NULL::double precision AS distance_km";
+    const latExpr = hasGeo ? "public.ST_Y(l.location::public.geometry) AS lat" : "NULL::double precision AS lat";
+    const lngExpr = hasGeo ? "public.ST_X(l.location::public.geometry) AS lng" : "NULL::double precision AS lng";
+
+    const whereSql = where.join("\n      AND ");
+    const selectExprs = ["l.id", textRankExpr, distanceExpr, latExpr, lngExpr].join(",\n      ");
+
+    const orderCols: string[] = [];
+    if (textQuery) orderCols.push("text_rank ASC");
+    if (sort === "price_asc") orderCols.push(`l.${priceCol} ASC NULLS LAST`);
+    else if (sort === "price_desc") orderCols.push(`l.${priceCol} DESC NULLS LAST`);
+    else if (sort === "newest") orderCols.push("l.created_at DESC");
+    else orderCols.push(hasGeo ? "distance_km ASC" : "l.created_at DESC");
+
+    // Pagination (cursor = offset)
+    const paginationStart = params.length;
+    const pageSql = `
+      SELECT ${selectExprs}
+      FROM listing.listings l
+      WHERE ${whereSql}
+      ORDER BY ${orderCols.join(", ")}
+      LIMIT ${next()} OFFSET ${next()}
+    `;
+    params.push(limit, cursor);
+
+    // The text-query param only appears in the SELECT (text_rank), never in the
+    // WHERE — so the COUNT query must exclude it or Postgres rejects the bind.
+    const countParamCount = paginationStart - (textQuery ? 1 : 0);
+
+    const [pageRows, countRows] = await Promise.all([
+      prisma.$queryRawUnsafe<Array<{ id: string; distance_km: number | null; lat: number | null; lng: number | null }>>(
+        pageSql, ...params,
+      ),
+      prisma.$queryRawUnsafe<Array<{ total: number }>>(
+        `SELECT COUNT(*)::int AS total FROM listing.listings l WHERE ${whereSql}`,
+        ...params.slice(0, countParamCount),
+      ),
+    ]);
+
+    const total = countRows[0]?.total ?? 0;
+    const available = total;
+    const nextCursor = cursor + limit < total ? String(cursor + limit) : null;
+
+    const pageIds = pageRows.map((r) => r.id);
+    const distanceMap = new Map(pageRows.map((r) => [r.id, Number(r.distance_km ?? 0)]));
+    const coordsMap = new Map(pageRows.map((r) => [r.id, { lat: r.lat ?? null, lng: r.lng ?? null }]));
+
+    // Enrich the page rows only (bounded to page size), preserving SQL order
+    const rows = await prisma.listing.findMany({
+      where: { id: { in: pageIds } },
       include: {
         photos: { where: { deletedAt: null }, orderBy: { position: "asc" }, take: 1 },
         amenities: true,
         hotelRoomTypes: { where: { isActive: true }, orderBy: { sortOrder: "asc" } },
       },
-      take: 500,
     });
-
-    // PostGIS geo filter — replaces in-memory Haversine
-    const candidateIds = candidates.map((l) => l.id) as string[];
-    let distanceMap = new Map<string, number>();
-    let coordsMap = new Map<string, { lat: number | null; lng: number | null }>();
-    if (candidateIds.length > 0) {
-      const geoResults = await prisma.$queryRaw<Array<{ id: string; distance_km: number; lat: number | null; lng: number | null }>>`
-        SELECT l.id,
-          COALESCE(public.ST_Distance(l.location, public.ST_SetSRID(public.ST_MakePoint(${lng}::double precision, ${lat}::double precision), 4326)::public.geography) / 1000, 999999) AS distance_km,
-          public.ST_Y(l.location::public.geometry) AS lat,
-          public.ST_X(l.location::public.geometry) AS lng
-        FROM listing.listings l
-        WHERE l.id = ANY(${candidateIds})
-          AND (l.location IS NULL OR public.ST_DWithin(l.location, public.ST_SetSRID(public.ST_MakePoint(${lng}::double precision, ${lat}::double precision), 4326)::public.geography, ${radiusKm * 1000}::double precision))
-      `;
-      distanceMap = new Map(geoResults.map((r) => [r.id, Number(r.distance_km)]));
-      coordsMap = new Map(geoResults.map((r) => [r.id, { lat: r.lat, lng: r.lng }]));
-    }
-    const withDistance = candidates
-      .filter((l) => distanceMap.has(l.id))
-      .map((l) => ({ ...l, distanceKm: distanceMap.get(l.id) ?? 0, ...(coordsMap.get(l.id) ?? {}) }));
-
-    // Availability filter (when dates provided)
-    const availIds = withDistance.map((l) => l.id);
-    const bookedIds = await getBookedListingIds(
-      availIds, checkIn, checkOut, pickupDatetime, returnDatetime,
-    );
-    let available = withDistance.filter((l) => !bookedIds.has(l.id));
-
-    // Review rating post-filter (single aggregate query over the filtered set)
-    if (ratingMin !== undefined) {
-      const ratingAggs = await prisma.listingReview.groupBy({
-        by: ["listingId"],
-        where: { listingId: { in: available.map((l) => l.id) }, isHidden: false },
-        _avg: { rating: true },
-        having: { rating: { _avg: { gte: ratingMin } } },
-      });
-      const qualifiedIds = new Set(ratingAggs.map((r) => r.listingId));
-      available = available.filter((l) => qualifiedIds.has(l.id));
-    }
-
-    // Sort
-    const sortPriceField = category === "car" ? "pricePerDay" : "pricePerNight";
-    let sorted = [...available];
-    if (sort === "price_asc") sorted.sort((a, b) => Number((a as any)[sortPriceField] ?? 0) - Number((b as any)[sortPriceField] ?? 0));
-    else if (sort === "price_desc") sorted.sort((a, b) => Number((b as any)[sortPriceField] ?? 0) - Number((a as any)[sortPriceField] ?? 0));
-    else if (sort === "distance") sorted.sort((a, b) => a.distanceKm - b.distanceKm);
-    else if (sort === "newest") sorted.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    else sorted.sort((a, b) => a.distanceKm - b.distanceKm); // recommended default = nearest
-
-    // Pagination (cursor = offset)
-    const total = sorted.length;
-    const page = sorted.slice(cursor, cursor + limit);
-    const nextCursor = cursor + limit < total ? String(cursor + limit) : null;
+    const rowsById = new Map(rows.map((row) => [row.id, row]));
+    const page = pageIds
+      .map((id) => rowsById.get(id))
+      .filter((row): row is NonNullable<typeof row> => !!row)
+      .map((l) => ({
+        ...l,
+        distanceKm: distanceMap.get(l.id) ?? 0,
+        lat: coordsMap.get(l.id)?.lat ?? null,
+        lng: coordsMap.get(l.id)?.lng ?? null,
+      }));
 
     // Favourites enrichment
     let favouriteSet = new Set<string>();
@@ -281,14 +306,16 @@ export async function searchRoutes(app: FastifyInstance) {
     }
 
     // Log search
+    const logLat = Number.isFinite(lat) ? lat : 0;
+    const logLng = Number.isFinite(lng) ? lng : 0;
     await prisma.searchLog.create({
       data: {
         userId: guestId ?? undefined,
         category,
         placeName,
-        lat,
-        lng,
-        radiusKm,
+        lat: logLat,
+        lng: logLng,
+        radiusKm: radiusKm ?? 25,
         checkIn: checkIn ? new Date(checkIn) : undefined,
         checkOut: checkOut ? new Date(checkOut) : undefined,
         pickupDatetime: pickupDatetime ? new Date(pickupDatetime) : undefined,
@@ -406,7 +433,7 @@ export async function searchRoutes(app: FastifyInstance) {
 
     return sendSuccess(reply, 200, {
       totalCount: total,
-      availableCount: available.length,
+      availableCount: available,
       nextCursor,
       results,
     });
@@ -424,10 +451,11 @@ export async function searchRoutes(app: FastifyInstance) {
         type: "object",
         properties: {
           category: { type: "string", enum: ["hotel", "apartment", "car"], description: "Listing category (required)" },
-          lat: { type: "number", description: "Latitude of search centre (required)" },
-          lng: { type: "number", description: "Longitude of search centre (required)" },
+          lat: { type: "number", description: "Latitude of search centre — optional; omitted → no distance ranking" },
+          lng: { type: "number", description: "Longitude of search centre — optional; omitted → no distance ranking" },
+          q: { type: "string", description: "Free-text destination search — matches listing name/location fields accent-insensitively; exact → partial → nearby ranked" },
           place_name: { type: "string", description: "Human-readable place name (for logging)" },
-          radius_km: { type: "integer", default: 25, description: "Search radius in km (default 25)" },
+          radius_km: { type: "integer", description: "Search radius in km — only applied when explicitly provided; omitted → nearest-first without a cap" },
           check_in: { type: "string", description: "Hotel/apartment check-in date (YYYY-MM-DD)" },
           check_out: { type: "string", description: "Hotel/apartment check-out date (YYYY-MM-DD)" },
           pickup_datetime: { type: "string", description: "Car pickup datetime (ISO 8601)" },
@@ -476,7 +504,7 @@ export async function searchRoutes(app: FastifyInstance) {
           delivery: { type: "string", enum: ["true", "false"], description: "Filter by delivery availability" },
           currency: { type: "string", description: "ISO 4217 currency code for localized prices (e.g. KES, NGN, USD)" },
         },
-        required: ["category", "lat", "lng"],
+        required: ["category"],
       },
     },
     preHandler: [authenticate],

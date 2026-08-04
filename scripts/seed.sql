@@ -2,6 +2,12 @@
 -- Provider: testprovider99@zika.com  (cmos7y8zp0009j9kc5o4ed3c0)
 -- Guest:    guest1@test.com          (cmosebuyd000ej9kcyqnm3ha3)
 
+-- Accent-insensitive search support (unaccent + pg_trgm for partial matching).
+-- Installed into public (where postgis lives) because the search service
+-- references them as public.unaccent / public.gin_trgm_ops.
+CREATE EXTENSION IF NOT EXISTS unaccent SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public;
+
 -- Commission rate for Kenya
 INSERT INTO listing.commission_rates (id, country, rate, set_by, created_at, updated_at)
 VALUES (gen_random_uuid(), 'KE', 0.10, 'system', NOW(), NOW())

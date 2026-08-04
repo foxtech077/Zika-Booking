@@ -26,6 +26,20 @@ import DateRangePicker from "./components/DateRangePicker";
 import type { PublicListingDetail } from "@/types";
 import { isTaraCountry } from "@zika/types";
 
+// Accent-insensitive matching: strips diacritics so "makepe" matches "Maképé".
+function normalizeText(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function matchesText(field: string | null | undefined, term: string): boolean {
+  if (!field) return false;
+  return normalizeText(String(field)).includes(normalizeText(term));
+}
+
 const AMENITY_CATEGORY: Record<string, string> = {
   wifi: "Connectivity", smart_tv: "Connectivity", work_desk: "Connectivity",
   printer: "Connectivity", workspace: "Connectivity",
@@ -1110,7 +1124,7 @@ export default function TravellerDashboard() {
           if (activeCategory === "car") {
             fields.push(listing.carMake, listing.carModel);
           }
-          return fields.some((f) => f && String(f).toLowerCase().includes(term));
+          return fields.some((f) => matchesText(f, term));
         });
       }
 
@@ -1185,7 +1199,7 @@ export default function TravellerDashboard() {
             listing.name, listing.town, listing.country, listing.address, listing.description,
           ];
           if (searchCategory === "car") fields.push(listing.carMake, listing.carModel);
-          return fields.some((f) => f && String(f).toLowerCase().includes(term));
+          return fields.some((f) => matchesText(f, term));
         })
         : mapped;
       if (filtered.length > 0) {
