@@ -65,6 +65,7 @@ export const useAuthStore = create<AuthState>()(
         if (typeof window !== "undefined") {
           sessionStorage.removeItem(TOKEN_KEY);
           localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem("zika:web_auth");
         }
         // Clear any anonymous checkout session too, so a logged-out user never
         // accidentally keeps acting as a prior anonymous session.

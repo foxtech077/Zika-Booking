@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAuthStore } from "@/stores/auth";
 import { fetchUnreadConversationCount } from "@/services/traveller";
+import { logoutUser } from "@/lib/api";
 
 interface TravellerWorkspaceNavProps {
   showHome?: boolean;
@@ -38,7 +39,7 @@ export function TravellerWorkspaceNav({
 }: TravellerWorkspaceNavProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, clearSession } = useAuthStore();
+  const { user } = useAuthStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -61,9 +62,9 @@ export function TravellerWorkspaceNav({
     return () => document.removeEventListener("mousedown", onOutsideClick);
   }, [menuOpen]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setMenuOpen(false);
-    clearSession();
+    await logoutUser();
     router.replace("/auth/login");
   };
 

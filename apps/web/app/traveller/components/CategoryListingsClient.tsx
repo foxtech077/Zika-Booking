@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { listingApi } from "@/lib/listing-api";
 import { useAuthStore } from "@/stores/auth";
 import { useFavourites } from "@/hooks/useFavourites";
+import { logoutUser } from "@/lib/api";
 import dynamic from "next/dynamic";
 import ListingCard from "./ListingCard";
 import DateRangePicker from "./DateRangePicker";
@@ -748,7 +749,7 @@ export default function CategoryListingsClient({ category }: Props) {
   const isCar = category === "car";
   const router = useRouter();
   const sp = useSearchParams();
-  const { user, clearSession, isAuthenticated } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
   const { isFavourited, toggleFavourite } = useFavourites();
   const [showAuthModal, setShowAuthModal] = useState(false);
 
@@ -1068,8 +1069,8 @@ export default function CategoryListingsClient({ category }: Props) {
   /* ─────────────────────────────────────────────────────────── */
   /* Logout                                                      */
   /* ─────────────────────────────────────────────────────────── */
-  function handleLogout() {
-    clearSession();
+  async function handleLogout() {
+    await logoutUser();
     router.push("/auth/login");
   }
 

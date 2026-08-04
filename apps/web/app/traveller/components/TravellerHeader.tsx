@@ -8,6 +8,7 @@ import { ChevronDown, Heart, LogOut, Menu, MessageSquare, Star, User, HelpCircle
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAuthStore } from "@/stores/auth";
+import { logoutUser } from "@/lib/api";
 import { fetchUnreadConversationCount } from "@/services/traveller";
 import { useUnreadNotificationCount } from "@/hooks/useNotifications";
 import { useListingSummary } from "@/hooks/listings";
@@ -45,7 +46,7 @@ export function TravellerHeader({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { user, clearSession } = useAuthStore();
+  const { user } = useAuthStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -80,9 +81,9 @@ export function TravellerHeader({
     setMobileMenuOpen(false);
   }, [pathname, searchSignature]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setMenuOpen(false);
-    clearSession();
+    await logoutUser();
     router.replace("/auth/login");
   };
 

@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { api } from "@/lib/api";           // auth-service: POST /auth/logout only
+import { api, logoutUser } from "@/lib/api";           // auth-service: POST /auth/logout only
 import { listingApi } from "@/lib/listing-api";
 import { ensureAnonymousToken } from "@/lib/anonymous";
 import { paymentApi } from "@/lib/payment-api";
@@ -227,7 +227,7 @@ export default function TravellerDashboard() {
   const getTodayString = () => new Date().toISOString().slice(0, 10);
 
   // Auth — read directly from Zustand store (populated by login page, no API call needed)
-  const { user, isAuthenticated, _hasHydrated, clearSession, updateUser } = useAuthStore();
+  const { user, isAuthenticated, _hasHydrated, updateUser } = useAuthStore();
   const hasAuthToken = isAuthenticated;
   const ready = _hasHydrated;
 
@@ -2127,9 +2127,8 @@ export default function TravellerDashboard() {
     }
   }
 
-  function handleLogout() {
-    api.post("/auth/logout").catch(() => { });  // invalidate server-side refresh token
-    clearSession();                            // clear Zustand store + sessionStorage
+  async function handleLogout() {
+    await logoutUser();
     router.replace("/auth/login");
   }
 

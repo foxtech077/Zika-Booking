@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Bell, LogOut, User, ChevronDown, HelpCircle, Menu, Home } from "lucide-react";
 import { listingsService } from "@/services/listings";
 import { useAuthStore } from "@/stores/auth";
+import { logoutUser } from "@/lib/api";
 import { Avatar } from "@/components/ui/Avatar";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -28,22 +29,22 @@ function formatUnreadCount(count: number) {
 /** Derive a human-readable page title from the current pathname */
 // function getPageTitle(pathname: string): string {
 //   const segments = pathname.split("/").filter(Boolean);
-//   const last = segments[segments.length - 1];
-//   if (!last || last === "dashboard") return "Dashboard";
-//   const map: Record<string, string> = {
-//     listings:      "Listings",
-//     bookings:      "Bookings",
-//     calendar:      "Calendar",
-//     reviews:       "Reviews",
-//     messaging:     "Messages",
-//     earnings:      "Earnings",
-//     channel:       "Channel Sync",
-//     settings:      "Settings",
-//     notifications: "Notifications",
-//     new:           "New Listing",
-//     edit:          "Edit Listing",
-//   };
-//   return map[last] ?? last.charAt(0).toUpperCase() + last.slice(1);
+//   const firstSegment = segments[0] || "";
+//   const secondSegment = segments[1] || "";
+//   const thirdSegment = segments[2] || "";
+//   
+//   if (firstSegment === "provider") {
+//     if (secondSegment === "dashboard") {
+//       if (thirdSegment === "listings") return "Listings";
+//       if (thirdSegment === "bookings") return "Bookings";
+//       if (thirdSegment === "messages") return "Messages";
+//       if (thirdSegment === "reviews") return "Reviews";
+//       if (thirdSegment === "settings") return "Settings";
+//       return "Dashboard";
+//     }
+//     return "Dashboard";
+//   }
+//   return "Dashboard";
 // }
 
 interface TopBarProps {
@@ -51,7 +52,7 @@ interface TopBarProps {
 }
 
 export function TopBar({ onToggleSidebar }: TopBarProps) {
-  const { user, clearSession } = useAuthStore();
+  const { user } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -62,8 +63,8 @@ export function TopBar({ onToggleSidebar }: TopBarProps) {
     staleTime: 15_000,
   });
 
-  const handleLogout = () => {
-    clearSession();
+  const handleLogout = async () => {
+    await logoutUser();
     router.replace("/auth/login");
   };
 
