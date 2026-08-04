@@ -212,14 +212,15 @@ export async function searchRoutes(app: FastifyInstance) {
       }
     }
 
-    // Free-text rank — accent-insensitive via unaccent: exact → partial → nearby
+    // Free-text rank — accent-insensitive via the immutable f_unaccent wrapper
+    // (unaccent itself is not immutable, so it cannot be indexed directly).
     let textRankExpr = "0 AS text_rank";
     if (textQuery) {
-      const normQ = `public.unaccent(lower(${next()}))`;
+      const normQ = `public.f_unaccent(lower(${next()}))`;
       params.push(textQuery);
       const fields = ["l.name", "l.town", "l.neighborhood", "l.address"];
-      const exact = fields.map((f) => `public.unaccent(lower(${f})) = ${normQ}`);
-      const partial = fields.map((f) => `public.unaccent(lower(${f})) LIKE '%' || ${normQ} || '%'`);
+      const exact = fields.map((f) => `public.f_unaccent(lower(${f})) = ${normQ}`);
+      const partial = fields.map((f) => `public.f_unaccent(lower(${f})) LIKE '%' || ${normQ} || '%'`);
       textRankExpr = `CASE WHEN ${exact.join(" OR ")} THEN 0 WHEN ${partial.join(" OR ")} THEN 1 ELSE 2 END AS text_rank`;
     }
 

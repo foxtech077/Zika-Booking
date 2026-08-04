@@ -4,9 +4,15 @@
 
 -- Accent-insensitive search support (unaccent + pg_trgm for partial matching).
 -- Installed into public (where postgis lives) because the search service
--- references them as public.unaccent / public.gin_trgm_ops.
+-- references them as public.f_unaccent / public.gin_trgm_ops.
 CREATE EXTENSION IF NOT EXISTS unaccent SCHEMA public;
 CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public;
+
+-- unaccent(text) is not IMMUTABLE on every server, but index expressions must
+-- be immutable, so the search service uses this stable wrapper.
+CREATE OR REPLACE FUNCTION public.f_unaccent(text) RETURNS text
+LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+AS 'SELECT public.unaccent($1)';
 
 -- Commission rate for Kenya
 INSERT INTO listing.commission_rates (id, country, rate, set_by, created_at, updated_at)
