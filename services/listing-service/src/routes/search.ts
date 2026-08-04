@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireUser, authenticate, type AuthRequest } from "../middleware/auth.js";
+import { requireUser, optionalAuth, type AuthRequest } from "../middleware/auth.js";
 import { getCommissionRate } from "./bookings.js";
 import { getRatesBatch, ceilingForCurrency, getConvertedAmounts, getLocalizedContext } from "../services/exchangeRate.services.js";
 
@@ -525,7 +525,7 @@ export async function searchRoutes(app: FastifyInstance) {
         required: ["category"],
       },
     },
-    preHandler: [authenticate],
+    preHandler: [optionalAuth],
   };
   app.get("/search", searchOpts, handleSearch);
   app.get("/listings/search", searchOpts, handleSearch);
@@ -550,7 +550,7 @@ export async function searchRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [authenticate],
+      preHandler: [optionalAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {

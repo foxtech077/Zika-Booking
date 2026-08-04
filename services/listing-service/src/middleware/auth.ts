@@ -31,12 +31,14 @@ async function readJwt(req: FastifyRequest): Promise<{ payload: any } | null> {
 }
 
 /**
- * authenticate — OPTIONAL. Parses the token if present and exposes req.auth
- * on the request, but never rejects. Only populated for real users so
- * anonymous ids are never used as lookup keys for user-data features.
- * Replaces the old optionalGuest; used on public search/detail endpoints.
+ * optionalAuth — best-effort. Parses the token when one is present and fills
+ * in req.authId / req.authType / req.hostStatus, but never rejects a request
+ * without a token. Used on public search/detail endpoints so identity is
+ * available for enrichment (e.g. recently-viewed) while guests stay
+ * unauthenticated. Only populated for real users so anonymous ids are never
+ * used as lookup keys for user-data features.
  */
-export async function authenticate(req: FastifyRequest, _reply: FastifyReply) {
+export async function optionalAuth(req: FastifyRequest, _reply: FastifyReply) {
   const base = req as Partial<AuthRequest>;
   base.authType = "anonymous";
   base.authId = "";
