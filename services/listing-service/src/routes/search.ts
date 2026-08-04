@@ -93,21 +93,21 @@ export async function searchRoutes(app: FastifyInstance) {
       params.push(...vals);
     };
 
-    push(`l.category = ${next()}`, category);
-    push(`l.status = ANY(${next()})`, validStatuses);
+    push(`l.category::text = ${next()}`, category);
+    push(`l.status::text = ANY(${next()})`, validStatuses);
 
     // Category-aware price filtering
     if (priceMin !== undefined) push(`l.${priceCol} >= ${next()}`, priceMin);
     if (priceMax !== undefined) push(`l.${priceCol} <= ${next()}`, priceMax);
-    if (cancellationPolicy) push(`l.cancellation_policy = ${next()}`, cancellationPolicy);
+    if (cancellationPolicy) push(`l.cancellation_policy::text = ${next()}`, cancellationPolicy);
     if (roomType) {
       if (category === "hotel") {
         push(
-          `EXISTS (SELECT 1 FROM listing.hotel_room_types hrt WHERE hrt.listing_id = l.id AND hrt.room_type = ${next()} AND hrt.is_active = true)`,
+          `EXISTS (SELECT 1 FROM listing.hotel_room_types hrt WHERE hrt.listing_id = l.id AND hrt.room_type::text = ${next()} AND hrt.is_active = true)`,
           roomType,
         );
       } else {
-        push(`l.room_type = ${next()}`, roomType);
+        push(`l.room_type::text = ${next()}`, roomType);
       }
     }
     if (smokingAllowed !== undefined) push(`l.smoking_allowed = ${next()}`, smokingAllowed === "true");
@@ -125,20 +125,20 @@ export async function searchRoutes(app: FastifyInstance) {
     // Car
     if (carMake) push(`l.car_make ILIKE ${next()}`, `%${carMake}%`);
     if (carModel) push(`l.car_model ILIKE ${next()}`, `%${carModel}%`);
-    if (transmission) push(`l.transmission = ${next()}`, transmission);
+    if (transmission) push(`l.transmission::text = ${next()}`, transmission);
     if (fuelType) {
       const ftMap: Record<string, string> = {
         petrol: "petrol", diesel: "diesel", electric: "electric",
         hybrid: "hybrid", lpg: "lpg",
       };
-      if (ftMap[fuelType]) push(`l.fuel_type = ${next()}`, ftMap[fuelType]);
+      if (ftMap[fuelType]) push(`l.fuel_type::text = ${next()}`, ftMap[fuelType]);
     }
     if (seatsMin !== undefined) push(`l.seats >= ${next()}`, seatsMin);
-    if (mileagePolicy) push(`l.mileage_policy = ${next()}`, mileagePolicy);
-    if (carCategory) push(`l.car_category = ${next()}`, carCategory);
+    if (mileagePolicy) push(`l.mileage_policy::text = ${next()}`, mileagePolicy);
+    if (carCategory) push(`l.car_category::text = ${next()}`, carCategory);
     if (driveType) {
       const driveMap: Record<string, string> = { "2WD": "2WD", "4WD": "4WD", AWD: "AWD" };
-      if (driveMap[driveType]) push(`l.drive_type = ${next()}`, driveMap[driveType]);
+      if (driveMap[driveType]) push(`l.drive_type::text = ${next()}`, driveMap[driveType]);
     }
     if (airConditioning !== undefined) push(`l.air_conditioning = ${next()}`, airConditioning === "true");
     if (delivery !== undefined) push(`l.delivery_enabled = ${next()}`, delivery === "true");
