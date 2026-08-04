@@ -194,7 +194,7 @@ export default function BookingReviewPage() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── UI State ────────────────────────────────────────────────────────────────
-  const [step, setStep] = useState<PayStep>("review");
+  const [step, setStep] = useState<PayStep>("payment");
   const [provider, setProvider] = useState<PayProvider>("stripe");
   const [showExpiry, setShowExpiry] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -798,360 +798,316 @@ export default function BookingReviewPage() {
             </div>
           )}
 
-          {/* ── REVIEW & PAYMENT SELECTION ── */}
+          {/* ── REVIEW & PAYMENT ── */}
           {(step === "review" || step === "payment") && (
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-8">
 
               {/* Left column */}
               <div className="space-y-6">
 
-                {/* Step indicator */}
-                <div className="flex items-center gap-0">
-                  {[{ k: "review", n: 1, l: "Review" }, { k: "payment", n: 2, l: "Payment" }].map((s, i) => (
-                    <div key={s.k} className="flex items-center">
-                      <div className={`flex items-center gap-1.5 text-xs font-semibold ${step === s.k ? "text-[#0B1E3F]" : s.n < (step === "payment" ? 2 : 1) ? "text-emerald-600" : "text-slate-400"}`}>
-                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${step === s.k ? "bg-[#0B1E3F] text-white" : s.n < (step === "payment" ? 2 : 1) ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-500"}`}>
-                          {s.n < (step === "payment" ? 2 : 1) ? "✓" : s.n}
-                        </span>
-                        {s.l}
+                {/* Listing card */}
+                <SectionCard title="Your Booking">
+                  <div className="flex gap-4">
+                    {ctx.listingPhoto ? (
+                      <img src={ctx.listingPhoto} alt="" className="w-24 h-20 rounded-xl object-cover shrink-0" />
+                    ) : (
+                      <div className="w-24 h-20 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+                        <span className="text-slate-400 text-2xl">{isCar ? "🚗" : "🏨"}</span>
                       </div>
-                      {i < 1 && <div className="w-12 h-px bg-slate-200 mx-2" />}
-                    </div>
-                  ))}
-                </div>
-
-                {/* ── REVIEW step ── */}
-                {step === "review" && (
-                  <>
-                    {/* Listing card */}
-                    <SectionCard title="Your Booking">
-                      <div className="flex gap-4">
-                        {ctx.listingPhoto ? (
-                          <img src={ctx.listingPhoto} alt="" className="w-24 h-20 rounded-xl object-cover shrink-0" />
-                        ) : (
-                          <div className="w-24 h-20 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
-                            <span className="text-slate-400 text-2xl">{isCar ? "🚗" : "🏨"}</span>
-                          </div>
-                        )}
-                        <div>
-                          <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-0.5">{ctx.listingCategory}</p>
-                          <h3 className="font-bold text-slate-800 text-base leading-snug">{ctx.listingTitle}</h3>
-                          {ctx.roomTypeName && (
-                            <p className="text-xs font-semibold text-[#1D8D2B] mt-0.5">{ctx.roomTypeName}</p>
-                          )}
-                          <p className="text-sm text-slate-500 mt-0.5">{ctx.listingTown}, {ctx.listingCountry}</p>
-                        </div>
-                      </div>
-                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                        {!isCar ? (
-                          <>
-                            <InfoRow label="Check-in" value={fmtDate(ctx.checkIn)} />
-                            <InfoRow label="Check-out" value={fmtDate(ctx.checkOut)} />
-                          </>
-                        ) : (
-                          <>
-                            <InfoRow label="Pick-up" value={fmtDate(ctx.pickupDatetime)} />
-                            <InfoRow label="Return" value={fmtDate(ctx.returnDatetime)} />
-                          </>
-                        )}
-                        <InfoRow label="Duration" value={`${ctx.nightsOrDays} ${isCar ? "day" : "night"}${ctx.nightsOrDays !== 1 ? "s" : ""}`} />
-                        <InfoRow label="Guests" value={`${ctx.adults} adult${ctx.adults !== 1 ? "s" : ""}${ctx.children > 0 ? `, ${ctx.children} child${ctx.children !== 1 ? "ren" : ""}` : ""}`} />
-                      </div>
-                    </SectionCard>
-
-                    {/* Guest details */}
-                    <SectionCard title="Guest Details">
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <InfoRow label="Name" value={`${ctx.firstName} ${ctx.lastName}`} />
-                        <InfoRow label="Email" value={ctx.email} />
-                        <InfoRow label="Phone" value={ctx.phone || "—"} />
-                        {ctx.specialRequests && <InfoRow label="Special requests" value={ctx.specialRequests} />}
-                      </div>
-                    </SectionCard>
-
-                    {/* Voucher / promo code */}
-                    <SectionCard title="Discount Code">
-                      {ctx.discountSource === "voucher" && ctx.voucherCode ? (
-                        /* ── Voucher applied ── */
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold text-emerald-700">
-                            ✓ {ctx.voucherCode} — saves {ctx.currency} {fmt(ctx.voucherDiscount ?? 0)}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updated: CheckoutCtx = { ...ctx, voucherCode: undefined, voucherDiscount: 0, discountSource: undefined };
-                              setCtx(updated);
-                              setReviewVoucherCode("");
-                              sessionStorage.setItem("zika:checkout", JSON.stringify(updated));
-                            }}
-                            className="text-xs text-slate-400 hover:text-red-500 transition font-medium"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ) : ctx.discountSource === "promotion" ? (
-                        /* ── Promotion active — user can still override with a higher voucher ── */
-                        <div className="space-y-3">
-                          <p className="text-sm text-emerald-700 font-semibold flex items-center gap-1.5">
-                            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                            Promotion applied — saves {ctx.currency} {fmt(pricing?.discount ?? 0)}
-                          </p>
-                          <p className="text-xs text-slate-500">Have a voucher that saves more? Select or enter it below:</p>
-
-                          {/* Wallet dropdown */}
-                          {loadingWalletVouchers ? (
-                            <div className="flex items-center gap-2 text-xs text-slate-400 py-0.5">
-                              <div className="w-3 h-3 border-2 border-slate-300 border-t-[#0B1E3F] rounded-full animate-spin" />
-                              Loading your vouchers…
-                            </div>
-                          ) : walletVouchers.length > 0 ? (
-                            <div className="relative">
-                              <select
-                                defaultValue=""
-                                onChange={(e) => {
-                                  const code = e.target.value;
-                                  if (!code) return;
-                                  setReviewVoucherCode(code);
-                                  handleReviewVoucherApply(code);
-                                }}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 appearance-none cursor-pointer focus:outline-none focus:border-[#0B1E3F] pr-7"
-                              >
-                                <option value="">Select a voucher from wallet…</option>
-                                {walletVouchers.map((v) => (
-                                  <option key={v.id} value={v.code}>
-                                    {v.code}
-                                    {v.description
-                                      ? ` — ${v.description}`
-                                      : v.discountType === "percentage"
-                                        ? ` — ${v.discountValue}% off`
-                                        : ` — ${ctx.currency} ${v.discountValue} off`}
-                                  </option>
-                                ))}
-                              </select>
-                              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                                </svg>
-                              </div>
-                            </div>
-                          ) : null}
-
-                          {/* Manual code input */}
-                          <div className="flex gap-2 items-center border border-slate-200 rounded-xl px-3 py-2 bg-slate-50">
-                            <input
-                              type="text"
-                              placeholder={walletVouchers.length > 0 ? "Or enter code manually" : "Voucher code"}
-                              value={reviewVoucherCode}
-                              onChange={(e) => setReviewVoucherCode(e.target.value)}
-                              onKeyDown={(e) => e.key === "Enter" && handleReviewVoucherApply()}
-                              className="bg-transparent border-0 focus:ring-0 focus:outline-none text-sm text-slate-800 flex-1 min-w-0"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleReviewVoucherApply()}
-                              disabled={reviewVoucherApplying || !reviewVoucherCode.trim()}
-                              className="text-xs font-bold text-[#0B1E3F] border border-[#0B1E3F] px-3 py-1.5 rounded-lg hover:bg-[#0B1E3F] hover:text-white disabled:opacity-40 transition shrink-0"
-                            >
-                              {reviewVoucherApplying ? "…" : "Apply"}
-                            </button>
-                          </div>
-                          {reviewVoucherError && <p className="text-xs text-red-600 font-medium">{reviewVoucherError}</p>}
-                        </div>
-                      ) : (
-                        /* ── No discount yet ── */
-                        <div className="space-y-2.5">
-                          {/* Wallet dropdown */}
-                          {loadingWalletVouchers ? (
-                            <div className="flex items-center gap-2 text-xs text-slate-400 py-0.5">
-                              <div className="w-3 h-3 border-2 border-slate-300 border-t-[#0B1E3F] rounded-full animate-spin" />
-                              Loading your vouchers…
-                            </div>
-                          ) : walletVouchers.length > 0 ? (
-                            <div className="relative">
-                              <select
-                                defaultValue=""
-                                onChange={(e) => {
-                                  const code = e.target.value;
-                                  if (!code) return;
-                                  setReviewVoucherCode(code);
-                                  handleReviewVoucherApply(code);
-                                }}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 appearance-none cursor-pointer focus:outline-none focus:border-[#0B1E3F] pr-7"
-                              >
-                                <option value="">Select a voucher from wallet…</option>
-                                {walletVouchers.map((v) => (
-                                  <option key={v.id} value={v.code}>
-                                    {v.code}
-                                    {v.description
-                                      ? ` — ${v.description}`
-                                      : v.discountType === "percentage"
-                                        ? ` — ${v.discountValue}% off`
-                                        : ` — ${ctx.currency} ${v.discountValue} off`}
-                                  </option>
-                                ))}
-                              </select>
-                              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                                </svg>
-                              </div>
-                            </div>
-                          ) : null}
-
-                          {/* Manual code input */}
-                          <div className="flex gap-2 items-center border border-slate-200 rounded-xl px-3 py-2 bg-slate-50">
-                            <input
-                              type="text"
-                              placeholder={walletVouchers.length > 0 ? "Or enter code manually" : "Promo / voucher code"}
-                              value={reviewVoucherCode}
-                              onChange={(e) => setReviewVoucherCode(e.target.value)}
-                              onKeyDown={(e) => e.key === "Enter" && handleReviewVoucherApply()}
-                              className="bg-transparent border-0 focus:ring-0 focus:outline-none text-sm text-slate-800 flex-1 min-w-0"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleReviewVoucherApply()}
-                              disabled={reviewVoucherApplying || !reviewVoucherCode.trim()}
-                              className="text-xs font-bold text-[#0B1E3F] border border-[#0B1E3F] px-3 py-1.5 rounded-lg hover:bg-[#0B1E3F] hover:text-white disabled:opacity-40 transition shrink-0"
-                            >
-                              {reviewVoucherApplying ? "…" : "Apply"}
-                            </button>
-                          </div>
-                          {reviewVoucherError && <p className="text-xs text-red-600 font-medium">{reviewVoucherError}</p>}
-                        </div>
+                    )}
+                    <div>
+                      <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-0.5">{ctx.listingCategory}</p>
+                      <h3 className="font-bold text-slate-800 text-base leading-snug">{ctx.listingTitle}</h3>
+                      {ctx.roomTypeName && (
+                        <p className="text-xs font-semibold text-[#1D8D2B] mt-0.5">{ctx.roomTypeName}</p>
                       )}
-                    </SectionCard>
-
-                    <button
-                      onClick={() => setStep("payment")}
-                      className="w-full py-3.5 bg-[#0B1E3F] hover:bg-[#07152B] text-white font-bold rounded-xl transition text-sm"
-                    >
-                      Continue to Payment
-                    </button>
-                  </>
-                )}
-
-                {/* ── PAYMENT step ── */}
-                {step === "payment" && (
-                  <>
-                    {/* Payment method selector */}
-                    <SectionCard title="Payment Method">
-                      <div className="grid grid-cols-2 gap-3">
-                        {(taraListingEligible ? (["tara", "stripe"] as PayProvider[]) : (["stripe"] as PayProvider[])).map((p) => (
-                          <button
-                            key={p}
-                            onClick={() => setProvider(p)}
-                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition text-sm font-semibold ${provider === p ? "border-[#0B1E3F] bg-[#0B1E3F]/5 text-[#0B1E3F]" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}
-                          >
-                            <span className="text-2xl">{p === "tara" ? "📱" : "💳"}</span>
-                            <span>{p === "tara" ? "Mobile Money" : "Card & Digital Wallets"}</span>
-                            {hasTara && p === "tara" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
-                            {!hasTara && p === "stripe" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
-                          </button>
-                        ))}
-                      </div>
-                    </SectionCard>
-
-                    {/* Mobile Money form */}
-                    {provider === "tara" && (
-                      <SectionCard title="Mobile Money" icon="📱">
-                        <label className="block text-sm font-medium text-slate-700 mb-1.5">Mobile Number</label>
-                        <input
-                          type="tel"
-                          value={mobileNumber}
-                          onChange={(e) => {
-                            setMobileNumber(e.target.value);
-                            try {
-                              const parsed = parsePhoneNumber(e.target.value);
-                              setPhoneCountry(parsed?.country ?? "");
-                            } catch {
-                              setPhoneCountry("");
-                            }
-                          }}
-                          placeholder="+254 700 000 000"
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B1E3F]/20 focus:border-[#0B1E3F]"
-                        />
-                        {phoneCountry && !isTaraCountry(phoneCountry) && (
-                          <p className="text-xs text-red-600 mt-2">
-                            Mobile money is only available for supported African countries. Please use card payment instead.
-                          </p>
-                        )}
-                        <p className="text-xs text-slate-400 mt-2">You will receive a payment prompt on this number.</p>
-                        {ctx && (ctx.currency ?? "").toUpperCase() !== "XAF" && (
-                          <p className="text-xs text-slate-500 mt-1">
-                            {taraXafLoading
-                              ? "Converting to XAF…"
-                              : taraXafAmount != null
-                                ? `You'll pay approximately ${taraXafAmount.toLocaleString()} XAF (mobile money is charged in XAF).`
-                                : "Mobile money is charged in XAF (Central African CFA Franc)."}
-                          </p>
-                        )}
-                      </SectionCard>
+                      <p className="text-sm text-slate-500 mt-0.5">{ctx.listingTown}, {ctx.listingCountry}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    {!isCar ? (
+                      <>
+                        <InfoRow label="Check-in" value={fmtDate(ctx.checkIn)} />
+                        <InfoRow label="Check-out" value={fmtDate(ctx.checkOut)} />
+                      </>
+                    ) : (
+                      <>
+                        <InfoRow label="Pick-up" value={fmtDate(ctx.pickupDatetime)} />
+                        <InfoRow label="Return" value={fmtDate(ctx.returnDatetime)} />
+                      </>
                     )}
+                    <InfoRow label="Duration" value={`${ctx.nightsOrDays} ${isCar ? "day" : "night"}${ctx.nightsOrDays !== 1 ? "s" : ""}`} />
+                    <InfoRow label="Guests" value={`${ctx.adults} adult${ctx.adults !== 1 ? "s" : ""}${ctx.children > 0 ? `, ${ctx.children} child${ctx.children !== 1 ? "ren" : ""}` : ""}`} />
+                  </div>
+                </SectionCard>
 
-                    {/* Card & Digital Wallets info */}
-                    {provider === "stripe" && (
-                      <SectionCard title="Card & Digital Wallets" icon="🔒">
-                        <p className="text-sm text-slate-500 mb-4 flex items-center gap-1.5">
-                          <span className="text-emerald-500">✓</span> Your payment is processed securely.
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {CARD_LOGOS.map((c) => (
-                            <span key={c} className="px-2 py-1 bg-slate-100 rounded text-[10px] font-semibold text-slate-500 border border-slate-200">{c}</span>
-                          ))}
-                        </div>
-                        <p className="text-xs text-slate-400 mt-3">You will be prompted to enter your card details on the next step.</p>
-                      </SectionCard>
-                    )}
+                {/* Guest details */}
+                <SectionCard title="Guest Details">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <InfoRow label="Name" value={`${ctx.firstName} ${ctx.lastName}`} />
+                    <InfoRow label="Email" value={ctx.email} />
+                    <InfoRow label="Phone" value={ctx.phone || "—"} />
+                    {ctx.specialRequests && <InfoRow label="Special requests" value={ctx.specialRequests} />}
+                  </div>
+                </SectionCard>
 
-                    {payError && (
-                      <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{payError}</div>
-                    )}
-
-                    {/* Terms & Conditions — required before completing a payment
-                        or booking. Acceptance is stored against the account on the
-                        first booking, so this is shown once and skipped thereafter.
-                        The Privacy Policy is handled earlier, at registration. */}
-                    {needsTermsAcceptance && (
-                      <label className="flex items-start gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={payTermsAccepted}
-                          onChange={(e) => setPayTermsAccepted(e.target.checked)}
-                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#0B1E3F] focus:ring-[#0B1E3F]"
-                        />
-                        <span className="text-sm text-slate-600">
-                          I have read and agree to the{" "}
-                          <a href="/legal/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#0B1E3F] underline">
-                            Terms &amp; Conditions
-                          </a>
-                          .
-                        </span>
-                      </label>
-                    )}
-
-                    <div className="flex gap-3">
+                {/* Voucher / promo code */}
+                <SectionCard title="Discount Code">
+                  {ctx.discountSource === "voucher" && ctx.voucherCode ? (
+                    /* ── Voucher applied ── */
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-emerald-700">
+                        ✓ {ctx.voucherCode} — saves {ctx.currency} {fmt(ctx.voucherDiscount ?? 0)}
+                      </span>
                       <button
-                        onClick={() => { setStep("review"); setPayError(""); }}
-                        className="flex-1 py-3 border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition text-sm"
+                        type="button"
+                        onClick={() => {
+                          const updated: CheckoutCtx = { ...ctx, voucherCode: undefined, voucherDiscount: 0, discountSource: undefined };
+                          setCtx(updated);
+                          setReviewVoucherCode("");
+                          sessionStorage.setItem("zika:checkout", JSON.stringify(updated));
+                        }}
+                        className="text-xs text-slate-400 hover:text-red-500 transition font-medium"
                       >
-                        ← Back
-                      </button>
-                      <button
-                        onClick={handlePay}
-                        disabled={submitting || (needsTermsAcceptance && !payTermsAccepted)}
-                        className="flex-[2] py-3.5 bg-[#0B1E3F] hover:bg-[#07152B] disabled:opacity-50 text-white font-bold rounded-xl transition text-sm"
-                      >
-                        {submitting ? "Please wait…" : provider === "tara" ? "Send Payment Request" : `Pay ${pricing!.platformCurrency} ${fmt(pricing!.platformAmount)}`}
+                        Remove
                       </button>
                     </div>
-                    {provider === "stripe" && pricing!.platformCurrency !== ctx.currency && (
-                      <p className="text-xs text-slate-400 mt-2 text-center">
-                        Billed as approx. {ctx.currency} {fmt(pricing!.total)} · charged in {pricing!.platformCurrency}
+                  ) : ctx.discountSource === "promotion" ? (
+                    /* ── Promotion active — user can still override with a higher voucher ── */
+                    <div className="space-y-3">
+                      <p className="text-sm text-emerald-700 font-semibold flex items-center gap-1.5">
+                        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                        Promotion applied — saves {ctx.currency} {fmt(pricing?.discount ?? 0)}
+                      </p>
+                      <p className="text-xs text-slate-500">Have a voucher that saves more? Select or enter it below:</p>
+
+                      {/* Wallet dropdown */}
+                      {loadingWalletVouchers ? (
+                        <div className="flex items-center gap-2 text-xs text-slate-400 py-0.5">
+                          <div className="w-3 h-3 border-2 border-slate-300 border-t-[#0B1E3F] rounded-full animate-spin" />
+                          Loading your vouchers…
+                        </div>
+                      ) : walletVouchers.length > 0 ? (
+                        <div className="relative">
+                          <select
+                            defaultValue=""
+                            onChange={(e) => {
+                              const code = e.target.value;
+                              if (!code) return;
+                              setReviewVoucherCode(code);
+                              handleReviewVoucherApply(code);
+                            }}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 appearance-none cursor-pointer focus:outline-none focus:border-[#0B1E3F] pr-7"
+                          >
+                            <option value="">Select a voucher from wallet…</option>
+                            {walletVouchers.map((v) => (
+                              <option key={v.id} value={v.code}>
+                                {v.code}
+                                {v.description
+                                  ? ` — ${v.description}`
+                                  : v.discountType === "percentage"
+                                    ? ` — ${v.discountValue}% off`
+                                    : ` — ${ctx.currency} ${v.discountValue} off`}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {/* Manual code input */}
+                      <div className="flex gap-2 items-center border border-slate-200 rounded-xl px-3 py-2 bg-slate-50">
+                        <input
+                          type="text"
+                          placeholder={walletVouchers.length > 0 ? "Or enter code manually" : "Voucher code"}
+                          value={reviewVoucherCode}
+                          onChange={(e) => setReviewVoucherCode(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleReviewVoucherApply()}
+                          className="bg-transparent border-0 focus:ring-0 focus:outline-none text-sm text-slate-800 flex-1 min-w-0"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleReviewVoucherApply()}
+                          disabled={reviewVoucherApplying || !reviewVoucherCode.trim()}
+                          className="text-xs font-bold text-[#0B1E3F] border border-[#0B1E3F] px-3 py-1.5 rounded-lg hover:bg-[#0B1E3F] hover:text-white disabled:opacity-40 transition shrink-0"
+                        >
+                          {reviewVoucherApplying ? "…" : "Apply"}
+                        </button>
+                      </div>
+                      {reviewVoucherError && <p className="text-xs text-red-600 font-medium">{reviewVoucherError}</p>}
+                    </div>
+                  ) : (
+                    /* ── No discount yet ── */
+                    <div className="space-y-2.5">
+                      {/* Wallet dropdown */}
+                      {loadingWalletVouchers ? (
+                        <div className="flex items-center gap-2 text-xs text-slate-400 py-0.5">
+                          <div className="w-3 h-3 border-2 border-slate-300 border-t-[#0B1E3F] rounded-full animate-spin" />
+                          Loading your vouchers…
+                        </div>
+                      ) : walletVouchers.length > 0 ? (
+                        <div className="relative">
+                          <select
+                            defaultValue=""
+                            onChange={(e) => {
+                              const code = e.target.value;
+                              if (!code) return;
+                              setReviewVoucherCode(code);
+                              handleReviewVoucherApply(code);
+                            }}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 appearance-none cursor-pointer focus:outline-none focus:border-[#0B1E3F] pr-7"
+                          >
+                            <option value="">Select a voucher from wallet…</option>
+                            {walletVouchers.map((v) => (
+                              <option key={v.id} value={v.code}>
+                                {v.code}
+                                {v.description
+                                  ? ` — ${v.description}`
+                                  : v.discountType === "percentage"
+                                    ? ` — ${v.discountValue}% off`
+                                    : ` — ${ctx.currency} ${v.discountValue} off`}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {/* Manual code input */}
+                      <div className="flex gap-2 items-center border border-slate-200 rounded-xl px-3 py-2 bg-slate-50">
+                        <input
+                          type="text"
+                          placeholder={walletVouchers.length > 0 ? "Or enter code manually" : "Promo / voucher code"}
+                          value={reviewVoucherCode}
+                          onChange={(e) => setReviewVoucherCode(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleReviewVoucherApply()}
+                          className="bg-transparent border-0 focus:ring-0 focus:outline-none text-sm text-slate-800 flex-1 min-w-0"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleReviewVoucherApply()}
+                          disabled={reviewVoucherApplying || !reviewVoucherCode.trim()}
+                          className="text-xs font-bold text-[#0B1E3F] border border-[#0B1E3F] px-3 py-1.5 rounded-lg hover:bg-[#0B1E3F] hover:text-white disabled:opacity-40 transition shrink-0"
+                        >
+                          {reviewVoucherApplying ? "…" : "Apply"}
+                        </button>
+                      </div>
+                      {reviewVoucherError && <p className="text-xs text-red-600 font-medium">{reviewVoucherError}</p>}
+                    </div>
+                  )}
+                </SectionCard>
+
+                {/* Payment method selector */}
+                <SectionCard title="Payment Method">
+                  <div className="grid grid-cols-2 gap-3">
+                    {(taraListingEligible ? (["tara", "stripe"] as PayProvider[]) : (["stripe"] as PayProvider[])).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setProvider(p)}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition text-sm font-semibold ${provider === p ? "border-[#0B1E3F] bg-[#0B1E3F]/5 text-[#0B1E3F]" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}
+                      >
+                        <span className="text-2xl">{p === "tara" ? "📱" : "💳"}</span>
+                        <span>{p === "tara" ? "Mobile Money" : "Card & Digital Wallets"}</span>
+                        {hasTara && p === "tara" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
+                        {!hasTara && p === "stripe" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
+                      </button>
+                    ))}
+                  </div>
+                </SectionCard>
+
+                {/* Mobile Money form */}
+                {provider === "tara" && (
+                  <SectionCard title="Mobile Money" icon="📱">
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Mobile Number</label>
+                    <input
+                      type="tel"
+                      value={mobileNumber}
+                      onChange={(e) => {
+                        setMobileNumber(e.target.value);
+                        try {
+                          const parsed = parsePhoneNumber(e.target.value);
+                          setPhoneCountry(parsed?.country ?? "");
+                        } catch {
+                          setPhoneCountry("");
+                        }
+                      }}
+                      placeholder="+254 700 000 000"
+                      className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B1E3F]/20 focus:border-[#0B1E3F]"
+                    />
+                    {phoneCountry && !isTaraCountry(phoneCountry) && (
+                      <p className="text-xs text-red-600 mt-2">
+                        Mobile money is only available for supported African countries. Please use card payment instead.
                       </p>
                     )}
-                  </>
+                    <p className="text-xs text-slate-400 mt-2">You will receive a payment prompt on this number.</p>
+                    {ctx && (ctx.currency ?? "").toUpperCase() !== "XAF" && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        {taraXafLoading
+                          ? "Converting to XAF…"
+                          : taraXafAmount != null
+                            ? `You'll pay approximately ${taraXafAmount.toLocaleString()} XAF (mobile money is charged in XAF).`
+                            : "Mobile money is charged in XAF (Central African CFA Franc)."}
+                      </p>
+                    )}
+                  </SectionCard>
+                )}
+
+                {/* Card & Digital Wallets info */}
+                {provider === "stripe" && (
+                  <SectionCard title="Card & Digital Wallets" icon="🔒">
+                    <p className="text-sm text-slate-500 mb-4 flex items-center gap-1.5">
+                      <span className="text-emerald-500">✓</span> Your payment is processed securely.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {CARD_LOGOS.map((c) => (
+                        <span key={c} className="px-2 py-1 bg-slate-100 rounded text-[10px] font-semibold text-slate-500 border border-slate-200">{c}</span>
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-3">You will be prompted to enter your card details on the next step.</p>
+                  </SectionCard>
+                )}
+
+                {payError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{payError}</div>
+                )}
+
+                {needsTermsAcceptance && (
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={payTermsAccepted}
+                      onChange={(e) => setPayTermsAccepted(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#0B1E3F] focus:ring-[#0B1E3F]"
+                    />
+                    <span className="text-sm text-slate-600">
+                      I have read and agree to the{" "}
+                      <a href="/legal/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#0B1E3F] underline">
+                        Terms &amp; Conditions
+                      </a>
+                      .
+                    </span>
+                  </label>
+                )}
+
+                <button
+                  onClick={handlePay}
+                  disabled={submitting || (needsTermsAcceptance && !payTermsAccepted)}
+                  className="w-full py-3.5 bg-[#0B1E3F] hover:bg-[#07152B] disabled:opacity-50 text-white font-bold rounded-xl transition text-sm"
+                >
+                  {submitting ? "Please wait…" : provider === "tara" ? "Send Payment Request" : `Pay ${pricing!.platformCurrency} ${fmt(pricing!.platformAmount)}`}
+                </button>
+                {provider === "stripe" && pricing!.platformCurrency !== ctx.currency && (
+                  <p className="text-xs text-slate-400 mt-2 text-center">
+                    Billed as approx. {ctx.currency} {fmt(pricing!.total)} · charged in {pricing!.platformCurrency}
+                  </p>
                 )}
               </div>
 
