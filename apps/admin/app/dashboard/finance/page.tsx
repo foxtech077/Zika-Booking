@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { StatCard, RevenueBarChart } from "@/components/charts/Charts";
 import { formatDate, formatCurrency, formatNumber } from "@/lib/utils";
+import { SYSTEM_COUNTRIES } from "@/lib/countries";
 import type { Booking } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 
@@ -46,38 +47,32 @@ export default function FinancePage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [status, setStatus] = useState("confirmed");
-  const [currency, setCurrency] = useState("");
+  const [country, setCountry] = useState("");
 
   const canExportFinancialData = user?.role === "super_admin" || user?.role === "finance";
 
-  const params = { status, page: String(page), limit: String(limit) };
+  const isCountryScoped = user?.role === "country_manager" || user?.role === "sales";
+  const scopedCountries = isCountryScoped ? (user?.countryScope ?? []) : [];
+  const countryOptions = scopedCountries.length > 0
+    ? scopedCountries.map((c) => {
+        const found = SYSTEM_COUNTRIES.find((sc) => sc.code === c);
+        return { value: c, label: found ? `${found.flag} ${found.name}` : c };
+      })
+    : SYSTEM_COUNTRIES.map((c) => ({ value: c.code, label: `${c.flag} ${c.name}` }));
+
+  const params = { status, country, page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-finance-bookings", page, limit, status],
+    queryKey: ["admin-finance-bookings", page, limit, status, country],
     queryFn: () => fetchBookings(params),
   });
 
   const allBookingsQuery = useQuery({
-    queryKey: ["admin-finance-all"],
-    queryFn: () => fetchBookings({ limit: "100" }),
+    queryKey: ["admin-finance-all", country],
+    queryFn: () => fetchBookings({ limit: "100", ...(country ? { country } : {}) }),
   });
 
   const bookings: Booking[] = Array.isArray(data?.bookings) ? data.bookings : [];
   const total: number = data?.total ?? 0;
-
-  const offset = (page - 1) * limit;
-  const requestUrl = `/admin/bookings?${new URLSearchParams(params)}`;
-  const responseCount = Array.isArray(data?.bookings) ? data.bookings.length : 0;
-  const renderedRows = bookings.length;
-  console.log("FinancePage Pagination Debug:", {
-    page,
-    limit,
-    offset,
-    params,
-    queryKey: ["admin-finance-bookings", page, limit, status],
-    requestUrl,
-    responseCount,
-    renderedRows,
-  });
 
   const allBookings: Booking[] = Array.isArray(allBookingsQuery.data?.bookings) ? allBookingsQuery.data.bookings : [];
   const confirmed = allBookings.filter((b) => ["confirmed", "completed"].includes(b?.status));
@@ -259,6 +254,13 @@ export default function FinancePage() {
                 { value: "cancelled_by_guest", label: "Cancelled" },
                 { value: "pending_payment", label: "Pending" },
               ],
+            },
+            {
+              key: "country",
+              label: "All Countries",
+              value: country,
+              onChange: (v) => { setCountry(v); setPage(1); },
+              options: countryOptions,
             },
           ]}
           limit={limit}
