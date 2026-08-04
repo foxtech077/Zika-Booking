@@ -1047,17 +1047,14 @@ export default function SearchScreen() {
   } = useQuery<SearchResponse["data"]>({
     queryKey: searchQueryKey,
     queryFn: async () => {
-      // Priority: geocoded place → detected IP location → no geo anchor.
-      // Without an anchor the backend ranks by text relevance instead of
-      // distance (exact → partial → nearby), so we no longer fabricate a
-      // (0,0) global centre or the 20000km radius that faked a global sort.
-      const effectiveLat = geo?.lat ?? fallbackLat;
-      const effectiveLng = geo?.lng ?? fallbackLng;
-      const hasSpatialContext =
-        effectiveLat != null &&
-        effectiveLng != null &&
-        Number.isFinite(effectiveLat) &&
-        Number.isFinite(effectiveLng);
+      const qText = searchInput.trim();
+      // A typed destination is "resolved" only when its geocode succeeded AND
+      // the submitted place matches what's currently in the box (geocoding runs
+      // on submit; while the user is still editing, treat as unresolved so the
+      // backend does live partial text matching instead of stale nearby).
+      const placeResolved =
+        !!geo &&
+        placeName.trim().toLowerCase() === searchInput.trim().toLowerCase();
 
       const qp = new URLSearchParams({
         category,
@@ -1065,11 +1062,32 @@ export default function SearchScreen() {
         limit: "50",
       });
 
-      // Free-text destination — backend runs accent-insensitive ranking
-      if (searchInput.trim()) qp.set("q", searchInput.trim());
-      if (hasSpatialContext) {
-        qp.set("lat", String(effectiveLat));
-        qp.set("lng", String(effectiveLng));
+      let anchorLat: number | null = null;
+      let anchorLng: number | null = null;
+
+      if (qText) {
+        // Free-text destination — backend runs accent-insensitive ranking.
+        // Only the geocoded place is a valid anchor; otherwise text-only.
+        qp.set("q", qText);
+        qp.set("place_resolved", placeResolved ? "true" : "false");
+        if (placeResolved && geo) {
+          anchorLat = geo.lat;
+          anchorLng = geo.lng;
+        }
+      } else {
+        // Browse (no typed text) — anchor at geocoded place or detected IP
+        anchorLat = geo?.lat ?? fallbackLat ?? null;
+        anchorLng = geo?.lng ?? fallbackLng ?? null;
+      }
+
+      if (
+        anchorLat != null &&
+        anchorLng != null &&
+        Number.isFinite(anchorLat) &&
+        Number.isFinite(anchorLng)
+      ) {
+        qp.set("lat", String(anchorLat));
+        qp.set("lng", String(anchorLng));
         // Radius is only applied when the user explicitly picks one
         if (radiusKm !== null) qp.set("radius_km", String(radiusKm));
       }
