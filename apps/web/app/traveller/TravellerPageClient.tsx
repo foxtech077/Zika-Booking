@@ -233,6 +233,8 @@ export default function TravellerDashboard() {
 
   const { isFavourited, toggleFavourite } = useFavourites();
   const [showFavAuthPrompt, setShowFavAuthPrompt] = useState(false);
+
+  const [highlightedBookingCode, setHighlightedBookingCode] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
 
   const [recentlyViewed, setRecentlyViewed] = useState<PublicListingDetail[]>([]);
@@ -395,11 +397,13 @@ export default function TravellerDashboard() {
     const checkout = searchParams.get("checkout") || searchParams.get("checkOut");
     const pickup = searchParams.get("pickup") || searchParams.get("pickupDate");
     const ret = searchParams.get("return") || searchParams.get("returnDate");
+    const bookingCode = searchParams.get("bookingCode") || searchParams.get("bookingId");
 
     if (checkin) { setSearchCheckIn(checkin); setDetailCheckIn(checkin); }
     if (checkout) { setSearchCheckOut(checkout); setDetailCheckOut(checkout); }
     if (pickup) { setSearchPickupDate(pickup); setDetailPickupDate(pickup); }
     if (ret) { setSearchReturnDate(ret); setDetailReturnDate(ret); }
+    if (bookingCode) { setHighlightedBookingCode(bookingCode); }
 
     if (tab === "bookings") {
       if (activeTab !== "bookings") {
@@ -4292,6 +4296,7 @@ export default function TravellerDashboard() {
                       booking={b}
                       onCancel={handleCancelBooking}
                       cancellingId={cancellingId}
+                      highlighted={highlightedBookingCode === b.reference || highlightedBookingCode === b.id}
                     />
 
                   </div>

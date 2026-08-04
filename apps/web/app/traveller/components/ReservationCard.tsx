@@ -25,6 +25,7 @@ interface Props {
   booking: Booking;
   onCancel: (id: string) => void;
   cancellingId: string | null;
+  highlighted?: boolean;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -56,11 +57,21 @@ function fmt(dateStr?: string | null) {
   return new Date(dateStr).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
-export default function ReservationCard({ booking, onCancel, cancellingId }: Props) {
+export default function ReservationCard({ booking, onCancel, cancellingId, highlighted }: Props) {
   const isCancelling = cancellingId === booking.id;
   const statusStyle = STATUS_STYLES[booking.status] ?? "bg-slate-100 text-slate-600 border-slate-200";
   const statusLabel = STATUS_LABEL[booking.status] ?? booking.status;
   const isCar = booking.listingCategory === "car";
+
+  const cardRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (highlighted && cardRef.current) {
+      setTimeout(() => {
+        cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 500);
+    }
+  }, [highlighted]);
 
   const dateFrom = isCar ? fmt(booking.pickupDatetime) : fmt(booking.checkIn);
   const dateTo = isCar ? fmt(booking.returnDatetime) : fmt(booking.checkOut);
@@ -71,7 +82,14 @@ export default function ReservationCard({ booking, onCancel, cancellingId }: Pro
     : `${booking.nightsOrDays} night${booking.nightsOrDays !== 1 ? "s" : ""}`;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+    <div
+      ref={cardRef}
+      className={`bg-white border rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 ${
+        highlighted
+          ? "border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/5 scale-[1.01]"
+          : "border-slate-200"
+      }`}
+    >
       <div className="flex">
         <div className="w-24 h-24 shrink-0 bg-slate-100 overflow-hidden">
           <ListingImage
@@ -92,7 +110,14 @@ export default function ReservationCard({ booking, onCancel, cancellingId }: Pro
         <div className="flex-1 p-3 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-sm font-bold text-slate-800 truncate">{booking.listingTitle || "Booking"}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-bold text-slate-800 truncate">{booking.listingTitle || "Booking"}</p>
+                {highlighted && (
+                  <span className="shrink-0 bg-emerald-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                    Selected
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="text-[10px] text-slate-400 font-mono">{booking.reference}</span>
                 <span className="text-slate-300">·</span>
