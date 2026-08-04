@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { EUR_CHARGE_BUFFER_MULTIPLIER, isTaraCountry } from "@zika/types";
 
 const STALENESS_THRESHOLD_MS = 6 * 60 * 60 * 1000; // 6 hours
 const BASE_CURRENCY = "USD";
@@ -302,4 +303,120 @@ export async function getRatesBatch(
   }
 
   return rateMap;
+}
+
+/**
+ * The platform (charge) currency for a listing. Tara-supported countries are
+ * charged in XAF (mobile money is always XAF); everywhere else the platform
+ * money-of-record is EUR (Stripe). Guests are always charged directly from the
+ * listing's base currency — never routed through a guest/home currency.
+ */
+export function resolvePlatformCurrency(country?: string | null): string {
+  return isTaraCountry(country) ? "XAF" : "EUR";
+}
+
+export interface PlatformQuote {
+  platformCurrency: string;
+  /** Raw market rate: baseCurrency → platformCurrency (identity → 1). */
+  rate: number | null;
+  /** Unbuffered converted amount (for reference / display math). */
+  rawAmount: number | null;
+  /** Buffered converted amount: raw × bufferApplied, ceiling-rounded. */
+  amount: number | null;
+  /** Buffer multiplier applied (1.015 for EUR, 1 otherwise / identity). */
+  bufferApplied: number;
+}
+
+/**
+ * Compute a platform-currency quote for a base-currency amount, using only the
+ * DB exchange-rate table. The +buffer is applied only when the platform
+ * currency is EUR to absorb FX fluctuation between quote and charge time.
+ *
+ *   raw = baseAmount × rate
+ *   buffered = raw × (1 + bufferPercentage)
+ */
+export async function getPlatformQuote(
+  baseCurrency: string,
+  platformCurrency: string,
+  amount: number
+): Promise<PlatformQuote> {
+  const from = baseCurrency.toUpperCase();
+  const to = platformCurrency.toUpperCase();
+
+  if (from === to) {
+    // Charging in the listing's own currency — no conversion, no buffer.
+    return {
+      platformCurrency: to,
+      rate: 1,
+      rawAmount: amount,
+      amount,
+      bufferApplied: 1,
+    };
+  }
+
+  const bufferApplied = to === "EUR" ? EUR_CHARGE_BUFFER_MULTIPLIER : 1;
+  const rate = await getExchangeRate(from, to);
+  if (rate === null) {
+    return { platformCurrency: to, rate: null, rawAmount: null, amount: null, bufferApplied };
+  }
+
+  const rawAmount = amount * rate;
+  // Match the charge path exactly: the platform service ceilings the raw
+  // conversion (via /internal/fx/eur-quote) and THEN applies the buffer, so
+  // the displayed/booked amount always equals the amount actually charged.
+  const buffered = ceilingForCurrency(ceilingForCurrency(rawAmount, to) * bufferApplied, to);
+  return { platformCurrency: to, rate, rawAmount, amount: buffered, bufferApplied };
+}
+
+export interface PlatformSnapshot {
+  platformCurrency: string;
+  platformAmount: number | null;
+  platformRate: number | null;
+  bufferApplied: number;
+  listingCurrencyAmount: number | null;
+  localizedCurrency: string | null;
+  localCurrencyAmount: number | null;
+}
+
+/**
+ * Build the generic platform snapshot shared by the pricing previews and the
+ * stored price breakdown. The platform amount is derived strictly from the
+ * listing base currency — the guest's home currency is reference/display only
+ * and never used for the charge.
+ */
+export async function buildPlatformSnapshot(opts: {
+  baseCurrency: string;
+  platformCurrency?: string;
+  listingCountry?: string | null;
+  guestCurrency?: string | null;
+  amounts: Record<string, number | null | undefined>;
+  totalKey?: string;
+}): Promise<PlatformSnapshot> {
+  const from = opts.baseCurrency.toUpperCase();
+  const platform = opts.platformCurrency ?? resolvePlatformCurrency(opts.listingCountry);
+  const totalKey = opts.totalKey ?? "totalAmount";
+  const total = opts.amounts[totalKey] != null ? Number(opts.amounts[totalKey]) : null;
+
+  const quote = total != null
+    ? await getPlatformQuote(from, platform, total)
+    : { platformCurrency: platform, rate: null, rawAmount: null, amount: null, bufferApplied: platform === "EUR" ? EUR_CHARGE_BUFFER_MULTIPLIER : 1 };
+
+  const guestTarget = opts.guestCurrency?.toUpperCase() ?? null;
+  const localized =
+    guestTarget && guestTarget !== from
+      ? await getConvertedAmounts(from, guestTarget, opts.amounts)
+      : null;
+
+  return {
+    platformCurrency: quote.platformCurrency,
+    platformAmount: quote.amount,
+    platformRate: quote.rate,
+    bufferApplied: quote.bufferApplied,
+    listingCurrencyAmount: total,
+    localizedCurrency: localized?.currency ?? null,
+    localCurrencyAmount:
+      localized && localized.values[totalKey] != null
+        ? localized.values[totalKey]
+        : null,
+  };
 }

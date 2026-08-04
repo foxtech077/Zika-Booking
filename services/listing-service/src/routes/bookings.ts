@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError, BookingNotFoundError, isPrismaUniqueViolation } from "../lib/errors.js";
-import { requireProvider, requireProviderRole, type ProviderRequest } from "../middleware/auth.js";
+import { requireAuth, requireUser, requireHost, type AuthRequest } from "../middleware/auth.js";
 import { getRedis } from "../lib/redis.js";
 import { randomUUID } from "crypto";
 import { sendBookingConfirmationEmail, sendBookingCancellationEmail } from "../lib/email.js";
@@ -14,7 +14,10 @@ import { getTaxRate } from "../services/getTaxRate.services.js";
 import { VoucherDiscountType } from "../generated/index.js";
 import { logLoyaltyTransaction } from "./loyalty.js";
 import { convertCurrency } from "../services/fx.services";
-import { getConvertedAmounts } from "../services/exchangeRate.services.js";
+import {
+  getConvertedAmounts,
+  buildPlatformSnapshot,
+} from "../services/exchangeRate.services.js";
 
 const LOCK_TTL_MS = 300_000; // 5 minutes
 
@@ -355,6 +358,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         where: { id: req.params.id },
         select: {
           id: true,
+          guestId: true,
           status: true,
           completedAt: true, 
           totalAmount: true,
@@ -667,6 +671,23 @@ export async function bookingRoutes(app: FastifyInstance) {
       driverProvided: Boolean(listing.driverProvided),
     });
 
+    const platformSnap = await buildPlatformSnapshot({
+      baseCurrency: listing.currency ?? "USD",
+      listingCountry: listing.country,
+      guestCurrency: body.currency,
+      amounts: {
+        baseAmount: billing.baseAmount,
+        nightlyRate: baseRate,
+        promotionDiscount: billing.promotionDiscount,
+        voucherDiscount: billing.voucherDiscount,
+        serviceFee: billing.serviceFee,
+        taxAmount: billing.taxAmount,
+        deliveryFee: billing.deliveryFee,
+        securityDeposit: billing.securityDeposit,
+        totalAmount: billing.totalAmount,
+      },
+    });
+
     return {
       units: billing.units,
       baseAmount: billing.baseAmount,
@@ -681,6 +702,15 @@ export async function bookingRoutes(app: FastifyInstance) {
       currency: listing.currency,
       commissionRate,
       taxRate: getTaxRate(listing.country),
+      // Generic platform-currency snapshot (charge currency + reference
+      // guest-local amounts). The charge is always listing → platform.
+      platformCurrency: platformSnap.platformCurrency,
+      platformAmount: platformSnap.platformAmount,
+      platformRate: platformSnap.platformRate,
+      bufferApplied: platformSnap.bufferApplied,
+      listingCurrencyAmount: platformSnap.listingCurrencyAmount,
+      localizedCurrency: platformSnap.localizedCurrency,
+      localCurrencyAmount: platformSnap.localCurrencyAmount,
       ...(await buildLocalizedBreakdown(
         listing.currency ?? "USD",
         body.currency,
@@ -741,6 +771,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             returnDatetime: { type: "string", format: "date-time" },
             deliveryRequested: { type: "boolean", default: false },
             guests: { type: "integer", minimum: 1 },
+            currency: { type: "string", description: "ISO 4217 guest local currency for the reference snapshot (never used for charging)" },
           },
         },
         response: {
@@ -764,10 +795,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           429: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
 
       const body = req.body as {
         listingId: string;
@@ -778,6 +809,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         returnDatetime?: string;
         deliveryRequested?: boolean;
         guests?: number;
+        currency?: string;
       };
 
       try {
@@ -1054,6 +1086,22 @@ export async function bookingRoutes(app: FastifyInstance) {
         });
 
         // ── 10. FIXED RESPONSE ───────────────────────
+        const platformSnap = await buildPlatformSnapshot({
+          baseCurrency: listing.currency ?? "USD",
+          listingCountry: listing.country,
+          guestCurrency: body.currency,
+          amounts: {
+            baseAmount: billing.baseAmount,
+            promotionDiscount: billing.promotionDiscount,
+            voucherDiscount: billing.voucherDiscount,
+            serviceFee: billing.serviceFee,
+            taxAmount: billing.taxAmount,
+            deliveryFee: billing.deliveryFee,
+            securityDeposit: billing.securityDeposit,
+            totalAmount: billing.totalAmount,
+          },
+        });
+
         const pricingPreview = {
           units: billing.units,
           baseAmount: billing.baseAmount,
@@ -1068,6 +1116,15 @@ export async function bookingRoutes(app: FastifyInstance) {
           currency: listing.currency,
           commissionRate,
           taxRate: getTaxRate(listing.country),
+          // Generic platform-currency snapshot (charge currency + reference
+          // guest-local amounts). The charge is always listing → platform.
+          platformCurrency: platformSnap.platformCurrency,
+          platformAmount: platformSnap.platformAmount,
+          platformRate: platformSnap.platformRate,
+          bufferApplied: platformSnap.bufferApplied,
+          listingCurrencyAmount: platformSnap.listingCurrencyAmount,
+          localizedCurrency: platformSnap.localizedCurrency,
+          localCurrencyAmount: platformSnap.localCurrencyAmount,
           // Room type info (if applicable)
           ...(roomTypeRecord && {
             roomType: roomTypeRecord.roomType,
@@ -1125,7 +1182,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const body = req.body as {
@@ -1181,10 +1238,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const { lockToken } = req.body as { lockToken: string };
 
       try {
@@ -1250,10 +1307,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           403: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const { lockToken } = req.params as { lockToken: string };
 
       try {
@@ -1346,10 +1403,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           410: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const body = req.body as {
         lockToken: string;
         listingId: string;
@@ -1600,7 +1657,8 @@ export async function bookingRoutes(app: FastifyInstance) {
         const appliedVoucherDiscount = voucherDiscount >= promotionDiscount ? voucherDiscount : 0;
 
         // Build the persistence-ready price breakdown snapshot (display only —
-        // the EUR money-of-record is captured on the payment at charge time).
+        // the actual platform-currency charge is captured on the payment at
+        // charge time and recorded back here in `charged*` on confirmation).
         const breakdownBase: Record<string, number> = {
           nightlyRate: listing.category !== "car" ? rate : 0,
           dailyRate: listing.category === "car" ? rate : 0,
@@ -1632,6 +1690,12 @@ export async function bookingRoutes(app: FastifyInstance) {
               ])
             )
           : {};
+        const platformSnap = await buildPlatformSnapshot({
+          baseCurrency: displayCurrency,
+          listingCountry: listing.country,
+          guestCurrency: body.currency,
+          amounts: breakdownBase,
+        });
         const priceBreakdownJson = {
           currency: displayCurrency,
           baseCurrency: displayCurrency,
@@ -1639,6 +1703,21 @@ export async function bookingRoutes(app: FastifyInstance) {
             ? { localizedCurrency: localizedSnap.currency, ...localizedSnapKeys }
             : {}),
           breakdown: breakdownBase,
+          // Generic platform-currency snapshot (charge currency + rate at the
+          // time of booking, for future reference). The charge is always
+          // listingCurrency → platformCurrency, never via a guest currency.
+          platformCurrency: platformSnap.platformCurrency,
+          platformAmount: platformSnap.platformAmount,
+          platformRate: platformSnap.platformRate,
+          bufferApplied: platformSnap.bufferApplied,
+          listingCurrencyAmount: platformSnap.listingCurrencyAmount,
+          ...(platformSnap.localCurrencyAmount != null
+            ? { localCurrencyAmount: platformSnap.localCurrencyAmount }
+            : {}),
+          // Actual charge — filled by the payment service at confirmation.
+          chargedCurrency: null,
+          chargedAmount: null,
+          chargedRate: null,
           capturedAt: new Date().toISOString(),
           source: "booking_create",
         };
@@ -1671,7 +1750,7 @@ export async function bookingRoutes(app: FastifyInstance) {
 
             guestFirstName: body.guestFirstName,
             guestLastName: body.guestLastName,
-            guestEmail: body.guestEmail,
+            guestEmail: body.guestEmail.trim().toLowerCase(),
             guestPhone: body.guestPhone,
 
             adults: body.adults,
@@ -1794,7 +1873,13 @@ export async function bookingRoutes(app: FastifyInstance) {
         },
         body: {
           type: "object",
-          properties: { paymentId: { type: "string" } },
+          properties: {
+            paymentId: { type: "string" },
+            paymentProvider: { type: "string" },
+            chargedCurrency: { type: "string", description: "Actual charge currency (EUR for Stripe, XAF for Tara)" },
+            chargedAmount: { type: "number", description: "Actual amount charged in chargedCurrency" },
+            chargedRate: { type: "number", description: "Exchange rate listingCurrency → chargedCurrency at charge time" },
+          },
         },
         response: {
           200: {
@@ -1814,7 +1899,13 @@ export async function bookingRoutes(app: FastifyInstance) {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { id } = req.params as { id: string };
-      const { paymentId } = req.body as { paymentId?: string };
+      const { paymentId, paymentProvider, chargedCurrency, chargedAmount, chargedRate } = req.body as {
+        paymentId?: string;
+        paymentProvider?: string;
+        chargedCurrency?: string;
+        chargedAmount?: number;
+        chargedRate?: number;
+      };
 
       try {
         const booking = await prisma.booking.findUnique({ where: { id } });
@@ -1873,9 +1964,23 @@ export async function bookingRoutes(app: FastifyInstance) {
                 }
               }
 
+              // Record the actual platform-currency charge on the booking
+              // snapshot for future reference (amount, currency and rate at
+              // charge time). Falls back to the booking-time snapshot when the
+              // payment service did not supply charge values.
+              const existingBreakdown = ((booking as any).priceBreakdownJson ?? {}) as Record<string, unknown>;
+              const mergedBreakdown = {
+                ...existingBreakdown,
+                chargedCurrency: chargedCurrency?.toUpperCase() ?? existingBreakdown.chargedCurrency ?? null,
+                chargedAmount: chargedAmount != null ? Number(chargedAmount) : existingBreakdown.chargedAmount ?? null,
+                chargedRate: chargedRate != null ? Number(chargedRate) : existingBreakdown.chargedRate ?? null,
+                chargedAt: new Date().toISOString(),
+                source: "booking_confirm",
+              };
+
               await tx.booking.update({
                 where: { id },
-                data: { status: "confirmed", confirmedAt, paymentId },
+                data: { status: "confirmed", confirmedAt, paymentId, priceBreakdownJson: mergedBreakdown },
               });
 
               await tx.bookingStatusLog.create({
@@ -2227,10 +2332,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
       const { reason } = req.body as { reason?: string };
 
@@ -2390,10 +2495,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const providerId = (req as ProviderRequest).providerId;
+      const providerId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
       const { reasonCode, reasonText } = req.body as {
         reasonCode: string;
@@ -2536,10 +2641,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const providerId = (req as ProviderRequest).providerId;
+      const providerId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
       const body = req.body as { checkedInAt?: string } | undefined;
       const checkedInAt = body?.checkedInAt ?? new Date().toISOString();
@@ -2637,10 +2742,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const providerId = (req as ProviderRequest).providerId;
+      const providerId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
       const body = req.body as { checkedOutAt?: string } | undefined;
       const checkedOutAt = body?.checkedOutAt ?? new Date().toISOString();
@@ -2709,8 +2814,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ["Bookings"],
-        summary: "Get the authenticated guest's booking history",
-        security: [{ bearerAuth: [] }],
+        summary: "Get the authenticated guest's booking history",        security: [{ bearerAuth: [] }],
         querystring: {
           type: "object",
           properties: {
@@ -2741,10 +2845,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const q = req.query as Record<string, string>;
       const status = q["status"];
       const searchRef = q["q"];
@@ -2823,6 +2927,10 @@ export async function bookingRoutes(app: FastifyInstance) {
   );
 
   // ── GET /guests/me/bookings/:id — booking detail ───────────────────────────
+  // requireAuth (user OR anonymous): the guestId ownership check below limits
+  // reads to the session that created the booking, so anonymous payers can view
+  // their own confirmation (mirrors the booking-document endpoints). The list
+  // endpoint /guests/me/bookings stays requireUser.
   app.get(
     "/guests/me/bookings/:id",
     {
@@ -2847,10 +2955,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           404: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
 
       try {
@@ -2913,6 +3021,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           voucherDiscount: Number(booking.voucherDiscount),
           totalAmount: Number(booking.totalAmount),
           currency: booking.currency,
+          priceBreakdownJson: (booking as any).priceBreakdownJson ?? null,
           cancellationPolicy: booking.cancellationPolicy,
           refundAmount: booking.refundAmount ? Number(booking.refundAmount) : null,
           cancelledAt: booking.cancelledAt?.toISOString() ?? null,
@@ -2942,10 +3051,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           required: ["id"],
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
 
       try {
@@ -3014,6 +3123,74 @@ export async function bookingRoutes(app: FastifyInstance) {
       } catch (err) {
         req.log.error({ err }, "Failed to bind commission rate to booking");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while binding the commission rate.");
+      }
+    }
+  );
+
+  // ── POST /bookings/claim  (adopt-by-email) ─────────────────────────────────
+  // Re-points anonymous (anonymous-token) bookings onto a real user after they sign
+  // in or register with the same email. Called best-effort by the auth service;
+  // never fails the auth flow when the listing service is unreachable.
+  app.post(
+    "/bookings/claim",
+    {
+      schema: {
+        tags: ["Bookings"],
+        summary: "Attach anonymous bookings made under an email to the authenticated user",
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: "object",
+          required: ["email"],
+          properties: {
+            email: { type: "string", format: "email" },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              success: { type: "boolean" },
+              data: {
+                type: "object",
+                properties: {
+                  claimed: { type: "integer" },
+                },
+                required: ["claimed"],
+              },
+            },
+          },
+          400: errSchema,
+          401: errSchema,
+        },
+      },
+      preHandler: [requireAuth],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const claimerId = (req as AuthRequest).authId;
+      const body = (req.body ?? {}) as { email?: string };
+
+      if (!body.email || typeof body.email !== "string" || !body.email.trim()) {
+        return sendError(reply, 400, "VALIDATION_ERROR", "Email is required.");
+      }
+
+      const email = body.email.trim().toLowerCase();
+
+      try {
+        // Only adopt anonymous bookings (anon_* ids). Real-user bookings that
+        // happen to share the email are left untouched, as is anything already
+        // owned by the claimer.
+        const result = await prisma.booking.updateMany({
+          where: {
+            guestEmail: { equals: email, mode: "insensitive" },
+            guestId: { startsWith: "anon_", not: claimerId },
+          },
+          data: { guestId: claimerId },
+        });
+
+        return sendSuccess(reply, 200, { claimed: result.count });
+      } catch (err) {
+        req.log.error({ err }, "Failed to claim guest bookings");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while claiming bookings.");
       }
     }
   );

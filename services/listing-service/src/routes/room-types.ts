@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
-import { requireProviderRole, type ProviderRequest } from "../middleware/auth.js";
+import { requireHost, type AuthRequest } from "../middleware/auth.js";
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
@@ -84,7 +84,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
   app.post(
     "/listings/:id/room-types",
     {
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
       schema: {
         tags: ["Room Types"],
         summary: "Create a new room type for a hotel listing",
@@ -132,7 +132,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { providerId } = req as ProviderRequest;
+        const { authId: providerId } = req as AuthRequest;
         const { id } = req.params as { id: string };
 
         const listing = await assertHotelOwner(id, providerId, reply);
@@ -188,7 +188,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
   app.get(
     "/listings/:id/room-types",
     {
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
       schema: {
         tags: ["Room Types"],
         summary: "List all room types for a hotel listing",
@@ -214,7 +214,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { providerId } = req as ProviderRequest;
+        const { authId: providerId } = req as AuthRequest;
         const { id } = req.params as { id: string };
 
         const listing = await assertHotelOwner(id, providerId, reply);
@@ -249,7 +249,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
   app.get(
     "/listings/:id/room-types/:rtId",
     {
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
       schema: {
         tags: ["Room Types"],
         summary: "Get details of a specific room type",
@@ -275,7 +275,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { providerId } = req as ProviderRequest;
+        const { authId: providerId } = req as AuthRequest;
         const { id, rtId } = req.params as { id: string; rtId: string };
 
         const listing = await assertHotelOwner(id, providerId, reply);
@@ -314,7 +314,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
   app.patch(
     "/listings/:id/room-types/:rtId",
     {
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
       schema: {
         tags: ["Room Types"],
         summary: "Update a room type",
@@ -365,7 +365,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { providerId } = req as ProviderRequest;
+        const { authId: providerId } = req as AuthRequest;
         const { id, rtId } = req.params as { id: string; rtId: string };
 
         const listing = await assertHotelOwner(id, providerId, reply);
@@ -425,7 +425,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
   app.delete(
     "/listings/:id/room-types/:rtId",
     {
-      preHandler: [requireProviderRole],
+      preHandler: [requireHost],
       schema: {
         tags: ["Room Types"],
         summary: "Delete a room type (hard delete if no bookings, else soft deactivate)",
@@ -456,7 +456,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const { providerId } = req as ProviderRequest;
+        const { authId: providerId } = req as AuthRequest;
         const { id, rtId } = req.params as { id: string; rtId: string };
 
         const listing = await assertHotelOwner(id, providerId, reply);

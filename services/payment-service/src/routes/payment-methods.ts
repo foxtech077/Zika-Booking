@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { stripe } from "../lib/stripe.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
-import { requireUser, type GuestRequest } from "../middleware/auth.js";
+import { requireAccount, type GuestRequest } from "../middleware/auth.js";
 import { initiateTaraPayment } from "../lib/tara.js";
 import { computeTaraCharge, getTaraPhoneCountry, TaraNotAllowedError } from "../lib/taraEligibility.js";
 import { isTaraCountry } from "@zika/types";
@@ -69,7 +69,7 @@ function formatMethod(m: {
 export async function paymentMethodRoutes(app: FastifyInstance) {
 
   // ── GET /guests/me/payment-methods ───────────────────────────────────────
-  app.get("/guests/me/payment-methods", { preHandler: [requireUser], schema: {
+  app.get("/guests/me/payment-methods", { preHandler: [requireAccount], schema: {
     tags: ["Payment Methods"],
     summary: "List saved payment methods",
   }, }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -101,7 +101,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
 
   // ── POST /guests/me/payment-methods/stripe/setup ─────────────────────────
   app.post(
-    "/guests/me/payment-methods/stripe/setup", { preHandler: [requireUser], schema: {
+    "/guests/me/payment-methods/stripe/setup", { preHandler: [requireAccount], schema: {
       tags: ["Payment Methods"],
       summary: "Create Stripe SetupIntent",
     }, }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -172,7 +172,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   );
 
   // ── POST /guests/me/payment-methods/stripe/confirm ───────────────────────
-  app.post("/guests/me/payment-methods/stripe/confirm", { preHandler: [requireUser], schema: {
+  app.post("/guests/me/payment-methods/stripe/confirm", { preHandler: [requireAccount], schema: {
     tags: ["Payment Methods"],
     summary: "Save Stripe payment method",
     body: {
@@ -299,7 +299,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   );
 
   // ── POST /guests/me/payment-methods/tara ─────────────────────────────────
-  app.post("/guests/me/payment-methods/tara", { preHandler: [requireUser], schema: {
+  app.post("/guests/me/payment-methods/tara", { preHandler: [requireAccount], schema: {
     tags: ["Payment Methods"],
     summary: "Add Tara mobile money account",
     body: {
@@ -361,7 +361,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
 // ── POST /payments/tara ─────────────────────────────────
   app.post(
     "/payments/tara",
-    { preHandler: [requireUser] },
+    { preHandler: [requireAccount] },
     async (req, reply) => {
       const { bookingId, mobileNumber } = req.body as {
         bookingId: string;
@@ -443,7 +443,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   // ── PATCH /guests/me/payment-methods/:id ─────────────────────────────────
   app.patch(
     "/guests/me/payment-methods/:id",
-    { preHandler: [requireUser], schema: {
+    { preHandler: [requireAccount], schema: {
       tags: ["Payment Methods"],
       summary: "Update payment method",
 
@@ -512,7 +512,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   );
 
   // ── DELETE /guests/me/payment-methods/:id ────────────────────────────────
-  app.delete("/guests/me/payment-methods/:id", { preHandler: [requireUser], schema: {
+  app.delete("/guests/me/payment-methods/:id", { preHandler: [requireAccount], schema: {
     tags: ["Payment Methods"],
     summary: "Delete payment method",
     params: {

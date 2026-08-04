@@ -1,5 +1,6 @@
 import axios from "axios";
 import { refreshAccessToken, clearAuthSession } from "@/lib/token-refresh";
+import { clearAnonymousToken } from "@/lib/anonymous";
 
 const TOKEN_KEY = "zika:access_token";
 
@@ -52,5 +53,6 @@ export function clearToken() {
   if (typeof window !== "undefined") {
     sessionStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(TOKEN_KEY);
+    clearAnonymousToken();
   }
 }

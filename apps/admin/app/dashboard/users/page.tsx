@@ -33,7 +33,7 @@ export default function UsersPage() {
   const [limit, setLimit] = useState(10);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
-  const [userType, setUserType] = useState("");
+  const [hostStatus, setHostStatus] = useState("");
   const [selected, setSelected] = useState<PlatformUser | null>(null);
   const [confirm, setConfirm] = useState<{ action: "suspend" | "reinstate" | "ban"; user: PlatformUser } | null>(null);
   const [reason, setReason] = useState("");
@@ -41,14 +41,14 @@ export default function UsersPage() {
   const params: Record<string, string> = {
     q,
     ...(status ? { status } : {}),
-    ...(userType ? { userType } : {}),
+    ...(hostStatus ? { hostStatus } : {}),
     // Inject country filter when admin is country-scoped
     ...(scopedCountries.length > 0 ? { country: scopedCountries.join(",") } : {}),
     page: scopedCountries.length > 0 ? "1" : String(page),
     limit: scopedCountries.length > 0 ? "1000" : String(limit),
   };
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-users", page, limit, q, status, userType, scopedCountries.join(",")],
+    queryKey: ["admin-users", page, limit, q, status, hostStatus, scopedCountries.join(",")],
     queryFn: () => fetchUsers(params),
     enabled: _hasHydrated && (!isCountryManager || scopedCountries.length > 0),
   });
@@ -71,7 +71,7 @@ export default function UsersPage() {
     limit,
     offset,
     params,
-    queryKey: ["admin-users", page, limit, q, status, userType, scopedCountries.join(",")],
+    queryKey: ["admin-users", page, limit, q, status, hostStatus, scopedCountries.join(",")],
     requestUrl,
     responseCount,
     renderedRows,
@@ -112,11 +112,14 @@ export default function UsersPage() {
       render: (u) => <Badge label={u.status} status={u.status} />,
     },
     {
-      key: "type",
-      label: "Type",
-      render: (u) => (
-        <span className="text-xs text-slate-600 font-medium capitalize">{u.userType}</span>
-      ),
+      key: "host",
+      label: "Host",
+      render: (u) => {
+        if (u.hostStatus === "approved") return <Badge label="Approved" status="active" />;
+        if (u.hostStatus === "pending") return <Badge label="Pending" status="pending_verification" />;
+        if (u.hostStatus === "rejected") return <Badge label="Rejected" status="banned" />;
+        return <span className="text-xs text-slate-400">—</span>;
+      },
     },
     {
       key: "tier",
@@ -219,13 +222,14 @@ export default function UsersPage() {
               ],
             },
             {
-              key: "userType",
-              label: "All Types",
-              value: userType,
-              onChange: (v) => { setUserType(v); setPage(1); },
+              key: "hostStatus",
+              label: "All Host Statuses",
+              value: hostStatus,
+              onChange: (v) => { setHostStatus(v); setPage(1); },
               options: [
-                { value: "guest", label: "Guest" },
-                { value: "provider", label: "Provider" },
+                { value: "approved", label: "Host approved" },
+                { value: "pending", label: "Host pending" },
+                { value: "rejected", label: "Host rejected" },
               ],
             },
           ]}
@@ -297,7 +301,14 @@ export default function UsersPage() {
                 <p className="text-sm text-slate-500">{selected.email}</p>
                 <div className="flex gap-2 mt-1.5">
                   <Badge label={selected.status} status={selected.status} />
-                  <Badge label={selected.userType} />
+                  {selected.hostStatus ? (
+                    <Badge
+                      label={selected.hostStatus === "approved" ? "Host: Approved" : selected.hostStatus === "pending" ? "Host: Pending" : "Host: Rejected"}
+                      status={selected.hostStatus === "approved" ? "active" : selected.hostStatus === "pending" ? "pending_verification" : "banned"}
+                    />
+                  ) : (
+                    <Badge label="Not a host" />
+                  )}
                 </div>
               </div>
             </div>

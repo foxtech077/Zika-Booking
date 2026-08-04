@@ -1,11 +1,11 @@
 import { prisma } from "./lib/prisma";
 import { hashPassword } from "./lib/password";
 
-async function seedUser(email: string, userType: "guest" | "provider", firstName: string, lastName: string) {
+async function seedUser(email: string, firstName: string, lastName: string) {
   const password = "ZikaTest123!";
   const passwordHash = await hashPassword(password);
 
-  console.log(`Seeding ${userType} user: ${email}...`);
+  console.log(`Seeding user: ${email}...`);
 
   const user = await prisma.user.upsert({
     where: { email },
@@ -20,14 +20,14 @@ async function seedUser(email: string, userType: "guest" | "provider", firstName
       passwordHash,
       firstName,
       lastName,
-      userType,
+      userType: "user",
       status: "active",
       emailVerified: true,
       emailVerifiedAt: new Date(),
     },
   });
 
-  console.log(`Successfully seeded ${userType} user:`, {
+  console.log(`Successfully seeded user:`, {
     id: user.id,
     email: user.email,
     firstName: user.firstName,
@@ -39,14 +39,9 @@ async function seedUser(email: string, userType: "guest" | "provider", firstName
 }
 
 async function main() {
-  // Legacy / Default
-  await seedUser("test@zika.com", "guest", "Test", "User");
-  
-  // Explicit guest
-  await seedUser("guest@zika.com", "guest", "Jane", "Guest");
-
-  // Explicit provider
-  await seedUser("provider@zika.com", "provider", "John", "Provider");
+  await seedUser("test@zika.com", "Test", "User");
+  await seedUser("guest@zika.com", "Jane", "Guest");
+  await seedUser("provider@zika.com", "John", "Provider");
 }
 
 main()

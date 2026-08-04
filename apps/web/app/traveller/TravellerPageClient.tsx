@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";           // auth-service: POST /auth/logout only
 import { listingApi } from "@/lib/listing-api";
+import { ensureAnonymousToken } from "@/lib/anonymous";
 import { paymentApi } from "@/lib/payment-api";
 import { fetchFavourites, fetchRecentlyViewed } from "@/services/traveller";
 import ListingImage from "./components/ListingImage";
@@ -13,6 +14,7 @@ import { PublicReviewsSection } from "./components/PublicReviewsSection";
 import { GiveReviewEntry } from "./components/GiveReviewEntry";
 import { useAuthStore } from "@/stores/auth";
 import { capitalize } from "@/lib/utils";
+import { derivePlatform, fmtMoney } from "@/lib/platform-currency";
 import { useFavourites } from "@/hooks/useFavourites";
 import ListingCard from "./components/ListingCard";
 import { ActivityPromoBanner, PersonalVoucherBanner } from "./components/PromoBanner";
@@ -44,7 +46,7 @@ interface User {
   firstName: string;
   lastName: string;
   email: string;
-  userType: string;
+  hostStatus?: "approved" | "pending" | "rejected" | null;
   currentTier: "bronze" | "silver" | "gold" | "diamond";
   loyaltyPoints: number;
 }
@@ -1344,7 +1346,10 @@ export default function TravellerDashboard() {
     } catch (err: any) {
       const code = err?.response?.data?.error?.code;
       if (code === "NO_TOKEN" || err?.response?.status === 401) {
-        router.push("/auth/login");
+        // The public detail endpoint is accessible without a token; a 401 here
+        // only means a stale/expired account token. Bounce only signed-in users
+        // to login — visitors can keep browsing anonymously.
+        if (isAuthenticated) router.push("/auth/login");
         return;
       }
       setDetailListing(null);
@@ -1542,6 +1547,12 @@ export default function TravellerDashboard() {
     if (!detailListing) return;
     setLockingListing(true);
     setBookingError("");
+
+    // Anonymous checkout: mint a stateless anonymous token so visitors can
+    // lock a booking without an account. Booking/payment endpoints accept it.
+    if (!isAuthenticated) {
+      await ensureAnonymousToken();
+    }
 
     const body: Record<string, any> = {
       listingId: detailListing.id,
@@ -1975,11 +1986,20 @@ export default function TravellerDashboard() {
   }
 
   // 8b. Save context to sessionStorage and navigate to /booking/review
-  function handleContinueToReview() {
+  async function handleContinueToReview() {
     if (!detailListing || !lockToken) return;
     if (!firstName || !lastName || !email) {
       setBookingError("Please fill in your name and email.");
       return;
+    }
+    // Ensure an anonymous token exists before checkout so the booking and
+    // payment calls (which require a token) succeed for non-accounts.
+    if (!isAuthenticated) {
+      const anon = await ensureAnonymousToken();
+      if (!anon) {
+        setBookingError("Unable to start checkout. Please try again.");
+        return;
+      }
     }
     const isCar = detailListing.category === "car";
     const isHotel = detailListing.category === "hotel";
@@ -2729,6 +2749,10 @@ export default function TravellerDashboard() {
                           const securityDeposit = isCar ? (pricingPreview.securityDeposit ?? 0) : 0;
                           const deliveryFee = pricingPreview.deliveryFee ?? 0;
                           const grandTotal = pricingPreview.totalAmount;
+                          // Breakdown stays in the listing currency; only the end
+                          // total is shown in the platform (charge) currency.
+                          const platform = derivePlatform(pricingPreview, detailListing.currency, grandTotal);
+                          const listingValue = (v: number) => `${detailListing.currency} ${v.toLocaleString()}`;
                           const fmt = (d: string | null | undefined) =>
                             d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
                           return (
@@ -2769,47 +2793,52 @@ export default function TravellerDashboard() {
                                 )}
                               </div>
 
-                              {/* Price breakdown */}
+                              {/* Price breakdown in listing currency; total in platform currency */}
                               <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
                                 <div className="flex justify-between">
                                   <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days !== 1 ? "s" : ""}</span>
-                                  <span>{detailListing.currency} {base.toLocaleString()}</span>
+                                  <span>{listingValue(base)}</span>
                                 </div>
                                 {discount > 0 && (
                                   <div className="flex justify-between text-emerald-600 font-semibold">
                                     <span>{effectiveDiscountSource === "promotion" ? `Promotional discount (${activePromotion?.discountValue}%)` : "Voucher discount"}</span>
-                                    <span>−{detailListing.currency} {discount.toLocaleString()}</span>
+                                    <span>−{listingValue(discount)}</span>
                                   </div>
                                 )}
                                 <div className="flex justify-between text-slate-500">
                                   <span>Service fee{pricingPreview?.commissionRate ? ` (${Math.round(pricingPreview.commissionRate * 100)}%)` : ''}</span>
-                                  <span>{detailListing.currency} {serviceFee.toLocaleString()}</span>
+                                  <span>{listingValue(serviceFee)}</span>
                                 </div>
                                 {taxAmount > 0 && (
                                   <div className="flex justify-between text-slate-500">
                                     <span>Taxes & VAT{pricingPreview?.taxRate ? ` (${Math.round(pricingPreview.taxRate * 100)}%)` : ''}</span>
-                                    <span>{detailListing.currency} {taxAmount.toLocaleString()}</span>
+                                    <span>{listingValue(taxAmount)}</span>
                                   </div>
                                 )}
 
                                 {isCar && securityDeposit > 0 && (
                                   <div className="flex justify-between text-slate-600">
                                     <span>Security deposit</span>
-                                    <span>{detailListing.currency} {securityDeposit.toLocaleString()}</span>
+                                    <span>{listingValue(securityDeposit)}</span>
                                   </div>
                                 )}
 
                                 {isCar && deliveryFee > 0 && (
                                   <div className="flex justify-between text-slate-600">
                                     <span>Delivery fee</span>
-                                    <span>{detailListing.currency} {deliveryFee.toLocaleString()}</span>
+                                    <span>{listingValue(deliveryFee)}</span>
                                   </div>
                                 )}
 
                                 {renderVoucherSelector()}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 text-base">
                                   <span>Total</span>
-                                  <span>{detailListing.currency} {grandTotal.toLocaleString()}</span>
+                                  <span className="text-right">
+                                    <div>{fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
+                                    {platform.platformCurrency !== detailListing.currency && (
+                                      <div className="text-[10px] font-normal text-slate-400">Billed as approx. {listingValue(grandTotal)}</div>
+                                    )}
+                                  </span>
                                 </div>
                               </div>
 
@@ -2890,40 +2919,48 @@ export default function TravellerDashboard() {
                             const securityDeposit = isCar ? (pricingPreview.securityDeposit ?? 0) : 0;
                             const deliveryFee = pricingPreview.deliveryFee ?? 0;
                             const grandTotal = pricingPreview.totalAmount;
+                            // Breakdown in listing currency; end total in platform currency.
+                            const platform = derivePlatform(pricingPreview, detailListing.currency, grandTotal);
+                            const listingValue = (v: number) => `${detailListing.currency} ${v.toLocaleString()}`;
                             return (
                               <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
                                 <div className="flex justify-between">
                                   <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
-                                  <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
+                                  <span>{listingValue(baseTotal)}</span>
                                 </div>
                                 {discount > 0 && (
                                   <div className="flex justify-between text-emerald-600 font-semibold">
                                     <span>{effectiveDiscountSource === "promotion" ? `Promotional discount (${activePromotion?.discountValue}%)` : "Voucher discount"}</span>
-                                    <span>−{detailListing.currency} {discount.toLocaleString()}</span>
+                                    <span>−{listingValue(discount)}</span>
                                   </div>
                                 )}
-                                <div className="flex justify-between"><span>Service fee{pricingPreview?.commissionRate ? ` (${Math.round(pricingPreview.commissionRate * 100)}%)` : ''}</span><span>{detailListing.currency} {serviceFee.toLocaleString()}</span></div>
+                                <div className="flex justify-between"><span>Service fee{pricingPreview?.commissionRate ? ` (${Math.round(pricingPreview.commissionRate * 100)}%)` : ''}</span><span>{listingValue(serviceFee)}</span></div>
                                 {taxAmount > 0 && (
                                   <div className="flex justify-between text-slate-500">
                                     <span>Taxes{pricingPreview?.taxRate ? ` (${Math.round(pricingPreview.taxRate * 100)}%)` : ''}</span>
-                                    <span>{detailListing.currency} {taxAmount.toLocaleString()}</span>
+                                    <span>{listingValue(taxAmount)}</span>
                                   </div>
                                 )}
                                 {isCar && securityDeposit > 0 && (
                                   <div className="flex justify-between text-slate-600">
                                     <span>Security deposit</span>
-                                    <span>{detailListing.currency} {securityDeposit.toLocaleString()}</span>
+                                    <span>{listingValue(securityDeposit)}</span>
                                   </div>
                                 )}
                                 {isCar && deliveryFee > 0 && (
                                   <div className="flex justify-between text-slate-600">
                                     <span>Delivery fee</span>
-                                    <span>{detailListing.currency} {deliveryFee.toLocaleString()}</span>
+                                    <span>{listingValue(deliveryFee)}</span>
                                   </div>
                                 )}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
                                   <span>Total to pay</span>
-                                  <span>{detailListing.currency} {grandTotal.toLocaleString()}</span>
+                                  <span className="text-right">
+                                    <div>{fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
+                                    {platform.platformCurrency !== detailListing.currency && (
+                                      <div className="text-[10px] font-normal text-slate-400">Billed as approx. {listingValue(grandTotal)}</div>
+                                    )}
+                                  </span>
                                 </div>
                               </div>
                             );
@@ -3018,7 +3055,10 @@ export default function TravellerDashboard() {
                             )}
                             <button type="button" onClick={handleStripeConfirm} disabled={submittingCheckout || !stripeCardElement}
                               className="w-full py-3.5 bg-[#635BFF] hover:bg-[#4f48cc] disabled:opacity-50 text-white font-bold rounded-xl transition text-sm">
-                              {submittingCheckout ? "Processing…" : `Pay ${detailListing.currency} ${pendingBookingAmount.toLocaleString()}`}
+                              {(() => {
+                                const p = derivePlatform(pricingPreview, detailListing.currency, pendingBookingAmount || 0);
+                                return submittingCheckout ? "Processing…" : `Pay ${fmtMoney(p.platformAmount, p.platformCurrency)}`;
+                              })()}
                             </button>
                             <button type="button" onClick={() => { setCheckoutStep("details"); setBookingError(""); }}
                               className="w-full text-center text-xs text-slate-400 hover:text-slate-600 transition">

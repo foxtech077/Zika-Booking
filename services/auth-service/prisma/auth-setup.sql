@@ -3,7 +3,7 @@ DO $$ BEGIN
     CREATE TYPE "UserStatus" AS ENUM ('pending_verification', 'active', 'suspended', 'banned');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'UserType') THEN
-    CREATE TYPE "UserType" AS ENUM ('guest', 'provider');
+    CREATE TYPE "UserType" AS ENUM ('user');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'OAuthProvider') THEN
     CREATE TYPE "OAuthProvider" AS ENUM ('google', 'apple');

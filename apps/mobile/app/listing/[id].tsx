@@ -958,6 +958,8 @@ export default function ListingDetailScreen() {
           pickupDatetime: effectivePU,
           returnDatetime: effectiveRT,
           listingCategory: listing.category,
+          listingTitle: listing.title ?? listing.name ?? "",
+          listingCountry: listing.country ?? "",
         },
       });
     } else {
@@ -969,6 +971,8 @@ export default function ListingDetailScreen() {
           checkOut: effectiveCO,
           guests,
           listingCategory: listing.category,
+          listingTitle: listing.title ?? listing.name ?? "",
+          listingCountry: listing.country ?? "",
           ...(selectedRoomType?.id ? { roomTypeId: selectedRoomType.id } : {}),
         },
       });

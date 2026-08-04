@@ -1,8 +1,8 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { registerSchema } from "@zika/validators";
 import { api, storeToken } from "@/lib/api";
@@ -20,11 +20,12 @@ function InputIcon({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function RegisterPage() {
+function RegisterPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { setSession } = useAuthStore();
   const [form, setForm] = useState({
-    firstName: "", lastName: "", email: "",
+    firstName: "", lastName: "", email: searchParams.get("email") ?? "",
     password: "", confirmPassword: "",
     dob: "",
   });
@@ -454,5 +455,13 @@ export default function RegisterPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense>
+      <RegisterPageContent />
+    </Suspense>
   );
 }

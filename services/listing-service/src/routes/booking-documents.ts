@@ -3,7 +3,7 @@ import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireProvider, type ProviderRequest } from "../middleware/auth.js";
+import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { getRedis } from "../lib/redis.js";
 import { uploadBuffer, createPresignedDownloadUrl } from "../lib/s3.js";
 
@@ -232,6 +232,17 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
                       voucherDiscount: { type: "number" },
                       total:           { type: "number" },
                       currency:        { type: "string" },
+                      localizedCurrency: { type: "string", nullable: true },
+                      localized:       { type: "object", additionalProperties: { type: "number", nullable: true } },
+                      platformCurrency:  { type: "string", nullable: true },
+                      platformAmount:    { type: "number", nullable: true },
+                      platformRate:      { type: "number", nullable: true },
+                      bufferApplied:     { type: "number", nullable: true },
+                      listingCurrencyAmount: { type: "number", nullable: true },
+                      localCurrencyAmount:   { type: "number", nullable: true },
+                      chargedCurrency:   { type: "string", nullable: true },
+                      chargedAmount:     { type: "number", nullable: true },
+                      chargedRate:       { type: "number", nullable: true },
                     },
                     required: ["subtotal", "discountAmount", "deliveryFee", "voucherDiscount", "total", "currency"],
                   },
@@ -252,10 +263,10 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
 
       try {
@@ -345,7 +356,17 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
                   localized: Object.fromEntries(
                     Object.entries(snapshot ?? {}).filter(([k]) => k.startsWith("localized"))
                   ),
-                  eur: snapshot.eur ?? null,
+                  // Generic platform-currency snapshot (charge currency, rate
+                  // and amounts at booking/confirm time) for future reference.
+                  platformCurrency: snapshot.platformCurrency ?? null,
+                  platformAmount: snapshot.platformAmount != null ? Number(snapshot.platformAmount) : null,
+                  platformRate: snapshot.platformRate != null ? Number(snapshot.platformRate) : null,
+                  bufferApplied: snapshot.bufferApplied != null ? Number(snapshot.bufferApplied) : null,
+                  listingCurrencyAmount: snapshot.listingCurrencyAmount != null ? Number(snapshot.listingCurrencyAmount) : null,
+                  localCurrencyAmount: snapshot.localCurrencyAmount != null ? Number(snapshot.localCurrencyAmount) : null,
+                  chargedCurrency: snapshot.chargedCurrency ?? null,
+                  chargedAmount: snapshot.chargedAmount != null ? Number(snapshot.chargedAmount) : null,
+                  chargedRate: snapshot.chargedRate != null ? Number(snapshot.chargedRate) : null,
                 }
               : {}),
           },
@@ -394,10 +415,10 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
 
       try {
@@ -478,10 +499,10 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as ProviderRequest).providerId;
+      const guestId = (req as AuthRequest).authId;
       const { id } = req.params as { id: string };
 
       try {

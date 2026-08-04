@@ -1,6 +1,6 @@
 FROM node:24-alpine
 WORKDIR /app
-RUN npm install -g pnpm
+RUN npm install -g pnpm@10.33.2
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/types/package.json ./packages/types/
 COPY packages/validators/package.json ./packages/validators/

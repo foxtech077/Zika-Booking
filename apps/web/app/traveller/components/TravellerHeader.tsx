@@ -100,8 +100,19 @@ export function TravellerHeader({
   const isWishlistActive = pathname?.startsWith(TRAVELLER_ROUTES.wishlist);
   const isProfileActive = pathname?.startsWith(TRAVELLER_ROUTES.profile);
   const isListingsActive = pathname?.startsWith("/dashboard");
-  const listingsHref = hasListings ? TRAVELLER_ROUTES.manageListings : TRAVELLER_ROUTES.createListing;
-  const listingsLabel = hasListings ? "Manage Listings" : "Create Listing";
+  // Users without an approved host profile are routed through the host
+  // onboarding flow before they can create/manage listings.
+  const canHost = user?.hostStatus === "approved";
+  const listingsHref = !canHost
+    ? "/dashboard/host"
+    : hasListings
+      ? TRAVELLER_ROUTES.manageListings
+      : TRAVELLER_ROUTES.createListing;
+  const listingsLabel = !canHost
+    ? "Become a Host"
+    : hasListings
+      ? "Manage Listings"
+      : "Create Listing";
 
   const lockTimer =
     lockSecondsLeft != null
@@ -171,276 +182,276 @@ export function TravellerHeader({
         /* Normal header */
         <div className="flex flex-col">
           <div className="flex items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          {/* ── Left: Logo + content nav ── */}
-          <div className="flex items-center gap-10">
-            <Link
-              href={TRAVELLER_ROUTES.destinations}
-              className="shrink-0 text-xl font-serif font-bold tracking-tight text-[#0c2614]"
-            >
-              Kainook
-            </Link>
+            {/* ── Left: Logo + content nav ── */}
+            <div className="flex items-center gap-10">
+              <Link
+                href={TRAVELLER_ROUTES.destinations}
+                className="shrink-0 text-xl font-serif font-bold tracking-tight text-[#0c2614]"
+              >
+                Kainook
+              </Link>
 
-            <nav className="hidden items-center gap-8 md:flex">
-              {navBtn(
-                "Destinations",
-                TRAVELLER_ROUTES.destinations,
-                isDestinationsActive,
-              )}
-              {navBtn(
-                "Hotels",
-                TRAVELLER_ROUTES.hotels,
-                isHotelsActive,
-              )}
-              {navBtn(
-                "Home",
-                TRAVELLER_ROUTES.apartments,
-                isApartmentsActive,
-              )}
-              {navBtn(
-                "Car Rentals",
-                TRAVELLER_ROUTES.cars,
-                isCarsActive,
-              )}
+              <nav className="hidden items-center gap-8 md:flex">
+                {navBtn(
+                  "Destinations",
+                  TRAVELLER_ROUTES.destinations,
+                  isDestinationsActive,
+                )}
+                {navBtn(
+                  "Hotels",
+                  TRAVELLER_ROUTES.hotels,
+                  isHotelsActive,
+                )}
+                {navBtn(
+                  "Home",
+                  TRAVELLER_ROUTES.apartments,
+                  isApartmentsActive,
+                )}
+                {navBtn(
+                  "Car Rentals",
+                  TRAVELLER_ROUTES.cars,
+                  isCarsActive,
+                )}
 
-            </nav>
-          </div>
+              </nav>
+            </div>
 
-          {/* ── Right: workspace links + avatar dropdown ── */}
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen((open) => !open)}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 transition hover:bg-slate-50 md:hidden"
-              aria-label="Open menu"
-              aria-expanded={mobileMenuOpen}
-            >
-              <Menu className="h-5 w-5 text-slate-700" />
-            </button>
+            {/* ── Right: workspace links + avatar dropdown ── */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen((open) => !open)}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 transition hover:bg-slate-50 md:hidden"
+                aria-label="Open menu"
+                aria-expanded={mobileMenuOpen}
+              >
+                <Menu className="h-5 w-5 text-slate-700" />
+              </button>
 
-            {/* Unauthenticated */}
-            {!user && !hasAuthToken && (
-              <>
-                <Link
-                  href="/auth/login"
-                  className="hidden text-sm font-medium text-slate-500 transition hover:text-[#0c2614] sm:block"
-                >
-                  Sign In
-                </Link>
-                <Link
-                  href="/auth/register"
-                  className="rounded-full bg-[#0c2614] px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#081b0d]"
-                >
-                  Sign Up
-                </Link>
-              </>
-            )}
-
-            {/* Authenticated */}
-            {user && (
-              <>
-                {/* Notification bell */}
-                <Link
-                  href="/traveller/notifications"
-                  aria-label="Open notifications"
-                  className="relative w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all mr-1"
-                >
-                  <Bell className="w-[18px] h-[18px]" />
-                  {unreadNotifData && unreadNotifData.count > 0 && (
-                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white">
-                      {unreadNotifData.count > 99 ? "99+" : unreadNotifData.count}
-                    </span>
-                  )}
-                </Link>
-
-                {/* Avatar dropdown */}
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    type="button"
-                    onClick={() => setMenuOpen((o) => !o)}
-                    aria-haspopup="menu"
-                    aria-expanded={menuOpen}
-                    className={cn(
-                      "flex items-center gap-2 rounded-2xl border px-2 py-1.5 font-semibold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-green-500/30",
-                      menuOpen
-                        ? "border-[#0c2614] bg-[#0c2614] text-white shadow-sm"
-                        : isProfileActive
-                          ? "border-[#0c2614] bg-[#0c2614] text-white shadow-sm"
-                          : "border-slate-200 bg-white text-slate-600 hover:border-[#1D8D2B] hover:text-[#0c2614]",
-                    )}
+              {/* Unauthenticated */}
+              {!user && !hasAuthToken && (
+                <>
+                  <Link
+                    href="/auth/login"
+                    className="hidden text-sm font-medium text-slate-500 transition hover:text-[#0c2614] sm:block"
                   >
-                    <Avatar name={fullName} size="sm" />
-                    <div className="hidden text-left sm:block">
-                      <p
-                        className={cn(
-                          "max-w-[100px] truncate text-xs font-semibold leading-none",
-                          menuOpen ? "text-white" : "text-slate-800",
-                        )}
-                      >
-                        {fullName}
-                      </p>
-                      <p
-                        className={cn(
-                          "mt-0.5 max-w-[100px] truncate text-[10px]",
-                          menuOpen ? "text-green-200/80" : "text-slate-400",
-                        )}
-                      >
-                        {user.email}
-                      </p>
-                    </div>
-                    <ChevronDown
-                      className={cn(
-                        "h-3.5 w-3.5 transition-transform",
-                        menuOpen ? "rotate-180 text-white/70" : "text-slate-400",
-                      )}
-                    />
-                  </button>
+                    Sign In
+                  </Link>
+                  <Link
+                    href="/auth/register"
+                    className="rounded-full bg-[#0c2614] px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#081b0d]"
+                  >
+                    Sign Up
+                  </Link>
+                </>
+              )}
 
-                  {menuOpen && (
-                    <div className="absolute right-0 top-full z-50 mt-2 w-52 animate-slide-in-up rounded-2xl border border-slate-100 bg-white py-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.1)]">
-                      <div className="mb-1 border-b border-slate-100 px-4 py-2.5">
-                        <p className="truncate text-sm font-semibold text-slate-800">{fullName}</p>
-                        <p className="mt-0.5 truncate text-xs text-slate-400">{user.email}</p>
+              {/* Authenticated */}
+              {user && (
+                <>
+                  {/* Notification bell */}
+                  <Link
+                    href="/traveller/notifications"
+                    aria-label="Open notifications"
+                    className="relative w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all mr-1"
+                  >
+                    <Bell className="w-[18px] h-[18px]" />
+                    {unreadNotifData && unreadNotifData.count > 0 && (
+                      <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white">
+                        {unreadNotifData.count > 99 ? "99+" : unreadNotifData.count}
+                      </span>
+                    )}
+                  </Link>
+
+                  {/* Avatar dropdown */}
+                  <div className="relative" ref={dropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setMenuOpen((o) => !o)}
+                      aria-haspopup="menu"
+                      aria-expanded={menuOpen}
+                      className={cn(
+                        "flex items-center gap-2 rounded-2xl border px-2 py-1.5 font-semibold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-green-500/30",
+                        menuOpen
+                          ? "border-[#0c2614] bg-[#0c2614] text-white shadow-sm"
+                          : isProfileActive
+                            ? "border-[#0c2614] bg-[#0c2614] text-white shadow-sm"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-[#1D8D2B] hover:text-[#0c2614]",
+                      )}
+                    >
+                      <Avatar name={fullName} size="sm" />
+                      <div className="hidden text-left sm:block">
+                        <p
+                          className={cn(
+                            "max-w-[100px] truncate text-xs font-semibold leading-none",
+                            menuOpen ? "text-white" : "text-slate-800",
+                          )}
+                        >
+                          {fullName}
+                        </p>
+                        <p
+                          className={cn(
+                            "mt-0.5 max-w-[100px] truncate text-[10px]",
+                            menuOpen ? "text-green-200/80" : "text-slate-400",
+                          )}
+                        >
+                          {user.email}
+                        </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          router.push(TRAVELLER_ROUTES.profile);
-                        }}
+                      <ChevronDown
                         className={cn(
-                          "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
-                          isProfileActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                          "h-3.5 w-3.5 transition-transform",
+                          menuOpen ? "rotate-180 text-white/70" : "text-slate-400",
                         )}
-                      >
-                        <User className="h-4 w-4 text-green-600" />
-                        Profile
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          router.push(listingsHref);
-                        }}
-                        className={cn(
-                          "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
-                          isListingsActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                        )}
-                      >
-                        <Building2 className="h-4 w-4 text-green-600" />
-                        {listingsLabel}
-                      </button>
-                      <div className="my-1 border-t border-slate-100" />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          router.push(TRAVELLER_ROUTES.bookings);
-                        }}
-                        className={cn(
-                          "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
-                          isBookingsActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                        )}
-                      >
-                        <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                        My Reservations
-                      </button>
-                      <Link
-                        href={TRAVELLER_ROUTES.messages}
-                        onClick={() => setMenuOpen(false)}
-                        className={cn(
-                          "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
-                          isMessagesActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                        )}
-                      >
-                        <MessageSquare className="h-4 w-4 text-green-600" />
-                        <span className="flex-1">Messages</span>
-                        {unreadCount > 0 && (
-                          <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-rose-100 px-1 text-[10px] font-bold text-rose-700">
-                            {unreadCount > 99 ? "99+" : unreadCount}
-                          </span>
-                        )}
-                      </Link>
-                      <Link
-                        href="/traveller/notifications"
-                        onClick={() => setMenuOpen(false)}
-                        className={cn(
-                          "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
-                          pathname === "/traveller/notifications" ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                        )}
-                      >
-                        <Bell className="h-4 w-4 text-green-600" />
-                        <span className="flex-1">Notifications</span>
-                        {unreadNotifData && unreadNotifData.count > 0 && (
-                          <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-rose-100 px-1 text-[10px] font-bold text-rose-700">
-                            {unreadNotifData.count > 99 ? "99+" : unreadNotifData.count}
-                          </span>
-                        )}
-                      </Link>
-                      <Link
-                        href={TRAVELLER_ROUTES.wishlist}
-                        onClick={() => setMenuOpen(false)}
-                        className={cn(
-                          "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
-                          isWishlistActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                        )}
-                      >
-                        <Heart className="h-4 w-4 text-green-600" />
-                        Wishlist
-                      </Link>
-                      <Link
-                        href={TRAVELLER_ROUTES.reviews}
-                        onClick={() => setMenuOpen(false)}
-                        className={cn(
-                          "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
-                          isReviewsActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                        )}
-                      >
-                        <Star className="h-4 w-4 text-green-600" />
-                        My Reviews
-                      </Link>
-                      <Link
-                        href={TRAVELLER_ROUTES.faq}
-                        onClick={() => setMenuOpen(false)}
-                        className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all"
-                      >
-                        <HelpCircle className="h-4 w-4 text-green-600" />
-                        Help &amp; FAQ
-                      </Link>
-                      <Link
-                        href="/legal/privacy"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => setMenuOpen(false)}
-                        className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all"
-                      >
-                        <Shield className="h-4 w-4 text-green-600" />
-                        Privacy Policy
-                      </Link>
-                      <Link
-                        href="/legal/terms"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => setMenuOpen(false)}
-                        className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all"
-                      >
-                        <FileText className="h-4 w-4 text-green-600" />
-                        Terms &amp; Conditions
-                      </Link>
-                      <div className="my-1 border-t border-slate-100" />
-                      <button
-                        type="button"
-                        onClick={handleLogout}
-                        className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-red-600 transition-all hover:bg-red-50"
-                      >
-                        <LogOut className="h-4 w-4" />
-                        Sign Out
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+                      />
+                    </button>
+
+                    {menuOpen && (
+                      <div className="absolute right-0 top-full z-50 mt-2 w-52 animate-slide-in-up rounded-2xl border border-slate-100 bg-white py-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.1)]">
+                        <div className="mb-1 border-b border-slate-100 px-4 py-2.5">
+                          <p className="truncate text-sm font-semibold text-slate-800">{fullName}</p>
+                          <p className="mt-0.5 truncate text-xs text-slate-400">{user.email}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            router.push(TRAVELLER_ROUTES.profile);
+                          }}
+                          className={cn(
+                            "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
+                            isProfileActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                          )}
+                        >
+                          <User className="h-4 w-4 text-green-600" />
+                          Profile
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            router.push(listingsHref);
+                          }}
+                          className={cn(
+                            "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
+                            isListingsActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                          )}
+                        >
+                          <Building2 className="h-4 w-4 text-green-600" />
+                          {listingsLabel}
+                        </button>
+                        <div className="my-1 border-t border-slate-100" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            router.push(TRAVELLER_ROUTES.bookings);
+                          }}
+                          className={cn(
+                            "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
+                            isBookingsActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                          )}
+                        >
+                          <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                          My Reservations
+                        </button>
+                        <Link
+                          href={TRAVELLER_ROUTES.messages}
+                          onClick={() => setMenuOpen(false)}
+                          className={cn(
+                            "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
+                            isMessagesActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                          )}
+                        >
+                          <MessageSquare className="h-4 w-4 text-green-600" />
+                          <span className="flex-1">Messages</span>
+                          {unreadCount > 0 && (
+                            <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-rose-100 px-1 text-[10px] font-bold text-rose-700">
+                              {unreadCount > 99 ? "99+" : unreadCount}
+                            </span>
+                          )}
+                        </Link>
+                        <Link
+                          href="/traveller/notifications"
+                          onClick={() => setMenuOpen(false)}
+                          className={cn(
+                            "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
+                            pathname === "/traveller/notifications" ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                          )}
+                        >
+                          <Bell className="h-4 w-4 text-green-600" />
+                          <span className="flex-1">Notifications</span>
+                          {unreadNotifData && unreadNotifData.count > 0 && (
+                            <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-rose-100 px-1 text-[10px] font-bold text-rose-700">
+                              {unreadNotifData.count > 99 ? "99+" : unreadNotifData.count}
+                            </span>
+                          )}
+                        </Link>
+                        <Link
+                          href={TRAVELLER_ROUTES.wishlist}
+                          onClick={() => setMenuOpen(false)}
+                          className={cn(
+                            "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
+                            isWishlistActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                          )}
+                        >
+                          <Heart className="h-4 w-4 text-green-600" />
+                          Wishlist
+                        </Link>
+                        <Link
+                          href={TRAVELLER_ROUTES.reviews}
+                          onClick={() => setMenuOpen(false)}
+                          className={cn(
+                            "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
+                            isReviewsActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                          )}
+                        >
+                          <Star className="h-4 w-4 text-green-600" />
+                          My Reviews
+                        </Link>
+                        <Link
+                          href={TRAVELLER_ROUTES.faq}
+                          onClick={() => setMenuOpen(false)}
+                          className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all"
+                        >
+                          <HelpCircle className="h-4 w-4 text-green-600" />
+                          Help &amp; FAQ
+                        </Link>
+                        <Link
+                          href="/legal/privacy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => setMenuOpen(false)}
+                          className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all"
+                        >
+                          <Shield className="h-4 w-4 text-green-600" />
+                          Privacy Policy
+                        </Link>
+                        <Link
+                          href="/legal/terms"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => setMenuOpen(false)}
+                          className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all"
+                        >
+                          <FileText className="h-4 w-4 text-green-600" />
+                          Terms &amp; Conditions
+                        </Link>
+                        <div className="my-1 border-t border-slate-100" />
+                        <button
+                          type="button"
+                          onClick={handleLogout}
+                          className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-red-600 transition-all hover:bg-red-50"
+                        >
+                          <LogOut className="h-4 w-4" />
+                          Sign Out
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           {mobileMenuOpen && (

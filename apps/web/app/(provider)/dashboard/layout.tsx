@@ -2,15 +2,33 @@
 
 import type { ReactNode } from "react";
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Shell } from "@/components/layout/Shell";
 import { useAuthStore } from "@/stores/auth";
 import { Spinner } from "@/components/ui/Skeleton";
 import { api } from "@/lib/api";
 
+// Routes that manage listings/earnings require an approved host profile. The
+// host-onboarding page and account-level settings stay reachable by any
+// authenticated user.
+const HOST_GATED_PREFIXES = [
+  "/dashboard/listings",
+  "/dashboard/bookings",
+  "/dashboard/calendar",
+  "/dashboard/channel",
+  "/dashboard/messaging",
+  "/dashboard/earnings",
+  "/dashboard/payments",
+  "/dashboard/reviews",
+  "/dashboard/notifications",
+];
+
 export default function ProviderDashboardLayout({ children }: { children: ReactNode }) {
   const { isAuthenticated, user, token, setSession, clearSession, _hasHydrated } = useAuthStore();
   const router = useRouter();
+  const pathname = usePathname();
+
+  const isHostGated = HOST_GATED_PREFIXES.some((p) => pathname?.startsWith(p));
 
   useEffect(() => {
     if (!_hasHydrated) return;
@@ -39,9 +57,16 @@ export default function ProviderDashboardLayout({ children }: { children: ReactN
         });
       return;
     }
-    // No further gate: any signed-in user may manage listings. "Provider" is
-    // just whoever owns one, not an account type to be blocked on.
-  }, [_hasHydrated, isAuthenticated, token, user?.id, setSession, clearSession, router]);
+
+    // Host-gated routes require an approved host profile. Redirect to the
+    // onboarding flow when the user has not filled it in, is pending, or was
+    // rejected. Approved hosts (and users whose JWT predates hostStatus)
+    // proceed — the backend enforces hostStatus on listing endpoints anyway.
+    if (isHostGated && user.hostStatus !== "approved") {
+      router.replace("/dashboard/host");
+      return;
+    }
+  }, [_hasHydrated, isAuthenticated, token, user?.id, user?.hostStatus, isHostGated, setSession, clearSession, router]);
 
   if (!_hasHydrated) {
     return (

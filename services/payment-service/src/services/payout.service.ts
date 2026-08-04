@@ -424,10 +424,12 @@ async function processSinglePayout(payout: any): Promise<void> {
     ) {
       // EUR is the money-of-record for host transfers. Resolve at the moment
       // the funds actually move; if the EUR rate is stale, leave the payout
-      // pending so it retries once the scheduled re-sync lands.
+      // pending so it retries once the scheduled re-sync lands. Payouts use
+      // the raw market rate (no charge buffer — that is only applied to guest
+      // charges).
       let eur;
       try {
-        eur = await resolveEurCharge(Number(payout.amount), payout.currency);
+        eur = await resolveEurCharge(Number(payout.amount), payout.currency, { applyBuffer: false });
       } catch (err) {
         if (err instanceof EurQuoteUnavailableError) {
           console.error(
@@ -470,11 +472,14 @@ async function processSinglePayout(payout: any): Promise<void> {
           amount: eur.amountEur,
           currency: "EUR",
           priceBreakdownJson: {
-            display: {
-              currency: (payout.currency ?? "").toUpperCase() || "USD",
-              providerPayout: Number(payout.amount),
+            // Generic platform snapshot (currency-agnostic).
+            platform: {
+              currency: "EUR",
+              amount: eur.amountEur,
+              rate: eur.rate,
+              listingCurrency: (payout.currency ?? "").toUpperCase() || "USD",
+              listingAmount: Number(payout.amount),
             },
-            eur: { rate: eur.rate, chargedCurrency: "EUR", providerPayout: eur.amountEur },
             capturedAt: new Date().toISOString(),
             source: "payout",
           },

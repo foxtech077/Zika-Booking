@@ -17,7 +17,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireProvider, requireAdmin } from "../middleware/auth.js";
+import { requireAuth, requireUser, requireAdmin, type AuthRequest } from "../middleware/auth.js";
 
 const errSchema = {
   type: "object",
@@ -115,7 +115,7 @@ export async function voucherRoutes(app: FastifyInstance) {
           400: errSchema,
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -260,11 +260,11 @@ export async function voucherRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const guestId = (req as any).providerId as string;
+        const guestId = (req as AuthRequest).authId as string;
         const q = req.query as { totalAmount?: string; currency?: string; activity?: string };
       const totalAmount = parseFloat(q.totalAmount ?? "0");
       const activity = q.activity;
@@ -461,11 +461,11 @@ export async function voucherRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireProvider],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const guestId = (req as any).providerId as string;
+        const guestId = (req as AuthRequest).authId as string;
         const q = req.query as { activity?: string; guestCountry?: string };
         const now = new Date();
 

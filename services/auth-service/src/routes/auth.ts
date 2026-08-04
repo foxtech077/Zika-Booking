@@ -8,7 +8,6 @@ import {
   resetPasswordSchema,
   googleOAuthSchema,
   appleOAuthSchema,
-  accountTypeSchema,
 } from "@zika/validators";
 import { prisma } from "../lib/prisma";
 import { hashPassword, verifyPassword } from "../lib/password";
@@ -16,9 +15,11 @@ import { generateToken, hashToken } from "../lib/crypto";
 import { z } from "zod";
 import {
   signAccessToken,
+  signAnonymousToken,
   generateRefreshToken,
   verifyAccessToken,
 } from "../lib/jwt";
+import { randomUUID, createHash } from "crypto";
 import {
   sendVerificationEmail,
   sendWelcomeEmail,
@@ -39,6 +40,28 @@ const COOKIE_OPTS = {
   maxAge: REFRESH_TTL,
   path: "/",
 };
+
+const ANONYMOUS_TOKEN_TTL = Number(process.env["JWT_ANONYMOUS_ACCESS_TTL_SECONDS"] ?? 1800);
+const LISTING_API_URL = process.env["LISTING_API_URL"] ?? "http://localhost:3003";
+
+// ── Guest booking claim (best-effort, fire-and-forget) ───────────────────────
+// After a successful login/register the freshly-minted access token is used to
+// re-point every anonymous booking that carries the same email onto the real
+// user (adopt-by-email). Failures are logged and never block auth.
+async function fireAndForgetBookingClaim(email: string, accessToken: string) {
+  try {
+    await fetch(`${LISTING_API_URL}/bookings/claim`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ email }),
+    });
+  } catch (err) {
+    console.error("[Auth] Booking claim failed (non-fatal):", (err as Error)?.message ?? err);
+  }
+}
 
 
 // POST schema - only photoUrl is allowed
@@ -69,7 +92,21 @@ async function issueTokens(
   status: string,
   country: string | null,
 ) {
-  const accessToken = await signAccessToken({ sub: userId, type: userType as "guest" | "provider", status, country: country ?? undefined });
+  // Hosting capability is derived from the Accreditation (host profile) row.
+  // Emitted as a JWT claim so downstream services can gate host-only routes
+  // statelessly. A newly-approved host picks this up on next token refresh.
+  let hostStatus: "approved" | "pending" | "rejected" | null = null;
+  try {
+    const acc = await prisma.accreditation.findUnique({
+      where: { providerId: userId },
+      select: { status: true },
+    });
+    hostStatus = (acc?.status as "approved" | "pending" | "rejected") ?? null;
+  } catch {
+    // non-fatal — fall back to null host status
+  }
+
+  const accessToken = await signAccessToken({ sub: userId, type: "user", status, country: country ?? undefined, hostStatus });
   const refreshToken = generateRefreshToken();
   const tokenHash = hashToken(refreshToken);
   const expiresAt = new Date(Date.now() + REFRESH_TTL * 1000);
@@ -153,8 +190,7 @@ export async function authRoutes(app: FastifyInstance) {
           "lastName",
           "email",
           "password",
-          "confirmPassword",
-          "userType"
+          "confirmPassword"
         ],
         properties: {
           firstName: { type: "string" },
@@ -162,9 +198,8 @@ export async function authRoutes(app: FastifyInstance) {
           email: { type: "string", format: "email" },
           password: { type: "string" },
           confirmPassword: { type: "string" },
-          userType: { type: "string", enum: ["guest", "provider"] },
           businessName: { type: "string" },
-          phone: { type: "string", description: "International format, required for providers" },
+          phone: { type: "string", description: "International format" },
           country: {
             type: "string",
             minLength: 2,
@@ -200,7 +235,6 @@ export async function authRoutes(app: FastifyInstance) {
       lastName,
       email,
       password,
-      userType,
       businessName,
       country,
       phone,
@@ -318,7 +352,7 @@ export async function authRoutes(app: FastifyInstance) {
           lastName,
           email,
           passwordHash,
-          userType: userType as "guest" | "provider",
+          userType: "user",
           businessName: businessName ?? null,
           country: country ?? null,
           phone: phone ?? null,
@@ -344,6 +378,8 @@ export async function authRoutes(app: FastifyInstance) {
           "active",
           user.country
         );
+
+        fireAndForgetBookingClaim(email, tokens.accessToken);
 
         return sendSuccess(reply, 201, {
           user: publicUser(user),
@@ -411,6 +447,55 @@ export async function authRoutes(app: FastifyInstance) {
       });
     } catch (err) {
       return sendError(reply, 400, "REGISTRATION_FAILED", "Registration could not be completed. Please try again.");
+    }
+  });
+
+  // ── POST /auth/anonymous-token  (Anonymous checkout — no sign-in required) ─
+  app.post("/auth/anonymous-token", {
+    schema: {
+      tags: ["User Auth"],
+      summary: "Mint a stateless anonymous access token for checkout without an account",
+      body: {
+        type: "object",
+        properties: {
+          deviceId: {
+            type: "string",
+            description: "Optional stable device identifier. When present the anon id is derived from it so retries reuse the same id.",
+          },
+        },
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      // Public endpoint → conservative per-IP rate limit.
+      const rlCount = await incrementCounter(`rl:anonymous-token:${req.ip}`, 3600);
+      if (rlCount > 120) {
+        return sendError(reply, 429, "RATE_LIMITED", "Too many anonymous tokens requested. Please try again later.");
+      }
+
+      const body = (req.body ?? {}) as { deviceId?: string };
+      let sub: string;
+      if (body.deviceId && typeof body.deviceId === "string" && body.deviceId.trim()) {
+        // Stable anon id derived from the device so a refresh resumes the same checkout.
+        sub = `anon_${createHash("sha256").update(body.deviceId.trim()).digest("hex").slice(0, 24)}`;
+      } else {
+        // Fresh anon id per mint — the client must persist and reuse the token.
+        sub = `anon_${randomUUID().replace(/-/g, "")}`;
+      }
+
+      const accessToken = await signAnonymousToken({
+        sub,
+        type: "anonymous",
+        status: "active",
+      });
+
+      return sendSuccess(reply, 200, {
+        accessToken,
+        expiresIn: ANONYMOUS_TOKEN_TTL,
+      });
+    } catch (err) {
+      req.log.error({ err }, "Failed to mint anonymous token");
+      return sendError(reply, 500, "ANONYMOUS_TOKEN_FAILED", "Could not issue an anonymous token. Please try again.");
     }
   });
 
@@ -634,6 +719,8 @@ export async function authRoutes(app: FastifyInstance) {
             record.user.country
           );
 
+          fireAndForgetBookingClaim(record.user.email, tokens.accessToken);
+
           return sendSuccess(reply, 200, {
             message: "You're already verified. Welcome back!",
             user: publicUser(record.user),
@@ -672,6 +759,8 @@ export async function authRoutes(app: FastifyInstance) {
             "active",
             updatedUser.country
           );
+
+          fireAndForgetBookingClaim(updatedUser.email, tokens.accessToken);
 
           return sendSuccess(reply, 200, {
             message: "Email verified — welcome to Kainook!",
@@ -831,6 +920,8 @@ export async function authRoutes(app: FastifyInstance) {
 
       console.log("[Login] SUCCESS → issuing tokens for user:", user.id);
       const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
+      // Adopt-by-email: attach any anonymous bookings made under this email.
+      fireAndForgetBookingClaim(email, tokens.accessToken);
       return sendSuccess(reply, 200, { user: publicUser(user), tokens });
     } catch {
       return sendError(reply, 400, "LOGIN_FAILED", "Unable to complete sign-in. Please check your credentials and try again.");
@@ -1067,6 +1158,8 @@ export async function authRoutes(app: FastifyInstance) {
 
         const updatedUser = await prisma.user.findUniqueOrThrow({ where: { id: record.userId } });
         const tokens = await issueTokens(reply, updatedUser.id, updatedUser.userType, updatedUser.status, updatedUser.country);
+
+        fireAndForgetBookingClaim(updatedUser.email, tokens.accessToken);
 
         return sendSuccess(reply, 200, { message: "Your password has been updated. You're now signed in.", user: publicUser(updatedUser), tokens });
       } catch (err: any) {
@@ -1388,21 +1481,6 @@ export async function authRoutes(app: FastifyInstance) {
 
         const { firstName, lastName, photoUrl, businessName, country, phone } = parsed.data;
 
-        // Fetch current user type to validate business name restriction
-        const userRecord = await prisma.user.findUnique({
-          where: { id },
-          select: { userType: true }
-        });
-
-        if (!userRecord) {
-          return sendError(reply, 404, "USER_NOT_FOUND", "Profile not found.");
-        }
-
-        // Restrict businessName to providers
-        if (businessName !== undefined && userRecord.userType !== "provider") {
-          return sendError(reply, 400, "BAD_REQUEST", "businessName can only be updated for provider accounts.");
-        }
-
         // Map updates
         const updateData: Record<string, any> = {};
         if (photoUrl !== undefined) updateData.photoUrl = photoUrl;
@@ -1469,7 +1547,7 @@ export async function authRoutes(app: FastifyInstance) {
             firstName: { type: "string" },
             lastName: { type: "string" },
             photoUrl: { type: "string", format: "uri", nullable: true },
-            businessName: { type: "string", nullable: true, description: "Provider business name (only allowed for providers)" },
+            businessName: { type: "string", nullable: true, description: "Host business name" },
             country: { type: "string", minLength: 2, maxLength: 2, description: "ISO 3166-1 alpha-2 country code" },
           },
         },
@@ -1503,7 +1581,7 @@ export async function authRoutes(app: FastifyInstance) {
             firstName: { type: "string" },
             lastName: { type: "string" },
             photoUrl: { type: "string", format: "uri", nullable: true },
-            businessName: { type: "string", nullable: true, description: "Provider business name (only allowed for providers)" },
+            businessName: { type: "string", nullable: true, description: "Host business name" },
             country: { type: "string", minLength: 2, maxLength: 2, description: "ISO 3166-1 alpha-2 country code" },
           },
         },
@@ -1513,6 +1591,135 @@ export async function authRoutes(app: FastifyInstance) {
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { id } = req.params as { id: string };
       return patchProfileHandler(req, reply, id);
+    }
+  );
+
+  // ── Host profile (Accreditation) ───────────────────────────────────────────
+  // Any user can become a host by submitting their business details and
+  // documents. Admin approval gates listing management. The status is minted
+  // into the JWT as hostStatus so downstream services can gate statelessly.
+
+  const hostProfileSchema = z.object({
+    businessName: z.string().min(1, "Business name is required").max(255).optional(),
+    registrationNo: z.string().max(100).optional(),
+    taxId: z.string().max(100).optional(),
+    documentsUrl: z.string().url("Invalid documents URL").optional(),
+  });
+
+  // ── GET /auth/host/profile  (own host profile + status) ───────────────────
+  app.get(
+    "/auth/host/profile",
+    {
+      schema: {
+        tags: ["User Auth"],
+        summary: "Get the current user's host profile (accreditation) and status",
+        security: [{ bearerAuth: [] }],
+      },
+      preHandler: [requireAuth],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const userId = (req as FastifyRequest & { userId: string }).userId;
+        const acc = await prisma.accreditation.findUnique({ where: { providerId: userId } });
+        return sendSuccess(reply, 200, {
+          hostProfile: acc
+            ? {
+              id: acc.id,
+              status: acc.status,
+              businessName: acc.businessName,
+              registrationNo: acc.registrationNo,
+              taxId: acc.taxId,
+              documentsUrl: acc.documentsUrl,
+              submittedAt: acc.submittedAt,
+              reviewedAt: acc.reviewedAt,
+              rejectionReason: acc.rejectionReason,
+            }
+            : null,
+        });
+      } catch (err: any) {
+        req.log.error(err, "Failed to fetch host profile");
+        return sendError(reply, 500, "SERVER_ERROR", "Could not fetch your host profile. Please try again.");
+      }
+    }
+  );
+
+  // ── POST /auth/host/profile  (submit or update host profile → pending) ────
+  app.post(
+    "/auth/host/profile",
+    {
+      schema: {
+        tags: ["User Auth"],
+        summary: "Submit or update the user's host profile (accreditation), setting status to pending",
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: "object",
+          properties: {
+            businessName: { type: "string" },
+            registrationNo: { type: "string" },
+            taxId: { type: "string" },
+            documentsUrl: { type: "string", format: "uri" },
+          },
+        },
+      },
+      preHandler: [requireAuth],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const userId = (req as FastifyRequest & { userId: string }).userId;
+        const parsed = hostProfileSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return sendError(
+            reply,
+            422,
+            "VALIDATION_ERROR",
+            "Validation failed",
+            zodFieldErrors((parsed.error as ZodError).issues)
+          );
+        }
+        const { businessName, registrationNo, taxId, documentsUrl } = parsed.data;
+
+        const acc = await prisma.accreditation.upsert({
+          where: { providerId: userId },
+          create: {
+            providerId: userId,
+            status: "pending",
+            businessName: businessName ?? null,
+            registrationNo: registrationNo ?? null,
+            taxId: taxId ?? null,
+            documentsUrl: documentsUrl ?? null,
+            submittedAt: new Date(),
+          },
+          update: {
+            status: "pending",
+            businessName: businessName ?? null,
+            registrationNo: registrationNo ?? null,
+            taxId: taxId ?? null,
+            documentsUrl: documentsUrl ?? null,
+            reviewedAt: null,
+            reviewedBy: null,
+            rejectionReason: null,
+            submittedAt: new Date(),
+          },
+        });
+
+        return sendSuccess(reply, 200, {
+          message: "Host profile submitted. It will be reviewed by our team.",
+          hostProfile: {
+            id: acc.id,
+            status: acc.status,
+            businessName: acc.businessName,
+            registrationNo: acc.registrationNo,
+            taxId: acc.taxId,
+            documentsUrl: acc.documentsUrl,
+            submittedAt: acc.submittedAt,
+            reviewedAt: acc.reviewedAt,
+            rejectionReason: acc.rejectionReason,
+          },
+        });
+      } catch (err: any) {
+        req.log.error(err, "Failed to submit host profile");
+        return sendError(reply, 500, "SERVER_ERROR", "Could not submit your host profile. Please try again.");
+      }
     }
   );
 
@@ -1532,7 +1739,7 @@ export async function authRoutes(app: FastifyInstance) {
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = googleOAuthSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid payload.");
-    const { idToken, userType, businessName, country } = parsed.data;
+    const { idToken, businessName, country } = parsed.data;
 
     let googlePayload: { email: string; given_name?: string; family_name?: string; sub: string } | null = null;
     try {
@@ -1562,17 +1769,6 @@ export async function authRoutes(app: FastifyInstance) {
       const existingByEmail = await prisma.user.findUnique({ where: { email } });
 
       if (!existingByEmail) {
-        // Prevent Providers from creating new accounts through Google OAuth.
-        if (userType === "provider") {
-          return sendError(
-            reply,
-            400,
-            "REGISTRATION_DENIED",
-            "Providers are not allowed to use Google OAuth for initial registration."
-          );
-        }
-
-        // Guest is allowed to register
         const user = await prisma.user.create({
           data: {
             firstName: firstName ?? "User",
@@ -1583,50 +1779,38 @@ export async function authRoutes(app: FastifyInstance) {
             emailVerifiedAt: new Date(),
             oauthProvider: "google",
             oauthSub: googleSub,
-            userType: "guest",
+            userType: "user",
             businessName: businessName ?? null,
             country: country ?? null,
           },
         });
         await sendWelcomeEmail(email, user.firstName).catch(() => null);
         const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
-        return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType: false });
+        fireAndForgetBookingClaim(email, tokens.accessToken);
+        return sendSuccess(reply, 201, { user: publicUser(user), tokens });
       }
 
       let user = existingByEmail;
 
-      if (user.userType === "provider") {
-        // After a Provider account has been created and verified, the Provider may use "Continue with Google" to sign in
-        if (!user.emailVerified || user.status !== "active") {
-          return sendError(
-            reply,
-            403,
-            "EMAIL_NOT_VERIFIED",
-            "Please verify your email address to sign in."
-          );
-        }
+      // Any account may use "Continue with Google" once verified.
+      if (!user.emailVerified || user.status !== "active") {
+        return sendError(
+          reply,
+          403,
+          "EMAIL_NOT_VERIFIED",
+          "Please verify your email address to sign in."
+        );
+      }
 
-        // Google email exactly matches the Provider's registered email (since we did a findUnique by email).
-        // Link the oauth provider details if they are not already set.
-        if (!user.oauthProvider || user.oauthProvider !== "google") {
-          user = await prisma.user.update({
-            where: { id: user.id },
-            data: {
-              oauthProvider: "google",
-              oauthSub: googleSub,
-            },
-          });
-        }
-      } else {
-        // Existing Guest user
-        if (!user.oauthProvider) {
-          return sendError(
-            reply,
-            409,
-            "ACCOUNT_EXISTS",
-            "An account with this email already exists. Please sign in with your password."
-          );
-        }
+      // Link the oauth provider details if they are not already set.
+      if (!user.oauthProvider || user.oauthProvider !== "google") {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            oauthProvider: "google",
+            oauthSub: googleSub,
+          },
+        });
       }
 
       // Returning user
@@ -1638,7 +1822,8 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
-      return sendSuccess(reply, 200, { user: publicUser(user), tokens, needsAccountType: false });
+      fireAndForgetBookingClaim(user.email, tokens.accessToken);
+      return sendSuccess(reply, 200, { user: publicUser(user), tokens });
     } catch (err) {
       return sendError(reply, 400, "OAUTH_FAILED", "Sign in with Google could not be completed. Please try again.");
     }
@@ -1653,9 +1838,6 @@ export async function authRoutes(app: FastifyInstance) {
         properties: {
           identityToken: {
             type: "string"
-          },
-          userType: {
-            type: "string",
           },
           // businessName: {
           //   type: "string"
@@ -1681,7 +1863,7 @@ export async function authRoutes(app: FastifyInstance) {
         },
       });
     }
-    const { identityToken, userType, businessName, country, phone } = parsed.data;
+    const { identityToken, businessName, country, phone } = parsed.data;
 
     let appleSub: string;
     let appleEmail: string;
@@ -1716,7 +1898,7 @@ export async function authRoutes(app: FastifyInstance) {
             emailVerifiedAt: new Date(),
             oauthProvider: "apple",
             oauthSub: appleSub,
-            userType: (userType ?? "guest") as "guest" | "provider",
+            userType: "user",
             businessName: businessName ?? null,
             country: country ?? null,
             phone: phone ?? null,
@@ -1724,7 +1906,8 @@ export async function authRoutes(app: FastifyInstance) {
         });
         await sendWelcomeEmail(appleEmail, user.firstName).catch(() => null);
         const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
-        return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType: !userType });
+        fireAndForgetBookingClaim(user.email, tokens.accessToken);
+        return sendSuccess(reply, 201, { user: publicUser(user), tokens });
       }
       if (user.status === "pending_verification") {
         return sendError(reply, 403, "EMAIL_NOT_VERIFIED", "Please verify your email address to sign in.");
@@ -1733,82 +1916,12 @@ export async function authRoutes(app: FastifyInstance) {
       if (user.status === "banned") return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
 
       const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
-      return sendSuccess(reply, 200, { user: publicUser(user), tokens, needsAccountType: false });
+      fireAndForgetBookingClaim(user.email, tokens.accessToken);
+      return sendSuccess(reply, 200, { user: publicUser(user), tokens });
     } catch (err) {
       return sendError(reply, 400, "OAUTH_FAILED", "Sign in with Apple could not be completed. Please try again.");
     }
   });
-
-  // ── POST /auth/account-type  (post-OAuth account type selection) ──────────
-  app.post("/auth/account-type", {
-    schema: {
-      tags: ["User Auth"],
-      body: {
-        type: "object",
-        required: ["userType"],
-        properties: {
-          userType: {
-            type: "string",
-            enum: ["guest", "provider"],
-          },
-          businessName: {
-            type: "string",
-          },
-          country: {
-            type: "string",
-            minLength: 2,
-            maxLength: 2,
-            description: "2-letter ISO country code (e.g. IN, US)",
-          },
-          phone: {
-            type: "string",
-            description: "International format, required for providers",
-          },
-        },
-      },
-    },
-    preHandler: [requireAuth],
-  },
-    async (req: FastifyRequest, reply: FastifyReply) => {
-      const parsed = accountTypeSchema.safeParse(req.body);
-
-      if (!parsed.success) {
-        return sendError(
-          reply,
-          422,
-          "VALIDATION_ERROR",
-          "Validation failed",
-          zodFieldErrors((parsed.error as ZodError).issues)
-        );
-      }
-
-      const userId = (req as FastifyRequest & { userId: string }).userId;
-      const { userType, businessName, country, phone } = parsed.data;
-
-      try {
-        const updated = await prisma.user.update({
-          where: { id: userId },
-          data: {
-            userType,
-            businessName: businessName ?? null,
-            country: country ?? null,
-            phone: phone ?? null,
-          },
-        });
-
-        return sendSuccess(reply, 200, {
-          message: "Account type updated successfully.",
-          user: publicUser(updated),
-        });
-      } catch (err: any) {
-        if (err?.code === "P2025") {
-          return sendError(reply, 404, "USER_NOT_FOUND", "Your account could not be found.");
-        }
-        return sendError(reply, 400, "UPDATE_FAILED", "Account type could not be updated. Please try again.");
-      }
-    }
-  );
-
 
   // ── GET /auth/oauth/google/redirect (Web OAuth Start) ──────────────────────
   app.get("/auth/oauth/google/redirect", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -1892,7 +2005,7 @@ export async function authRoutes(app: FastifyInstance) {
             emailVerifiedAt: new Date(),
             oauthProvider: "google",
             oauthSub: googleSub,
-            userType: "guest", // Default to guest
+            userType: "user",
           },
         });
         await sendWelcomeEmail(email, user.firstName).catch(() => null);
@@ -1908,6 +2021,7 @@ export async function authRoutes(app: FastifyInstance) {
 
       // Issue Zika tokens and set HTTP-only cookie
       const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
+      fireAndForgetBookingClaim(user.email, tokens.accessToken);
 
       // Return a beautiful loading HTML that initializes sessionStorage and redirects
       reply.type("text/html").send(`
@@ -2003,10 +2117,9 @@ export async function authRoutes(app: FastifyInstance) {
       // Store token in session storage
       sessionStorage.setItem("zika:access_token", accessToken);
       
-      // Redirect based on user type
+      // All accounts share one home surface now — host onboarding happens later.
       setTimeout(() => {
-        const dest = userType === "provider" ? "/listings" : "/traveller";
-        window.location.href = dest;
+        window.location.href = "/traveller";
       }, 800);
     } catch (e) {
       console.error(e);
@@ -2033,6 +2146,11 @@ async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
   if (!authHeader?.startsWith("Bearer ")) return sendError(reply, 401, "NO_TOKEN", "Authentication required.");
   try {
     const payload = await verifyAccessToken(authHeader.slice(7));
+    // Anonymous tokens must not reach account-scoped endpoints (profile,
+    // settings, payment methods, etc.).
+    if (payload.type === "anonymous") {
+      return sendError(reply, 403, "ACCOUNT_REQUIRED", "An account is required to access this feature.");
+    }
     (req as FastifyRequest & { userId: string }).userId = payload.sub;
   } catch {
     return sendError(reply, 401, "INVALID_TOKEN", "Invalid or expired token.");

@@ -135,7 +135,7 @@ export function TopBar({ onToggleSidebar }: TopBarProps) {
             <div className="text-left hidden sm:block">
               <p className="text-sm font-semibold text-white leading-none">{name}</p>
               <p className="text-[11px] text-green-200/80 mt-0.5 truncate max-w-[120px]">
-                {user?.businessName ?? user?.email ?? "Provider"}
+                {user?.businessName ?? user?.email ?? "Account"}
               </p>
             </div>
             <ChevronDown className={cn("w-3.5 h-3.5 text-white/60 transition-transform ml-0.5", menuOpen && "rotate-180")} />

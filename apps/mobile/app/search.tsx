@@ -143,6 +143,8 @@ interface SearchResult {
   city: string;
   countryCode: string;
   distanceKm: number;
+  lat?: number | null;
+  lng?: number | null;
   primaryPhotoUrl: string | null;
   nightlyRate: number | null;
   dailyRate: number | null;

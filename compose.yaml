@@ -8,12 +8,12 @@ services:
   #     - zika-redis-data:/data
 
   # db:
-  #   container_name: zika_booking
-  #   image: postgis/postgis:18-3.6-alpine
+  #   container_name: zika-booking
+  #   image: docker.io/postgis/postgis:18-3.6-alpine
   #   environment:
-  #     POSTGRES_USER: zika_user
-  #     POSTGRES_PASSWORD: aakopass123
-  #     POSTGRES_DB: zika_booking
+  #     POSTGRES_USER: zikauser
+  #     POSTGRES_PASSWORD: zikapassword
+  #     POSTGRES_DB: zikadb_local
   #   ports:
   #     - "5434:5432"
   #   volumes:

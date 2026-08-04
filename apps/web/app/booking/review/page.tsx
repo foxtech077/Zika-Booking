@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import { storeLatestReviewContext } from "@/services/traveller";
 import { useAuthStore } from "@/stores/auth";
 import { capitalize } from "@/lib/utils";
+import { derivePlatform, fmtMoney } from "@/lib/platform-currency";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,12 @@ interface PricingPreview {
   totalAmount: number;
   commissionRate?: number;
   taxRate?: number;
+  /** Platform (charge) currency — EUR for Stripe, XAF for Tara. */
+  platformCurrency?: string;
+  /** Amount actually charged in the platform currency (EUR includes the buffer). */
+  platformAmount?: number;
+  /** Exchange rate listingCurrency → platformCurrency at lock time. */
+  platformRate?: number;
 }
 
 interface CheckoutCtx {
@@ -124,7 +131,31 @@ function getPricing(ctx: CheckoutCtx) {
     : (pp.promotionDiscount ?? 0);
   const subtotal = Math.max(0, base - totalDiscount);
   const total = subtotal + serviceFee + taxAmount + deliveryFee + securityDeposit;
-  return { base, discount: totalDiscount, subtotal, serviceFee, taxes: taxAmount, deliveryFee, securityDeposit, total };
+  // The end amount the guest pays is the platform-currency total (EUR for
+  // Stripe, XAF for Tara) returned by the booking API. Breakdown lines stay in
+  // the listing currency; only this converted total is shown in the platform
+  // currency. Fall back to the listing total for older checkout sessions.
+  const info = derivePlatform(pp, ctx.currency, total);
+  return {
+    base, discount: totalDiscount, subtotal, serviceFee, taxes: taxAmount,
+    deliveryFee, securityDeposit, total,
+    platformCurrency: info.platformCurrency,
+    platformAmount: info.platformAmount,
+    platformRate: info.platformRate,
+    listingCurrency: ctx.currency,
+  };
+}
+
+/** Platform amount as primary value with the listing amount muted underneath. */
+function MoneyValue({ platform, listing, currency, listingCurrency }: { platform: number; listing: number; currency: string; listingCurrency: string }) {
+  return (
+    <span className="text-right">
+      <div>{fmtMoney(platform, currency)}</div>
+      {currency !== listingCurrency && (
+        <div className="text-[10px] font-normal text-slate-400">Billed as approx. {fmtMoney(listing, listingCurrency)}</div>
+      )}
+    </span>
+  );
 }
 
 function fmtDate(d?: string) {
@@ -181,7 +212,7 @@ export default function BookingReviewPage() {
   const [phoneCountry, setPhoneCountry] = useState("");
   const [taraXafAmount, setTaraXafAmount] = useState<number | null>(null);
   const [taraXafLoading, setTaraXafLoading] = useState(false);
-  
+
   const [submitting, setSubmitting] = useState(false);
   const [payError, setPayError] = useState("");
   const [paymentId, setPaymentId] = useState<string | null>(null);
@@ -224,7 +255,7 @@ export default function BookingReviewPage() {
         method: "POST",
         keepalive: true,
         headers,
-      }).catch(() => {});
+      }).catch(() => { });
     } catch { /* best-effort */ }
   }
 
@@ -312,7 +343,7 @@ export default function BookingReviewPage() {
       setLoadingWalletVouchers(true);
       listingApi.get<any>("/vouchers/wallet")
         .then((res) => { if (res.data.success) setWalletVouchers(res.data.data ?? []); })
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => setLoadingWalletVouchers(false));
     } catch {
       router.replace("/");
@@ -454,7 +485,9 @@ export default function BookingReviewPage() {
     // Record the acceptance the guest just gave, once. Best-effort: a failure
     // must not cost them their reservation lock, so it is logged and the
     // payment proceeds — the checkbox itself is still an enforced gate.
-    if (needsTermsAcceptance) {
+    // Anonymous guests have no account to record acceptance against, so the
+    // call is skipped (the backend would reject it with ACCOUNT_REQUIRED).
+    if (needsTermsAcceptance && user) {
       void api
         .post("/auth/accept-terms", { acceptedTerms: true })
         .then(() => updateUser({ requiresTermsAcceptance: false }))
@@ -706,6 +739,7 @@ export default function BookingReviewPage() {
               ctx={ctx}
               onDownload={handleDownloadPDF}
               onViewBookings={() => router.push("/?tab=bookings")}
+              isAuthenticated={!!user}
             />
           )}
 
@@ -751,8 +785,13 @@ export default function BookingReviewPage() {
                     disabled={submitting}
                     className="mt-5 w-full py-3.5 bg-[#0B1E3F] hover:bg-[#07152B] disabled:opacity-50 text-white font-bold rounded-xl transition text-sm"
                   >
-                    {submitting ? "Processing…" : `Pay ${ctx.currency} ${fmt(pricing!.total)}`}
+                    {submitting ? "Processing…" : `Pay ${pricing!.platformCurrency} ${fmt(pricing!.platformAmount)}`}
                   </button>
+                  {pricing!.platformCurrency !== ctx.currency && (
+                    <p className="text-xs text-slate-400 mt-2">
+                      Billed as approx. {ctx.currency} {fmt(pricing!.total)} · charged in {pricing!.platformCurrency}
+                    </p>
+                  )}
                 </SectionCard>
               </div>
               <PriceSummary ctx={ctx} pricing={pricing!} />
@@ -885,8 +924,8 @@ export default function BookingReviewPage() {
                                     {v.description
                                       ? ` — ${v.description}`
                                       : v.discountType === "percentage"
-                                      ? ` — ${v.discountValue}% off`
-                                      : ` — ${ctx.currency} ${v.discountValue} off`}
+                                        ? ` — ${v.discountValue}% off`
+                                        : ` — ${ctx.currency} ${v.discountValue} off`}
                                   </option>
                                 ))}
                               </select>
@@ -947,8 +986,8 @@ export default function BookingReviewPage() {
                                     {v.description
                                       ? ` — ${v.description}`
                                       : v.discountType === "percentage"
-                                      ? ` — ${v.discountValue}% off`
-                                      : ` — ${ctx.currency} ${v.discountValue} off`}
+                                        ? ` — ${v.discountValue}% off`
+                                        : ` — ${ctx.currency} ${v.discountValue} off`}
                                   </option>
                                 ))}
                               </select>
@@ -1075,21 +1114,21 @@ export default function BookingReviewPage() {
                         first booking, so this is shown once and skipped thereafter.
                         The Privacy Policy is handled earlier, at registration. */}
                     {needsTermsAcceptance && (
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={payTermsAccepted}
-                        onChange={(e) => setPayTermsAccepted(e.target.checked)}
-                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#0B1E3F] focus:ring-[#0B1E3F]"
-                      />
-                      <span className="text-sm text-slate-600">
-                        I have read and agree to the{" "}
-                        <a href="/legal/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#0B1E3F] underline">
-                          Terms &amp; Conditions
-                        </a>
-                        .
-                      </span>
-                    </label>
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={payTermsAccepted}
+                          onChange={(e) => setPayTermsAccepted(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#0B1E3F] focus:ring-[#0B1E3F]"
+                        />
+                        <span className="text-sm text-slate-600">
+                          I have read and agree to the{" "}
+                          <a href="/legal/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#0B1E3F] underline">
+                            Terms &amp; Conditions
+                          </a>
+                          .
+                        </span>
+                      </label>
                     )}
 
                     <div className="flex gap-3">
@@ -1104,9 +1143,14 @@ export default function BookingReviewPage() {
                         disabled={submitting || (needsTermsAcceptance && !payTermsAccepted)}
                         className="flex-[2] py-3.5 bg-[#0B1E3F] hover:bg-[#07152B] disabled:opacity-50 text-white font-bold rounded-xl transition text-sm"
                       >
-                        {submitting ? "Please wait…" : provider === "tara" ? "Send Payment Request" : "Pay Now"}
+                        {submitting ? "Please wait…" : provider === "tara" ? "Send Payment Request" : `Pay ${pricing!.platformCurrency} ${fmt(pricing!.platformAmount)}`}
                       </button>
                     </div>
+                    {provider === "stripe" && pricing!.platformCurrency !== ctx.currency && (
+                      <p className="text-xs text-slate-400 mt-2 text-center">
+                        Billed as approx. {ctx.currency} {fmt(pricing!.total)} · charged in {pricing!.platformCurrency}
+                      </p>
+                    )}
                   </>
                 )}
               </div>
@@ -1244,7 +1288,7 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
           </div>
         </div>
 
-        {/* Line items */}
+        {/* Line items in listing currency; the total is shown in the platform currency */}
         <div className="space-y-2.5 text-sm">
           <div className="flex justify-between text-slate-600">
             <span>{ctx.currency} {fmt(ctx.pricingPreview?.nightlyRate ?? ctx.pricePerNight)} × {ctx.pricingPreview?.units ?? ctx.nightsOrDays} {isCar ? "day" : "night"}{(ctx.pricingPreview?.units ?? ctx.nightsOrDays) !== 1 ? "s" : ""}</span>
@@ -1270,9 +1314,6 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
               <span>{ctx.currency} {fmt(pricing.taxes)}</span>
             </div>
           )}
-          {/* Delivery is already inside pricing.total (see getPricing). Without
-              this row the payment page showed a total that did not reconcile
-              with the lines above it. */}
           {pricing.deliveryFee > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Delivery fee</span>
@@ -1287,7 +1328,7 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
           )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
             <span>Total</span>
-            <span>{ctx.currency} {fmt(pricing.total)}</span>
+            <MoneyValue platform={pricing.platformAmount} listing={pricing.total} currency={pricing.platformCurrency} listingCurrency={pricing.listingCurrency} />
           </div>
         </div>
       </div>
@@ -1298,14 +1339,18 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
 // ─── Confirmed View ───────────────────────────────────────────────────────────
 
 function ConfirmedView({
-  confirmed, ctx, onDownload, onViewBookings,
+  confirmed, ctx, onDownload, onViewBookings, isAuthenticated,
 }: {
   confirmed: ConfirmedBooking;
   ctx: CheckoutCtx;
   onDownload: () => void;
   onViewBookings: () => void;
+  isAuthenticated: boolean;
 }) {
   const isCar = ctx.listingCategory === "car";
+  const info = derivePlatform(ctx.pricingPreview, confirmed.currency, confirmed.totalAmount);
+  const platformCurrency = info.platformCurrency;
+  const platformAmount = info.platformAmount;
   return (
     <div className="max-w-2xl mx-auto space-y-6">
 
@@ -1323,6 +1368,35 @@ function ConfirmedView({
         </div>
         <p className="text-slate-500 text-sm">A confirmation email with your PDF voucher has been sent to <strong>{ctx.email}</strong>.</p>
       </div>
+
+      {/* Anonymous → create an account banner. Adopt-by-email attaches this
+          booking to the account automatically on sign-up/login with the same
+          email, so the guest does not lose access. */}
+      {!isAuthenticated && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 space-y-3">
+          <div>
+            <h3 className="font-bold text-amber-900 text-sm">Want to keep your bookings in one place?</h3>
+            <p className="text-amber-800 text-xs leading-relaxed mt-1">
+              Create a free account with <strong>{ctx.email}</strong> and this booking will be attached to it
+              automatically. You'll be able to view your reservations, save favourites, and earn rewards.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href={`/auth/register?email=${encodeURIComponent(ctx.email)}`}
+              className="inline-flex items-center justify-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg transition"
+            >
+              Create an account
+            </a>
+            <button
+              onClick={onViewBookings}
+              className="inline-flex items-center justify-center px-4 py-2 border border-amber-300 text-amber-800 hover:bg-amber-100 text-xs font-semibold rounded-lg transition"
+            >
+              Continue browsing
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Booking info */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
@@ -1387,7 +1461,7 @@ function ConfirmedView({
           )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
             <span>Total Paid</span>
-            <span>{confirmed.currency} {fmt(confirmed.totalAmount)}</span>
+            <MoneyValue platform={platformAmount} listing={confirmed.totalAmount} currency={platformCurrency} listingCurrency={confirmed.currency} />
           </div>
         </div>
       </div>
@@ -1448,6 +1522,13 @@ function VoucherLayout({
   ctx: CheckoutCtx;
 }) {
   const isCar = ctx.listingCategory === "car";
+  const info = derivePlatform(ctx.pricingPreview, confirmed.currency, confirmed.totalAmount);
+  const platformCurrency = info.platformCurrency;
+  const platformAmount = info.platformAmount;
+  const lv = (value: number) => `${confirmed.currency} ${fmt(value)}`;
+  const totalDisplay = platformCurrency === confirmed.currency
+    ? lv(platformAmount)
+    : `${fmtMoney(platformAmount, platformCurrency)}  (Billed as approx. ${lv(confirmed.totalAmount)})`;
   return (
     <div style={{ fontFamily: "sans-serif", maxWidth: 680, margin: "0 auto", color: "#1e293b" }}>
       {/* Header */}
@@ -1491,12 +1572,12 @@ function VoucherLayout({
 
       {/* Receipt */}
       <VoucherSection title="Itemised Receipt">
-        <VoucherRow label="Base amount" value={`${confirmed.currency} ${fmt(confirmed.baseAmount)}`} />
-        {confirmed.discount > 0 && <VoucherRow label="Discount" value={`−${confirmed.currency} ${fmt(confirmed.discount)}`} />}
-        <VoucherRow label={`Service fee${confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}`} value={`${confirmed.currency} ${fmt(confirmed.serviceFee)}`} />
-        {confirmed.taxes > 0 && <VoucherRow label={`Taxes${confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}`} value={`${confirmed.currency} ${fmt(confirmed.taxes)}`} />}
-        {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && <VoucherRow label="Security deposit" value={`${confirmed.currency} ${fmt(confirmed.securityDeposit)}`} />}
-        <VoucherRow label="Total Paid" value={`${confirmed.currency} ${fmt(confirmed.totalAmount)}`} bold />
+        <VoucherRow label="Base amount" value={lv(confirmed.baseAmount)} />
+        {confirmed.discount > 0 && <VoucherRow label="Discount" value={`−${lv(confirmed.discount)}`} />}
+        <VoucherRow label={`Service fee${confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}`} value={lv(confirmed.serviceFee)} />
+        {confirmed.taxes > 0 && <VoucherRow label={`Taxes${confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}`} value={lv(confirmed.taxes)} />}
+        {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && <VoucherRow label="Security deposit" value={lv(confirmed.securityDeposit)} />}
+        <VoucherRow label="Total Paid" value={totalDisplay} bold />
       </VoucherSection>
 
       {/* Payment Info */}

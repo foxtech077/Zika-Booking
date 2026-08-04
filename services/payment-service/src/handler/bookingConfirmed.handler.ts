@@ -44,7 +44,7 @@ function scheduleGuestEmailRetry(
 }
 
 console.log("BEFORE CONFIRM");
-async function confirmBooking(bookingId: string, paymentId: string, paymentProvider: string) {
+async function confirmBooking(bookingId: string, paymentId: string, paymentProvider: string, charge?: { currency?: string | null; amount?: number | null; rate?: number | null }) {
   console.log("CONFIRM API CALLED");
   const response = await fetch(`${BOOKING_SERVICE_URL}/bookings/${bookingId}/confirm`, {
     method: "PATCH",
@@ -52,7 +52,13 @@ async function confirmBooking(bookingId: string, paymentId: string, paymentProvi
       "Content-Type": "application/json",
       "x-service-key": INTERNAL_SERVICE_KEY,
     },
-    body: JSON.stringify({ paymentId, paymentProvider }),
+    body: JSON.stringify({
+      paymentId,
+      paymentProvider,
+      chargedCurrency: charge?.currency ?? undefined,
+      chargedAmount: charge?.amount ?? undefined,
+      chargedRate: charge?.rate ?? undefined,
+    }),
   });
   console.log("CONFIRM STATUS =", response.status);
 
@@ -114,6 +120,15 @@ export async function bookingConfirmedHandler(payment: any) {
     throw new Error(`Payment record not found for ID: ${payment.id}`);
   }
 
+  // Actual platform-currency charge (EUR for Stripe, XAF for Tara) captured on
+  // the payment record. Used to render the invoice/email/PDF in the charged
+  // currency and to persist `charged*` back onto the booking for reference.
+  const charge = {
+    currency: (dbPayment.chargedCurrency ?? "EUR").toUpperCase(),
+    amount: dbPayment.chargedAmount != null ? Number(dbPayment.chargedAmount) : null,
+    rate: dbPayment.chargedRate != null ? Number(dbPayment.chargedRate) : null,
+  };
+
   // 1. GET BOOKING
   const res = await fetch(`${BOOKING_SERVICE_URL}/bookings/internal/${bookingId}`, {
     headers: {
@@ -170,7 +185,7 @@ export async function bookingConfirmedHandler(payment: any) {
     console.log(`[webhook] Booking ${bookingId} status is pending_payment. Executing confirmation flow first.`);
     // 2. CONFIRM BOOKING FIRST
     console.log("STEP-3 CONFIRM SUCCESS");
-    await confirmBooking(bookingId, payment.id, payment.paymentProvider || "stripe");
+    await confirmBooking(bookingId, payment.id, payment.paymentProvider || "stripe", charge);
     console.log("STEP-4 BEFORE PDF");
 
   } else {
@@ -181,8 +196,8 @@ export async function bookingConfirmedHandler(payment: any) {
   // (booking.paymentId is null at fetch time, set only after confirm)
   booking.transactionId = dbPayment.displayId ?? payment.id;
 
-  // Generate invoice
-  const invoice = buildInvoice(booking);
+  // Generate invoice (breakdown in listing currency + platform total)
+  const invoice = buildInvoice(booking, charge);
 
   // 3. PDF/Voucher generation and S3 upload
   let voucher: { fileName: string; pdfUrl: string; pdfBuffer: Buffer };

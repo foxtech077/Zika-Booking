@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import QRCode from "qrcode";
 import { uploadBuffer, getPublicUrl } from "../lib/s3.js";
+import { money } from "./currency-format.js";
 import os from "os";
 
 const BOOKING_BASE_URL = process.env["BOOKING_PUBLIC_URL"] ?? "https://kainook.com/bookings";
@@ -53,18 +54,26 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
   doc.text(`Check-out: ${booking.checkOut}`, 40, y); y += 20;
 
   // ── ITEMIZED RECEIPT ────────────────────────────────────────────────────
+  const listingCurrency = invoice.listingCurrency ?? (booking.currency ?? "").toUpperCase();
+  const platformCurrency = invoice.platform?.currency ?? listingCurrency;
+  const platformAmount = invoice.platform?.amount ?? invoice.total;
   doc.fontSize(14).text("ITEMIZED RECEIPT", 40, y); y += 18;
-  doc.fontSize(12).text(`Base Amount: ${invoice.baseAmount}`, 40, y); y += 15;
-  doc.text(`Discount: ${invoice.discount}`, 40, y); y += 15;
-  doc.text(`Subtotal: ${invoice.subtotal}`, 40, y); y += 15;
-  doc.text(`Service Fee: ${invoice.serviceFee}`, 40, y); y += 15;
-  doc.text(`Tax: ${invoice.tax}`, 40, y); y += 15;
+  doc.fontSize(12).text(`Base Amount: ${money(invoice.baseAmount, listingCurrency)}`, 40, y); y += 15;
+  doc.text(`Discount: ${money(invoice.discount, listingCurrency)}`, 40, y); y += 15;
+  doc.text(`Subtotal: ${money(invoice.subtotal, listingCurrency)}`, 40, y); y += 15;
+  doc.text(`Service Fee: ${money(invoice.serviceFee, listingCurrency)}`, 40, y); y += 15;
+  doc.text(`Tax: ${money(invoice.tax, listingCurrency)}`, 40, y); y += 15;
   if (invoice.securityDeposit && invoice.securityDeposit > 0) {
-    doc.text(`Security Deposit: ${invoice.securityDeposit}`, 40, y); y += 18;
+    doc.text(`Security Deposit: ${money(invoice.securityDeposit, listingCurrency)}`, 40, y); y += 18;
   } else {
     y += 3;
   }
-  doc.fontSize(14).text(`TOTAL PAID: ${invoice.total}`, 40, y); y += 24;
+  doc.fontSize(14).text(`TOTAL PAID: ${money(platformAmount, platformCurrency)}`, 40, y); y += 12;
+  if (listingCurrency !== platformCurrency) {
+    doc.fontSize(10).fillColor("#6b7280").text(`≈ ${money(invoice.total, listingCurrency)}`, 40, y); y += 12;
+    doc.fillColor("#000000");
+  }
+  y += 12;
 
   // ── PAYMENT INFORMATION ─────────────────────────────────────────────────
   doc.fontSize(14).text("PAYMENT INFORMATION", 40, y); y += 18;

@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
-import { requireUser, requireAdmin, requireInternalService, type GuestRequest } from "../middleware/auth.js";
+import { requireAccount, requireAdmin, requireInternalService, type GuestRequest } from "../middleware/auth.js";
 import { sendError } from "../lib/errors.js";
 import { processEligiblePayouts } from "../services/payout.service.js";
 
@@ -20,11 +20,9 @@ export async function payoutRoutes(app: FastifyInstance) {
         },
       },
     },
-    preHandler: [requireUser],
+    preHandler: [requireAccount],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { userId, userType } = req as GuestRequest;
-    if (userType !== "provider") return sendError(reply, 403, "FORBIDDEN", "Provider access required.");
-
+    const { userId } = req as GuestRequest;
     const query = req.query as { page?: string; limit?: string; status?: string };
     const page = Math.max(1, parseInt(query.page ?? "1", 10));
     const limit = Math.max(1, Math.min(100, parseInt(query.limit ?? "20", 10)));
@@ -67,11 +65,9 @@ export async function payoutRoutes(app: FastifyInstance) {
         properties: { id: { type: "string" } },
       },
     },
-    preHandler: [requireUser],
+    preHandler: [requireAccount],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { userId, userType } = req as GuestRequest;
-    if (userType !== "provider") return sendError(reply, 403, "FORBIDDEN", "Provider access required.");
-
+    const { userId } = req as GuestRequest;
     const { id } = req.params as { id: string };
     const payout = await prisma.payout.findFirst({
       where: { id, providerId: userId },
