@@ -1,5 +1,7 @@
 import { PAYMENT_API_URL, LISTING_API_URL } from '$lib/config';
 import { getToken, clearToken, requestAnonymousToken } from '$lib/booking-api';
+import { refreshAccessToken, hasAccountToken } from '$lib/token-refresh';
+import { clearSession } from '$lib/stores/auth.svelte';
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
@@ -64,14 +66,33 @@ async function request<T>(url: string, init: RequestInitWithRetry = {}): Promise
 			const err = new Error(message) as Error & { code?: string; status?: number };
 			err.code = code;
 			err.status = res.status;
-			// Recover from an expired/invalid anonymous token by minting a fresh
-			// one (same stable sub) and retrying once.
+			// A 401 means the bearer token expired (or is invalid). Recover once:
+			//   • account token → refresh it via the auth-service proxy, retry
+			//   • anonymous / no token → mint a fresh anonymous token (same
+			//     stable sub), retry
 			if (res.status === 401 && !init._retried) {
-				clearToken();
-				const { accessToken } = await requestAnonymousToken();
-				if (accessToken) {
-					init._retried = true;
-					return request<T>(url, init);
+				const hadAccountToken = hasAccountToken(getToken());
+				init._retried = true;
+				if (hadAccountToken) {
+					const newToken = await refreshAccessToken();
+					if (newToken) {
+						init.headers = {
+							...(init.headers as Record<string, string>),
+							Authorization: `Bearer ${newToken}`
+						};
+						return request<T>(url, init);
+					}
+					clearSession();
+				} else {
+					clearToken();
+					const { accessToken } = await requestAnonymousToken();
+					if (accessToken) {
+						init.headers = {
+							...(init.headers as Record<string, string>),
+							Authorization: `Bearer ${accessToken}`
+						};
+						return request<T>(url, init);
+					}
 				}
 			}
 			throw err;

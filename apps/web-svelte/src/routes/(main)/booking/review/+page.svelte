@@ -29,6 +29,7 @@
 		convertFx,
 		type CreateIntentResult
 	} from '$lib/payment-api';
+	import { auth } from '$lib/stores/auth.svelte';
 
 	let { data }: PageProps = $props();
 
@@ -65,6 +66,18 @@
 	let email = $state('');
 	let phone = $state('');
 	let specialRequests = $state('');
+
+	// Pre-fill the guest details from the signed-in account so a logged-in
+	// traveller doesn't retype their name/email at checkout. Guests keep the
+	// blank form.
+	$effect(() => {
+		const u = auth.user;
+		if (!u) return;
+		firstName = u.firstName;
+		lastName = u.lastName;
+		email = u.email;
+		phone = u.phone ?? phone;
+	});
 
 	// ── Car rental form ──────────────────────────────────────────────────────
 	let driverFirstName = $state('');
@@ -397,7 +410,7 @@
 				code,
 				totalAmount: breakdown.base,
 				activity: isCar ? 'cars' : detail.category === 'apartment' ? 'apartments' : 'hotels',
-				guestId: 'guest',
+				guestId: auth.user?.id ?? 'guest',
 				guestCountry: detail.country
 			});
 			if (res.valid && res.discountAmount > 0) {

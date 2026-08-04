@@ -1,5 +1,7 @@
 import { browser } from '$app/environment';
 import { AUTH_API_URL, LISTING_API_URL } from '$lib/config';
+import { refreshAccessToken, hasAccountToken } from '$lib/token-refresh';
+import { clearSession } from '$lib/stores/auth.svelte';
 
 const TOKEN_KEY = 'kainook:access_token';
 const DEVICE_ID_KEY = 'kainook:device_id';
@@ -163,15 +165,34 @@ async function request<T>(url: string, init: RequestInitWithRetry = {}): Promise
 			const err = new Error(message) as Error & { code?: string; status?: number };
 			err.code = code;
 			err.status = res.status;
-			// An expired/invalid anonymous token trips 401 on protected endpoints.
-			// Mint a fresh anonymous token (same stable sub) and retry once —
-			// never on the token-mint endpoint itself, and never twice.
+			// A 401 means the bearer token expired (or is invalid). Recover once:
+			//   • account token → refresh it via the auth-service proxy, retry
+			//   • anonymous / no token → mint a fresh anonymous token (same
+			//     stable sub), retry
+			// Never on the token-mint endpoint itself, and never twice.
 			if (res.status === 401 && !init._retried && !url.includes('/auth/anonymous-token')) {
-				clearToken();
-				const { accessToken } = await requestAnonymousToken();
-				if (accessToken) {
-					init._retried = true;
-					return request<T>(url, init);
+				const hadAccountToken = hasAccountToken(getToken());
+				init._retried = true;
+				if (hadAccountToken) {
+					const newToken = await refreshAccessToken();
+					if (newToken) {
+						init.headers = {
+							...(init.headers as Record<string, string>),
+							Authorization: `Bearer ${newToken}`
+						};
+						return request<T>(url, init);
+					}
+					clearSession();
+				} else {
+					clearToken();
+					const { accessToken } = await requestAnonymousToken();
+					if (accessToken) {
+						init.headers = {
+							...(init.headers as Record<string, string>),
+							Authorization: `Bearer ${accessToken}`
+						};
+						return request<T>(url, init);
+					}
 				}
 			}
 			throw err;
@@ -197,11 +218,16 @@ export async function requestAnonymousToken(): Promise<{ accessToken: string; ex
 }
 
 /**
- * Ensures a valid anonymous token exists. Reuses the stored token when it is
- * still valid; otherwise discards it and mints a fresh one (same stable sub).
+ * Ensures a valid token exists for a checkout session.
+ *
+ * A logged-in user keeps their account token — using it for the lock/booking
+ * is what attaches the booking to their real account (the listing service
+ * derives guestId from the JWT). A guest reuses a valid anonymous token or
+ * mints a fresh one (same stable sub).
  */
 export async function ensureAnonymousToken(): Promise<string> {
 	const existing = getToken();
+	if (hasAccountToken(existing)) return existing!;
 	if (isAnonymousTokenValid(existing)) return existing!;
 	clearToken();
 	const { accessToken } = await requestAnonymousToken();

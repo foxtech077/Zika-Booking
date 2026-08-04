@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { auth, clearSession } from '$lib/stores/auth.svelte';
+	import { logout } from '$lib/auth-api';
 	import Avatar from './Avatar.svelte';
 	import CountrySelector from './CountrySelector.svelte';
 	import { cn } from '$lib/utils';
@@ -60,8 +61,10 @@
 
 	function handleLogout() {
 		menuOpen = false;
-		clearSession();
-		goto('/');
+		void logout().finally(() => {
+			clearSession();
+			goto('/');
+		});
 	}
 </script>
 
