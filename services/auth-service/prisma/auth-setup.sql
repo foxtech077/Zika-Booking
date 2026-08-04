@@ -1,3 +1,9 @@
+-- Accent-insensitive search support (unaccent + pg_trgm for partial matching).
+-- Installed into public (where postgis lives) because the search service
+-- references them as public.unaccent / public.gin_trgm_ops.
+CREATE EXTENSION IF NOT EXISTS unaccent SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public;
+
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'UserStatus') THEN
     CREATE TYPE "UserStatus" AS ENUM ('pending_verification', 'active', 'suspended', 'banned');

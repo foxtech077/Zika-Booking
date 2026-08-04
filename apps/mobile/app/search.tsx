@@ -814,7 +814,8 @@ export default function SearchScreen() {
   // Dynamic filter state variables
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
-  const [radiusKm, setRadiusKm] = useState(25);
+  // Radius is optional — null means nearest-first with no distance cap
+  const [radiusKm, setRadiusKm] = useState<number | null>(null);
   const [onlyPromotions, setOnlyPromotions] = useState(false); // apartment-only: long_stay_discount
   const [cancellationPolicy, setCancellationPolicy] = useState<string | null>(
     null,
@@ -857,7 +858,7 @@ export default function SearchScreen() {
   const hasActiveFilters =
     priceMin !== "" ||
     priceMax !== "" ||
-    radiusKm !== 25 ||
+    radiusKm !== null ||
     onlyPromotions ||
     cancellationPolicy !== null ||
     starRating.length > 0 ||
@@ -875,7 +876,7 @@ export default function SearchScreen() {
   const handleResetFilters = () => {
     setPriceMin("");
     setPriceMax("");
-    setRadiusKm(25);
+    setRadiusKm(null);
     setOnlyPromotions(false);
     setCancellationPolicy(null);
     setStarRating([]);
@@ -1046,24 +1047,32 @@ export default function SearchScreen() {
   } = useQuery<SearchResponse["data"]>({
     queryKey: searchQueryKey,
     queryFn: async () => {
-      // Priority: geocoded place → detected IP location → global (0,0)
-      const effectiveLat = geo?.lat ?? fallbackLat ?? 0;
-      const effectiveLng = geo?.lng ?? fallbackLng ?? 0;
-      const hasSpatialContext = !!(geo || fallbackLat);
-      const effectiveRadius = geo
-        ? radiusKm
-        : hasSpatialContext
-          ? radiusKm
-          : 20000;
+      // Priority: geocoded place → detected IP location → no geo anchor.
+      // Without an anchor the backend ranks by text relevance instead of
+      // distance (exact → partial → nearby), so we no longer fabricate a
+      // (0,0) global centre or the 20000km radius that faked a global sort.
+      const effectiveLat = geo?.lat ?? fallbackLat;
+      const effectiveLng = geo?.lng ?? fallbackLng;
+      const hasSpatialContext =
+        effectiveLat != null &&
+        effectiveLng != null &&
+        Number.isFinite(effectiveLat) &&
+        Number.isFinite(effectiveLng);
 
       const qp = new URLSearchParams({
         category,
-        lat: String(effectiveLat),
-        lng: String(effectiveLng),
-        radius_km: String(effectiveRadius),
         sort,
         limit: "50",
       });
+
+      // Free-text destination — backend runs accent-insensitive ranking
+      if (searchInput.trim()) qp.set("q", searchInput.trim());
+      if (hasSpatialContext) {
+        qp.set("lat", String(effectiveLat));
+        qp.set("lng", String(effectiveLng));
+        // Radius is only applied when the user explicitly picks one
+        if (radiusKm !== null) qp.set("radius_km", String(radiusKm));
+      }
 
       if (priceMin) qp.set("price_min", priceMin);
       if (priceMax) qp.set("price_max", priceMax);
@@ -1108,22 +1117,9 @@ export default function SearchScreen() {
       );
       const incoming = res.data.data;
 
-      let filteredResults = (incoming.results ?? []).filter(
+      const filteredResults = (incoming.results ?? []).filter(
         (r) => r.listingType === category,
       );
-
-      // When no geo (keyword/global search), apply client-side text filter
-      if (!geo && searchInput.trim()) {
-        const kw = searchInput.trim().toLowerCase();
-        filteredResults = filteredResults.filter(
-          (r) =>
-            (r.title ?? "").toLowerCase().includes(kw) ||
-            (r.city ?? "").toLowerCase().includes(kw) ||
-            (r.countryCode ?? "").toLowerCase().includes(kw) ||
-            (r.carMake ?? "").toLowerCase().includes(kw) ||
-            (r.carModel ?? "").toLowerCase().includes(kw),
-        );
-      }
 
       // Return filtered results — allResults is synced via the useEffect below
       // so that cache hits (where queryFn is NOT re-run) are also handled.
@@ -2052,25 +2048,27 @@ export default function SearchScreen() {
               Search Radius (Distance)
             </Text>
             <View style={filterStyles.rowChips}>
-              {[25, 100, 500, 2000].map((radius) => (
-                <TouchableOpacity
-                  key={radius}
-                  style={[
-                    filterStyles.chip,
-                    radiusKm === radius && filterStyles.chipActive,
-                  ]}
-                  onPress={() => setRadiusKm(radius)}
-                >
-                  <Text
+              {([null, 25, 100, 500, 2000] as Array<number | null>).map(
+                (radius) => (
+                  <TouchableOpacity
+                    key={radius ?? "any"}
                     style={[
-                      filterStyles.chipText,
-                      radiusKm === radius && filterStyles.chipTextActive,
+                      filterStyles.chip,
+                      radiusKm === radius && filterStyles.chipActive,
                     ]}
+                    onPress={() => setRadiusKm(radius)}
                   >
-                    {radius} km
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        filterStyles.chipText,
+                        radiusKm === radius && filterStyles.chipTextActive,
+                      ]}
+                    >
+                      {radius === null ? "Any" : `${radius} km`}
+                    </Text>
+                  </TouchableOpacity>
+                ),
+              )}
             </View>
 
             {/* PROMOTIONS ONLY — apartment only (filters listing.longStayEnabled) */}
