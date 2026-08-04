@@ -44,6 +44,10 @@
 
 	const isCar = $derived(detail.category === 'car');
 
+	/** Payment-phase hold window (seconds) — matches the listing service's
+	 *  pending_payment availability block (5 minutes from booking creation). */
+	const PAYMENT_HOLD_SECONDS = 300;
+
 	// ── Lock + timer state ───────────────────────────────────────────────────
 	let lockToken = $state<string | null>(null);
 	let lockExpiresAt = $state<number | null>(null);
@@ -111,6 +115,9 @@
 	let stripeClientSecret = $state('');
 	let cardRef = $state<HTMLDivElement | null>(null);
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
+	let pollCountdownTimer: ReturnType<typeof setInterval> | null = null;
+	let pollSecondsLeft = $state(120);
+	const POLL_WINDOW_SECONDS = 120;
 
 	const taraEligible = $derived(isTaraCountry(detail.country));
 
@@ -291,7 +298,9 @@
 		const remaining = secondsLeft;
 		if (remaining === null || !browser) return;
 		if (remaining <= 0) {
-			showExpiry = true;
+			// Once the booking exists the dates are held by the pending_payment
+			// record, so the countdown reaching zero should not expire it.
+			if (!confirmed) showExpiry = true;
 			return;
 		}
 		const timer = setTimeout(() => (secondsLeft = remaining - 1), 1000);
@@ -351,6 +360,11 @@
 			.toString()
 			.padStart(2, '0');
 		const ss = (secondsLeft % 60).toString().padStart(2, '0');
+		if (confirmed) {
+			if (secondsLeft > 120) return 'Dates held — complete payment';
+			if (secondsLeft > 30) return `Complete payment — ${mm}:${ss} left`;
+			return 'Payment window expiring soon!';
+		}
 		if (secondsLeft > 120) return 'Booking held — complete your booking';
 		if (secondsLeft > 30) return `Hurry — only ${mm}:${ss} remaining!`;
 		return 'Expiring soon!';
@@ -461,7 +475,11 @@
 			bookingRef = res.bookingReference;
 			bookingTotal = Number(res.totalAmount) || (breakdown?.total ?? 0);
 			lockToken = null;
-			secondsLeft = null;
+			// The Redis reservation lock is consumed on booking creation — the
+			// pending_payment record now holds the dates for its own 5-minute
+			// window, so rebase the countdown to that payment window.
+			lockExpiresAt = Date.now() + PAYMENT_HOLD_SECONDS * 1000;
+			secondsLeft = PAYMENT_HOLD_SECONDS;
 			payError = '';
 			payStep = 'payment';
 		} catch (err) {
@@ -486,6 +504,11 @@
 			clearInterval(pollTimer);
 			pollTimer = null;
 		}
+		if (pollCountdownTimer) {
+			clearInterval(pollCountdownTimer);
+			pollCountdownTimer = null;
+		}
+		pollSecondsLeft = POLL_WINDOW_SECONDS;
 	}
 
 	function startPolling(method: string): void {
@@ -493,6 +516,13 @@
 		clearPoll();
 		const pmId = paymentId;
 		const startedAt = Date.now();
+		pollSecondsLeft = POLL_WINDOW_SECONDS;
+		pollCountdownTimer = setInterval(() => {
+			pollSecondsLeft = Math.max(
+				0,
+				POLL_WINDOW_SECONDS - Math.floor((Date.now() - startedAt) / 1000)
+			);
+		}, 1000);
 		pollTimer = setInterval(async () => {
 			if (Date.now() - startedAt > 120_000) {
 				clearPoll();
@@ -1216,6 +1246,36 @@
 						</div>
 					</div>
 
+					{#if secondsLeft !== null}
+						<div
+							class={`flex items-center justify-between gap-3 rounded-xl border px-4 py-2.5 ${timerBg()}`}
+						>
+							<div class="flex items-center gap-2 text-sm font-semibold text-slate-700">
+								<svg
+									class={`h-4 w-4 animate-pulse ${timerColor()}`}
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									viewBox="0 0 24 24"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
+									/>
+								</svg>
+								<span>Your dates are held</span>
+							</div>
+							<div class="flex items-center gap-2">
+								<span class={`font-mono text-base font-bold ${timerColor()}`}>{timerDisplay()}</span
+								>
+								<span class={`hidden text-xs font-medium sm:inline ${timerColor()}`}>
+									{timerMsg()}
+								</span>
+							</div>
+						</div>
+					{/if}
+
 					<!-- Payment method selector -->
 					<section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 						<h3 class="mb-4 flex items-center gap-2 font-bold text-slate-800">Payment Method</h3>
@@ -1295,10 +1355,10 @@
 						<!-- Card & digital wallets -->
 						<section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 							<h3 class="mb-4 flex items-center gap-2 font-bold text-slate-800">Secure Payment</h3>
-							<p class="mb-4 flex items-center gap-1.5 text-sm text-slate-500">
+							<p class="mb-5 flex items-center gap-1.5 text-sm text-slate-500">
 								<span class="text-emerald-500">✓</span> Your payment is processed securely.
 							</p>
-							<div class="flex flex-wrap gap-2">
+							<div class="mb-4 flex flex-wrap gap-2">
 								{#each ['Visa', 'Mastercard', 'Amex', 'Apple Pay', 'Google Pay', 'PayPal'] as c (c)}
 									<span
 										class="rounded border border-slate-200 bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500"
@@ -1307,7 +1367,7 @@
 									</span>
 								{/each}
 							</div>
-							<p class="mt-3 text-xs text-slate-400">
+							<p class="text-xs text-slate-400">
 								You will be prompted to enter your card details on the next step.
 							</p>
 						</section>
@@ -1437,10 +1497,10 @@
 				<div class="space-y-6">
 					<section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 						<h3 class="mb-4 flex items-center gap-2 font-bold text-slate-800">Secure Payment</h3>
-						<p class="mb-4 flex items-center gap-1.5 text-sm text-slate-500">
+						<p class="mb-5 flex items-center gap-1.5 text-sm text-slate-500">
 							<span class="text-emerald-500">✓</span> Your payment is processed securely.
 						</p>
-						<div class="flex flex-wrap gap-2">
+						<div class="mb-5 flex flex-wrap gap-2">
 							{#each ['Visa', 'Mastercard', 'Amex', 'UnionPay', 'Apple Pay', 'Google Pay', 'PayPal', 'Bank Debit', 'Klarna'] as c (c)}
 								<span
 									class="rounded border border-slate-200 bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500"
@@ -1451,16 +1511,16 @@
 						</div>
 						<div
 							bind:this={cardRef}
-							class="min-h-[44px] rounded-xl border border-slate-200 bg-white p-4"
+							class="min-h-[48px] rounded-xl border border-slate-200 bg-white p-4"
 						></div>
 						{#if payError}
-							<p class="mt-3 text-sm text-red-600">{payError}</p>
+							<p class="mt-4 text-sm text-red-600">{payError}</p>
 						{/if}
 						<button
 							type="button"
 							onclick={() => void handleStripeConfirm()}
 							disabled={submitting}
-							class="mt-5 w-full rounded-xl bg-[#0B1E3F] py-3.5 text-sm font-bold text-white transition hover:bg-[#07152B] disabled:opacity-50"
+							class="mt-6 w-full rounded-xl bg-[#0B1E3F] py-3.5 text-sm font-bold text-white transition hover:bg-[#07152B] disabled:opacity-50"
 						>
 							{submitting
 								? 'Processing…'
@@ -1508,7 +1568,9 @@
 			<div class="mx-auto max-w-md py-20 text-center">
 				<div class="relative mx-auto h-20 w-20">
 					<div class="absolute inset-0 rounded-full border-4 border-slate-200"></div>
-					<div class="absolute inset-0 animate-spin rounded-full border-4 border-t-[#0B1E3F]"></div>
+					<div
+						class="absolute inset-0 animate-spin rounded-full border-4 border-t-[#1D8D2B] border-r-[#1D8D2B]/40 border-b-[#1D8D2B]/20"
+					></div>
 				</div>
 				<h2 class="mt-6 text-xl font-bold text-slate-800">
 					{payProvider === 'tara' ? 'Payment Request Sent' : 'Processing Payment'}
@@ -1519,6 +1581,38 @@
 						: 'Please wait while we confirm your payment.'}
 				</p>
 				<p class="mt-3 animate-pulse text-xs text-slate-400">Waiting for payment confirmation…</p>
+
+				{#if payProvider === 'tara'}
+					<div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm">
+						<div
+							class="mb-2 flex items-center justify-between text-xs font-semibold text-slate-500"
+						>
+							<span>Waiting for approval on your phone</span>
+							<span class="font-mono text-sm font-bold text-[#0B1E3F]">{pollSecondsLeft}s</span>
+						</div>
+						<div class="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+							<div
+								class="h-full rounded-full bg-[#1D8D2B] transition-all duration-1000 ease-linear"
+								style="width: {Math.round((pollSecondsLeft / POLL_WINDOW_SECONDS) * 100)}%"
+							></div>
+						</div>
+						<p class="mt-2 text-[10px] text-slate-400">
+							If you miss the prompt, you can retry from the payment step.
+						</p>
+					</div>
+				{:else}
+					<div
+						class="mx-auto mt-6 flex max-w-xs items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3.5 shadow-sm"
+					>
+						<div
+							class="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-[#0B1E3F]"
+						></div>
+						<span class="font-mono text-sm font-semibold text-slate-600">
+							Confirmation pending — {pollSecondsLeft}s
+						</span>
+					</div>
+				{/if}
+
 				{#if payError}
 					<p class="mt-4 text-sm text-red-600">{payError}</p>
 				{/if}
