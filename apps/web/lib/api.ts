@@ -53,6 +53,29 @@ export function clearToken() {
   if (typeof window !== "undefined") {
     sessionStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem("zika:web_auth");
     clearAnonymousToken();
+  }
+}
+
+export async function logoutUser() {
+  try {
+    await api.post("/auth/logout");
+  } catch (err) {
+    console.error("Logout API failed:", err);
+  }
+
+  if (typeof window !== "undefined") {
+    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem("zika:web_auth");
+    clearAnonymousToken();
+  }
+
+  try {
+    const { useAuthStore } = await import("@/stores/auth");
+    useAuthStore.getState().clearSession();
+  } catch (e) {
+    console.error("Failed to clear auth store:", e);
   }
 }

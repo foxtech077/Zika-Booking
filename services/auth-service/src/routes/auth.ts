@@ -1006,7 +1006,10 @@ export async function authRoutes(app: FastifyInstance) {
         const tokenHash = hashToken(refreshToken);
         await prisma.session.updateMany({ where: { tokenHash }, data: { revoked: true } });
       }
-      reply.clearCookie("web_refresh_token", { path: "/" });
+      reply.clearCookie("web_refresh_token", {
+        path: "/",
+        domain: process.env["COOKIE_DOMAIN"] ?? ".kainook.com",
+      });
       return sendSuccess(reply, 200, { message: "Signed out successfully." });
     } catch {
       return sendError(reply, 400, "LOGOUT_FAILED", "Sign-out could not be completed. Please try again.");
@@ -1018,7 +1021,10 @@ export async function authRoutes(app: FastifyInstance) {
     try {
       const userId = (req as FastifyRequest & { userId: string }).userId;
       await prisma.session.updateMany({ where: { userId }, data: { revoked: true } });
-        reply.clearCookie("web_refresh_token", { path: "/" });
+        reply.clearCookie("web_refresh_token", {
+          path: "/",
+          domain: process.env["COOKIE_DOMAIN"] ?? ".kainook.com",
+        });
       return sendSuccess(reply, 200, { message: "Signed out from all devices." });
     } catch {
       return sendError(reply, 400, "LOGOUT_FAILED", "Sign-out from all devices could not be completed. Please try again.");
@@ -1038,7 +1044,10 @@ export async function authRoutes(app: FastifyInstance) {
       });
 
       if (!session || session.revoked || session.expiresAt < new Date()) {
-      reply.clearCookie("web_refresh_token", { path: "/" });
+        reply.clearCookie("web_refresh_token", {
+          path: "/",
+          domain: process.env["COOKIE_DOMAIN"] ?? ".kainook.com",
+        });
         return sendError(reply, 401, "INVALID_TOKEN", "Session expired. Please sign in again.");
       }
       if (session.user.status !== "active") {

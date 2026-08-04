@@ -212,7 +212,7 @@ export default function BookingReviewPage() {
   const [phoneCountry, setPhoneCountry] = useState("");
   const [taraXafAmount, setTaraXafAmount] = useState<number | null>(null);
   const [taraXafLoading, setTaraXafLoading] = useState(false);
-  
+
   const [submitting, setSubmitting] = useState(false);
   const [payError, setPayError] = useState("");
   const [paymentId, setPaymentId] = useState<string | null>(null);
@@ -255,7 +255,7 @@ export default function BookingReviewPage() {
         method: "POST",
         keepalive: true,
         headers,
-      }).catch(() => {});
+      }).catch(() => { });
     } catch { /* best-effort */ }
   }
 
@@ -343,7 +343,7 @@ export default function BookingReviewPage() {
       setLoadingWalletVouchers(true);
       listingApi.get<any>("/vouchers/wallet")
         .then((res) => { if (res.data.success) setWalletVouchers(res.data.data ?? []); })
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => setLoadingWalletVouchers(false));
     } catch {
       router.replace("/");
@@ -924,8 +924,8 @@ export default function BookingReviewPage() {
                                     {v.description
                                       ? ` — ${v.description}`
                                       : v.discountType === "percentage"
-                                      ? ` — ${v.discountValue}% off`
-                                      : ` — ${ctx.currency} ${v.discountValue} off`}
+                                        ? ` — ${v.discountValue}% off`
+                                        : ` — ${ctx.currency} ${v.discountValue} off`}
                                   </option>
                                 ))}
                               </select>
@@ -986,8 +986,8 @@ export default function BookingReviewPage() {
                                     {v.description
                                       ? ` — ${v.description}`
                                       : v.discountType === "percentage"
-                                      ? ` — ${v.discountValue}% off`
-                                      : ` — ${ctx.currency} ${v.discountValue} off`}
+                                        ? ` — ${v.discountValue}% off`
+                                        : ` — ${ctx.currency} ${v.discountValue} off`}
                                   </option>
                                 ))}
                               </select>
@@ -1114,21 +1114,21 @@ export default function BookingReviewPage() {
                         first booking, so this is shown once and skipped thereafter.
                         The Privacy Policy is handled earlier, at registration. */}
                     {needsTermsAcceptance && (
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={payTermsAccepted}
-                        onChange={(e) => setPayTermsAccepted(e.target.checked)}
-                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#0B1E3F] focus:ring-[#0B1E3F]"
-                      />
-                      <span className="text-sm text-slate-600">
-                        I have read and agree to the{" "}
-                        <a href="/legal/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#0B1E3F] underline">
-                          Terms &amp; Conditions
-                        </a>
-                        .
-                      </span>
-                    </label>
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={payTermsAccepted}
+                          onChange={(e) => setPayTermsAccepted(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#0B1E3F] focus:ring-[#0B1E3F]"
+                        />
+                        <span className="text-sm text-slate-600">
+                          I have read and agree to the{" "}
+                          <a href="/legal/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#0B1E3F] underline">
+                            Terms &amp; Conditions
+                          </a>
+                          .
+                        </span>
+                      </label>
                     )}
 
                     <div className="flex gap-3">
@@ -1423,48 +1423,48 @@ function ConfirmedView({
         </div>
       </div>
 
-        {/* Receipt */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
-          <h3 className="font-bold text-slate-800">Receipt</h3>
-          <div className="space-y-2 text-sm">
+      {/* Receipt */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+        <h3 className="font-bold text-slate-800">Receipt</h3>
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between text-slate-600">
+            <span>Base amount</span>
+            <span>{confirmed.currency} {fmt(confirmed.baseAmount)}</span>
+          </div>
+          {confirmed.discount > 0 && (
+            <div className="flex justify-between text-emerald-600">
+              <span>{ctx.discountSource === "promotion" ? "Promotional discount" : "Voucher discount"}</span>
+              <span>−{confirmed.currency} {fmt(confirmed.discount)}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-slate-600">
+            <span>Service fee{confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}</span>
+            <span>{confirmed.currency} {fmt(confirmed.serviceFee)}</span>
+          </div>
+          {confirmed.taxes > 0 && (
             <div className="flex justify-between text-slate-600">
-              <span>Base amount</span>
-              <span>{confirmed.currency} {fmt(confirmed.baseAmount)}</span>
+              <span>Taxes{confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}</span>
+              <span>{confirmed.currency} {fmt(confirmed.taxes)}</span>
             </div>
-            {confirmed.discount > 0 && (
-              <div className="flex justify-between text-emerald-600">
-                <span>{ctx.discountSource === "promotion" ? "Promotional discount" : "Voucher discount"}</span>
-                <span>−{confirmed.currency} {fmt(confirmed.discount)}</span>
-              </div>
-            )}
+          )}
+          {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && (
             <div className="flex justify-between text-slate-600">
-              <span>Service fee{confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}</span>
-              <span>{confirmed.currency} {fmt(confirmed.serviceFee)}</span>
+              <span>Security deposit</span>
+              <span>{confirmed.currency} {fmt(confirmed.securityDeposit)}</span>
             </div>
-            {confirmed.taxes > 0 && (
-              <div className="flex justify-between text-slate-600">
-                <span>Taxes{confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}</span>
-                <span>{confirmed.currency} {fmt(confirmed.taxes)}</span>
-              </div>
-            )}
-            {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && (
-              <div className="flex justify-between text-slate-600">
-                <span>Security deposit</span>
-                <span>{confirmed.currency} {fmt(confirmed.securityDeposit)}</span>
-              </div>
-            )}
-            {confirmed.deliveryFee != null && confirmed.deliveryFee > 0 && (
-              <div className="flex justify-between text-slate-600">
-                <span>Delivery fee</span>
-                <span>{confirmed.currency} {fmt(confirmed.deliveryFee)}</span>
-              </div>
-            )}
-            <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
-              <span>Total Paid</span>
-              <MoneyValue platform={platformAmount} listing={confirmed.totalAmount} currency={platformCurrency} listingCurrency={confirmed.currency} />
+          )}
+          {confirmed.deliveryFee != null && confirmed.deliveryFee > 0 && (
+            <div className="flex justify-between text-slate-600">
+              <span>Delivery fee</span>
+              <span>{confirmed.currency} {fmt(confirmed.deliveryFee)}</span>
             </div>
+          )}
+          <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
+            <span>Total Paid</span>
+            <MoneyValue platform={platformAmount} listing={confirmed.totalAmount} currency={platformCurrency} listingCurrency={confirmed.currency} />
           </div>
         </div>
+      </div>
 
       {/* Payment info */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">

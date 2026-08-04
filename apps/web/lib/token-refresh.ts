@@ -71,6 +71,7 @@ export function clearAuthSession(): void {
 
   sessionStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem("zika:web_auth");
   clearAnonymousToken();
 
   import("@/stores/auth")
