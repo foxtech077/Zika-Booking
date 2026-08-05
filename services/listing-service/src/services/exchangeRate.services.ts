@@ -296,6 +296,10 @@ export async function getRatesBatch(
   if (!targetRate) return rateMap;
 
   for (const from of unique) {
+    if (from === BASE_CURRENCY) {
+      rateMap.set(from, targetRate);
+      continue;
+    }
     const fromRate = usdRates.get(from);
     if (fromRate) {
       rateMap.set(from, targetRate / fromRate);
