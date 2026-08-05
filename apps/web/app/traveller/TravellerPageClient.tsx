@@ -2000,7 +2000,12 @@ export default function TravellerDashboard() {
             returnDatetime: b.returnDatetime ?? b.return_datetime ?? null,
             totalAmount: b.totalAmount ?? b.total_amount ?? 0,
             nightsOrDays: b.nightsOrDays ?? b.nights_or_days ?? 1,
-            canCancel: b.status === "confirmed",
+            // Mirrors the server rule: cancellable only while the start date is
+            // strictly in the future (hotels: check-in; cars: pickup).
+            canCancel:
+              b.status === "confirmed" &&
+              (b.checkIn ?? b.pickupDatetime) != null &&
+              new Date(b.checkIn ?? b.pickupDatetime) > new Date(),
           };
           return mapped;
         })
@@ -2085,11 +2090,10 @@ export default function TravellerDashboard() {
         alert("Booking cancelled successfully! Refund has been processed.");
         fetchGuestBookings();
       }
-    } catch {
-      alert("Booking cancelled successfully! Refund has been processed.");
-      setBookingsList(
-        bookingsList.map((b) => (b.id === id ? { ...b, status: "cancelled", canCancel: false } : b))
-      );
+    } catch (err: any) {
+      const message = err?.response?.data?.error?.message ?? "Could not cancel the booking. Please try again.";
+      alert(message);
+      fetchGuestBookings();
     } finally {
       setCancellingId(null);
     }
