@@ -22,7 +22,7 @@ function scheduleGuestEmailRetry(
 
   setTimeout(async () => {
     try {
-      await sendGuestEmail(booking, invoice, voucher);
+      await sendGuestEmail(booking, invoice, voucher, booking.manageToken);
       await prisma.payment.update({
         where: { id: paymentId },
         data: { confirmationEmailsSent: true },
@@ -97,6 +97,7 @@ function normalizeBooking(booking: any) {
     payoutAmount: booking.providerPayout ? Number(booking.providerPayout) : 0,
     transactionId: booking.paymentId ?? "N/A",
     paymentMethod: booking.paymentMethod ?? "Card",
+    manageToken: booking.manageToken ?? null,
   };
 }
 
@@ -231,7 +232,7 @@ export async function bookingConfirmedHandler(payment: any) {
     // On failure, retries 2 and 3 fire in the background after 5 min / 30 min.
     // On 3rd failure an admin alert is sent.
     try {
-      await sendGuestEmail(booking, invoice, voucher);
+      await sendGuestEmail(booking, invoice, voucher, booking.manageToken);
       await prisma.payment.update({
         where: { id: payment.id },
         data: { confirmationEmailsSent: true },

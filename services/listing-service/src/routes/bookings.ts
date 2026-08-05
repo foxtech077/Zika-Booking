@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError, BookingNotFoundError, isPrismaUniqueViolation } from "../lib/errors.js";
 import { requireAuth, requireUser, requireHost, type AuthRequest } from "../middleware/auth.js";
 import { getRedis } from "../lib/redis.js";
-import { randomUUID } from "crypto";
+import { randomUUID, randomBytes } from "crypto";
 import { sendBookingConfirmationEmail, sendBookingCancellationEmail } from "../lib/email.js";
 import { fireNotification } from "../lib/notifications.js";
 import { ipDetect } from "../middleware/ipDetect.js";
@@ -385,6 +385,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           nightsOrDays: true,
           voucherDiscount: true,
           voucherCode: true,
+          manageToken: true,
           listing: {
             select: {
               name: true,
@@ -1728,6 +1729,14 @@ export async function bookingRoutes(app: FastifyInstance) {
 
         const reference = await generateReference(listing.country ?? "XX");
 
+        // Anonymous bookings get a secret magic-link token (minted here, stored
+        // plaintext for the payment service to build the email URL). Never
+        // cleared — valid until checkout + 24h so the guest can revisit to see
+        // the booking's current state (e.g. cancelled).
+        const manageToken = guestId.startsWith("anon_")
+          ? randomBytes(32).toString("base64url")
+          : undefined;
+
         const booking = await (prisma.booking.create as any)({
           data: {
             reference,
@@ -1737,6 +1746,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             providerId: listing.providerId,
             listingType: listing.category,
             status: "pending_payment",
+            manageToken,
 
             checkIn: body.checkIn ? new Date(body.checkIn) : undefined,
             checkOut: body.checkOut ? new Date(body.checkOut) : undefined,
@@ -2295,6 +2305,192 @@ export async function bookingRoutes(app: FastifyInstance) {
     },
   );
 
+  // ── Shared guest-cancellation logic ────────────────────────────────────────
+  // Used by both the authenticated cancel route and the anonymous magic-link
+  // route so refund / payout / audit / loyalty / email behavior stays identical.
+  // The magic link token is intentionally NOT cleared here — the guest may
+  // revisit the link to see the cancelled state until checkout + 24h.
+  async function performGuestCancellation(
+    booking: any,
+    actorId: string,
+    reason?: string,
+  ): Promise<{
+    refundAmount: number;
+    currency: string;
+    message: string;
+    pointsRefunded?: number;
+    pointsReversed?: number;
+  }> {
+    const refundAmount = calcRefund(booking);
+
+    await prisma.booking.update({
+      where: { id: booking.id },
+      data: {
+        status: "cancelled_by_guest",
+        cancelledAt: new Date(),
+        cancelledBy: "guest",
+        cancellationReason: reason,
+        refundAmount,
+      },
+    });
+
+    // Trigger payout cancellation on payment-service
+    notifyPayoutCancellation(booking.id).catch((err) => {
+      app.log.error({ err }, "Background payout cancellation notification failed");
+    });
+
+    // Trigger refund on payment-service if there is a refund amount
+    if (refundAmount > 0) {
+      const idempotencyKey = generateRefundIdempotencyKey(booking.id, "guest_cancel");
+      triggerPaymentRefund(booking.id, refundAmount, reason || "Cancelled by guest", idempotencyKey).catch((err) => {
+        app.log.error({ err }, "Background refund trigger failed");
+      });
+    }
+
+    await prisma.bookingStatusLog.create({
+      data: {
+        bookingId: booking.id,
+        fromStatus: "confirmed",
+        toStatus: "cancelled_by_guest",
+        actorType: "guest",
+        changedBy: actorId,
+        reason,
+      },
+    });
+
+    // Loyalty points adjustments on cancellation:
+    // 1. Refund redeemed points (guest paid with points that are now voided)
+    // 2. Reverse earned points if they were awarded at confirmation
+    const redeemedPoints = Number((booking as any).redeemPoints ?? 0);
+    const earnedPointsToReverse = Number((booking as any).earnedPoints ?? 0);
+    const pointsDelta = redeemedPoints - earnedPointsToReverse;
+    if (pointsDelta !== 0) {
+      const balRows = await prisma.$queryRawUnsafe<{ loyaltyPoints: number }[]>(
+        `SELECT "loyaltyPoints" FROM auth."User" WHERE id = $1`, actorId,
+      ).catch(() => [] as { loyaltyPoints: number }[]);
+      const prevBal = balRows[0]?.loyaltyPoints ?? 0;
+      await prisma.$executeRawUnsafe(`
+        UPDATE auth."User"
+        SET "loyaltyPoints" = GREATEST(0, "loyaltyPoints" + $1), "updatedAt" = NOW()
+        WHERE id = $2
+      `, pointsDelta, actorId).catch(() => { });
+      const newBal = Math.max(0, prevBal + pointsDelta);
+      if (redeemedPoints > 0) {
+        await logLoyaltyTransaction({
+          userId: actorId, type: "refunded_redeemed",
+          points: redeemedPoints, balanceAfter: newBal,
+          bookingId: booking.id, description: `Redeemed points refunded — booking ${booking.reference} cancelled by guest`,
+        }).catch(() => { });
+      }
+      if (earnedPointsToReverse > 0) {
+        await logLoyaltyTransaction({
+          userId: actorId, type: "reversed_earned",
+          points: -earnedPointsToReverse, balanceAfter: newBal,
+          bookingId: booking.id, description: `Earned points reversed — booking ${booking.reference} cancelled by guest`,
+        }).catch(() => { });
+      }
+    }
+
+    const cancelledListing = await prisma.listing.findUnique({
+      where: { id: booking.listingId },
+    });
+    sendBookingCancellationEmail(
+      booking.guestEmail,
+      `${booking.guestFirstName} ${booking.guestLastName}`,
+      {
+        reference: booking.reference,
+        listingName: cancelledListing?.name ?? "Your booking",
+        refundAmount,
+        currency: booking.currency,
+      },
+    ).catch(() => { });
+
+    return {
+      refundAmount,
+      currency: booking.currency,
+      message: "Booking cancelled.",
+      pointsRefunded: redeemedPoints > 0 ? redeemedPoints : undefined,
+      pointsReversed: earnedPointsToReverse > 0 ? earnedPointsToReverse : undefined,
+    };
+  }
+
+  // Serializes a booking (with its listing + primary photo included) into the
+  // guest-facing detail shape shared by the authed detail endpoint and the
+  // anonymous magic-link manage endpoint.
+  function buildBookingDetail(booking: any, canCancel: boolean): Record<string, unknown> {
+    return {
+      id: booking.id,
+      reference: booking.reference,
+      status: booking.status,
+      listingType: booking.listingType,
+      listing: {
+        id: booking.listing.id,
+        title: booking.listing.name,
+        address: booking.listing.address,
+        town: booking.listing.town,
+        neighborhood: booking.listing.neighborhood,
+        country: booking.listing.country,
+        primaryPhotoUrl: booking.listing.photos[0]?.cdnUrl ?? null,
+      },
+      checkIn: booking.checkIn?.toISOString().slice(0, 10) ?? null,
+      checkOut: booking.checkOut?.toISOString().slice(0, 10) ?? null,
+      pickupDatetime: booking.pickupDatetime?.toISOString() ?? null,
+      returnDatetime: booking.returnDatetime?.toISOString() ?? null,
+      nightsOrDays: booking.nightsOrDays,
+      adults: booking.adults,
+      children: booking.children,
+      specialRequests: booking.specialRequests,
+      guestFirstName: booking.guestFirstName,
+      guestLastName: booking.guestLastName,
+      guestEmail: booking.guestEmail,
+      subtotal: Number(booking.subtotal),
+      discountAmount: Number(booking.discountAmount),
+      deliveryFee: Number(booking.deliveryFee),
+      serviceFee: Number(booking.serviceFee),
+      taxAmount: Number(booking.taxAmount),
+      securityDeposit: Number(booking.securityDeposit ?? 0),
+      voucherCode: booking.voucherCode ?? null,
+      voucherDiscount: Number(booking.voucherDiscount),
+      totalAmount: Number(booking.totalAmount),
+      currency: booking.currency,
+      priceBreakdownJson: (booking as any).priceBreakdownJson ?? null,
+      cancellationPolicy: booking.cancellationPolicy,
+      refundAmount: booking.refundAmount ? Number(booking.refundAmount) : null,
+      cancelledAt: booking.cancelledAt?.toISOString() ?? null,
+      confirmedAt: booking.confirmedAt?.toISOString() ?? null,
+      completedAt: booking.completedAt?.toISOString() ?? null,
+      createdAt: booking.createdAt,
+      canCancel,
+    };
+  }
+
+  // Resolves a booking by its magic-link token and enforces the 24h-past-checkout
+  // validity window. Sends the error response and returns null when invalid.
+  async function resolveManageBooking(
+    token: string,
+    reply: FastifyReply,
+  ): Promise<any | null> {
+    const booking = await prisma.booking.findUnique({
+      where: { manageToken: token },
+    });
+    if (!booking) {
+      sendError(reply, 404, "INVALID_LINK", "This booking link is invalid.");
+      return null;
+    }
+    const endRef = booking.checkOut ?? booking.returnDatetime;
+    const expiresAt = endRef
+      ? new Date(new Date(endRef).getTime() + 24 * 60 * 60 * 1000)
+      : new Date(0); // no end date → treat as expired (shouldn't happen)
+    if (Date.now() > expiresAt.getTime()) {
+      reply.status(410).send({
+        success: false,
+        error: { code: "LINK_EXPIRED", message: "This booking link has expired." },
+      });
+      return null;
+    }
+    return booking;
+  }
+
   // ── POST /bookings/:id/cancel — guest cancellation ─────────────────────────
   app.post(
     "/bookings/:id/cancel",
@@ -2356,99 +2552,140 @@ export async function bookingRoutes(app: FastifyInstance) {
             error: { code: "INVALID_STATUS", message: "Only confirmed bookings can be cancelled." },
           });
 
-        const refundAmount = calcRefund(booking);
-
-        await prisma.booking.update({
-          where: { id },
-          data: {
-            status: "cancelled_by_guest",
-            cancelledAt: new Date(),
-            cancelledBy: "guest",
-            cancellationReason: reason,
-            refundAmount,
-          },
-        });
-
-        // Trigger payout cancellation on payment-service
-        notifyPayoutCancellation(id).catch((err) => {
-          app.log.error({ err }, "Background payout cancellation notification failed");
-        });
-
-        // Trigger refund on payment-service if there is a refund amount
-        if (refundAmount > 0) {
-          const idempotencyKey = generateRefundIdempotencyKey(id, "guest_cancel");
-          triggerPaymentRefund(id, refundAmount, reason || "Cancelled by guest", idempotencyKey).catch((err) => {
-            app.log.error({ err }, "Background refund trigger failed");
-          });
-        }
-
-        await prisma.bookingStatusLog.create({
-          data: {
-            bookingId: id,
-            fromStatus: "confirmed",
-            toStatus: "cancelled_by_guest",
-            actorType: "guest",
-            changedBy: guestId,
-            reason,
-          },
-        });
-
-        // Loyalty points adjustments on cancellation:
-        // 1. Refund redeemed points (guest paid with points that are now voided)
-        // 2. Reverse earned points if they were awarded at confirmation
-        const redeemedPoints = Number((booking as any).redeemPoints ?? 0);
-        const earnedPointsToReverse = Number((booking as any).earnedPoints ?? 0);
-        const pointsDelta = redeemedPoints - earnedPointsToReverse;
-        if (pointsDelta !== 0) {
-          const balRows = await prisma.$queryRawUnsafe<{ loyaltyPoints: number }[]>(
-            `SELECT "loyaltyPoints" FROM auth."User" WHERE id = $1`, guestId,
-          ).catch(() => [] as { loyaltyPoints: number }[]);
-          const prevBal = balRows[0]?.loyaltyPoints ?? 0;
-          await prisma.$executeRawUnsafe(`
-            UPDATE auth."User"
-            SET "loyaltyPoints" = GREATEST(0, "loyaltyPoints" + $1), "updatedAt" = NOW()
-            WHERE id = $2
-          `, pointsDelta, guestId).catch(() => { });
-          const newBal = Math.max(0, prevBal + pointsDelta);
-          if (redeemedPoints > 0) {
-            await logLoyaltyTransaction({
-              userId: guestId, type: "refunded_redeemed",
-              points: redeemedPoints, balanceAfter: newBal,
-              bookingId: id, description: `Redeemed points refunded — booking ${booking.reference} cancelled by guest`,
-            }).catch(() => { });
-          }
-          if (earnedPointsToReverse > 0) {
-            await logLoyaltyTransaction({
-              userId: guestId, type: "reversed_earned",
-              points: -earnedPointsToReverse, balanceAfter: newBal,
-              bookingId: id, description: `Earned points reversed — booking ${booking.reference} cancelled by guest`,
-            }).catch(() => { });
-          }
-        }
-
-        const cancelledListing = await prisma.listing.findUnique({
-          where: { id: booking.listingId },
-        });
-        sendBookingCancellationEmail(
-          booking.guestEmail,
-          `${booking.guestFirstName} ${booking.guestLastName}`,
-          {
-            reference: booking.reference,
-            listingName: cancelledListing?.name ?? "Your booking",
-            refundAmount,
-            currency: booking.currency,
-          },
-        ).catch(() => { });
-
-        return sendSuccess(reply, 200, {
-          refundAmount,
-          currency: booking.currency,
-          message: "Booking cancelled.",
-          pointsRefunded: redeemedPoints > 0 ? redeemedPoints : undefined,
-          pointsReversed: earnedPointsToReverse > 0 ? earnedPointsToReverse : undefined,
-        });
+        const data = await performGuestCancellation(booking, guestId, reason);
+        return sendSuccess(reply, 200, data);
       } catch (err) {
         req.log.error({ err }, "Failed to cancel booking by guest");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while cancelling the booking.");
+      }
+    },
+  );
+
+  // ── GET /bookings/manage/:token — anonymous magic-link booking view ────────
+  app.get(
+    "/bookings/manage/:token",
+    {
+      schema: {
+        tags: ["Bookings"],
+        summary: "View an anonymous booking via its magic-link token",
+        params: {
+          type: "object",
+          properties: { token: { type: "string" } },
+          required: ["token"],
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              success: { type: "boolean" },
+              data: { type: "object", additionalProperties: true },
+            },
+          },
+          404: errSchema,
+          410: errSchema,
+        },
+      },
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const { token } = req.params as { token: string };
+
+      try {
+        const booking = await resolveManageBooking(token, reply);
+        if (!booking) return;
+
+        const full = await prisma.booking.findUnique({
+          where: { id: booking.id },
+          include: {
+            listing: {
+              include: {
+                photos: {
+                  where: { deletedAt: null },
+                  orderBy: { position: "asc" },
+                  take: 1,
+                },
+              },
+            },
+          },
+        });
+        if (!full) return sendError(reply, 404, "INVALID_LINK", "This booking link is invalid.");
+
+        // (checkIn ?? pickupDatetime) so car bookings (pickupDatetime) can
+        // cancel until pickup, not just hotel/apartment bookings.
+        const startRef = full.checkIn ?? full.pickupDatetime;
+        const canCancel =
+          full.status === "confirmed" &&
+          startRef != null &&
+          new Date(startRef) > new Date();
+
+        return sendSuccess(reply, 200, buildBookingDetail(full, canCancel));
+      } catch (err) {
+        req.log.error({ err }, "Failed to load booking via magic link");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while loading the booking.");
+      }
+    },
+  );
+
+  // ── POST /bookings/manage/:token/cancel — anonymous magic-link cancellation ──
+  app.post(
+    "/bookings/manage/:token/cancel",
+    {
+      schema: {
+        tags: ["Bookings"],
+        summary: "Cancel an anonymous booking via its magic-link token",
+        params: {
+          type: "object",
+          properties: { token: { type: "string" } },
+          required: ["token"],
+        },
+        body: {
+          type: "object",
+          properties: { reason: { type: "string" } },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              success: { type: "boolean" },
+              data: {
+                type: "object",
+                properties: {
+                  refundAmount: { type: "number" },
+                  currency: { type: "string" },
+                  message: { type: "string" },
+                },
+                required: ["refundAmount", "currency", "message"],
+              },
+            },
+          },
+          404: errSchema,
+          409: errSchema,
+          410: errSchema,
+        },
+      },
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const { token } = req.params as { token: string };
+      const { reason } = req.body as { reason?: string };
+
+      try {
+        const booking = await resolveManageBooking(token, reply);
+        if (!booking) return;
+
+        if (booking.status === "completed")
+          return reply.status(409).send({
+            success: false,
+            error: { code: "ALREADY_COMPLETED", message: "Completed bookings cannot be cancelled." },
+          });
+        if (booking.status !== "confirmed")
+          return reply.status(409).send({
+            success: false,
+            error: { code: "INVALID_STATUS", message: "Only confirmed bookings can be cancelled." },
+          });
+
+        const data = await performGuestCancellation(booking, booking.guestId, reason);
+        return sendSuccess(reply, 200, data);
+      } catch (err) {
+        req.log.error({ err }, "Failed to cancel booking via magic link");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while cancelling the booking.");
       }
     },
@@ -2990,50 +3227,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           booking.checkIn != null &&
           booking.checkIn > new Date();
 
-        return sendSuccess(reply, 200, {
-          id: booking.id,
-          reference: booking.reference,
-          status: booking.status,
-          listingType: booking.listingType,
-          listing: {
-            id: booking.listing.id,
-            title: booking.listing.name,
-            address: booking.listing.address,
-            town: booking.listing.town,
-            neighborhood: booking.listing.neighborhood,
-            country: booking.listing.country,
-            primaryPhotoUrl: booking.listing.photos[0]?.cdnUrl ?? null,
-          },
-          checkIn: booking.checkIn?.toISOString().slice(0, 10) ?? null,
-          checkOut: booking.checkOut?.toISOString().slice(0, 10) ?? null,
-          pickupDatetime: booking.pickupDatetime?.toISOString() ?? null,
-          returnDatetime: booking.returnDatetime?.toISOString() ?? null,
-          nightsOrDays: booking.nightsOrDays,
-          adults: booking.adults,
-          children: booking.children,
-          specialRequests: booking.specialRequests,
-          guestFirstName: booking.guestFirstName,
-          guestLastName: booking.guestLastName,
-          guestEmail: booking.guestEmail,
-          subtotal: Number(booking.subtotal),
-          discountAmount: Number(booking.discountAmount),
-          deliveryFee: Number(booking.deliveryFee),
-          serviceFee: Number(booking.serviceFee),
-          taxAmount: Number(booking.taxAmount),
-          securityDeposit: Number(booking.securityDeposit ?? 0),
-          voucherCode: booking.voucherCode ?? null,
-          voucherDiscount: Number(booking.voucherDiscount),
-          totalAmount: Number(booking.totalAmount),
-          currency: booking.currency,
-          priceBreakdownJson: (booking as any).priceBreakdownJson ?? null,
-          cancellationPolicy: booking.cancellationPolicy,
-          refundAmount: booking.refundAmount ? Number(booking.refundAmount) : null,
-          cancelledAt: booking.cancelledAt?.toISOString() ?? null,
-          confirmedAt: booking.confirmedAt?.toISOString() ?? null,
-          completedAt: booking.completedAt?.toISOString() ?? null,
-          createdAt: booking.createdAt,
-          canCancel,
-        });
+        return sendSuccess(reply, 200, buildBookingDetail(booking, canCancel));
       } catch (err) {
         req.log.error({ err }, "Failed to fetch booking detail");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching booking details.");
