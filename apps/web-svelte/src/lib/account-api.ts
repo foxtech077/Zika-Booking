@@ -300,6 +300,39 @@ export async function submitReview(input: {
 	});
 }
 
+// ── Recently viewed ──────────────────────────────────────────────────────────
+
+export interface RecentlyViewedListing {
+	listingId: string;
+	viewedAt: string;
+	listing: {
+		id: string;
+		title: string;
+		category: string;
+		status: string;
+		city: string | null;
+		countryCode: string | null;
+		nightlyRate: number | null;
+		currency: string | null;
+		primaryPhotoUrl: string | null;
+	} | null;
+}
+
+export async function getRecentlyViewed(): Promise<RecentlyViewedListing[]> {
+	const data = await apiRequest<
+		{ recentlyViewed: RecentlyViewedListing[] } | RecentlyViewedListing[]
+	>(LISTING_API_URL, '/guests/me/recently-viewed');
+	if (Array.isArray(data)) return data;
+	return data.recentlyViewed ?? [];
+}
+
+export async function recordRecentlyViewed(listingId: string): Promise<void> {
+	await apiRequest<unknown>(LISTING_API_URL, '/guests/me/recently-viewed', {
+		method: 'POST',
+		body: JSON.stringify({ listingId })
+	});
+}
+
 // ── Conversations / messages ─────────────────────────────────────────────────
 
 export interface ConversationLastMessage {
@@ -339,6 +372,13 @@ export async function getConversations(): Promise<Conversation[]> {
 		'/conversations?limit=50'
 	);
 	return data.conversations;
+}
+
+export async function createConversation(listingId: string): Promise<Conversation> {
+	return apiRequest<Conversation>(LISTING_API_URL, '/conversations', {
+		method: 'POST',
+		body: JSON.stringify({ listingId })
+	});
 }
 
 export async function getUnreadConversationCount(): Promise<number> {

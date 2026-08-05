@@ -34,6 +34,11 @@
 			<p class="text-[10px] tracking-wide">
 				© {new Date().getFullYear()} Kainook · All rights reserved.
 			</p>
+			<div class="flex flex-wrap items-center gap-4 text-[10px]">
+				<a href="/legal/privacy" class="transition-colors hover:text-white">Privacy</a>
+				<a href="/legal/terms" class="transition-colors hover:text-white">Terms</a>
+				<a href="/delete-account" class="transition-colors hover:text-white">Delete account</a>
+			</div>
 		</div>
 	</div>
 </footer>

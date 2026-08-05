@@ -30,6 +30,9 @@ export interface AuthUser {
 	/** Set by the API when the user has never accepted the Privacy Policy or
 	 *  accepted a superseded version. Gates entry to the app. */
 	requiresPrivacyAcceptance?: boolean;
+	/** Set when the user has not yet accepted the Terms at checkout. Cleared by
+	 *  a per-transaction POST /auth/accept-terms. */
+	requiresTermsAcceptance?: boolean;
 	privacyAcceptedAt?: string | Date | null;
 	termsAcceptedAt?: string | Date | null;
 }

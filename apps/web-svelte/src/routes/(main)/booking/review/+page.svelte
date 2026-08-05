@@ -30,7 +30,8 @@
 		convertFx,
 		type CreateIntentResult
 	} from '$lib/payment-api';
-	import { auth } from '$lib/stores/auth.svelte';
+	import { auth, updateUser } from '$lib/stores/auth.svelte';
+	import { acceptTerms } from '$lib/auth-api';
 
 	let { data }: PageProps = $props();
 
@@ -101,6 +102,26 @@
 	let submitting = $state(false);
 	let submitError = $state('');
 	let confirmed = $state<CreateBookingResult | null>(null);
+
+	// ── Terms & Conditions ───────────────────────────────────────────────────
+	// Signed-in travellers accept the Terms at checkout (recorded once via
+	// POST /auth/accept-terms); guests are skipped because the backend only
+	// accepts it for accounts.
+	let termsAccepted = $state(false);
+	const needsTerms = $derived(!!auth.user && (auth.user.requiresTermsAcceptance ?? true));
+
+	// Fire-and-forget: record per-transaction Terms acceptance once payment
+	// captures. Failure is non-fatal — the backend records it on the account.
+	function recordTermsAcceptance(): void {
+		if (!needsTerms) return;
+		void acceptTerms({ acceptedTerms: true })
+			.then(() => {
+				updateUser({ requiresTermsAcceptance: false });
+			})
+			.catch(() => {
+				// non-fatal — the user already completed payment
+			});
+	}
 
 	// ── Payment state ───────────────────────────────────────────────────────
 	type PayStep = 'payment' | 'stripe_card' | 'polling' | 'confirmed';
@@ -566,6 +587,7 @@
 						deliveryFee: breakdown?.deliveryFee
 					};
 					payStep = 'confirmed';
+					recordTermsAcceptance();
 				} else if (status.status === 'failed' || status.status === 'timed_out') {
 					clearPoll();
 					paymentResolvedRef.current = true;
@@ -699,7 +721,7 @@
 <div class="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
 	{#if confirmedPayment && payStep === 'confirmed'}
 		<!-- ── Confirmation ── -->
-		<div class="mx-auto max-w-2xl space-y-6">
+		<div class="mx-auto max-w-2xl space-y-6 print:hidden">
 			<div class="py-8 text-center">
 				<div
 					class="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 shadow-inner"
@@ -759,7 +781,32 @@
 				</dl>
 			</div>
 
-			<div class="flex items-center justify-center gap-3">
+			{#if !auth.isAuthenticated}
+				<div class="rounded-2xl border border-[#1D8D2B]/30 bg-[#f0fdf4] p-6 shadow-sm">
+					<h3 class="text-base font-bold text-[#0c2614]">
+						Create an account to attach this booking
+					</h3>
+					<p class="mt-1 text-sm leading-relaxed text-slate-600">
+						Sign up with <span class="font-semibold">{email}</span> to keep this reservation and manage
+						it from your account.
+					</p>
+					<a
+						href={`/auth/register?email=${encodeURIComponent(email)}`}
+						class="mt-4 inline-block rounded-full bg-[#0c2614] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#081b0d]"
+					>
+						Create account
+					</a>
+				</div>
+			{/if}
+
+			<div class="flex flex-wrap items-center justify-center gap-3">
+				<button
+					type="button"
+					onclick={() => window.print()}
+					class="rounded-xl border border-slate-300 px-6 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+				>
+					Print voucher
+				</button>
 				<a
 					href="/"
 					class="rounded-xl bg-[#0B1E3F] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[#07152B]"
@@ -773,6 +820,113 @@
 					View listing
 				</a>
 			</div>
+		</div>
+
+		<!-- ── PRINT VOUCHER (visible only when printing) ── -->
+		<div class="hidden p-8 font-sans text-slate-900 print:block">
+			<div class="mb-6 flex items-start justify-between border-b-2 border-slate-900 pb-4">
+				<div>
+					<p class="font-serif text-2xl font-bold">Kainook</p>
+					<p class="text-xs tracking-wide text-slate-500 uppercase">Booking voucher</p>
+				</div>
+				<div class="text-right">
+					<p class="font-mono text-sm font-semibold">{confirmedPayment.reference}</p>
+					<p class="mt-1 text-xs text-slate-500">Booking confirmed</p>
+				</div>
+			</div>
+
+			<div class="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+				<div>
+					<p class="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">Listing</p>
+					<p class="mt-0.5 font-semibold">{detail.name}</p>
+				</div>
+				<div>
+					<p class="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">Guest</p>
+					<p class="mt-0.5 font-semibold">
+						{[firstName, lastName].filter(Boolean).join(' ') || '—'}
+					</p>
+				</div>
+				<div>
+					<p class="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">Dates</p>
+					<p class="mt-0.5 font-semibold">{fmtDates(start, end)}</p>
+				</div>
+				<div>
+					<p class="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">Guests</p>
+					<p class="mt-0.5 font-semibold">{guests} guest{guests !== 1 ? 's' : ''}</p>
+				</div>
+				<div>
+					<p class="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">Paid with</p>
+					<p class="mt-0.5 font-semibold">{confirmedPayment.paymentMethod}</p>
+				</div>
+				<div>
+					<p class="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
+						Transaction
+					</p>
+					<p class="mt-0.5 font-mono text-xs">{confirmedPayment.transactionId}</p>
+				</div>
+			</div>
+
+			<div class="mt-6 space-y-1.5 border-t border-slate-300 pt-4 text-sm">
+				<div class="flex justify-between">
+					<span class="text-slate-600">Base amount</span>
+					<span>{fmtPlatform(breakdown?.base ?? 0, breakdown?.listingCurrency ?? currency)}</span>
+				</div>
+				{#if (breakdown?.discount ?? 0) > 0}
+					<div class="flex justify-between text-emerald-700">
+						<span>{voucherApplied ? 'Voucher discount' : 'Promotional discount'}</span>
+						<span
+							>−{fmtPlatform(
+								breakdown?.discount ?? 0,
+								breakdown?.listingCurrency ?? currency
+							)}</span
+						>
+					</div>
+				{/if}
+				<div class="flex justify-between">
+					<span class="text-slate-600">Service fee</span>
+					<span
+						>{fmtPlatform(breakdown?.serviceFee ?? 0, breakdown?.listingCurrency ?? currency)}</span
+					>
+				</div>
+				{#if (breakdown?.taxes ?? 0) > 0}
+					<div class="flex justify-between">
+						<span class="text-slate-600">Taxes</span>
+						<span>{fmtPlatform(breakdown?.taxes ?? 0, breakdown?.listingCurrency ?? currency)}</span
+						>
+					</div>
+				{/if}
+				{#if (breakdown?.deliveryFee ?? 0) > 0}
+					<div class="flex justify-between">
+						<span class="text-slate-600">Delivery fee</span>
+						<span
+							>{fmtPlatform(
+								breakdown?.deliveryFee ?? 0,
+								breakdown?.listingCurrency ?? currency
+							)}</span
+						>
+					</div>
+				{/if}
+				{#if (breakdown?.securityDeposit ?? 0) > 0}
+					<div class="flex justify-between">
+						<span class="text-slate-600">Security deposit</span>
+						<span
+							>{fmtPlatform(
+								breakdown?.securityDeposit ?? 0,
+								breakdown?.listingCurrency ?? currency
+							)}</span
+						>
+					</div>
+				{/if}
+				<div class="flex justify-between border-t border-slate-300 pt-2 text-base font-bold">
+					<span>Total</span>
+					<span>{fmtPlatform(confirmedPayment.totalAmount, confirmedPayment.currency)}</span>
+				</div>
+			</div>
+
+			<p class="mt-6 text-xs leading-relaxed text-slate-500">
+				Free cancellation up to 48 hours before check-in. Cancellations made after that may be
+				subject to a fee. Thank you for booking with Kainook.
+			</p>
 		</div>
 	{:else}
 		<!-- ── Header with timer ── -->
@@ -1396,6 +1550,29 @@
 						</div>
 					{/if}
 
+					{#if needsTerms}
+						<label
+							class="flex cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600"
+						>
+							<input
+								type="checkbox"
+								bind:checked={termsAccepted}
+								class="mt-0.5 h-4 w-4 shrink-0 accent-[#1D8D2B]"
+							/>
+							<span>
+								I agree to Kainook's
+								<a
+									href="/legal/terms"
+									target="_blank"
+									rel="noreferrer"
+									class="font-semibold text-[#0B1E3F] underline"
+								>
+									Terms of Service
+								</a>.
+							</span>
+						</label>
+					{/if}
+
 					<div class="flex gap-3">
 						<button
 							type="button"
@@ -1407,8 +1584,8 @@
 						<button
 							type="button"
 							onclick={() => void handlePay()}
-							disabled={submitting}
-							class="flex-[2] rounded-xl bg-[#0B1E3F] py-3.5 text-sm font-bold text-white transition hover:bg-[#07152B] disabled:opacity-50"
+							disabled={submitting || (needsTerms && !termsAccepted)}
+							class="flex-[2] rounded-xl bg-[#0B1E3F] py-3.5 text-sm font-bold text-white transition hover:bg-[#07152B] disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							{submitting
 								? 'Please wait…'

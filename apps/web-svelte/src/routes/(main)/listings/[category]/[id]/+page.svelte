@@ -1,12 +1,17 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 	import type { PageProps } from './$types';
 	import ListingGallery from '$lib/components/ListingGallery.svelte';
 	import ReviewsSection from '$lib/components/ReviewsSection.svelte';
 	import ListingCard from '$lib/components/ListingCard.svelte';
 	import { currencySymbol } from '$lib/utils';
 	import { categoryHref } from '$lib/listing-meta';
+	import { auth } from '$lib/stores/auth.svelte';
+	import { recordRecentlyViewed, createConversation } from '$lib/account-api';
+	import { addLocalRecentlyViewed } from '$lib/recently-viewed';
 
 	let { data }: PageProps = $props();
 
@@ -37,6 +42,73 @@
 	);
 	const imageUrl = $derived(detail?.photos[0]?.cdnUrl ?? detail?.primaryPhotoUrl ?? null);
 	const canonicalUrl = $derived(page.url.origin + page.url.pathname);
+
+	let shareCopied = $state(false);
+	let messaging = $state(false);
+
+	const canMessage = $derived(!!detail?.allowPreBooking && auth.isAuthenticated);
+
+	// Record the view — signed-in users get server-side history, guests keep a
+	// small local list so they still see "recently viewed" on the home page.
+	onMount(() => {
+		if (!detail) return;
+		const snapshot = {
+			id: detail.id,
+			name: detail.name,
+			category: detail.category,
+			town: detail.town,
+			country: detail.country,
+			pricePerNight: detail.pricePerNight,
+			currency: detail.currency,
+			primaryPhotoUrl: detail.primaryPhotoUrl
+		};
+		if (auth.isAuthenticated) {
+			recordRecentlyViewed(detail.id).catch(() => {
+				// Signed-in request can still 401 while the store is hydrated —
+				// fall back to local history rather than losing the record.
+				addLocalRecentlyViewed(snapshot);
+			});
+		} else {
+			addLocalRecentlyViewed(snapshot);
+		}
+	});
+
+	async function handleShare(): Promise<void> {
+		if (!detail || !browser) return;
+		const url = canonicalUrl;
+		const shareData = {
+			title: detail.name,
+			text: `Check out ${detail.name} on Kainook`,
+			url
+		};
+		if (typeof navigator.share === 'function') {
+			try {
+				await navigator.share(shareData);
+				return;
+			} catch (err) {
+				// User dismissed the native sheet — treat as done.
+				if ((err as DOMException)?.name === 'AbortError') return;
+			}
+		}
+		try {
+			await navigator.clipboard.writeText(url);
+			shareCopied = true;
+			setTimeout(() => (shareCopied = false), 2000);
+		} catch {
+			// clipboard unavailable — nothing more we can do
+		}
+	}
+
+	async function handleMessage(): Promise<void> {
+		if (!detail || messaging) return;
+		messaging = true;
+		try {
+			const convo = await createConversation(detail.id);
+			await goto(`/messages?conversationId=${convo.id}`);
+		} catch {
+			messaging = false;
+		}
+	}
 
 	const jsonLd = $derived(
 		detail
@@ -225,6 +297,52 @@
 
 		<h1 class="mt-3 font-serif text-3xl font-bold text-slate-900 sm:text-4xl">{detail.name}</h1>
 		<p class="mt-1 text-sm text-slate-500">{locationLabel}</p>
+
+		<div class="mt-4 flex flex-wrap items-center gap-2">
+			<button
+				type="button"
+				onclick={handleShare}
+				class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+			>
+				<svg
+					class="h-3.5 w-3.5"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					viewBox="0 0 24 24"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z"
+					/>
+				</svg>
+				{shareCopied ? 'Link copied' : 'Share'}
+			</button>
+			{#if canMessage}
+				<button
+					type="button"
+					onclick={handleMessage}
+					disabled={messaging}
+					class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-[#1D8D2B]/50 hover:text-[#0c2614] disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					<svg
+						class="h-3.5 w-3.5"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						viewBox="0 0 24 24"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M8.625 9.75a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.76 9.76 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"
+						/>
+					</svg>
+					{messaging ? 'Opening chat…' : 'Message provider'}
+				</button>
+			{/if}
+		</div>
 
 		<div class="mt-6">
 			<ListingGallery photos={detail.photos} alt={detail.name} />

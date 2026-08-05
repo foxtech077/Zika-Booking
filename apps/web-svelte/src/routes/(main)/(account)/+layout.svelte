@@ -29,6 +29,11 @@
 		},
 		{ label: 'Messages', href: '/messages', active: pathname.startsWith('/messages') },
 		{ label: 'Wishlist', href: '/wishlist', active: pathname.startsWith('/wishlist') },
+		{
+			label: 'Recently Viewed',
+			href: '/recently-viewed',
+			active: pathname.startsWith('/recently-viewed')
+		},
 		{ label: 'Reviews', href: '/reviews', active: pathname.startsWith('/reviews') },
 		{ label: 'Profile', href: '/profile', active: pathname.startsWith('/profile') }
 	]);

@@ -2,6 +2,7 @@
 	import type { PageProps } from './$types';
 	import HeroSearch from '$lib/components/HeroSearch.svelte';
 	import ListingCard from '$lib/components/ListingCard.svelte';
+	import RecentlyViewedStrip from '$lib/components/RecentlyViewedStrip.svelte';
 	import ShimmerImage from '$lib/components/ShimmerImage.svelte';
 
 	let { data }: PageProps = $props();
@@ -280,6 +281,9 @@
 		{/if}
 	</div>
 </section>
+
+<!-- ── RECENTLY VIEWED ── -->
+<RecentlyViewedStrip />
 
 <!-- ── ELEVATE YOUR EVERY EXPERIENCE ── -->
 <section class="bg-[#0c2614] px-4 py-16 sm:px-6">
