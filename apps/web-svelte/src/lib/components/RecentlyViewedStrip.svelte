@@ -5,7 +5,7 @@
 	import { getRecentlyViewed } from '$lib/account-api';
 	import { getLocalRecentlyViewed, type LocalViewedListing } from '$lib/recently-viewed';
 	import { listingHref } from '$lib/listing-meta';
-	import { currencySymbol } from '$lib/utils';
+	import { formatMoney } from '$lib/currency-display';
 	import ListingImage from '$lib/components/ListingImage.svelte';
 
 	interface StripItem {
@@ -121,9 +121,7 @@
 							<h3 class="truncate text-sm font-bold text-slate-900">{item.title}</h3>
 							<p class="mt-0.5 truncate text-xs text-slate-500">{item.location || '—'}</p>
 							<p class="mt-2 text-sm font-bold text-slate-900">
-								{item.price != null
-									? `${currencySymbol(item.currency)}${Number(item.price).toLocaleString()}/night`
-									: '—'}
+								{item.price != null ? `${formatMoney(item.price, item.currency)}/night` : '—'}
 							</p>
 						</div>
 					</div>

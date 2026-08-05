@@ -3,7 +3,8 @@
 	import { page } from '$app/state';
 
 	import { getBookingDetail, cancelBooking, type BookingDetail } from '$lib/account-api';
-	import { currencySymbol, formatDate, cn } from '$lib/utils';
+	import { formatDate, cn } from '$lib/utils';
+	import { formatMoney } from '$lib/currency-display';
 	import { listingHref } from '$lib/listing-meta';
 	import ListingImage from '$lib/components/ListingImage.svelte';
 	import type { ListingCategory } from '$lib/listing-api';
@@ -56,7 +57,7 @@
 					canCancel: false,
 					refundAmount: res.refundAmount
 				};
-				cancelMessage = `Booking cancelled. Refund: ${currencySymbol(res.currency)}${Number(res.refundAmount ?? 0).toLocaleString()}`;
+				cancelMessage = `Booking cancelled. Refund: ${formatMoney(res.refundAmount ?? 0, res.currency)}`;
 			} catch {
 				cancelMessage = 'Could not cancel the booking. Please try again.';
 			} finally {
@@ -78,46 +79,46 @@
 		const rows: { label: string; value: string; strong?: boolean }[] = [
 			{
 				label: 'Subtotal',
-				value: `${currencySymbol(booking.currency)}${Number(booking.subtotal).toLocaleString()}`
+				value: formatMoney(booking.subtotal, booking.currency)
 			}
 		];
 		if (booking.discountAmount > 0) {
 			rows.push({
 				label: 'Discount',
-				value: `−${currencySymbol(booking.currency)}${Number(booking.discountAmount).toLocaleString()}`
+				value: `−${formatMoney(booking.discountAmount, booking.currency)}`
 			});
 		}
 		if (booking.deliveryFee > 0) {
 			rows.push({
 				label: 'Delivery fee',
-				value: `${currencySymbol(booking.currency)}${Number(booking.deliveryFee).toLocaleString()}`
+				value: formatMoney(booking.deliveryFee, booking.currency)
 			});
 		}
 		rows.push({
 			label: 'Service fee',
-			value: `${currencySymbol(booking.currency)}${Number(booking.serviceFee).toLocaleString()}`
+			value: formatMoney(booking.serviceFee, booking.currency)
 		});
 		if (booking.taxAmount > 0) {
 			rows.push({
 				label: 'Taxes',
-				value: `${currencySymbol(booking.currency)}${Number(booking.taxAmount).toLocaleString()}`
+				value: formatMoney(booking.taxAmount, booking.currency)
 			});
 		}
 		if (booking.securityDeposit > 0) {
 			rows.push({
 				label: 'Security deposit',
-				value: `${currencySymbol(booking.currency)}${Number(booking.securityDeposit).toLocaleString()}`
+				value: formatMoney(booking.securityDeposit, booking.currency)
 			});
 		}
 		if (booking.voucherDiscount > 0) {
 			rows.push({
 				label: 'Voucher',
-				value: `−${currencySymbol(booking.currency)}${Number(booking.voucherDiscount).toLocaleString()}`
+				value: `−${formatMoney(booking.voucherDiscount, booking.currency)}`
 			});
 		}
 		rows.push({
 			label: 'Total',
-			value: `${currencySymbol(booking.currency)}${Number(booking.totalAmount).toLocaleString()}`,
+			value: formatMoney(booking.totalAmount, booking.currency),
 			strong: true
 		});
 		return rows;
@@ -275,9 +276,7 @@
 				{/if}
 				{#if booking.refundAmount != null && isCancelled}
 					<p class="mt-2 text-xs font-semibold text-emerald-700">
-						Refund: {currencySymbol(booking.currency)}{Number(
-							booking.refundAmount
-						).toLocaleString()}
+						Refund: {formatMoney(booking.refundAmount, booking.currency)}
 					</p>
 				{/if}
 

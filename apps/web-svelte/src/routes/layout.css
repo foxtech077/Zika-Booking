@@ -119,3 +119,26 @@ html {
 		animation: none;
 	}
 }
+
+/* Print — the booking voucher is the only thing a guest should see when
+   printing, so the app chrome (header with its menu + footer) is hidden and
+   the page collapses to its content height so the voucher stays on one page.
+   The @page margin is zeroed so the browser's own print header/footer (tab
+   title, URL, page number, date/time) have no room to render; content margins
+   are restored with body padding instead. */
+@page {
+	margin: 0;
+}
+
+@media print {
+	header,
+	footer {
+		display: none !important;
+	}
+	main {
+		min-height: 0 !important;
+	}
+	body {
+		padding: 14mm;
+	}
+}

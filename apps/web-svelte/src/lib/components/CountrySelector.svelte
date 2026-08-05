@@ -1,5 +1,11 @@
 <script lang="ts">
-	import { location, setCountry } from '$lib/stores/location.svelte';
+	import {
+		location,
+		setCountry,
+		clearCountry,
+		resetToProfileCountry
+	} from '$lib/stores/location.svelte';
+	import { auth } from '$lib/stores/auth.svelte';
 	import { ALL_COUNTRIES } from '$lib/countries';
 	import { cn } from '$lib/utils';
 
@@ -16,6 +22,9 @@
 		})
 	);
 
+	/** The logged-in profile country, if one is set. */
+	const profileCountry = $derived(auth.user?.country?.trim().toUpperCase() ?? '');
+
 	$effect(() => {
 		if (!open) return;
 		searchInput?.focus();
@@ -30,6 +39,18 @@
 		setCountry(code);
 		open = false;
 		query = '';
+	}
+
+	function useMyLocation(): void {
+		open = false;
+		query = '';
+		void clearCountry();
+	}
+
+	function useMyProfile(): void {
+		open = false;
+		query = '';
+		if (profileCountry) resetToProfileCountry(profileCountry);
 	}
 </script>
 
@@ -91,6 +112,28 @@
 				{:else}
 					<p class="px-3 py-6 text-center text-xs text-slate-400">No countries found</p>
 				{/each}
+			</div>
+			<div class="border-t border-slate-100 p-2">
+				{#if profileCountry}
+					<button
+						type="button"
+						onclick={useMyProfile}
+						class="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+					>
+						<span class="text-base leading-none">👤</span>
+						<span>Use my profile country</span>
+						<span class="ml-auto text-[10px] font-medium text-slate-400">{profileCountry}</span>
+					</button>
+				{/if}
+				<button
+					type="button"
+					onclick={useMyLocation}
+					class="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+				>
+					<span class="text-base leading-none">📍</span>
+					<span>Use my location</span>
+					<span class="ml-auto text-[10px] font-medium text-slate-400">auto</span>
+				</button>
 			</div>
 		</div>
 	{/if}

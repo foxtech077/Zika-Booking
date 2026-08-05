@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { cn } from '$lib/utils';
-	import { currencySymbol } from '$lib/utils';
+	import { formatMoney } from '$lib/currency-display';
 	import { location } from '$lib/stores/location.svelte';
 	import type { ListingCategory } from '$lib/listing-api';
 	import { AMENITY_OPTIONS, CAR_CATEGORIES, type FilterState } from '$lib/listing-meta';
@@ -28,8 +28,8 @@
 	const currency = $derived(location.country?.currency ?? 'KES');
 	const priceDisplay = $derived(
 		filters.priceMax >= 500000
-			? `${currencySymbol(currency)}500+`
-			: `${currencySymbol(currency)}${filters.priceMax.toLocaleString()}`
+			? `${formatMoney(500, currency)}+`
+			: formatMoney(filters.priceMax, currency)
 	);
 </script>
 

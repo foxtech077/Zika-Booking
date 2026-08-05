@@ -7,8 +7,13 @@
 	import { parsePhoneNumber } from 'libphonenumber-js';
 	import { isTaraCountry } from '$lib/tara';
 	import type { Stripe, StripeCardElement } from '@stripe/stripe-js';
-	import { currencySymbol } from '$lib/utils';
 	import { fmtDates, derivePlatform, fmtPlatform } from '$lib/booking-utils';
+	import {
+		formatMoney,
+		eurMoney,
+		formatRate,
+		resolvePlatformCurrency
+	} from '$lib/currency-display';
 	import { listingHref } from '$lib/listing-meta';
 	import ShimmerImage from '$lib/components/ShimmerImage.svelte';
 	import {
@@ -147,6 +152,7 @@
 		discount: number;
 		securityDeposit?: number;
 		deliveryFee?: number;
+		bookedAt?: string;
 	} | null>(null);
 	let stripeInstance = $state.raw<Stripe | null>(null);
 	let stripeCardElement = $state.raw<StripeCardElement | null>(null);
@@ -221,14 +227,6 @@
 		return new Date(dateStr + 'T00:00:00Z').toISOString();
 	}
 
-	/** Symbol for the listing currency — the line items are billed in it. */
-	const sym = $derived(currencySymbol(detail.currency));
-
-	function fmt(n: number): string {
-		if (typeof n !== 'number' || isNaN(n)) return '0';
-		return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-	}
-
 	const breakdown = $derived.by(() => {
 		if (!pricingPreview) return null;
 		const pp = pricingPreview;
@@ -256,6 +254,26 @@
 			listingCurrency: pp.currency ?? detail.currency
 		};
 	});
+
+	/** Display (guest local) currency — set by the widget via the URL param. */
+	const displayCode = $derived(currency);
+
+	/** Platform (charge) currency — EUR for Stripe, XAF for Tara. */
+	const platformCode = $derived(
+		(breakdown?.platformCurrency as string | undefined) ?? resolvePlatformCurrency(detail.country)
+	);
+
+	/** Display-currency totals are estimates only when a display→charge conversion exists. */
+	const estimate = $derived(displayCode !== platformCode);
+
+	/** A real listing→platform conversion exists — surface the settlement bridge. */
+	const bridgeShown = $derived(breakdown != null && platformCode !== breakdown.listingCurrency);
+
+	/** Localized (display-currency) total from the locked pricing preview. */
+	const localizedTotal = $derived(
+		pricingPreview?.localizedTotalAmount ?? pricingPreview?.localCurrencyAmount ?? null
+	);
+	const localizedTotalCode = $derived(pricingPreview?.localizedCurrency ?? displayCode);
 
 	// ── Lock acquisition (client only) ───────────────────────────────────────
 	// The initial lock is acquired once on mount. The car delivery toggle
@@ -399,13 +417,20 @@
 			.padStart(2, '0');
 		const ss = (secondsLeft % 60).toString().padStart(2, '0');
 		if (confirmed) {
-			if (secondsLeft > 120) return 'Dates held — complete payment';
-			if (secondsLeft > 30) return `Complete payment — ${mm}:${ss} left`;
-			return 'Payment window expiring soon!';
+			if (secondsLeft > 120) return 'Rate locked — complete payment';
+			if (secondsLeft > 30) return `Rate locked — ${mm}:${ss} left`;
+			return 'Rate lock expiring soon!';
 		}
-		if (secondsLeft > 120) return 'Booking held — complete your booking';
-		if (secondsLeft > 30) return `Hurry — only ${mm}:${ss} remaining!`;
-		return 'Expiring soon!';
+		if (secondsLeft > 120) return 'Rate locked — complete your booking';
+		if (secondsLeft > 30) return `Rate locked — ${mm}:${ss} remaining!`;
+		return 'Rate lock expiring soon!';
+	}
+
+	function fmtBookedDate(iso?: string): string {
+		if (!iso) return '';
+		const d = new Date(iso);
+		if (isNaN(d.getTime())) return '';
+		return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 	}
 
 	async function handleRenew(): Promise<void> {
@@ -584,7 +609,8 @@
 						taxes: breakdown?.taxes ?? 0,
 						discount: breakdown?.discount ?? 0,
 						securityDeposit: breakdown?.securityDeposit,
-						deliveryFee: breakdown?.deliveryFee
+						deliveryFee: breakdown?.deliveryFee,
+						bookedAt: new Date().toISOString()
 					};
 					payStep = 'confirmed';
 					recordTermsAcceptance();
@@ -718,6 +744,41 @@
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
+{#snippet settlementBridge()}
+	<div class="mt-3 space-y-1.5 border-t border-slate-200 pt-3">
+		{#if displayCode !== breakdown!.listingCurrency}
+			<div class="flex items-baseline justify-between text-sm font-semibold text-slate-600">
+				<span>Total ({breakdown!.listingCurrency})</span>
+				<span>{fmtPlatform(breakdown!.total, breakdown!.listingCurrency)}</span>
+			</div>
+		{/if}
+		<div class="flex items-baseline justify-between gap-3">
+			<span class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+				{estimate ? 'In your currency' : 'Total'}
+			</span>
+			<span class="text-2xl font-extrabold text-slate-900">
+				{formatMoney(
+					displayCode === breakdown!.listingCurrency ? breakdown!.total : localizedTotal,
+					localizedTotalCode,
+					{ equiv: estimate }
+				)}
+			</span>
+		</div>
+		{#if estimate}
+			<div class="flex items-baseline justify-between gap-3">
+				<span class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+					{platformCode === 'EUR' ? 'Card charge' : 'Mobile money charge'}
+				</span>
+				<span class="text-lg font-bold text-[#0B1E3F]">
+					{platformCode === 'EUR'
+						? eurMoney(breakdown!.platformAmount)
+						: fmtPlatform(breakdown!.platformAmount, platformCode)}
+				</span>
+			</div>
+		{/if}
+	</div>
+{/snippet}
+
 <div class="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
 	{#if confirmedPayment && payStep === 'confirmed'}
 		<!-- ── Confirmation ── -->
@@ -764,10 +825,20 @@
 						<dt class="text-slate-400">Guests</dt>
 						<dd class="font-semibold text-slate-700">{guests} guest{guests !== 1 ? 's' : ''}</dd>
 					</div>
-					<div class="flex justify-between">
-						<dt class="text-slate-400">Total</dt>
-						<dd class="font-semibold text-slate-700">
-							{fmtPlatform(confirmedPayment.totalAmount, confirmedPayment.currency)}
+					<div class="flex justify-between border-t border-slate-100 pt-2">
+						<dt class="text-slate-400">Total Paid</dt>
+						<dd class="text-right font-bold text-slate-900">
+							<div>
+								{confirmedPayment.currency === 'EUR'
+									? eurMoney(confirmedPayment.totalAmount)
+									: fmtPlatform(confirmedPayment.totalAmount, confirmedPayment.currency)}
+							</div>
+							{#if estimate && localizedTotal != null}
+								<div class="text-[10px] font-normal text-slate-400">
+									{formatMoney(localizedTotal, localizedTotalCode, { approx: true })} billed at processing
+									time
+								</div>
+							{/if}
 						</dd>
 					</div>
 					<div class="flex justify-between">
@@ -779,6 +850,16 @@
 						<dd class="font-mono text-slate-700">{confirmedPayment.transactionId}</dd>
 					</div>
 				</dl>
+
+				{#if bridgeShown}
+					<p class="mt-3 border-t border-slate-100 pt-3 text-[10px] leading-relaxed text-slate-400">
+						Transaction processed in {platformCode === 'EUR' ? 'EUR via Stripe' : 'XAF via Tara'}.
+						Base rate locked at 1 {breakdown?.listingCurrency ?? detail.currency} = {formatRate(
+							breakdown?.platformRate
+						)}
+						{platformCode}.
+					</p>
+				{/if}
 			</div>
 
 			{#if !auth.isAuthenticated}
@@ -832,6 +913,11 @@
 				<div class="text-right">
 					<p class="font-mono text-sm font-semibold">{confirmedPayment.reference}</p>
 					<p class="mt-1 text-xs text-slate-500">Booking confirmed</p>
+					{#if confirmedPayment.bookedAt}
+						<p class="mt-1 text-xs text-slate-500">
+							Booked on {fmtBookedDate(confirmedPayment.bookedAt)}
+						</p>
+					{/if}
 				</div>
 			</div>
 
@@ -918,10 +1004,31 @@
 					</div>
 				{/if}
 				<div class="flex justify-between border-t border-slate-300 pt-2 text-base font-bold">
-					<span>Total</span>
-					<span>{fmtPlatform(confirmedPayment.totalAmount, confirmedPayment.currency)}</span>
+					<span>Total Paid</span>
+					<span>
+						{confirmedPayment.currency === 'EUR'
+							? eurMoney(confirmedPayment.totalAmount)
+							: fmtPlatform(confirmedPayment.totalAmount, confirmedPayment.currency)}
+					</span>
 				</div>
+				{#if estimate && localizedTotal != null}
+					<div class="flex justify-between text-[11px] font-normal text-slate-500">
+						<span>Equivalent</span>
+						<span>
+							{formatMoney(localizedTotal, localizedTotalCode, { approx: true })} billed at processing
+							time
+						</span>
+					</div>
+				{/if}
 			</div>
+
+			{#if bridgeShown}
+				<p class="mt-3 text-[10px] leading-relaxed text-slate-400">
+					{`Transaction processed in ${platformCode === 'EUR' ? 'EUR via Stripe' : 'XAF via Tara'}. Base rate locked at 1 ${breakdown?.listingCurrency ?? currency} = ${formatRate(
+						breakdown?.platformRate
+					)} ${platformCode}.`}
+				</p>
+			{/if}
 
 			<p class="mt-6 text-xs leading-relaxed text-slate-500">
 				Free cancellation up to 48 hours before check-in. Cancellations made after that may be
@@ -1180,7 +1287,7 @@
 												<p class="text-sm font-semibold text-slate-800">Request vehicle delivery</p>
 												<p class="mt-0.5 text-xs text-slate-400">
 													{detail.deliveryFee != null && detail.deliveryFee > 0
-														? `${sym}${detail.deliveryFee.toLocaleString()} delivery fee`
+														? `${fmtPlatform(detail.deliveryFee, detail.currency)} delivery fee`
 														: 'Free delivery'}
 													{detail.deliveryRadiusKm ? ` · within ${detail.deliveryRadiusKm} km` : ''}
 												</p>
@@ -1212,7 +1319,7 @@
 						{#if voucherApplied}
 							<div class="flex items-center justify-between">
 								<span class="text-sm font-semibold text-emerald-700">
-									✓ {voucherCode} — saves {sym}{fmt(voucherDiscount)}
+									✓ {voucherCode} — saves {fmtPlatform(voucherDiscount, detail.currency)}
 								</span>
 								<button
 									type="button"
@@ -1324,22 +1431,24 @@
 							<div class="space-y-2.5 text-sm">
 								<div class="flex justify-between text-slate-600">
 									<span>
-										{sym}
-										{pricingPreview?.nightlyRate?.toLocaleString() ?? breakdown.base}
+										{fmtPlatform(
+											pricingPreview?.nightlyRate ?? breakdown.base,
+											breakdown.listingCurrency
+										)}
 										× {pricingPreview?.units ?? nights}
 										{unit}{nights !== 1 ? 's' : ''}
 									</span>
-									<span>{sym}{fmt(breakdown.base)}</span>
+									<span>{fmtPlatform(breakdown.base, breakdown.listingCurrency)}</span>
 								</div>
 								{#if breakdown.discount > 0}
 									<div class="flex justify-between font-semibold text-emerald-600">
 										<span>{voucherApplied ? 'Voucher discount' : 'Promotional discount'}</span>
-										<span>−{sym}{fmt(breakdown.discount)}</span>
+										<span>−{fmtPlatform(breakdown.discount, breakdown.listingCurrency)}</span>
 									</div>
 								{/if}
 								<div class="flex justify-between text-slate-600">
 									<span> Subtotal </span>
-									<span>{sym}{fmt(breakdown.subtotal)}</span>
+									<span>{fmtPlatform(breakdown.subtotal, breakdown.listingCurrency)}</span>
 								</div>
 								<div class="flex justify-between text-slate-600">
 									<span>
@@ -1347,7 +1456,7 @@
 											? ` (${Math.round(pricingPreview.commissionRate * 100)}%)`
 											: ''}
 									</span>
-									<span>{sym}{fmt(breakdown.serviceFee)}</span>
+									<span>{fmtPlatform(breakdown.serviceFee, breakdown.listingCurrency)}</span>
 								</div>
 								{#if breakdown.taxes > 0}
 									<div class="flex justify-between text-slate-600">
@@ -1356,37 +1465,38 @@
 												? ` (${Math.round(pricingPreview.taxRate * 100)}%)`
 												: ''}
 										</span>
-										<span>{sym}{fmt(breakdown.taxes)}</span>
+										<span>{fmtPlatform(breakdown.taxes, breakdown.listingCurrency)}</span>
 									</div>
 								{/if}
 								{#if breakdown.deliveryFee > 0}
 									<div class="flex justify-between text-slate-600">
 										<span>Delivery fee</span>
-										<span>{sym}{fmt(breakdown.deliveryFee)}</span>
+										<span>{fmtPlatform(breakdown.deliveryFee, breakdown.listingCurrency)}</span>
 									</div>
 								{/if}
 								{#if breakdown.securityDeposit > 0}
 									<div class="flex justify-between text-slate-600">
 										<span>Security deposit</span>
-										<span>{sym}{fmt(breakdown.securityDeposit)}</span>
+										<span>{fmtPlatform(breakdown.securityDeposit, breakdown.listingCurrency)}</span>
 									</div>
 								{/if}
-								<div
-									class="flex items-baseline justify-between border-t border-slate-200 pt-3 text-base font-bold text-slate-900"
-								>
-									<span>Total</span>
-									<span class="text-right">
-										<div>
-											{fmtPlatform(breakdown.platformAmount, breakdown.platformCurrency)}
-										</div>
-										{#if breakdown.platformCurrency !== breakdown.listingCurrency}
-											<div class="text-[10px] font-normal text-slate-400">
-												Billed as approx.
-												{fmtPlatform(breakdown.total, breakdown.listingCurrency)}
-											</div>
-										{/if}
-									</span>
-								</div>
+								{#if bridgeShown}
+									{@render settlementBridge()}
+								{:else}
+									<div
+										class="flex items-baseline justify-between border-t border-slate-200 pt-3 text-base font-bold text-slate-900"
+									>
+										<span>Total</span>
+										<span class="text-right">
+											<div>{fmtPlatform(breakdown.platformAmount, breakdown.platformCurrency)}</div>
+											{#if estimate && localizedTotal != null}
+												<div class="text-[10px] font-normal text-slate-400">
+													≈ {formatMoney(localizedTotal, localizedTotalCode)} in your currency
+												</div>
+											{/if}
+										</span>
+									</div>
+								{/if}
 							</div>
 						{:else}
 							<p class="text-sm text-slate-400">Loading price…</p>
@@ -1416,36 +1526,6 @@
 							Payment
 						</div>
 					</div>
-
-					{#if secondsLeft !== null}
-						<div
-							class={`flex items-center justify-between gap-3 rounded-xl border px-4 py-2.5 ${timerBg()}`}
-						>
-							<div class="flex items-center gap-2 text-sm font-semibold text-slate-700">
-								<svg
-									class={`h-4 w-4 animate-pulse ${timerColor()}`}
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
-									/>
-								</svg>
-								<span>Your dates are held</span>
-							</div>
-							<div class="flex items-center gap-2">
-								<span class={`font-mono text-base font-bold ${timerColor()}`}>{timerDisplay()}</span
-								>
-								<span class={`hidden text-xs font-medium sm:inline ${timerColor()}`}>
-									{timerMsg()}
-								</span>
-							</div>
-						</div>
-					{/if}
 
 					<!-- Payment method selector -->
 					<section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -1573,6 +1653,21 @@
 						</label>
 					{/if}
 
+					{#if estimate}
+						<div
+							class="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-snug text-slate-600"
+						>
+							<span class="shrink-0">ℹ️</span>
+							<span>
+								{#if platformCode === 'EUR'}
+									Processed in EUR (€). Your bank converts this to {displayCode}.
+								{:else}
+									Charged in {platformCode} via mobile money.
+								{/if}
+							</span>
+						</div>
+					{/if}
+
 					<div class="flex gap-3">
 						<button
 							type="button"
@@ -1592,10 +1687,28 @@
 								: payProvider === 'tara'
 									? 'Send Payment Request'
 									: breakdown
-										? `Pay ${fmtPlatform(breakdown.platformAmount, breakdown.platformCurrency)}`
+										? `Pay ${
+												breakdown.platformCurrency === 'EUR'
+													? eurMoney(breakdown.platformAmount)
+													: fmtPlatform(breakdown.platformAmount, breakdown.platformCurrency)
+											}`
 										: 'Pay'}
 						</button>
 					</div>
+					{#if estimate && payProvider === 'stripe' && breakdown}
+						<p
+							class="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[11px] leading-relaxed text-slate-500"
+						>
+							Your card will be processed in {platformCode === 'EUR' ? 'EUR' : platformCode} (
+							{platformCode === 'EUR'
+								? eurMoney(breakdown.platformAmount)
+								: fmtPlatform(breakdown.platformAmount, platformCode)}
+							). The {displayCode} total (
+							{formatMoney(localizedTotal, localizedTotalCode, { approx: true })}) is an estimate
+							based on live market rates. Your issuing bank will perform the final conversion from
+							{platformCode} to {displayCode} on your statement.
+						</p>
+					{/if}
 					<button
 						type="button"
 						onclick={handleCancelAfterBooking}
@@ -1664,20 +1777,23 @@
 										<span>{fmtPlatform(breakdown.securityDeposit, breakdown.listingCurrency)}</span>
 									</div>
 								{/if}
-								<div
-									class="flex items-baseline justify-between border-t border-slate-200 pt-3 text-base font-bold text-slate-900"
-								>
-									<span>Total</span>
-									<span class="text-right">
-										<div>{fmtPlatform(breakdown.platformAmount, breakdown.platformCurrency)}</div>
-										{#if breakdown.platformCurrency !== breakdown.listingCurrency}
-											<div class="text-[10px] font-normal text-slate-400">
-												Billed as approx.
-												{fmtPlatform(breakdown.total, breakdown.listingCurrency)}
-											</div>
-										{/if}
-									</span>
-								</div>
+								{#if bridgeShown}
+									{@render settlementBridge()}
+								{:else}
+									<div
+										class="flex items-baseline justify-between border-t border-slate-200 pt-3 text-base font-bold text-slate-900"
+									>
+										<span>Total</span>
+										<span class="text-right">
+											<div>{fmtPlatform(breakdown.platformAmount, breakdown.platformCurrency)}</div>
+											{#if estimate && localizedTotal != null}
+												<div class="text-[10px] font-normal text-slate-400">
+													≈ {formatMoney(localizedTotal, localizedTotalCode)} in your currency
+												</div>
+											{/if}
+										</span>
+									</div>
+								{/if}
 							</div>
 						{:else}
 							<p class="text-sm text-slate-400">Loading price…</p>
@@ -1718,12 +1834,24 @@
 						>
 							{submitting
 								? 'Processing…'
-								: `Pay ${breakdown ? fmtPlatform(breakdown.platformAmount, breakdown.platformCurrency) : ''}`}
+								: `Pay ${
+										breakdown
+											? breakdown.platformCurrency === 'EUR'
+												? eurMoney(breakdown.platformAmount)
+												: fmtPlatform(breakdown.platformAmount, breakdown.platformCurrency)
+											: ''
+									}`}
 						</button>
-						{#if breakdown && breakdown.platformCurrency !== breakdown.listingCurrency}
-							<p class="mt-2 text-xs text-slate-400">
-								Billed as approx. {fmtPlatform(breakdown.total, breakdown.listingCurrency)} · charged
-								in {breakdown.platformCurrency}
+						{#if estimate && breakdown}
+							<p class="mt-2 text-xs leading-relaxed text-slate-400">
+								Your card will be processed in {platformCode === 'EUR' ? 'EUR' : platformCode} (
+								{platformCode === 'EUR'
+									? eurMoney(breakdown.platformAmount)
+									: fmtPlatform(breakdown.platformAmount, platformCode)}
+								). The {displayCode} total (
+								{formatMoney(localizedTotal, localizedTotalCode, { approx: true })}) is an estimate
+								based on live market rates. Your issuing bank will perform the final conversion from
+								{platformCode} to {displayCode} on your statement.
 							</p>
 						{/if}
 					</section>
@@ -1740,18 +1868,21 @@
 						<h3 class="font-bold text-slate-800">Price Breakdown</h3>
 						{#if breakdown}
 							<div class="space-y-2.5 text-sm">
-								<div class="flex justify-between font-bold text-slate-900">
-									<span>Total</span>
-									<span class="text-right">
-										<div>{fmtPlatform(breakdown.platformAmount, breakdown.platformCurrency)}</div>
-										{#if breakdown.platformCurrency !== breakdown.listingCurrency}
-											<div class="text-[10px] font-normal text-slate-400">
-												Billed as approx.
-												{fmtPlatform(breakdown.total, breakdown.listingCurrency)}
-											</div>
-										{/if}
-									</span>
-								</div>
+								{#if bridgeShown}
+									{@render settlementBridge()}
+								{:else}
+									<div class="flex justify-between font-bold text-slate-900">
+										<span>Total</span>
+										<span class="text-right">
+											<div>{fmtPlatform(breakdown.platformAmount, breakdown.platformCurrency)}</div>
+											{#if estimate && localizedTotal != null}
+												<div class="text-[10px] font-normal text-slate-400">
+													≈ {formatMoney(localizedTotal, localizedTotalCode)} in your currency
+												</div>
+											{/if}
+										</span>
+									</div>
+								{/if}
 							</div>
 						{/if}
 					</div>

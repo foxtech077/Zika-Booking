@@ -1,3 +1,5 @@
+import { formatMoney } from '$lib/currency-display';
+
 /** Formats a YYYY-MM-DD pair as e.g. "12 Aug – 15 Aug 2026". */
 export function fmtDates(start: string, end: string): string {
 	const fmt = (s: string): string => {
@@ -46,12 +48,7 @@ export function derivePlatform(
 	};
 }
 
-/** Format an amount in a platform currency ("EUR 1.64", "XAF 1"). */
+/** Format an amount in a platform currency ("EUR 22,580.50", "XAF 1"). */
 export function fmtPlatform(amount: number, currency: string): string {
-	const code = (currency ?? '').toUpperCase();
-	const decimals = code === 'XAF' ? 0 : 2;
-	return `${code} ${(amount ?? 0).toLocaleString(undefined, {
-		minimumFractionDigits: decimals,
-		maximumFractionDigits: decimals
-	})}`;
+	return formatMoney(amount, currency);
 }

@@ -7,7 +7,13 @@
 		type PublicListingDetail
 	} from '$lib/listing-api';
 	import { computePriceBreakdown, getTaxRate, nightsBetween } from '$lib/pricing';
-	import { currencySymbol } from '$lib/utils';
+	import {
+		formatMoney,
+		eurMoney,
+		resolvePlatformCurrency,
+		withChargeBuffer
+	} from '$lib/currency-display';
+	import { convertFx } from '$lib/payment-api';
 	import DateRangePicker from './DateRangePicker.svelte';
 
 	let { listing }: { listing: PublicListingDetail } = $props();
@@ -24,23 +30,33 @@
 				})
 			: null
 	);
-	/* True when the API returned prices converted into a different currency,
-	   so shown amounts are an estimate against the actual (base) price. */
-	const converted = $derived(
+	/** True when the API returned prices converted into the guest's display currency. */
+	const hasLocalized = $derived(
 		!!listing.localizedCurrency && listing.localizedCurrency !== listing.currency
 	);
-	const rate = $derived(
-		converted
+	const displayCode = $derived(listing.localizedCurrency ?? listing.currency);
+	const platformCode = $derived(resolvePlatformCurrency(listing.country));
+	/** Display-currency amounts are estimates only when a display→charge conversion exists. */
+	const estimate = $derived(displayCode !== platformCode);
+	/** Show the base/platform meta line when any currency conversion is in play. */
+	const showMeta = $derived(hasLocalized || estimate);
+	/** The itemized breakdown is shown in the host's currency; its lines are
+	 *  estimates only when that currency is also the guest's display currency
+	 *  AND a conversion to the platform charge exists. */
+	const lineEstimate = $derived(estimate && listing.currency === displayCode);
+
+	/** Per-unit rate shown in the headline (display currency when available). */
+	const localizedRate = $derived(
+		hasLocalized
 			? (cheapestRoom?.localizedPricePerNight ??
 					listing.localizedNightlyRate ??
-					listing.localizedDailyRate ??
-					cheapestRoom?.pricePerNight ??
-					listing.pricePerNight)
-			: (cheapestRoom?.pricePerNight ?? listing.pricePerNight)
+					listing.localizedDailyRate)
+			: null
 	);
-	const sym = $derived(currencySymbol(listing.localizedCurrency ?? listing.currency));
-	const baseSym = $derived(currencySymbol(listing.currency));
+	/** Per-unit rate in the host's listed (base) currency — the fee breakdown. */
 	const baseRate = $derived(cheapestRoom?.pricePerNight ?? listing.pricePerNight);
+	const effectiveRate = $derived(hasLocalized ? (localizedRate ?? baseRate) : baseRate);
+
 	const securityDeposit = $derived(
 		listing.localizedSecurityDeposit ?? listing.securityDeposit ?? 0
 	);
@@ -58,7 +74,7 @@
 	);
 	/* Discounted per-unit rate shown in the header (original stays as the base). */
 	const displayRate = $derived(
-		promoPct > 0 ? Number((rate * (1 - promoPct / 100)).toFixed(2)) : rate
+		promoPct > 0 ? Number((effectiveRate * (1 - promoPct / 100)).toFixed(2)) : effectiveRate
 	);
 
 	let checkIn = $state('');
@@ -71,29 +87,112 @@
 		| undefined
 	>(undefined);
 
-	/* Promo discount in currency units for the breakdown (applied to the base amount). */
+	/* Promo discount in currency units for the breakdown (applied to the base
+	   amount in the host's listed currency). */
 	const promotionDiscount = $derived(
 		checkIn && checkOut && promoPct > 0
-			? Number((rate * nightsBetween(checkIn, checkOut) * (promoPct / 100)).toFixed(2))
+			? Number((baseRate * nightsBetween(checkIn, checkOut) * (promoPct / 100)).toFixed(2))
 			: 0
 	);
 
+	/* The itemized fee breakdown is always shown in the host's listed (base)
+	   currency — the guest's display currency is only a headline estimate. */
 	const breakdown = $derived.by(() =>
 		checkIn && checkOut
 			? computePriceBreakdown({
-					pricePerNight: rate,
+					pricePerNight: baseRate,
 					checkIn,
 					checkOut,
 					commissionRate: listing.commissionRate,
 					taxRate: getTaxRate(listing.country),
 					category: listing.category,
-					deliveryFee: deliveryRequested ? deliveryFee : 0,
-					securityDeposit,
+					deliveryFee: deliveryRequested ? Number(listing.deliveryFee ?? 0) : 0,
+					securityDeposit: Number(listing.securityDeposit ?? 0),
 					driverProvided: listing.driverProvided,
 					promotionDiscount
 				})
 			: null
 	);
+
+	/* Buffered estimate of the per-night platform charge (EUR/XAF), fetched once
+	   per listing so the PDP meta line matches the checkout's final charge. */
+	let platformNightlyRate = $state<number | null>(null);
+	$effect(() => {
+		if (!showMeta || !baseRate || platformCode === listing.currency) {
+			platformNightlyRate = platformCode === listing.currency ? baseRate : null;
+			return;
+		}
+		let cancelled = false;
+		void convertFx(baseRate, listing.currency, platformCode)
+			.then((res) => {
+				if (cancelled) return;
+				const raw = res?.converted;
+				platformNightlyRate =
+					raw != null && Number.isFinite(Number(raw))
+						? withChargeBuffer(Number(raw), platformCode)
+						: null;
+			})
+			.catch(() => {
+				if (!cancelled) platformNightlyRate = null;
+			});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	/* Buffered total charge in the platform currency (EUR/XAF) for the selected
+	   dates — shown in the breakdown so the guest always sees what they'll
+	   actually be charged, never labelled as an estimate. */
+	let platformTotal = $state<number | null>(null);
+	$effect(() => {
+		if (!estimate || !breakdown || breakdown.total <= 0) {
+			platformTotal = null;
+			return;
+		}
+		let cancelled = false;
+		void convertFx(breakdown.total, listing.currency, platformCode)
+			.then((res) => {
+				if (cancelled) return;
+				const raw = res?.converted;
+				platformTotal =
+					raw != null && Number.isFinite(Number(raw))
+						? withChargeBuffer(Number(raw), platformCode)
+						: null;
+			})
+			.catch(() => {
+				if (!cancelled) platformTotal = null;
+			});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	/* Total converted to the guest's display currency for the priority summary
+	   row (a reference — the charge itself is always in the platform currency). */
+	let localTotal = $state<number | null>(null);
+	$effect(() => {
+		if (!breakdown || breakdown.total <= 0) {
+			localTotal = null;
+			return;
+		}
+		if (displayCode === listing.currency) {
+			localTotal = breakdown.total;
+			return;
+		}
+		let cancelled = false;
+		void convertFx(breakdown.total, listing.currency, displayCode)
+			.then((res) => {
+				if (cancelled) return;
+				const raw = res?.converted;
+				localTotal = raw != null && Number.isFinite(Number(raw)) ? Number(raw) : null;
+			})
+			.catch(() => {
+				if (!cancelled) localTotal = null;
+			});
+		return () => {
+			cancelled = true;
+		};
+	});
 
 	const selectedRanges = $derived.by(() => {
 		if (!availData) return null;
@@ -161,20 +260,27 @@
 		<div class="min-w-0">
 			<div class="flex flex-wrap items-baseline gap-2">
 				<p class="text-2xl font-extrabold text-slate-900">
-					{#if converted}<span class="text-sm font-medium text-slate-400">~</span>{/if}
-					{sym}{displayRate > 0 ? displayRate.toLocaleString() : '—'}
+					{formatMoney(displayRate, displayCode, { approx: estimate })}
 					{#if promoPct > 0}
 						<span class="ml-1 text-sm font-semibold text-slate-400 line-through">
-							{sym}{rate.toLocaleString()}
+							{formatMoney(effectiveRate, displayCode)}
 						</span>
 					{/if}
 				</p>
 			</div>
 			<p class="mt-0.5 text-xs font-medium text-slate-400">/ {unit}</p>
-			{#if converted}
+			{#if showMeta}
 				<p class="mt-0.5 text-[11px] font-medium text-slate-400">
-					≈ {baseSym}{baseRate.toLocaleString()}
-					{listing.currency}/{unit}
+					{#if hasLocalized}
+						Base: {formatMoney(baseRate, listing.currency)}/{unit}
+					{/if}
+					{#if platformCode !== listing.currency && platformNightlyRate != null}
+						{#if hasLocalized}•{/if}
+						{platformCode === 'EUR'
+							? eurMoney(platformNightlyRate)
+							: formatMoney(platformNightlyRate, platformCode)}
+						/{unit}
+					{/if}
 				</p>
 			{/if}
 		</div>
@@ -225,10 +331,9 @@
 			<span class="shrink-0 font-bold text-amber-600">🔒</span>
 			<span
 				><strong>Security deposit:</strong>
-				{#if converted}<span>~ </span>{/if}
-				{sym}{(securityDeposit ?? 0).toLocaleString()}
-				{#if converted && securityDepositBase > 0}
-					({baseSym}{(securityDepositBase ?? 0).toLocaleString()})
+				{formatMoney(securityDepositBase, listing.currency)}
+				{#if hasLocalized && securityDeposit > 0}
+					({formatMoney(securityDeposit, displayCode, { approx: estimate })})
 				{/if}
 				— collected at booking.</span
 			>
@@ -253,11 +358,10 @@
 					<div>
 						<p class="text-sm font-semibold text-slate-800">Request vehicle delivery</p>
 						<p class="mt-0.5 text-xs text-slate-400">
-							{#if deliveryFee > 0}
-								{#if converted}<span>~ </span>{/if}
-								{sym}{deliveryFee.toLocaleString()} delivery fee
-								{#if converted && deliveryFeeBase > 0}
-									({baseSym}{(deliveryFeeBase ?? 0).toLocaleString()})
+							{#if deliveryFeeBase > 0}
+								{formatMoney(deliveryFeeBase, listing.currency)} delivery fee
+								{#if hasLocalized && deliveryFee > 0}
+									({formatMoney(deliveryFee, displayCode, { approx: estimate })})
 								{/if}
 								· within
 								{listing.deliveryRadiusKm ?? '—'} km
@@ -313,47 +417,101 @@
 		<div class="mt-4 space-y-2 border-t border-slate-100 pt-4 text-sm text-slate-600">
 			<div class="flex justify-between">
 				<span>
-					{sym}{rate.toLocaleString()} × {breakdown.nights}
+					{formatMoney(baseRate, listing.currency, { approx: lineEstimate })} × {breakdown.nights}
 					{unit}{breakdown.nights > 1 ? 's' : ''}
 				</span>
-				<span>{sym}{breakdown.baseAmount.toLocaleString()}</span>
+				<span>{formatMoney(breakdown.baseAmount, listing.currency, { approx: lineEstimate })}</span>
 			</div>
 			{#if breakdown.promotionDiscount > 0}
 				<div class="flex justify-between font-semibold text-emerald-600">
 					<span>Promotional discount ({promoLabel})</span>
-					<span>−{sym}{breakdown.promotionDiscount.toLocaleString()}</span>
+					<span
+						>−{formatMoney(breakdown.promotionDiscount, listing.currency, {
+							approx: lineEstimate
+						})}</span
+					>
 				</div>
 			{/if}
 			{#if listing.commissionRate}
 				<div class="flex justify-between">
 					<span>Service fee ({Math.round(listing.commissionRate * 100)}%)</span>
-					<span>{sym}{breakdown.serviceFee.toLocaleString()}</span>
+					<span
+						>{formatMoney(breakdown.serviceFee, listing.currency, { approx: lineEstimate })}</span
+					>
 				</div>
 			{/if}
 			{#if breakdown.taxAmount > 0}
 				<div class="flex justify-between">
 					<span>Taxes ({Math.round(getTaxRate(listing.country) * 100)}%)</span>
-					<span>{sym}{breakdown.taxAmount.toLocaleString()}</span>
+					<span>{formatMoney(breakdown.taxAmount, listing.currency, { approx: lineEstimate })}</span
+					>
 				</div>
 			{/if}
 			{#if breakdown.deliveryFee > 0}
 				<div class="flex justify-between">
 					<span>Delivery fee</span>
-					<span>{sym}{breakdown.deliveryFee.toLocaleString()}</span>
+					<span
+						>{formatMoney(breakdown.deliveryFee, listing.currency, { approx: lineEstimate })}</span
+					>
 				</div>
 			{/if}
 			{#if breakdown.securityDeposit > 0}
 				<div class="flex justify-between text-slate-600">
 					<span>Security deposit</span>
-					<span>{sym}{breakdown.securityDeposit.toLocaleString()}</span>
+					<span
+						>{formatMoney(breakdown.securityDeposit, listing.currency, {
+							approx: lineEstimate
+						})}</span
+					>
 				</div>
 			{/if}
-			<div
-				class="mt-1 flex justify-between border-t border-slate-200 pt-2 text-sm font-bold text-slate-900"
-			>
-				<span>Total</span>
-				<span>{sym}{breakdown.total.toLocaleString()}</span>
+			<div class="mt-3 space-y-1.5 border-t border-slate-200 pt-3">
+				{#if listing.currency !== displayCode}
+					<div class="flex items-baseline justify-between text-sm font-semibold text-slate-600">
+						<span>Total ({listing.currency})</span>
+						<span>{formatMoney(breakdown.total, listing.currency)}</span>
+					</div>
+				{/if}
+				<div class="flex items-baseline justify-between gap-3">
+					<span class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+						{estimate ? 'In your currency' : 'Total'}
+					</span>
+					<span class="text-2xl font-extrabold text-slate-900">
+						{formatMoney(
+							displayCode === listing.currency ? breakdown.total : localTotal,
+							displayCode,
+							{ equiv: estimate }
+						)}
+					</span>
+				</div>
+				{#if estimate && platformTotal != null}
+					<div class="flex items-baseline justify-between gap-3">
+						<span class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+							{platformCode === 'EUR' ? 'Card charge' : 'Mobile money charge'}
+						</span>
+						<span class="text-lg font-bold text-[#0B1E3F]">
+							{platformCode === 'EUR'
+								? eurMoney(platformTotal)
+								: formatMoney(platformTotal, platformCode)}
+						</span>
+					</div>
+				{/if}
 			</div>
+		</div>
+	{/if}
+
+	{#if estimate}
+		<div
+			class="mt-4 flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] leading-snug text-slate-600"
+		>
+			<span class="shrink-0">ℹ️</span>
+			<span>
+				{#if platformCode === 'EUR'}
+					Processed in EUR (€). Your bank converts this to {displayCode}.
+				{:else}
+					Charged in XAF via mobile money.
+				{/if}
+			</span>
 		</div>
 	{/if}
 

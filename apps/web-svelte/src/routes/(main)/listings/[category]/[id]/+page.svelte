@@ -7,7 +7,7 @@
 	import ListingGallery from '$lib/components/ListingGallery.svelte';
 	import ReviewsSection from '$lib/components/ReviewsSection.svelte';
 	import ListingCard from '$lib/components/ListingCard.svelte';
-	import { currencySymbol } from '$lib/utils';
+	import { formatMoney } from '$lib/currency-display';
 	import { categoryHref } from '$lib/listing-meta';
 	import { auth } from '$lib/stores/auth.svelte';
 	import { recordRecentlyViewed, createConversation } from '$lib/account-api';
@@ -153,12 +153,11 @@
 		if (!detail) return [];
 		const rows: { label: string; value: string }[] = [];
 		const converted = !!detail.localizedCurrency && detail.localizedCurrency !== detail.currency;
-		const sym = currencySymbol(detail.localizedCurrency ?? detail.currency);
-		const baseSym = currencySymbol(detail.currency);
+		const displayCode = detail.localizedCurrency ?? detail.currency;
 		const money = (loc: number | null | undefined, base: number | null | undefined) => {
 			const shown = loc ?? base;
-			let s = `${converted ? '~ ' : ''}${sym}${(shown ?? 0).toLocaleString()}`;
-			if (converted && base && shown !== base) s += ` (${baseSym}${base.toLocaleString()})`;
+			let s = formatMoney(shown, displayCode, { approx: converted });
+			if (converted && base && shown !== base) s += ` (${formatMoney(base, detail.currency)})`;
 			return s;
 		};
 		if (detail.category !== 'car') {

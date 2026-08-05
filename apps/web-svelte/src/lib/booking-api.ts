@@ -32,6 +32,7 @@ export interface PricingPreview {
 	platformRate?: number;
 	bufferApplied?: boolean;
 	listingCurrencyAmount?: number;
+	localCurrencyAmount?: number | null;
 	localizedCurrency?: string | null;
 	localizedBaseAmount?: number | null;
 	localizedNightlyRate?: number | null;

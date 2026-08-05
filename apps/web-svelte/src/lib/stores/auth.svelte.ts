@@ -1,4 +1,5 @@
 import { browser } from '$app/environment';
+import { applyProfileCountry } from '$lib/stores/location.svelte';
 
 /**
  * Auth session state.
@@ -60,9 +61,26 @@ function readPersisted(): { user: AuthUser | null } {
 	return { user: null };
 }
 
-function hasToken(): boolean {
+function readToken(): string | null {
 	try {
-		return !!(sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY));
+		return sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
+	} catch {
+		return null;
+	}
+}
+
+/** True when the stored token is a real account token (JWT type "user"), not an
+ *  anonymous checkout token. An anonymous session must still see Sign In and
+ *  account-upgrade prompts, so it never counts as authenticated. */
+function hasAccountToken(): boolean {
+	const token = readToken();
+	if (!token) return false;
+	try {
+		const parts = token.split('.');
+		if (parts.length < 2) return false;
+		const json = atob(parts[1]!.replace(/-/g, '+').replace(/_/g, '/'));
+		const payload = JSON.parse(json) as { type?: string };
+		return payload?.type === 'user';
 	} catch {
 		return false;
 	}
@@ -86,7 +104,7 @@ export function initAuth(): void {
 	initialized = true;
 	const { user: storedUser } = readPersisted();
 	auth.user = storedUser ? normalizeUser(storedUser) : null;
-	auth.isAuthenticated = !!storedUser || hasToken();
+	auth.isAuthenticated = !!storedUser || hasAccountToken();
 }
 
 /** Email addresses are case-insensitive — normalise to lowercase for display
@@ -110,6 +128,12 @@ export function setSession(token: string, user: AuthUser): void {
 	persistUser(normalized);
 	auth.user = normalized;
 	auth.isAuthenticated = true;
+
+	// A country selected on the user's profile becomes the default browse
+	// location on login — it drives the display currency sent as `currency=`
+	// until the user picks something else. A manual selection always wins, and
+	// anonymous checkout sessions never reach setSession.
+	applyProfileCountry(normalized.country?.trim().toUpperCase());
 }
 
 export function updateUser(updates: Partial<AuthUser>): void {

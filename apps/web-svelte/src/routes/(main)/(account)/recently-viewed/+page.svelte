@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { getRecentlyViewed, type RecentlyViewedListing } from '$lib/account-api';
 	import { listingHref } from '$lib/listing-meta';
-	import { currencySymbol } from '$lib/utils';
+	import { formatMoney } from '$lib/currency-display';
 	import ListingImage from '$lib/components/ListingImage.svelte';
 	import type { ListingCategory } from '$lib/listing-api';
 
@@ -168,9 +168,7 @@
 							</p>
 							<p class="mt-2 text-sm font-bold text-slate-900">
 								{l.nightlyRate != null
-									? `${currencySymbol(l.currency ?? 'KES')}${Number(
-											l.nightlyRate
-										).toLocaleString()}/night`
+									? `${formatMoney(l.nightlyRate, l.currency ?? 'KES')}/night`
 									: '—'}
 							</p>
 						</div>

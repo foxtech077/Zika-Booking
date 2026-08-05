@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PublicListing, PublicListingDetail } from '$lib/listing-api';
-	import { cn, currencySymbol } from '$lib/utils';
+	import { cn } from '$lib/utils';
+	import { formatMoney, resolvePlatformCurrency } from '$lib/currency-display';
 	import { listingHref } from '$lib/listing-meta';
 	import { auth } from '$lib/stores/auth.svelte';
 	import ListingImage from './ListingImage.svelte';
@@ -58,17 +59,17 @@
 	const promoLocalizedRate = $derived(
 		promoPct > 0 && localizedRate ? Number((localizedRate * (1 - promoPct / 100)).toFixed(2)) : null
 	);
-	const showLocalized = $derived(
-		!!(promoLocalizedRate ?? localizedRate) &&
-			(promoLocalizedRate ?? localizedRate)! > 0 &&
-			!!listing.localizedCurrency &&
-			listing.localizedCurrency !== listing.currency
+	/** True when the API returned a converted price in the guest's display currency. */
+	const hasLocalized = $derived(
+		!!listing.localizedCurrency &&
+			listing.localizedCurrency !== listing.currency &&
+			(promoLocalizedRate ?? localizedRate) != null &&
+			(promoLocalizedRate ?? localizedRate)! > 0
 	);
-	const localizedLabel = $derived(
-		showLocalized && (promoLocalizedRate ?? localizedRate) && listing.localizedCurrency
-			? `~${currencySymbol(listing.localizedCurrency)}${(promoLocalizedRate ?? localizedRate)!.toLocaleString()}`
-			: ''
-	);
+	const displayCode = $derived(listing.localizedCurrency ?? listing.currency);
+	const platformCode = $derived(resolvePlatformCurrency(listing.country));
+	/** The displayed amount is an estimate only when a display→charge conversion exists. */
+	const estimate = $derived(displayCode !== platformCode);
 </script>
 
 <a
@@ -174,22 +175,20 @@
 			<div class="ml-2 shrink-0 text-right">
 				{#if basePrice > displayPrice}
 					<p class="text-[9px] leading-none text-slate-400 line-through">
-						{currencySymbol(listing.currency)}{basePrice.toLocaleString()}
+						{formatMoney(basePrice, listing.currency)}
 					</p>
 				{/if}
-				{#if localizedLabel}
+				{#if hasLocalized}
 					<p class="text-sm font-bold text-slate-800">
-						{localizedLabel}
+						{formatMoney(promoLocalizedRate ?? localizedRate, displayCode, { approx: estimate })}
 						<span class="text-[10px] font-medium text-slate-400">/{unit}</span>
 					</p>
 					<p class="text-[10px] font-medium text-slate-400">
-						{currencySymbol(listing.currency)}
-						{displayPrice > 0 ? displayPrice.toLocaleString() : '—'}/{unit}
+						{formatMoney(displayPrice, listing.currency, { equiv: true })}/{unit}
 					</p>
 				{:else}
 					<p class="text-sm font-bold text-slate-800">
-						{currencySymbol(listing.currency)}
-						{displayPrice > 0 ? displayPrice.toLocaleString() : '—'}
+						{formatMoney(displayPrice, displayCode, { approx: estimate })}
 						<span class="text-[10px] font-medium text-slate-400">/{unit}</span>
 					</p>
 				{/if}

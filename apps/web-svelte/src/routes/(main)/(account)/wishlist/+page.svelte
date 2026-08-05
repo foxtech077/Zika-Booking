@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getFavourites, removeFavourite, type FavouriteListing } from '$lib/account-api';
-	import { currencySymbol } from '$lib/utils';
+	import { formatMoney } from '$lib/currency-display';
 	import { listingHref } from '$lib/listing-meta';
 	import ListingImage from '$lib/components/ListingImage.svelte';
 	import { goto } from '$app/navigation';
@@ -70,7 +70,7 @@
 		if (!l) return '';
 		const currency = l.localizedCurrency ?? l.currency;
 		const amount = l.localizedNightlyRate ?? l.nightlyRate;
-		return `${currencySymbol(currency)}${Number(amount ?? 0).toLocaleString()}`;
+		return formatMoney(amount, currency);
 	}
 </script>
 

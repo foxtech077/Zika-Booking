@@ -10,7 +10,8 @@
 		type GuestBooking
 	} from '$lib/account-api';
 	import { auth } from '$lib/stores/auth.svelte';
-	import { currencySymbol, formatDate, cn } from '$lib/utils';
+	import { formatDate, cn } from '$lib/utils';
+	import { formatMoney } from '$lib/currency-display';
 	import ListingImage from '$lib/components/ListingImage.svelte';
 	import type { ListingCategory } from '$lib/listing-api';
 
@@ -312,7 +313,7 @@
 									{/if}
 								</p>
 								<p class="text-base font-bold text-slate-900">
-									{currencySymbol(b.currency)}{Number(b.totalAmount).toLocaleString()}
+									{formatMoney(b.totalAmount, b.currency)}
 								</p>
 							</div>
 
