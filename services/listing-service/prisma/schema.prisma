@@ -535,6 +535,11 @@ enum BookingStatus {
     pointsDiscount  Decimal  @default(0) @map("points_discount") @db.Decimal(10, 2)
     earnedPoints    Int      @default(0) @map("earned_points")
 
+    // Secret magic link token for anonymous bookings. Minted at booking
+    // creation for anon_* guests only; used to view/cancel without an account.
+    // Never cleared — stays valid until checkout + 24h.
+    manageToken String? @unique @map("manage_token") @db.VarChar(100)
+
     listing   Listing            @relation(fields: [listingId], references: [id])
     roomType  HotelRoomType?     @relation(fields: [roomTypeId], references: [id])
     statusLog BookingStatusLog[]

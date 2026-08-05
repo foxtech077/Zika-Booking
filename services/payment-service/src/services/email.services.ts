@@ -27,7 +27,8 @@ function emailLayout(body: string): string {
 export async function sendGuestEmail(
   booking: any,
   invoice: any,
-  pdf: { fileName: string; pdfUrl: string; pdfBuffer: Buffer }
+  pdf: { fileName: string; pdfUrl: string; pdfBuffer: Buffer },
+  manageToken?: string | null
 ) {
   const isCar = booking.listingType === "car";
   const unitLabel = isCar ? "day" : "night";
@@ -92,9 +93,9 @@ export async function sendGuestEmail(
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
 
       <p style="text-align:center;">
-        <a href="${BOOKING_BASE_URL}/${booking.code}"
+        <a href="${manageToken ? `${BOOKING_BASE_URL}/${booking.code}?token=${manageToken}` : `${BOOKING_BASE_URL}/${booking.code}`}"
            style="display:inline-block;background:#16a34a;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;">
-          View Your Booking
+          ${manageToken ? "View & Manage Your Booking" : "View Your Booking"}
         </a>
       </p>
 
