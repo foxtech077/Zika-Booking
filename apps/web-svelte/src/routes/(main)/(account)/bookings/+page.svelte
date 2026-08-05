@@ -1,12 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { browser } from '$app/environment';
+	import { page } from '$app/state';
 	import {
 		getMyBookings,
 		cancelBooking,
 		failPendingBooking,
 		type GuestBooking
 	} from '$lib/account-api';
+	import { auth } from '$lib/stores/auth.svelte';
 	import { currencySymbol, formatDate, cn } from '$lib/utils';
 	import ListingImage from '$lib/components/ListingImage.svelte';
 	import type { ListingCategory } from '$lib/listing-api';
@@ -26,6 +29,14 @@
 	let error = $state<string | null>(null);
 	let filter = $state<Filter>('all');
 	let cancellingId = $state<string | null>(null);
+
+	// Optional ?highlight=<id|reference> (e.g. from the confirmation email or
+	// the notifications "view booking" link) — scrolls to and emphasises the
+	// matching reservation once it has loaded.
+	const highlightParam = $derived(
+		page.url.searchParams.get('highlight') ?? page.url.searchParams.get('bookingCode') ?? ''
+	);
+	let highlightedId = $state<string | null>(null);
 
 	const isCancelled = $derived((s: string) => s.startsWith('cancelled'));
 
@@ -54,6 +65,12 @@
 		void (async () => {
 			try {
 				bookings = await getMyBookings();
+				if (highlightParam) {
+					const match = bookings.find(
+						(b) => b.id === highlightParam || b.reference === highlightParam
+					);
+					if (match) highlightedId = match.id;
+				}
 			} catch {
 				error = 'Could not load your bookings. Please try again.';
 			} finally {
@@ -63,6 +80,12 @@
 	}
 
 	onMount(load);
+
+	$effect(() => {
+		if (!browser || loading || !highlightedId) return;
+		const el = document.querySelector(`[data-booking-id="${CSS.escape(highlightedId)}"]`);
+		if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+	});
 
 	function statusLabel(status: string): string {
 		if (status === 'confirmed') return 'Confirmed';
@@ -209,7 +232,9 @@
 			<h3 class="text-lg font-bold text-slate-800">No reservations yet</h3>
 			<p class="mx-auto mt-2 max-w-sm text-sm text-slate-500">
 				{filter === 'all'
-					? 'When you book a stay or car rental it will show up here.'
+					? auth.isAuthenticated
+						? 'When you book a stay or car rental it will show up here.'
+						: 'Bookings made on this device appear here. Use the link from your confirmation email for full access.'
 					: 'No bookings match this filter.'}
 			</p>
 			<a
@@ -225,14 +250,20 @@
 				<div
 					role="link"
 					tabindex="0"
-					onclick={() => void goto(`/bookings/${b.id}`)}
+					data-booking-id={b.id}
+					onclick={() => void goto(`/my-bookings/${b.id}`)}
 					onkeydown={(e) => {
 						if (e.key === 'Enter' || e.key === ' ') {
 							e.preventDefault();
-							void goto(`/bookings/${b.id}`);
+							void goto(`/my-bookings/${b.id}`);
 						}
 					}}
-					class="group w-full cursor-pointer rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-sm transition hover:border-[#1D8D2B]/40 hover:shadow-md"
+					class={cn(
+						'group w-full cursor-pointer rounded-2xl border bg-white p-4 text-left shadow-sm transition-all duration-300 hover:border-[#1D8D2B]/40 hover:shadow-md',
+						highlightedId === b.id
+							? 'scale-[1.01] border-emerald-500 ring-2 ring-emerald-500/20'
+							: 'border-slate-100'
+					)}
 				>
 					<div class="flex gap-4">
 						<div class="h-28 w-28 shrink-0 overflow-hidden rounded-xl">
@@ -246,7 +277,16 @@
 						<div class="min-w-0 flex-1">
 							<div class="flex items-start justify-between gap-3">
 								<div class="min-w-0">
-									<p class="font-mono text-[11px] font-semibold text-slate-400">{b.reference}</p>
+									<div class="flex items-center gap-2">
+										<p class="font-mono text-[11px] font-semibold text-slate-400">{b.reference}</p>
+										{#if highlightedId === b.id}
+											<span
+												class="shrink-0 animate-pulse rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-white uppercase"
+											>
+												Selected
+											</span>
+										{/if}
+									</div>
 									<h3 class="mt-0.5 truncate text-base font-bold text-slate-900">
 										{b.listingTitle}
 									</h3>

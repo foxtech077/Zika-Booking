@@ -10,6 +10,7 @@
 	import {
 		searchListingsDetail,
 		buildSearchApiParams,
+		geocodeDestination,
 		type ListingCategory,
 		type PublicListingDetail
 	} from '$lib/listing-api';
@@ -84,7 +85,7 @@
 		const sp = seedParams;
 		filters = filtersFromParams(sp);
 		sort = sp.get('sort') ?? 'recommended';
-		query = sp.get('q') ?? '';
+		query = sp.get('q') ?? sp.get('destination') ?? '';
 		checkIn = sp.get('checkin') ?? '';
 		checkOut = sp.get('checkout') ?? '';
 		pickupDate = sp.get('pickup') ?? '';
@@ -136,7 +137,11 @@
 			if (v) p.set(k, v);
 		}
 		const q = query.trim();
-		if (q) p.set('q', q);
+		if (q) {
+			p.set('q', q);
+			const pr = sp.get('place_resolved');
+			if (pr) p.set('place_resolved', pr);
+		}
 		if (sort) p.set('sort', sort);
 		if (checkIn) p.set('checkin', checkIn);
 		if (checkOut) p.set('checkout', checkOut);
@@ -170,11 +175,28 @@
 		return `${path}?${p.toString()}`;
 	}
 
-	function handleSearch(e: SubmitEvent): void {
+	async function handleSearch(e: SubmitEvent): Promise<void> {
 		e.preventDefault();
 		showSuggestions = false;
 		showFilterPanel = false;
-		goto(buildUrl(category, paramsFromState()));
+		const p = paramsFromState();
+		const q = query.trim();
+		if (q) {
+			// Resolve the typed destination so a real place unlocks the backend's
+			// "nearby" fallback, while an unresolved/junk term stays text-only and
+			// returns no results (never the whole category).
+			const { lat, lng, resolved } = await geocodeDestination(q);
+			p.set('q', q);
+			p.set('place_resolved', resolved ? 'true' : 'false');
+			if (resolved) {
+				p.set('lat', String(lat));
+				p.set('lng', String(lng));
+			} else {
+				p.delete('lat');
+				p.delete('lng');
+			}
+		}
+		await goto(buildUrl(category, p));
 	}
 
 	function handleClearSearch(): void {

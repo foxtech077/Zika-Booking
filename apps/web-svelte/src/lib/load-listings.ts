@@ -33,9 +33,19 @@ export function searchStateFromUrl(
 		const v = Number(sp.get(k) ?? 0);
 		return v > 0 ? v : undefined;
 	};
+	// A destination search is carried by `q` (new) or `destination` (legacy
+	// homepage links / hero form). When the destination resolved to a real
+	// place the URL also carries place_resolved=true + the geocoded coords —
+	// those unlock the "nearby" fallback; otherwise the backend stays text-only.
+	const placeResolved = sp.get('place_resolved') === 'true';
+	const urlLat = sp.get('lat') ? Number(sp.get('lat')) : undefined;
+	const urlLng = sp.get('lng') ? Number(sp.get('lng')) : undefined;
+	const hasUrlCoords =
+		placeResolved && urlLat != null && urlLng != null && !isNaN(urlLat) && !isNaN(urlLng);
 	return {
 		category,
-		q: sp.get('q') ?? undefined,
+		q: sp.get('q') ?? sp.get('destination') ?? undefined,
+		placeResolved: sp.get('q') || sp.get('destination') ? placeResolved : undefined,
 		checkIn: sp.get('checkin') ?? undefined,
 		checkOut: sp.get('checkout') ?? undefined,
 		pickupDate: sp.get('pickup') ?? undefined,
@@ -61,8 +71,8 @@ export function searchStateFromUrl(
 		currency,
 		cursor,
 		limit,
-		lat: coords.lat,
-		lng: coords.lng
+		lat: hasUrlCoords ? urlLat! : coords.lat,
+		lng: hasUrlCoords ? urlLng! : coords.lng
 	};
 }
 

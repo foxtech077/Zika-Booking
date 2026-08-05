@@ -3,7 +3,7 @@
 	import DateRangePicker from './DateRangePicker.svelte';
 	import { todayString, cn } from '$lib/utils';
 	import { location } from '$lib/stores/location.svelte';
-	import type { ListingCategory } from '$lib/listing-api';
+	import { geocodeDestination, type ListingCategory } from '$lib/listing-api';
 
 	interface NominatimResult {
 		display_name: string;
@@ -60,7 +60,7 @@
 
 	const searchGuests = $derived(adults + children);
 
-	function handleSubmit(e: SubmitEvent): void {
+	async function handleSubmit(e: SubmitEvent): Promise<void> {
 		e.preventDefault();
 
 		if (!searchDestination.trim()) {
@@ -92,9 +92,19 @@
 		searching = true;
 		showGuestPicker = false;
 
+		// Resolve the typed destination so a real place unlocks the backend's
+		// "nearby" fallback, while an unresolved/junk term stays text-only and
+		// returns no results (never the whole category).
+		const { lat, lng, resolved } = await geocodeDestination(searchDestination.trim());
+
 		const parts: string[] = [];
 		parts.push(`category=${encodeURIComponent(searchCategory)}`);
-		parts.push(`destination=${encodeURIComponent(searchDestination.trim())}`);
+		parts.push(`q=${encodeURIComponent(searchDestination.trim())}`);
+		parts.push(`place_resolved=${resolved ? 'true' : 'false'}`);
+		if (resolved) {
+			parts.push(`lat=${lat}`);
+			parts.push(`lng=${lng}`);
+		}
 
 		if (searchCategory === 'car') {
 			if (pickupDate) parts.push(`pickup=${encodeURIComponent(pickupDate)}`);
@@ -110,13 +120,13 @@
 		parts.push(`rooms=${rooms}`);
 
 		const coords = location.coords;
-		if (coords) {
+		if (coords && !resolved) {
 			parts.push(`lat=${coords.lat}`);
 			parts.push(`lng=${coords.lng}`);
 			parts.push(`radius_km=100`);
 		}
 
-		goto(`/search?${parts.join('&')}`);
+		await goto(`/search?${parts.join('&')}`);
 	}
 </script>
 

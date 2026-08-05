@@ -497,6 +497,10 @@ export function isRangeAvailable(
 export interface SearchState {
 	category: ListingCategory;
 	q?: string;
+	/** True when the typed destination resolved to a real geocoded location —
+	 *  unlocks the backend's "nearby" fallback. Unresolved/junk terms stay
+	 *  text-only so they never return the whole category. */
+	placeResolved?: boolean;
 	checkIn?: string;
 	checkOut?: string;
 	pickupDate?: string;
@@ -547,7 +551,12 @@ export function buildSearchApiParams(s: SearchState): Record<string, string | nu
 		sort: s.sort
 	};
 
-	if (s.q) p.q = s.q;
+	if (s.q) {
+		p.q = s.q;
+		// Only a resolved place unlocks the "nearby" fallback; an unresolved
+		// query returns exact/partial text matches only (never the category).
+		p.place_resolved = s.placeResolved ? 'true' : 'false';
+	}
 	if (s.guests && s.guests > 1) p.guests = s.guests;
 	if (s.priceMax && s.priceMax < 500000) p.price_max = s.priceMax;
 	if (s.rating) p.rating_min = s.rating;
@@ -593,10 +602,12 @@ const KNOWN_DESTINATIONS: Record<string, [number, number]> = {
 };
 
 /** Resolves a free-text destination to coordinates, with a curated shortcut list + Nominatim. */
-export async function geocodeDestination(q: string): Promise<{ lat: number; lng: number }> {
+export async function geocodeDestination(
+	q: string
+): Promise<{ lat: number; lng: number; resolved: boolean }> {
 	const lower = q.toLowerCase();
 	for (const [key, [lat, lng]] of Object.entries(KNOWN_DESTINATIONS)) {
-		if (lower.includes(key)) return { lat, lng };
+		if (lower.includes(key)) return { lat, lng, resolved: true };
 	}
 	try {
 		const r = await fetch(
@@ -604,9 +615,9 @@ export async function geocodeDestination(q: string): Promise<{ lat: number; lng:
 			{ headers: { 'Accept-Language': 'en', 'User-Agent': 'Kainook/1.0' } }
 		);
 		const d = (await r.json()) as Array<{ lat: string; lon: string }>;
-		if (d?.[0]) return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
+		if (d?.[0]) return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon), resolved: true };
 	} catch {
-		// fall through to the default
+		// destination stays unresolved
 	}
-	return { lat: -1.2921, lng: 36.8219 };
+	return { lat: -1.2921, lng: 36.8219, resolved: false };
 }

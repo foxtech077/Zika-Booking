@@ -8,10 +8,15 @@
 
 	const pathname = $derived(String(page.url.pathname));
 
+	// The reservations list (/bookings) is also reachable by anonymous visitors:
+	// their stable per-device anonymous token returns the bookings made on this
+	// device. Every other account page requires a signed-in user.
+	const isPublicBookings = $derived(pathname === '/bookings');
+
 	// Account pages require a signed-in user. Redirect (with a next param) so
 	// the user lands back where they were after signing in.
 	$effect(() => {
-		if (!auth.isAuthenticated) {
+		if (!auth.isAuthenticated && !isPublicBookings) {
 			void goto(`/auth/login?next=${encodeURIComponent(pathname)}`);
 		}
 	});
@@ -27,12 +32,16 @@
 		{ label: 'Reviews', href: '/reviews', active: pathname.startsWith('/reviews') },
 		{ label: 'Profile', href: '/profile', active: pathname.startsWith('/profile') }
 	]);
+
+	const visibleNavItems = $derived(
+		auth.isAuthenticated ? navItems : navItems.filter((i) => i.href === '/bookings')
+	);
 </script>
 
-{#if auth.isAuthenticated}
+{#if auth.isAuthenticated || isPublicBookings}
 	<div class="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 		<nav class="mb-8 flex flex-wrap items-center gap-2">
-			{#each navItems as item (item.href)}
+			{#each visibleNavItems as item (item.href)}
 				<a
 					href={item.href}
 					aria-current={item.active ? 'page' : undefined}

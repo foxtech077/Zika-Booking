@@ -187,6 +187,30 @@ export async function failPendingBooking(id: string): Promise<void> {
 	});
 }
 
+// ── Anonymous magic-link manage ───────────────────────────────────────────────
+//
+// Anonymous bookings carry a secret magic-link token (sent in the confirmation
+// email) so the guest can view and cancel their booking without signing in.
+// The response shape matches BookingDetail (buildBookingDetail on the service).
+
+export async function getBookingByManageToken(token: string): Promise<BookingDetail> {
+	return apiRequest<BookingDetail>(
+		LISTING_API_URL,
+		`/bookings/manage/${encodeURIComponent(token)}`
+	);
+}
+
+export async function cancelBookingByManageToken(token: string): Promise<{
+	refundAmount: number;
+	currency: string;
+	message: string;
+}> {
+	return apiRequest(LISTING_API_URL, `/bookings/manage/${encodeURIComponent(token)}/cancel`, {
+		method: 'POST',
+		body: JSON.stringify({})
+	});
+}
+
 // ── Favourites / wishlist ────────────────────────────────────────────────────
 
 export interface FavouriteListing {
