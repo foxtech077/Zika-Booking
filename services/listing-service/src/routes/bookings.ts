@@ -2414,6 +2414,14 @@ export async function bookingRoutes(app: FastifyInstance) {
     };
   }
 
+  // Cancellation is only available before the stay starts (mirrors the UI
+  // canCancel flag): hotels/apartments until the check-in date, cars until the
+  // pickup datetime. Enforced here so the API and UI agree.
+  function isCancellationWindowOpen(booking: any): boolean {
+    const startRef = booking.checkIn ?? booking.pickupDatetime;
+    return startRef != null && new Date(startRef) > new Date();
+  }
+
   // Serializes a booking (with its listing + primary photo included) into the
   // guest-facing detail shape shared by the authed detail endpoint and the
   // anonymous magic-link manage endpoint.
@@ -2551,6 +2559,11 @@ export async function bookingRoutes(app: FastifyInstance) {
             success: false,
             error: { code: "INVALID_STATUS", message: "Only confirmed bookings can be cancelled." },
           });
+        if (!isCancellationWindowOpen(booking))
+          return reply.status(409).send({
+            success: false,
+            error: { code: "CANCELLATION_WINDOW_CLOSED", message: "Cancellation is only available before your check-in." },
+          });
 
         const data = await performGuestCancellation(booking, guestId, reason);
         return sendSuccess(reply, 200, data);
@@ -2680,6 +2693,11 @@ export async function bookingRoutes(app: FastifyInstance) {
           return reply.status(409).send({
             success: false,
             error: { code: "INVALID_STATUS", message: "Only confirmed bookings can be cancelled." },
+          });
+        if (!isCancellationWindowOpen(booking))
+          return reply.status(409).send({
+            success: false,
+            error: { code: "CANCELLATION_WINDOW_CLOSED", message: "Cancellation is only available before your check-in." },
           });
 
         const data = await performGuestCancellation(booking, booking.guestId, reason);
