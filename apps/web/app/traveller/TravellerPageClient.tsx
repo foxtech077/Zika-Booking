@@ -1630,7 +1630,8 @@ export default function TravellerDashboard() {
         }
         setSecondsLeft(300);
         setBookingError("");
-        setCheckoutStep("review");
+        setCheckoutStep("details");
+        fetchSavedMethods();
         setPaymentId(null);
         if (paymentPollRef.current) clearInterval(paymentPollRef.current);
         const totalForVouchers = pricingPreview ? (pricingPreview.totalAmount ?? 0) : 0;
@@ -2911,24 +2912,18 @@ export default function TravellerDashboard() {
                             )}
                           </div>
 
-                          {/* Discount section — promotion badge + wallet vouchers + manual entry always visible */}
-                          <div className="space-y-2">
-                            {/* Promotion badge — always shown when a promotion exists */}
-                            {serverPromotionDiscount > 0 && activePromotion && (
-                              <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
-                                <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
-                                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                  {activePromotion.name}
-                                  {effectiveDiscountSource === "voucher" && (
-                                    <span className="text-slate-400 font-normal"> (voucher saves more)</span>
-                                  )}
-                                </span>
-                                <span className="text-xs font-bold text-emerald-700">−{detailListing.currency} {serverPromotionDiscount.toLocaleString()}</span>
-                              </div>
-                            )}
-
-                            {renderVoucherSelector()}
-                          </div>
+                           {/* Discount section — promotion badge */}
+                           {serverPromotionDiscount > 0 && activePromotion && (
+                             <div className="space-y-2">
+                               <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
+                                 <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                                   <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                   {activePromotion.name}
+                                 </span>
+                                 <span className="text-xs font-bold text-emerald-700">−{detailListing.currency} {serverPromotionDiscount.toLocaleString()}</span>
+                                </div>
+                             </div>
+                           )}
 
                           {/* Price summary */}
                           {(() => {

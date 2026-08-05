@@ -1,4 +1,5 @@
 "use client";
+import "@/lib/fontScale";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 
