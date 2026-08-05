@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError, BookingNotFoundError, isPrismaUniqueViolation } from "../lib/errors.js";
-import { requireAuth, requireUser, requireHost, type AuthRequest } from "../middleware/auth.js";
+import { requireAuth, requireHost, type AuthRequest } from "../middleware/auth.js";
 import { getRedis } from "../lib/redis.js";
 import { randomUUID, randomBytes } from "crypto";
 import { sendBookingConfirmationEmail, sendBookingCancellationEmail } from "../lib/email.js";
@@ -3047,6 +3047,9 @@ export async function bookingRoutes(app: FastifyInstance) {
   );
 
   // ── GET /guests/me/bookings — guest booking history ────────────────────────
+  // requireAuth (user OR anonymous): anonymous tokens carry a stable per-device
+  // sub (anon_<sha256(deviceId)>), so the guestId filter below returns exactly
+  // the bookings made on that device. Mirrors the detail/documents endpoints.
   app.get(
     "/guests/me/bookings",
     {
@@ -3083,7 +3086,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireUser],
+      preHandler: [requireAuth],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const guestId = (req as AuthRequest).authId;
@@ -3170,8 +3173,7 @@ export async function bookingRoutes(app: FastifyInstance) {
   // ── GET /guests/me/bookings/:id — booking detail ───────────────────────────
   // requireAuth (user OR anonymous): the guestId ownership check below limits
   // reads to the session that created the booking, so anonymous payers can view
-  // their own confirmation (mirrors the booking-document endpoints). The list
-  // endpoint /guests/me/bookings stays requireUser.
+  // their own confirmation (mirrors the booking-document endpoints).
   app.get(
     "/guests/me/bookings/:id",
     {

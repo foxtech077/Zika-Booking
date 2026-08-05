@@ -422,9 +422,10 @@ export default function TravellerDashboard() {
     if (tab === "bookings") {
       if (activeTab !== "bookings") {
         setActiveTab("bookings");
-        if (user) {
-          fetchGuestBookings();
-        }
+        // Fetch for signed-in users AND anonymous visitors. Anonymous tokens
+        // carry a stable per-device sub, so the list returns the bookings made
+        // on this device; the API interceptor mints/refreshes the token on 401.
+        fetchGuestBookings();
       }
     } else if (!tab && activeTab === "bookings") {
       setActiveTab("home");
@@ -4298,7 +4299,9 @@ export default function TravellerDashboard() {
                 </h3>
                 <p className="text-slate-500 text-sm max-w-xs mx-auto leading-relaxed">
                   {reservationStatusFilter === "all"
-                    ? "Book your next stay or car rental to see it here."
+                    ? !user
+                      ? "Bookings made on this device appear here. Use the link from your confirmation email for full access."
+                      : "Book your next stay or car rental to see it here."
                     : "Try switching to a different filter tab."}
                 </p>
                 {/* {reservationStatusFilter === "all" && (
@@ -4371,14 +4374,12 @@ export default function TravellerDashboard() {
                   {cat === "hotel" ? "Stays" : cat === "apartment" ? "Home" : "Car Rentals"}
                 </button>
               ))}
-              {user && (
-                <button
-                  onClick={() => { setSelectedListingId(null); selectedListingIdRef.current = null; navHandlesUrlRef.current = true; setMobileNavOpen(false); router.push("/?tab=bookings"); }}
-                  className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "bookings" ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
-                >
-                  My Reservations
-                </button>
-              )}
+              <button
+                onClick={() => { setSelectedListingId(null); selectedListingIdRef.current = null; navHandlesUrlRef.current = true; setMobileNavOpen(false); router.push("/?tab=bookings"); }}
+                className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "bookings" ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
+              >
+                My Reservations
+              </button>
             </nav>
             {user && (
               <div className="p-4 border-t border-slate-100 space-y-3 shrink-0">

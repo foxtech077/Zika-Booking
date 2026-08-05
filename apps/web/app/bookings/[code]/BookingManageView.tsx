@@ -423,6 +423,11 @@ export default function BookingManageView() {
               )}
             </div>
           )}
+          {booking.status === "confirmed" && !booking.canCancel && (
+            <p className="pt-2 text-sm text-slate-500 leading-relaxed">
+              Cancellation is no longer available because your check-in has already started.
+            </p>
+          )}
           {isCancelled && booking.cancelledAt && (
             <p className="text-xs text-slate-400">
               Cancelled on {fmtDate(booking.cancelledAt.slice(0, 10))}
