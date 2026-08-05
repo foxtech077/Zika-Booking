@@ -463,7 +463,7 @@ export function TravellerHeader({
                   {mobileNavBtn("Hotels", TRAVELLER_ROUTES.hotels, isHotelsActive)}
                   {mobileNavBtn("Home", TRAVELLER_ROUTES.apartments, isApartmentsActive)}
                   {mobileNavBtn("Car Rentals", TRAVELLER_ROUTES.cars, isCarsActive)}
-                  {user && mobileNavBtn("My Reservations", TRAVELLER_ROUTES.bookings, isBookingsActive)}
+                  {mobileNavBtn("My Reservations", TRAVELLER_ROUTES.bookings, isBookingsActive)}
                 </div>
 
                 {user ? (
