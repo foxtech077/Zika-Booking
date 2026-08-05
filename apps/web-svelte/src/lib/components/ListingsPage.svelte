@@ -17,6 +17,7 @@
 		PAGE_SIZE,
 		CATEGORY_META,
 		categoryHref,
+		listingHref,
 		SORT_OPTIONS,
 		DEFAULT_FILTERS,
 		countActiveFilters,
@@ -594,7 +595,10 @@
 									listings={allResults}
 									{hoveredId}
 									onHover={(id: string | null) => (hoveredId = id)}
-									onSelect={(id: string) => void goto(`/listings/${id}`)}
+									onSelect={(id: string) => {
+										const item = allResults.find((l) => l.id === id);
+										if (item) void goto(listingHref(item.category, id));
+									}}
 								/>
 							{:else}
 								<div

@@ -9,6 +9,7 @@
 	import type { Stripe, StripeCardElement } from '@stripe/stripe-js';
 	import { currencySymbol } from '$lib/utils';
 	import { fmtDates, derivePlatform, fmtPlatform } from '$lib/booking-utils';
+	import { listingHref } from '$lib/listing-meta';
 	import ShimmerImage from '$lib/components/ShimmerImage.svelte';
 	import {
 		ensureAnonymousToken,
@@ -44,6 +45,9 @@
 	const roomTypeId = $derived(sp.get('roomTypeId') ?? '');
 
 	const isCar = $derived(detail.category === 'car');
+
+	/** Canonical listing URL for back-navigation and expiry actions. */
+	const listingUrl = $derived(listingHref(detail.category, listingId));
 
 	/** Payment-phase hold window (seconds) — matches the listing service's
 	 *  pending_payment availability block (5 minutes from booking creation). */
@@ -397,7 +401,7 @@
 
 	function handleCancel(): void {
 		if (lockToken) void releaseLock(lockToken);
-		void goto(`/listings/${listingId}`);
+		void goto(listingUrl);
 	}
 
 	async function handleVoucherApply(): Promise<void> {
@@ -677,7 +681,7 @@
 	function handleCancelAfterBooking(): void {
 		firePaymentCancel();
 		clearPoll();
-		void goto(`/listings/${listingId}`);
+		void goto(listingUrl);
 	}
 
 	function expiryAction(path: string): void {
@@ -763,7 +767,7 @@
 					Back to home
 				</a>
 				<a
-					href={`/listings/${listingId}`}
+					href={listingUrl}
 					class="rounded-xl border border-slate-200 px-6 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
 				>
 					View listing
@@ -807,7 +811,7 @@
 				<p class="font-semibold">{initError}</p>
 				<button
 					type="button"
-					onclick={() => goto(`/listings/${listingId}`)}
+					onclick={() => goto(listingUrl)}
 					class="mt-4 rounded-xl bg-[#0B1E3F] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#07152B]"
 				>
 					Back to listing
@@ -1658,7 +1662,7 @@
 				</button>
 				<button
 					type="button"
-					onclick={() => expiryAction(`/listings/${listingId}`)}
+					onclick={() => expiryAction(listingUrl)}
 					class="flex-1 rounded-xl bg-[#0B1E3F] py-2.5 text-sm font-bold text-white transition hover:bg-[#07152B]"
 				>
 					Try to rebook
@@ -1691,7 +1695,7 @@
 				</button>
 				<button
 					type="button"
-					onclick={() => expiryAction(`/listings/${listingId}`)}
+					onclick={() => expiryAction(listingUrl)}
 					class="flex-1 rounded-xl bg-[#0B1E3F] py-2.5 text-sm font-bold text-white transition hover:bg-[#07152B]"
 				>
 					Try to rebook

@@ -39,6 +39,27 @@ export function categoryHref(category: ListingCategory): string {
 	return category === 'hotel' ? '/hotels' : category === 'apartment' ? '/apartments' : '/cars';
 }
 
+/** Singular URL segment used in listing detail routes: /listings/:category/:id */
+export const CATEGORY_SLUGS: Record<ListingCategory, string> = {
+	hotel: 'hotel',
+	apartment: 'apartment',
+	car: 'car'
+};
+
+/** Maps a detail-route slug back to a listing category, or null for unknown. */
+export function slugToCategory(slug: string | null | undefined): ListingCategory | null {
+	if (slug === 'hotel') return 'hotel';
+	if (slug === 'apartment') return 'apartment';
+	if (slug === 'car') return 'car';
+	return null;
+}
+
+/** Canonical detail URL for a listing, e.g. /listings/hotel/abc-123 */
+export function listingHref(category: ListingCategory | string, id: string): string {
+	const cat = slugToCategory(category) ?? (category as ListingCategory);
+	return `/listings/${CATEGORY_SLUGS[cat]}/${encodeURIComponent(id)}`;
+}
+
 export function isListingCategory(value: string | null): value is ListingCategory {
 	return value === 'hotel' || value === 'apartment' || value === 'car';
 }

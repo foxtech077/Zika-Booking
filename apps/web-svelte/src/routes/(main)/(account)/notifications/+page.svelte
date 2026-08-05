@@ -7,6 +7,9 @@
 		markAllNotificationsRead,
 		type AppNotification
 	} from '$lib/account-api';
+	import { fetchListingDetail } from '$lib/listing-api';
+	import { LISTING_API_URL } from '$lib/config';
+	import { listingHref } from '$lib/listing-meta';
 	import { formatRelativeTime, cn } from '$lib/utils';
 
 	type Category =
@@ -130,7 +133,14 @@
 		const { bookingId, conversationId, listingId } = n.data ?? {};
 		if (bookingId) void goto(`/bookings?highlight=${bookingId}`);
 		else if (conversationId) void goto(`/messages?conversationId=${conversationId}`);
-		else if (listingId) void goto(`/listings/${listingId}`);
+		else if (listingId) {
+			// The listing URL is category-scoped, which the notification payload
+			// doesn't carry — resolve it from the listing before navigating.
+			void (async () => {
+				const detail = await fetchListingDetail(fetch, listingId, LISTING_API_URL);
+				if (detail) void goto(listingHref(detail.category, listingId));
+			})();
+		}
 	}
 
 	function handleMarkAll(): void {

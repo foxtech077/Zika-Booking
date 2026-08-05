@@ -4,6 +4,7 @@
 
 	import { getBookingDetail, cancelBooking, type BookingDetail } from '$lib/account-api';
 	import { currencySymbol, formatDate, cn } from '$lib/utils';
+	import { listingHref } from '$lib/listing-meta';
 	import ListingImage from '$lib/components/ListingImage.svelte';
 	import type { ListingCategory } from '$lib/listing-api';
 
@@ -22,6 +23,9 @@
 		if (c === 'car' || c === 'apartment' || c === 'hotel') return c;
 		return 'hotel';
 	});
+
+	/** Canonical listing URL for the "view listing" link. */
+	const listingUrl = $derived(booking ? listingHref(listingCategory, booking.listing.id) : '');
 
 	function load(): void {
 		loading = true;
@@ -195,7 +199,7 @@
 								.join(', ')}
 						</p>
 						<a
-							href={`/listings/${booking.listing.id}`}
+							href={listingUrl}
 							class="mt-3 inline-block text-sm font-semibold text-[#1D8D2B] hover:underline"
 						>
 							View listing →

@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { PublicListing, PublicListingDetail } from '$lib/listing-api';
 	import { cn, currencySymbol } from '$lib/utils';
+	import { listingHref } from '$lib/listing-meta';
+	import { auth } from '$lib/stores/auth.svelte';
 	import ListingImage from './ListingImage.svelte';
 
 	let {
@@ -20,6 +22,9 @@
 	const location = $derived([listing.town, listing.country].filter(Boolean).join(', '));
 	let favOverride = $state<boolean | null>(null);
 	const isFav = $derived(favOverride ?? listing.isFavourited ?? false);
+	// Favourites are tied to an account — hide the heart for guests and
+	// anonymous checkout sessions.
+	const canFavourite = $derived(auth.isAuthenticated);
 
 	const promoPct = $derived(
 		listing.promoBadge?.labelText
@@ -67,7 +72,7 @@
 </script>
 
 <a
-	href={`/listings/${listing.id}`}
+	href={listingHref(listing.category, listing.id)}
 	{onmouseenter}
 	{onmouseleave}
 	class={cn(
@@ -134,29 +139,31 @@
 			</div>
 		{/if}
 
-		<button
-			type="button"
-			onclick={(e) => {
-				e.preventDefault();
-				favOverride = !isFav;
-			}}
-			class="absolute top-3 right-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/80 shadow-sm backdrop-blur-sm transition hover:bg-white"
-			aria-label={isFav ? 'Remove from wishlist' : 'Save to wishlist'}
-		>
-			<svg
-				class={isFav ? 'h-3.5 w-3.5 fill-current text-red-500' : 'h-3.5 w-3.5 text-slate-500'}
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				viewBox="0 0 24 24"
+		{#if canFavourite}
+			<button
+				type="button"
+				onclick={(e) => {
+					e.preventDefault();
+					favOverride = !isFav;
+				}}
+				class="absolute top-3 right-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/80 shadow-sm backdrop-blur-sm transition hover:bg-white"
+				aria-label={isFav ? 'Remove from wishlist' : 'Save to wishlist'}
 			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-				/>
-			</svg>
-		</button>
+				<svg
+					class={isFav ? 'h-3.5 w-3.5 fill-current text-red-500' : 'h-3.5 w-3.5 text-slate-500'}
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					viewBox="0 0 24 24"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+					/>
+				</svg>
+			</button>
+		{/if}
 	</div>
 
 	<div class="p-4">

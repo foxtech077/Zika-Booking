@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { getFavourites, removeFavourite, type FavouriteListing } from '$lib/account-api';
 	import { currencySymbol } from '$lib/utils';
+	import { listingHref } from '$lib/listing-meta';
 	import ListingImage from '$lib/components/ListingImage.svelte';
 	import { goto } from '$app/navigation';
 
@@ -154,11 +155,11 @@
 					class="group relative cursor-pointer overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
 					role="link"
 					tabindex="0"
-					onclick={() => void goto(`/listings/${listingId(f)}`)}
+					onclick={() => void goto(listingHref(category(f), listingId(f)))}
 					onkeydown={(e) => {
 						if (e.key === 'Enter' || e.key === ' ') {
 							e.preventDefault();
-							void goto(`/listings/${listingId(f)}`);
+							void goto(listingHref(category(f), listingId(f)));
 						}
 					}}
 				>
