@@ -6,15 +6,36 @@
 	import RecentlyViewedStrip from '$lib/components/RecentlyViewedStrip.svelte';
 	import ShimmerImage from '$lib/components/ShimmerImage.svelte';
 	import { loadFavourites } from '$lib/stores/favourites.svelte';
+	import { location } from '$lib/stores/location.svelte';
+	import { DEFAULT_COORDS, LISTING_API_URL } from '$lib/config';
+	import {
+		searchListingsDetail,
+		fetchActivePromotion,
+		isPromotionValid,
+		type ListingCategory,
+		type PublicListing,
+		type ActivePromotion
+	} from '$lib/listing-api';
 
 	let { data }: PageProps = $props();
 
-	const featured = $derived(data.featured ?? []);
+	// The SSR load serves the hotel tab; the interactive tabs re-fetch per
+	// category client-side, mirroring apps/web's "Stay in Excellence".
+	const FEATURED_CATEGORIES: { key: ListingCategory; label: string; plural: string }[] = [
+		{ key: 'hotel', label: 'Hotels', plural: 'hotels' },
+		{ key: 'apartment', label: 'Home', plural: 'homes' },
+		{ key: 'car', label: 'Cars', plural: 'cars' }
+	];
 
-	// The active hotel promotion renders as the badge on the featured cards
+	let activeCategory = $state<ListingCategory>('hotel');
+	let featuredListings = $state<PublicListing[]>(data.featured ?? []);
+	let featuredLoading = $state(false);
+	let featuredPromo = $state<ActivePromotion | null>(data.promotion ?? null);
+
+	// The active promotion renders as the badge on the featured cards
 	// (percentage/fixed-off label), mirroring apps/web.
 	const featuredPromoBadge = $derived.by(() => {
-		const p = data.promotion;
+		const p = featuredPromo;
 		if (!p) return null;
 		return {
 			labelText:
@@ -26,11 +47,38 @@
 		};
 	});
 
+	async function loadFeatured(cat: ListingCategory): Promise<void> {
+		activeCategory = cat;
+		featuredLoading = true;
+		try {
+			const coords = location.coords ?? DEFAULT_COORDS;
+			const { results } = await searchListingsDetail(
+				fetch,
+				{
+					category: cat,
+					limit: 8,
+					lat: coords.lat,
+					lng: coords.lng,
+					radius_km: 5000,
+					...(location.country?.currency ? { currency: location.country.currency } : {})
+				},
+				LISTING_API_URL
+			);
+			featuredListings = results;
+			const promo = await fetchActivePromotion(fetch, cat, LISTING_API_URL).catch(() => null);
+			featuredPromo = promo && isPromotionValid(promo) ? promo : null;
+		} catch {
+			featuredListings = [];
+		} finally {
+			featuredLoading = false;
+		}
+	}
+
 	// Destination autocomplete blends in town/listing names harvested from the
 	// featured listings, matching apps/web's apiSuggestions behaviour.
 	const heroSuggestions = $derived.by(() => {
 		const set = new Set<string>();
-		for (const l of featured) {
+		for (const l of featuredListings) {
 			if (l.town) set.add(`${l.town}, ${l.country}`);
 			if (l.name) set.add(l.name);
 		}
@@ -272,36 +320,43 @@
 				<h2 class="font-serif text-3xl text-slate-900 md:text-4xl">Stay in Excellence</h2>
 			</div>
 			<div class="flex gap-2">
-				{#each [{ key: 'hotel', label: 'Hotels' }, { key: 'apartment', label: 'Home' }, { key: 'car', label: 'Cars' }] as cat (cat.key)}
-					<a
-						href={`/search?category=${cat.key}`}
-						class={cat.key === 'hotel'
+				{#each FEATURED_CATEGORIES as cat (cat.key)}
+					<button
+						type="button"
+						onclick={() => void loadFeatured(cat.key)}
+						class={cat.key === activeCategory
 							? 'rounded-full border border-[#0c2614] bg-[#0c2614] px-4 py-1.5 text-xs font-semibold text-white'
 							: 'rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-semibold text-slate-600 hover:border-[#0c2614] hover:text-[#0c2614]'}
 					>
 						{cat.label}
-					</a>
+					</button>
 				{/each}
 			</div>
 		</div>
 
-		{#if featured.length === 0}
+		{#if featuredLoading}
+			<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+				{#each Array(4) as _, i (i)}
+					<div class="h-72 animate-pulse rounded-2xl bg-slate-200/70"></div>
+				{/each}
+			</div>
+		{:else if featuredListings.length === 0}
 			<div class="py-16 text-center text-sm font-semibold text-slate-400">
 				No featured listings available right now.
 			</div>
 		{:else}
 			<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-				{#each featured as listing (listing.id)}
+				{#each featuredListings as listing (listing.id)}
 					<ListingCard {listing} promotionBadge={featuredPromoBadge} />
 				{/each}
 			</div>
 
 			<div class="mt-8 text-center">
 				<a
-					href="/search?category=hotel"
+					href={`/search?category=${activeCategory}`}
 					class="inline-flex items-center gap-2 rounded-full border border-[#0c2614] px-6 py-3 text-sm font-semibold text-[#0c2614] transition hover:bg-[#0c2614] hover:text-white"
 				>
-					View all hotels
+					View all {FEATURED_CATEGORIES.find((c) => c.key === activeCategory)?.plural ?? 'listings'}
 					<svg
 						class="h-4 w-4"
 						fill="none"
