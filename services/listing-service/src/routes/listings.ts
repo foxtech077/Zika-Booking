@@ -261,6 +261,25 @@ export async function listingRoutes(app: FastifyInstance) {
         return sendError(reply, 422, "VALIDATION_ERROR", "Invalid listing category.");
       }
 
+      // Reuse an existing blank draft instead of spawning a new empty listing on
+      // every create click. All edit forms require a name before saving, so a
+      // draft with `name: null` has never had content and is safe to reopen.
+      // Deleted (soft-deleted) drafts are excluded — returning one would bounce
+      // the user to an edit page that 404s.
+      const existing = await prisma.listing.findFirst({
+        where: {
+          providerId,
+          status: "draft",
+          name: null,
+          category: category as "hotel" | "apartment" | "car",
+          deletedAt: null,
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      if (existing) {
+        return sendSuccess(reply, 200, { id: existing.id, category: existing.category, status: existing.status });
+      }
+
       const listing = await prisma.listing.create({
         data: { providerId, category: category as "hotel" | "apartment" | "car" },
       });
