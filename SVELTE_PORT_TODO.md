@@ -74,7 +74,7 @@ Scope notes: the provider dashboard and Stripe Connect (section E) are a large, 
 ## D. Auth & infrastructure
 
 - [x] **D1. Register payload drops `dob`** — FIXED. The UI collects DOB (18+ gate) but `register()` never sent it; `dob` is now included in the payload (`apps/web-svelte/src/lib/auth-api.ts:94`, `apps/web-svelte/src/routes/auth/register/+page.svelte`). Note: the auth-service zod schema doesn't persist DOB, so this is payload parity with web, not new storage.
-- [ ] **D2. Reset-password route mismatch** — DIFFERENT. web: `/reset-password`; web-svelte: `/auth/reset-password`. Verify which URL the auth-service reset email links to and add a redirect if needed.
+- [x] **D2. Reset-password route mismatch** — FIXED. The auth service emails `/reset-password?token=...` but web-svelte's screen lives at `/auth/reset-password`; added `src/routes/reset-password/+page.server.ts` that 308-redirects to `/auth/reset-password`, preserving the token.
 - [ ] **D3. Auth-endpoint 401 recovery** — MISSING. `request()` in `apps/web-svelte/src/lib/auth-api.ts` has no refresh/retry on 401 (web's axios interceptor refreshes and retries). Add token refresh on auth-endpoint 401s.
 - [ ] **D4. `?next=` login behavior** — DIFFERENT. web ignores `?next=` and always goes to `/` (or accept-terms); web-svelte honors `?next`. Decide which behavior is desired.
 - [ ] **D5. `ACCOUNT_PENDING_APPROVAL` redirect target** — DIFFERENT (minor). web → `/dashboard`; web-svelte → `/`. Align if web's target applies.
