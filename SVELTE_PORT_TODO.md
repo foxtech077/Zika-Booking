@@ -69,7 +69,7 @@ Scope notes: the provider dashboard and Stripe Connect (section E) are a large, 
 - [x] **C9. `rooms` search param** — FIXED. `rooms` is now parsed into `SearchState` and sent to `/search` when >1, matching apps/web. Note the listing-service route ignores the param today, so this is contract parity (`apps/web-svelte/src/lib/load-listings.ts`, `apps/web-svelte/src/lib/listing-api.ts`).
 - [ ] **C10. Client-side text filter + `name` param** — DIFFERENT (minor). web additionally filters results client-side and sends both `q` and `name`; web-svelte relies on the backend `q` only.
 - [ ] **C11. Hero autocomplete apiSuggestions** — DIFFERENT (minor). Svelte's `HeroSearch.svelte` shows Nominatim suggestions only; web blends in town/listing-name suggestions from prior search results.
-- [ ] **C12. Loyalty tier perks** — DIFFERENT (minor). Svelte shows 1 perk per tier; web shows 2. Align copy if desired.
+- [x] **C12. Loyalty tier perks** — FIXED. Each tier card now lists two perks, matching apps/web (`apps/web-svelte/src/routes/(main)/+page.svelte`).
 
 ## D. Auth & infrastructure
 

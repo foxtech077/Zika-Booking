@@ -44,7 +44,7 @@
 			tier: 'Bronze',
 			label: 'THE ENTRY',
 			level: '1 Stay',
-			perk: 'Access to member-only pricing',
+			perks: ['Access to member-only pricing', 'Welcome amenities'],
 			border: 'border-amber-700/30',
 			iconBg: 'bg-amber-700/20',
 			icon: 'text-amber-400',
@@ -54,7 +54,7 @@
 			tier: 'Silver',
 			label: 'ACHIEVEMENT',
 			level: '5 Stays',
-			perk: 'Early check-in, late check-out',
+			perks: ['Early check-in, late check-out', 'Luxury suite upgrades'],
 			border: 'border-slate-400/25',
 			iconBg: 'bg-slate-400/15',
 			icon: 'text-slate-300',
@@ -64,7 +64,7 @@
 			tier: 'Gold',
 			label: 'ACHIEVEMENT',
 			level: '10 Stays',
-			perk: 'Personal travel designer',
+			perks: ['Personal travel designer', 'Sustainable breakfast'],
 			border: 'border-[#58B430]/50',
 			iconBg: 'bg-[#58B430]/15',
 			icon: 'text-[#58B430]',
@@ -74,7 +74,7 @@
 			tier: 'Diamond',
 			label: 'REQUIREMENT',
 			level: 'Invitation Only',
-			perk: '24/7 dedicated butler',
+			perks: ['24/7 dedicated butler', 'Private jet transfers'],
 			border: 'border-cyan-400/25',
 			iconBg: 'bg-cyan-400/10',
 			icon: 'text-cyan-300',
@@ -338,9 +338,11 @@
 					</div>
 					<div>
 						<p class="text-base font-semibold tracking-wide">{t.tier}</p>
-						<p class="mt-0.5 text-[10px] font-medium tracking-widest text-green-300/50 uppercase">
-							{t.perk}
-						</p>
+						{#each t.perks as perk}
+							<p class="mt-0.5 text-[10px] font-medium tracking-widest text-green-300/50 uppercase">
+								{perk}
+							</p>
+						{/each}
 					</div>
 					<div class="w-full space-y-1 border-t border-white/10 pt-3">
 						<p class="text-[9px] font-bold tracking-widest text-green-400/60 uppercase">
