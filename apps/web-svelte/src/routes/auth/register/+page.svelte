@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { register, validateEmail, validatePassword, AuthApiError } from '$lib/auth-api';
 	import { setSession } from '$lib/stores/auth.svelte';
@@ -17,6 +18,13 @@
 
 	let errors = $state<Record<string, string | undefined>>({});
 	let submitting = $state(false);
+
+	// Prefill the email from ?email= (e.g. following a password reset or
+	// verification email), without clobbering anything the user typed.
+	$effect(() => {
+		const prefill = page.url.searchParams.get('email');
+		if (prefill && !email) email = prefill;
+	});
 
 	const is18OrOver = $derived.by(() => {
 		if (!dob) return false;

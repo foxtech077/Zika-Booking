@@ -78,7 +78,7 @@ Scope notes: the provider dashboard and Stripe Connect (section E) are a large, 
 - [ ] **D3. Auth-endpoint 401 recovery** — MISSING. `request()` in `apps/web-svelte/src/lib/auth-api.ts` has no refresh/retry on 401 (web's axios interceptor refreshes and retries). Add token refresh on auth-endpoint 401s.
 - [ ] **D4. `?next=` login behavior** — DIFFERENT. web ignores `?next=` and always goes to `/` (or accept-terms); web-svelte honors `?next`. Decide which behavior is desired.
 - [ ] **D5. `ACCOUNT_PENDING_APPROVAL` redirect target** — DIFFERENT (minor). web → `/dashboard`; web-svelte → `/`. Align if web's target applies.
-- [ ] **D6. Register `?email=` prefill** — MISSING (minor). web pre-fills the email field from the query param; web-svelte does not.
+- [x] **D6. Register `?email=` prefill** — FIXED. The register page now prefills the email field from `?email=` (via an `$effect`), matching apps/web (`apps/web-svelte/src/routes/auth/register/+page.svelte`).
 - [ ] **D7. `/verify` expired-state email recovery** — MISSING (minor). web's `/verify` recovers the email from the error body `fields.email` on expiry so "Send a new link" always appears; web-svelte does not read error fields.
 
 ## E. Provider dashboard & Stripe Connect (in scope, large/separate effort)
