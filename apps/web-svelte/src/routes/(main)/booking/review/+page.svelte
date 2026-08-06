@@ -1629,7 +1629,7 @@
 								<span class="text-emerald-500">✓</span> Your payment is processed securely.
 							</p>
 							<div class="mb-4 flex flex-wrap gap-2">
-								{#each ['Visa', 'Mastercard', 'Amex', 'Apple Pay', 'Google Pay', 'PayPal'] as c (c)}
+								{#each ['Visa', 'Mastercard', 'Amex', 'UnionPay', 'Apple Pay', 'Google Pay', 'PayPal', 'Bank Debit', 'Klarna'] as c (c)}
 									<span
 										class="rounded border border-slate-200 bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500"
 									>
