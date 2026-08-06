@@ -835,6 +835,7 @@ export default function ListingsPage() {
   const [selected, setSelected] = useState<Listing | null>(null);
   const [confirm, setConfirm] = useState<{ action: string; listing: Listing } | null>(null);
   const [createError, setCreateError] = useState("");
+  const [creatingCategory, setCreatingCategory] = useState<ListingCategory | null>(null);
 
   useEffect(() => {
     if (token && typeof window !== "undefined") sessionStorage.setItem(TOKEN_KEY, token);
@@ -920,6 +921,7 @@ export default function ListingsPage() {
         token,
       ),
     onSuccess: (data) => {
+      setCreatingCategory(null);
       const id = unwrapListingId(data);
       if (!id) {
         setCreateError("Listing was created, but the server did not return a listing id. Please refresh the listings page.");
@@ -929,6 +931,7 @@ export default function ListingsPage() {
       router.push(`/dashboard/listings/${id}/edit`);
     },
     onError: (err: any) => {
+      setCreatingCategory(null);
       if (err.message === "AUTH_REQUIRED") {
         setCreateError("Please sign in again.");
         router.replace("/auth/login");
@@ -1079,8 +1082,9 @@ export default function ListingsPage() {
                 key={cat}
                 variant="outline"
                 size="sm"
-                onClick={() => { setCreateError(""); createMutation.mutate(cat); }}
-                loading={createMutation.isPending}
+                onClick={() => { setCreateError(""); setCreatingCategory(cat); createMutation.mutate(cat); }}
+                loading={createMutation.isPending && creatingCategory === cat}
+                disabled={createMutation.isPending && creatingCategory !== cat}
                 icon={<Plus />}
               >
                 {cat.charAt(0).toUpperCase() + cat.slice(1)}
