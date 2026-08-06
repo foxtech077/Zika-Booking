@@ -11,6 +11,17 @@
 
 	const featured = $derived(data.featured ?? []);
 
+	// Destination autocomplete blends in town/listing names harvested from the
+	// featured listings, matching apps/web's apiSuggestions behaviour.
+	const heroSuggestions = $derived.by(() => {
+		const set = new Set<string>();
+		for (const l of featured) {
+			if (l.town) set.add(`${l.town}, ${l.country}`);
+			if (l.name) set.add(l.name);
+		}
+		return Array.from(set).filter(Boolean);
+	});
+
 	onMount(() => {
 		// Load the signed-in user's favourites so the featured-card hearts
 		// reflect what's already saved (the SSR featured load can't carry the
@@ -145,7 +156,7 @@
 			Extraordinary Stays,<br />Unforgettable Journeys
 		</h1>
 
-		<HeroSearch />
+		<HeroSearch apiSuggestions={heroSuggestions} />
 
 		<p class="mt-6 text-[10px] font-semibold tracking-[0.3em] text-white/60 uppercase">
 			✦ 10,000+ Curated Stays · 40 Countries · 24/7 Concierge ✦

@@ -9,6 +9,14 @@
 		display_name: string;
 	}
 
+	let {
+		apiSuggestions = []
+	}: {
+		// Town/listing-name suggestions (e.g. harvested from the current page's
+		// listings), blended with Nominatim results like apps/web does.
+		apiSuggestions?: string[];
+	} = $props();
+
 	const CATEGORIES: { key: ListingCategory; label: string }[] = [
 		{ key: 'hotel', label: 'Hotels' },
 		{ key: 'apartment', label: 'Home' },
@@ -57,6 +65,12 @@
 		showSuggestions = false;
 		nominatimResults = [];
 	}
+
+	// Listing/town suggestions from the current page's data, filtered by what
+	// the user has typed so far (used when Nominatim returns nothing).
+	const filteredApiSuggestions = $derived(
+		apiSuggestions.filter((s) => s.toLowerCase().includes(searchDestination.trim().toLowerCase()))
+	);
 
 	const searchGuests = $derived(adults + children);
 
@@ -227,38 +241,68 @@
 				</div>
 			</div>
 
-			{#if showSuggestions && nominatimResults.length > 0}
+			{#if showSuggestions && (nominatimResults.length > 0 || filteredApiSuggestions.length > 0)}
 				<div
 					class="absolute top-full right-0 left-0 z-50 mt-2 max-h-56 overflow-hidden overflow-y-auto rounded-2xl border border-slate-200/80 bg-white shadow-2xl"
 				>
-					{#each nominatimResults as r, i (i)}
-						<button
-							type="button"
-							onmousedown={() =>
-								selectSuggestion(r.display_name.split(',').slice(0, 2).join(',').trim())}
-							class="flex w-full items-center gap-2 px-4 py-2.5 text-left text-xs font-semibold text-slate-700 transition-colors hover:bg-[#0c2614] hover:text-white"
-						>
-							<svg
-								class="h-3.5 w-3.5 shrink-0 opacity-60"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								viewBox="0 0 24 24"
+					{#if nominatimResults.length > 0}
+						{#each nominatimResults as r, i (i)}
+							<button
+								type="button"
+								onmousedown={() =>
+									selectSuggestion(r.display_name.split(',').slice(0, 2).join(',').trim())}
+								class="flex w-full items-center gap-2 px-4 py-2.5 text-left text-xs font-semibold text-slate-700 transition-colors hover:bg-[#0c2614] hover:text-white"
 							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-								/>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-								/>
-							</svg>
-							<span class="truncate">{r.display_name.split(',').slice(0, 3).join(', ')}</span>
-						</button>
-					{/each}
+								<svg
+									class="h-3.5 w-3.5 shrink-0 opacity-60"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									viewBox="0 0 24 24"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+									/>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+									/>
+								</svg>
+								<span class="truncate">{r.display_name.split(',').slice(0, 3).join(', ')}</span>
+							</button>
+						{/each}
+					{:else}
+						{#each filteredApiSuggestions as s (s)}
+							<button
+								type="button"
+								onmousedown={() => selectSuggestion(s)}
+								class="flex w-full items-center gap-2 px-4 py-2.5 text-left text-xs font-semibold text-slate-700 transition-colors hover:bg-[#0c2614] hover:text-white"
+							>
+								<svg
+									class="h-3.5 w-3.5 shrink-0 opacity-60"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									viewBox="0 0 24 24"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+									/>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+									/>
+								</svg>
+								<span class="truncate">{s}</span>
+							</button>
+						{/each}
+					{/if}
 				</div>
 			{/if}
 		</div>

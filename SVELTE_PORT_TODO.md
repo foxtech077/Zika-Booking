@@ -68,7 +68,7 @@ Scope notes: the provider dashboard and Stripe Connect (section E) are a large, 
 - [x] **C8. Map marker popups** — FIXED. Markers in `apps/web-svelte/src/lib/components/ListingMap.svelte` now open a popup with the listing name, price per night/day and star rating, mirroring apps/web.
 - [x] **C9. `rooms` search param** — FIXED. `rooms` is now parsed into `SearchState` and sent to `/search` when >1, matching apps/web. Note the listing-service route ignores the param today, so this is contract parity (`apps/web-svelte/src/lib/load-listings.ts`, `apps/web-svelte/src/lib/listing-api.ts`).
 - [x] **C10. Client-side text filter + `name` param** — FIXED. `/search` now also sends `name` alongside `q`, and `ListingsPage.svelte` applies the same client-side text gate as apps/web: for an unresolved destination only listings whose name/town/country/address/description (or car make/model) contain the term are rendered.
-- [ ] **C11. Hero autocomplete apiSuggestions** — DIFFERENT (minor). Svelte's `HeroSearch.svelte` shows Nominatim suggestions only; web blends in town/listing-name suggestions from prior search results.
+- [x] **C11. Hero autocomplete apiSuggestions** — FIXED. `HeroSearch.svelte` now accepts an `apiSuggestions` prop and blends listing/town suggestions with Nominatim results (Nominatim first, then filtered suggestions), mirroring apps/web. The home page feeds it town/listing names from the featured listings.
 - [x] **C12. Loyalty tier perks** — FIXED. Each tier card now lists two perks, matching apps/web (`apps/web-svelte/src/routes/(main)/+page.svelte`).
 
 ## D. Auth & infrastructure
