@@ -59,6 +59,15 @@
 			const marker = L.marker([listing.lat, listing.lng], {
 				icon: makePriceIcon(listing, hoveredId === listing.id)
 			});
+			const unit = listing.category === 'car' ? 'day' : 'night';
+			const rating = listing.starRating ? `<span style="font-size:10px;color:#94a3b8;margin-top:2px;display:block">⭐ ${listing.starRating}</span>` : '';
+			marker.bindPopup(
+				`<div style="min-width:140px;font-family:system-ui,sans-serif">
+					<p style="font-weight:700;font-size:12px;color:#0f172a;margin:0 0 2px">${listing.name}</p>
+					<p style="font-weight:700;font-size:11px;color:#0B1E3F;margin:0">${listing.currency} ${(listing.pricePerNight || 0).toLocaleString()} / ${unit}</p>
+					${rating}
+				</div>`
+			);
 			marker.on('click', () => onSelect(listing.id));
 			marker.on('mouseover', () => onHover(listing.id));
 			marker.on('mouseout', () => onHover(null));
