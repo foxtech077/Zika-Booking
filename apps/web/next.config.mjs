@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // React StrictMode double-mounts refs/effects in dev, which trips react-leaflet
+  // v4's ref-callback map init ("Map container is already initialized"). The app
+  // is pinned to React 18, so react-leaflet v5 (React 19 only) is not an option;
+  // disabling StrictMode is the reliable fix. Production is unaffected.
+  reactStrictMode: false,
   transpilePackages: ["@zika/types", "@zika/validators"],
   // async rewrites() {
   //   return [

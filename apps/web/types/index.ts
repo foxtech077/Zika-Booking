@@ -5,7 +5,7 @@ export interface ListingPhoto {
 }
 
 export interface ListingAmenity {
-  id: string;
+  listingId: string;
   amenityKey: string;
 }
 

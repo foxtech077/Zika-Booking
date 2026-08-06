@@ -11,7 +11,6 @@ import { useAuthStore } from "@/stores/auth";
 import { logoutUser } from "@/lib/api";
 import { fetchUnreadConversationCount } from "@/services/traveller";
 import { useUnreadNotificationCount } from "@/hooks/useNotifications";
-import { useListingSummary } from "@/hooks/listings";
 
 const TRAVELLER_ROUTES = {
   destinations: "/",
@@ -61,10 +60,6 @@ export function TravellerHeader({
   });
 
   const { data: unreadNotifData } = useUnreadNotificationCount(!!user);
-  // Decides which of "Create Listing" / "Manage Listings" to show. Never fires
-  // for a signed-out visitor.
-  const { data: listingSummaryData } = useListingSummary(!!user);
-  const hasListings = (listingSummaryData?.listings.length ?? 0) > 0;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -104,13 +99,9 @@ export function TravellerHeader({
   // The avatar trigger turns dark when the menu is open or on the profile
   // screen; inner text must flip to light in both cases to keep contrast.
   const avatarActive = menuOpen || isProfileActive;
-  // Any signed-in user can create and manage listings directly.
-  const listingsHref = hasListings
-    ? TRAVELLER_ROUTES.manageListings
-    : TRAVELLER_ROUTES.createListing;
-  const listingsLabel = hasListings
-    ? "Manage Listings"
-    : "Create Listing";
+  // Any signed-in user manages their listings from the dashboard.
+  const listingsHref = TRAVELLER_ROUTES.manageListings;
+  const listingsLabel = "My Listings";
 
   const lockTimer =
     lockSecondsLeft != null
