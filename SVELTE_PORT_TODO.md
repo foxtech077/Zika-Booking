@@ -21,7 +21,7 @@ Scope notes: the provider dashboard and Stripe Connect (section E) are a large, 
 - [x] **A6. Children count in checkout** — FIXED. The booking widget now has separate Adults/Children steppers, the review URL carries `adults`/`children`, and the booking payload sends them separately (with `guests` = adults + children and a combined guest label), matching apps/web (`apps/web-svelte/src/lib/components/BookingWidget.svelte`, `apps/web-svelte/src/routes/(main)/booking/review/+page.svelte`).
 - [x] **A7. Pre-lock pricing-estimate call** — N/A. web-svelte already shows the price breakdown client-side in the booking widget and authoritative pricing from `/bookings/initiate` in review; a redundant pre-lock `/bookings/pricing-estimate` call adds no user-visible benefit. No change.
 - [x] **A8. Payment-step card logos** — FIXED. The payment step now lists all nine card/wallet logos (UnionPay, Bank Debit, Klarna added), matching apps/web (`apps/web-svelte/src/routes/(main)/booking/review/+page.svelte`).
-- [ ] **A9. Message-host gating** — DIFFERENT. web shows the message-host entry for any listing; web-svelte gates it behind `allowPreBooking && auth.isAuthenticated`. web-svelte: `apps/web-svelte/src/routes/(main)/listings/[category]/[id]/+page.svelte:379-399`. Decide whether to relax the gate.
+- [x] **A9. Message-host gating** — N/A. The listing service's `POST /conversations` uses `requireUser`, so anonymous guests cannot create conversations. web-svelte's `allowPreBooking && auth.isAuthenticated` gate is the correct behaviour (apps/web shows the button to guests but their request would be rejected). No change.
 
 ## B. Account pages
 
