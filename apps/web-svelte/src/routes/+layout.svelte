@@ -1,9 +1,16 @@
 <script lang="ts">
 	import './layout.css';
+	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { onNavigate } from '$app/navigation';
+	import { applyFontScale } from '$lib/font-scale.svelte';
 
 	let { children } = $props();
+
+	// Scale the root font for Windows users (low-DPI desktop displays).
+	onMount(() => {
+		applyFontScale();
+	});
 
 	// Listing detail pages set their own SEO/OG tags, so the brand defaults
 	// below would otherwise shadow them (crawlers use the first occurrence).
