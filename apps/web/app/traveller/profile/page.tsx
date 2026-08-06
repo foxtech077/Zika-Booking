@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Building2,
   CheckCircle2,
   Globe,
   KeyRound,
   MapPin,
+  Phone,
   Shield,
   Star,
   User,
@@ -21,20 +23,9 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { CountryCombobox, WORLD_COUNTRIES } from "@/components/ui/CountryCombobox";
 import { cn } from "@/lib/utils";
-
-const COUNTRIES = [
-  { value: "AE", label: "United Arab Emirates" },
-  { value: "KE", label: "Kenya" },
-  { value: "NG", label: "Nigeria" },
-  { value: "GH", label: "Ghana" },
-  { value: "TZ", label: "Tanzania" },
-  { value: "ZA", label: "South Africa" },
-  { value: "US", label: "United States" },
-  { value: "GB", label: "United Kingdom" },
-  { value: "IN", label: "India" },
-  { value: "PK", label: "Pakistan" },
-];
+import { ALL_COUNTRIES, parsePhoneNumber } from "@/lib/countries";
 
 const TIER_CONFIG: Record<string, { label: string; className: string }> = {
   bronze:  { label: "Bronze",  className: "bg-amber-50 text-amber-800 border-amber-200" },
@@ -99,10 +90,15 @@ export default function TravellerProfilePage() {
   const user = fetchedProfile ?? storedUser;
 
   const [profileForm, setProfileForm] = useState({
-    firstName: "",
-    lastName:  "",
-    country:   "",
+    firstName:    "",
+    lastName:     "",
+    businessName: "",
+    country:      "",
   });
+
+  const [phoneCountryCode, setPhoneCountryCode] = useState("+254");
+  const [phoneLocalNumber, setPhoneLocalNumber] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [pwdForm, setPwdForm] = useState({
     currentPassword: "",
@@ -113,32 +109,65 @@ export default function TravellerProfilePage() {
   const [profileMsg, setProfileMsg] = useState<FeedbackMsg>(null);
   const [pwdMsg,     setPwdMsg]     = useState<FeedbackMsg>(null);
 
+  const countryDialOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return ALL_COUNTRIES
+      .filter((c) => (seen.has(c.dialCode) ? false : (seen.add(c.dialCode), true)))
+      .map((c) => ({
+        value: c.dialCode,
+        label: `${c.flag} ${c.dialCode}`,
+      }));
+  }, []);
+
   // Populate edit form once profile arrives (runs once per identity)
   useEffect(() => {
     const source = fetchedProfile ?? storedUser;
     if (!source) return;
     setProfileForm({
-      firstName: source.firstName ?? "",
-      lastName:  source.lastName  ?? "",
-      country:   source.country   ?? "",
+      firstName:    source.firstName    ?? "",
+      lastName:     source.lastName     ?? "",
+      businessName: source.businessName ?? "",
+      country:      source.country      ?? "",
     });
+    const parsed = parsePhoneNumber(source.phone ?? "");
+    setPhoneCountryCode(parsed.countryCode || "+254");
+    setPhoneLocalNumber(parsed.localNumber);
   }, [fetchedProfile?.id ?? storedUser?.id]);
 
   // PATCH /auth/profile
   const profileMutation = useMutation({
-    mutationFn: () =>
-      api.patch("/auth/profile", {
-        firstName: profileForm.firstName.trim(),
-        lastName:  profileForm.lastName.trim(),
-        country:   profileForm.country || null,
-      }),
+    mutationFn: () => {
+      const combinedPhone = phoneLocalNumber ? `${phoneCountryCode}${phoneLocalNumber}` : "";
+      return api.patch("/auth/profile", {
+        firstName:    profileForm.firstName.trim(),
+        lastName:     profileForm.lastName.trim(),
+        businessName: profileForm.businessName.trim() || null,
+        country:      profileForm.country || null,
+        phone:        combinedPhone || null,
+      });
+    },
     onSuccess: (res) => {
       const updated: AuthUser = res.data?.data?.user ?? res.data?.user;
-      if (updated) updateUser(updated);
+      if (updated) {
+        updateUser(updated);
+        setProfileForm((f) => ({
+          ...f,
+          firstName:    updated.firstName    ?? "",
+          lastName:     updated.lastName     ?? "",
+          businessName: updated.businessName ?? "",
+          country:      updated.country      ?? "",
+        }));
+        const parsed = parsePhoneNumber(updated.phone ?? "");
+        setPhoneCountryCode(parsed.countryCode || "+254");
+        setPhoneLocalNumber(parsed.localNumber);
+      }
       queryClient.invalidateQueries({ queryKey: ["traveller-profile"] });
+      setFieldErrors({});
       setProfileMsg({ type: "success", text: "Profile updated successfully." });
     },
-    onError: () => {
+    onError: (err: any) => {
+      const fields = err?.response?.data?.error?.fields;
+      if (fields) setFieldErrors(fields);
       setProfileMsg({ type: "error", text: "Profile update failed. Please try again." });
     },
   });
@@ -167,6 +196,7 @@ export default function TravellerProfilePage() {
       return;
     }
     setProfileMsg(null);
+    setFieldErrors({});
     profileMutation.mutate();
   };
 
@@ -284,39 +314,110 @@ export default function TravellerProfilePage() {
           >
             <SectionHeader
               title="Edit Profile"
-              subtitle="Update your personal information"
+              subtitle="Update your personal and business information"
             />
 
-            <form onSubmit={handleProfileSave} className="space-y-4">
-              <Input
-                label="First name"
-                placeholder="Enter your first name"
-                value={profileForm.firstName}
-                onChange={(e) =>
-                  setProfileForm((f) => ({ ...f, firstName: e.target.value }))
-                }
-                required
-                maxLength={60}
-              />
-              <Input
-                label="Last name"
-                placeholder="Enter your last name"
-                value={profileForm.lastName}
-                onChange={(e) =>
-                  setProfileForm((f) => ({ ...f, lastName: e.target.value }))
-                }
-                required
-                maxLength={60}
-              />
-              <Select
-                label="Country"
-                placeholder="Select a country"
-                value={profileForm.country ?? ""}
-                onChange={(e) =>
-                  setProfileForm((f) => ({ ...f, country: e.target.value }))
-                }
-                options={COUNTRIES}
-              />
+            <form onSubmit={handleProfileSave} className="space-y-6">
+              {/* Personal Information */}
+              <div>
+                <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <User className="h-4 w-4 text-emerald-600" />
+                  Personal Information
+                </h3>
+                <p className="mb-4 text-xs text-slate-500">
+                  Your personal details and the country on your account.
+                </p>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Input
+                    label="First name"
+                    placeholder="Enter your first name"
+                    value={profileForm.firstName}
+                    onChange={(e) =>
+                      setProfileForm((f) => ({ ...f, firstName: e.target.value }))
+                    }
+                    required
+                    maxLength={60}
+                    error={fieldErrors.firstName}
+                  />
+                  <Input
+                    label="Last name"
+                    placeholder="Enter your last name"
+                    value={profileForm.lastName}
+                    onChange={(e) =>
+                      setProfileForm((f) => ({ ...f, lastName: e.target.value }))
+                    }
+                    required
+                    maxLength={60}
+                    error={fieldErrors.lastName}
+                  />
+                  <CountryCombobox
+                    label="Country"
+                    value={profileForm.country}
+                    onChange={(code) => {
+                      setProfileForm((f) => ({ ...f, country: code }));
+                      setFieldErrors((prev) => ({ ...prev, country: "" }));
+                    }}
+                    error={fieldErrors.country}
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100" />
+
+              {/* Business Information */}
+              <div>
+                <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <Building2 className="h-4 w-4 text-emerald-600" />
+                  Business Information
+                </h3>
+                <p className="mb-4 text-xs text-slate-500">
+                  Shown to guests on your listings and used for payouts.
+                </p>
+                <div className="grid gap-4">
+                  <Input
+                    label="Business name"
+                    placeholder="e.g. Serena Hotels Ltd"
+                    value={profileForm.businessName}
+                    onChange={(e) =>
+                      setProfileForm((f) => ({ ...f, businessName: e.target.value }))
+                    }
+                    maxLength={255}
+                    error={fieldErrors.businessName}
+                  />
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                      Phone number
+                    </label>
+                    <div className="flex gap-2">
+                      <div className="w-[110px] shrink-0">
+                        <Select
+                          value={phoneCountryCode}
+                          onChange={(e) => {
+                            setPhoneCountryCode(e.target.value);
+                            setFieldErrors((prev) => ({ ...prev, phone: "" }));
+                          }}
+                          options={countryDialOptions}
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <Input
+                          value={phoneLocalNumber}
+                          onChange={(e) => {
+                            const cleaned = e.target.value.replace(/[^0-9]/g, "");
+                            setPhoneLocalNumber(cleaned);
+                            setFieldErrors((prev) => ({ ...prev, phone: "" }));
+                          }}
+                          placeholder="e.g. 712345678"
+                          error={fieldErrors.phone}
+                        />
+                      </div>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Optional — used for business contact and payouts.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
               <FeedbackBanner msg={profileMsg} onDismiss={() => setProfileMsg(null)} />
 
@@ -328,10 +429,15 @@ export default function TravellerProfilePage() {
                   onClick={() => {
                     const source = fetchedProfile ?? storedUser;
                     setProfileForm({
-                      firstName: source?.firstName ?? "",
-                      lastName:  source?.lastName  ?? "",
-                      country:   source?.country   ?? "",
+                      firstName:    source?.firstName    ?? "",
+                      lastName:     source?.lastName     ?? "",
+                      businessName: source?.businessName ?? "",
+                      country:      source?.country      ?? "",
                     });
+                    const parsed = parsePhoneNumber(source?.phone ?? "");
+                    setPhoneCountryCode(parsed.countryCode || "+254");
+                    setPhoneLocalNumber(parsed.localNumber);
+                    setFieldErrors({});
                     setProfileMsg(null);
                   }}
                 >
@@ -387,9 +493,19 @@ export default function TravellerProfilePage() {
                     {
                       label: "Country",
                       value: user?.country
-                        ? COUNTRIES.find((c) => c.value === user.country)?.label ?? user.country
+                        ? WORLD_COUNTRIES.find((c) => c.code === user.country)?.name ?? user.country
                         : "—",
                       icon: <MapPin className="h-3.5 w-3.5" />,
+                    },
+                    {
+                      label: "Business name",
+                      value: user?.businessName,
+                      icon: <Building2 className="h-3.5 w-3.5" />,
+                    },
+                    {
+                      label: "Phone",
+                      value: user?.phone,
+                      icon: <Phone className="h-3.5 w-3.5" />,
                     },
                     {
                       label: "Loyalty tier",
