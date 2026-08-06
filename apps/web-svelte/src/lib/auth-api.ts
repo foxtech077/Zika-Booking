@@ -1,5 +1,8 @@
+import { browser } from '$app/environment';
 import type { AuthUser } from '$lib/stores/auth.svelte';
+import { clearSession } from '$lib/stores/auth.svelte';
 import { getToken } from '$lib/http';
+import { refreshAccessToken } from '$lib/token-refresh';
 
 /**
  * Auth-service client.
@@ -45,7 +48,25 @@ export class AuthApiError extends Error {
 	}
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+// Entry points that are called without a valid session — a 401 there is a real
+// credential/validation error, so it must never trigger a token refresh.
+const NO_REFRESH_PATHS = [
+	'/auth/login',
+	'/auth/register',
+	'/auth/verify',
+	'/auth/resend-verification',
+	'/auth/forgot-password',
+	'/auth/reset-password',
+	'/auth/oauth/google'
+];
+
+function shouldRefresh(path: string): boolean {
+	return !NO_REFRESH_PATHS.some((p) => path.startsWith(p));
+}
+
+type RequestInitWithRetry = RequestInit & { _authRetried?: boolean };
+
+async function request<T>(path: string, init: RequestInitWithRetry = {}): Promise<T> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 	try {
@@ -63,6 +84,25 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 			credentials: 'include',
 			signal: controller.signal
 		});
+
+		// Recover once on an expired access token for authenticated endpoints:
+		// refresh via the shared singleton (the same one http.ts uses, so
+		// concurrent 401s trigger a single refresh) and retry. On refresh
+		// failure the session is dead — clear it and rethrow.
+		if (res.status === 401 && !init._authRetried && shouldRefresh(path) && browser) {
+			init._authRetried = true;
+			const newToken = await refreshAccessToken();
+			if (newToken) {
+				return request<T>(path, {
+					...init,
+					headers: {
+						...(init.headers as Record<string, string> | undefined),
+						Authorization: `Bearer ${newToken}`
+					}
+				});
+			}
+			clearSession();
+		}
 
 		const json = (await res.json().catch(() => ({}))) as {
 			success?: boolean;
