@@ -173,6 +173,12 @@
 						>
 							Edit
 						</a>
+						<a
+							href={`/dashboard/listings/${l.id}/availability`}
+							class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+						>
+							Availability
+						</a>
 						<button
 							type="button"
 							onclick={() => void toggleActive(l)}

@@ -78,6 +78,27 @@
 		<p class="mt-1 text-sm text-slate-500">Payouts and payout settings.</p>
 	</div>
 
+	<div class="flex flex-wrap gap-2">
+		<a
+			href="/dashboard/payments"
+			class="rounded-full px-4 py-2 text-sm font-semibold transition bg-[#0c2614] text-white"
+		>
+			Overview
+		</a>
+		<a
+			href="/dashboard/payments/history"
+			class="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
+		>
+			Payout history
+		</a>
+		<a
+			href="/dashboard/payments/revenue"
+			class="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
+		>
+			Booking revenue
+		</a>
+	</div>
+
 	{#if notice}
 		<div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{notice}</div>
 	{/if}

@@ -70,6 +70,9 @@ export interface ProviderListingDetail {
 	currency: string;
 	description: string;
 	primaryPhotoUrl: string | null;
+	photos: { id: string; cdnUrl: string; position: number }[];
+	amenities: string[];
+	roomTypes?: { id: string; name: string; pricePerNight: number; maxGuests?: number | null; unitCount?: number | null }[];
 }
 
 /** Blank-draft create — the provider then fills in the details via edit. */
@@ -90,11 +93,51 @@ export async function getProviderListings(): Promise<ProviderListing[]> {
 
 export async function getProviderListing(id: string): Promise<ProviderListingDetail | null> {
 	try {
-		const data = await apiRequest<ProviderListingDetail>(
+		const data = await apiRequest<Record<string, unknown>>(
 			LISTING_API_URL,
 			`/listings/${encodeURIComponent(id)}`
 		);
-		return data;
+		const photos = Array.isArray(data.photos)
+			? (data.photos as Record<string, unknown>[]).map((p) => ({
+					id: String(p.id ?? ''),
+					cdnUrl: String(p.cdnUrl ?? p.url ?? ''),
+					position: Number(p.position ?? 0)
+				}))
+			: [];
+		const rawAmenities = Array.isArray(data.amenities) ? (data.amenities as unknown[]) : [];
+		const amenities: string[] = [];
+		for (const a of rawAmenities) {
+			if (typeof a === 'string') amenities.push(a);
+			else if (a && typeof a === 'object') {
+				const am = a as Record<string, unknown>;
+				const key = String(am.amenityKey ?? am.key ?? '');
+				if (key) amenities.push(key);
+			}
+		}
+		const rawRoomTypes = Array.isArray(data.roomTypes)
+			? (data.roomTypes as Record<string, unknown>[])
+			: [];
+		return {
+			id: String(data.id ?? ''),
+			name: String(data.name ?? data.listingTitle ?? ''),
+			category: String(data.category ?? 'hotel'),
+			status: String(data.status ?? 'draft'),
+			town: String(data.town ?? ''),
+			country: String(data.country ?? ''),
+			pricePerNight: Number(data.pricePerNight ?? 0),
+			currency: String(data.currency ?? 'KES'),
+			description: String(data.description ?? ''),
+			primaryPhotoUrl: photos[0]?.cdnUrl ?? null,
+			photos,
+			amenities,
+			roomTypes: rawRoomTypes.map((rt) => ({
+				id: String(rt.id ?? ''),
+				name: String(rt.name ?? ''),
+				pricePerNight: Number(rt.pricePerNight ?? 0),
+				maxGuests: rt.maxGuests != null ? Number(rt.maxGuests) : null,
+				unitCount: rt.unitCount != null ? Number(rt.unitCount) : null
+			}))
+		};
 	} catch {
 		return null;
 	}
@@ -355,4 +398,247 @@ export async function getPayouts(): Promise<ProviderPayout[]> {
 	} catch {
 		return [];
 	}
+}
+
+export async function getPayoutDetail(id: string): Promise<ProviderPayout | null> {
+	try {
+		const data = await apiRequest<{ data?: ProviderPayout; payout?: ProviderPayout }>(
+			PAYMENT_API_URL,
+			`/provider/me/payouts/${encodeURIComponent(id)}`
+		);
+		return data.payout ?? data.data ?? null;
+	} catch {
+		return null;
+	}
+}
+
+// ── Photos & documents (S3 presigned uploads) ───────────────────────────────
+
+export async function presignPhoto(
+	listingId: string,
+	contentType: string,
+	filename: string,
+	fileSize?: number
+): Promise<{ uploadUrl: string; s3Key: string }> {
+	return apiRequest(LISTING_API_URL, `/listings/${encodeURIComponent(listingId)}/photos/presign`, {
+		method: 'POST',
+		body: JSON.stringify({ contentType, filename, ...(fileSize ? { fileSize } : {}) })
+	});
+}
+
+export async function confirmPhoto(
+	listingId: string,
+	s3Key: string
+): Promise<{ id: string; cdnUrl: string; position: number }> {
+	return apiRequest(LISTING_API_URL, `/listings/${encodeURIComponent(listingId)}/photos/confirm`, {
+		method: 'POST',
+		body: JSON.stringify({ s3Key })
+	});
+}
+
+export async function reorderPhotos(listingId: string, order: string[]): Promise<void> {
+	await apiRequest<unknown>(
+		LISTING_API_URL,
+		`/listings/${encodeURIComponent(listingId)}/photos/reorder`,
+		{ method: 'PATCH', body: JSON.stringify({ order }) }
+	);
+}
+
+export async function deletePhoto(listingId: string, photoId: string): Promise<void> {
+	await apiRequest<unknown>(
+		LISTING_API_URL,
+		`/listings/${encodeURIComponent(listingId)}/photos/${encodeURIComponent(photoId)}`,
+		{ method: 'DELETE' }
+	);
+}
+
+export async function presignDocument(
+	listingId: string,
+	contentType: string,
+	documentType: string
+): Promise<{ uploadUrl: string; s3Key: string }> {
+	return apiRequest(LISTING_API_URL, `/listings/${encodeURIComponent(listingId)}/documents/presign`, {
+		method: 'POST',
+		body: JSON.stringify({ contentType, documentType })
+	});
+}
+
+export async function confirmDocument(
+	listingId: string,
+	s3Key: string,
+	documentType: string,
+	contentType: string
+): Promise<{ id: string; cdnUrl: string }> {
+	return apiRequest(
+		LISTING_API_URL,
+		`/listings/${encodeURIComponent(listingId)}/documents/confirm`,
+		{ method: 'POST', body: JSON.stringify({ s3Key, documentType, contentType }) }
+	);
+}
+
+export async function deleteDocument(listingId: string, docId: string): Promise<void> {
+	await apiRequest<unknown>(
+		LISTING_API_URL,
+		`/listings/${encodeURIComponent(listingId)}/documents/${encodeURIComponent(docId)}`,
+		{ method: 'DELETE' }
+	);
+}
+
+// ── Geocoding ────────────────────────────────────────────────────────────────
+
+export async function geocodeAddress(address: string): Promise<{ lat?: number; lng?: number }> {
+	try {
+		const data = await apiRequest<Record<string, unknown>>(
+			LISTING_API_URL,
+			`/geocode?address=${encodeURIComponent(address)}`
+		);
+		const lat = data.lat ?? data.latitude;
+		const lng = data.lng ?? data.longitude;
+		return {
+			lat: lat != null ? Number(lat) : undefined,
+			lng: lng != null ? Number(lng) : undefined
+		};
+	} catch {
+		return {};
+	}
+}
+
+// ── Availability + iCal / channel ────────────────────────────────────────────
+
+export interface AvailabilityRange {
+	start: string;
+	end: string | null;
+	reference?: string | null;
+}
+
+export async function getProviderAvailability(
+	listingId: string,
+	from?: string,
+	to?: string
+): Promise<{ bookedRanges: AvailabilityRange[]; blockedRanges: AvailabilityRange[] }> {
+	const query = new URLSearchParams();
+	if (from) query.set('from', from);
+	if (to) query.set('to', to);
+	const data = await apiRequest<{ bookedRanges?: unknown; blockedRanges?: unknown }>(
+		LISTING_API_URL,
+		`/provider/availability/${encodeURIComponent(listingId)}${query.size ? `?${query.toString()}` : ''}`
+	);
+	return {
+		bookedRanges: (Array.isArray(data.bookedRanges) ? data.bookedRanges : []) as AvailabilityRange[],
+		blockedRanges: (Array.isArray(data.blockedRanges) ? data.blockedRanges : []) as AvailabilityRange[]
+	};
+}
+
+export interface IcalFeed {
+	id: string;
+	platform: string;
+	feedUrl: string;
+	isActive: boolean;
+	status: string;
+	lastSyncedAt: string | null;
+	lastError: string | null;
+	consecutiveFailures: number;
+	createdAt: string;
+}
+
+export async function getIcalFeeds(listingId: string): Promise<IcalFeed[]> {
+	const data = await apiRequest<{ feeds?: unknown }>(
+		LISTING_API_URL,
+		`/listings/${encodeURIComponent(listingId)}/ical-feeds`
+	);
+	return (Array.isArray(data.feeds) ? data.feeds : []) as IcalFeed[];
+}
+
+export async function addIcalFeed(
+	listingId: string,
+	platform: string,
+	feedUrl: string
+): Promise<void> {
+	await apiRequest<unknown>(
+		LISTING_API_URL,
+		`/listings/${encodeURIComponent(listingId)}/ical-feeds`,
+		{ method: 'POST', body: JSON.stringify({ platform, feedUrl }) }
+	);
+}
+
+export async function deleteIcalFeed(listingId: string, feedId: string): Promise<void> {
+	await apiRequest<unknown>(
+		LISTING_API_URL,
+		`/listings/${encodeURIComponent(listingId)}/ical-feeds/${encodeURIComponent(feedId)}`,
+		{ method: 'DELETE' }
+	);
+}
+
+export async function syncIcalFeed(listingId: string, feedId: string): Promise<void> {
+	await apiRequest<unknown>(
+		LISTING_API_URL,
+		`/listings/${encodeURIComponent(listingId)}/ical-feeds/${encodeURIComponent(feedId)}/sync`,
+		{ method: 'POST', body: JSON.stringify({}) }
+	);
+}
+
+export async function getBlockedDates(listingId: string): Promise<AvailabilityRange[]> {
+	const data = await apiRequest<{ blockedDates?: unknown }>(
+		LISTING_API_URL,
+		`/listings/${encodeURIComponent(listingId)}/blocked-dates`
+	);
+	return (Array.isArray(data.blockedDates) ? data.blockedDates : []) as AvailabilityRange[];
+}
+
+// ── Room types (hotels) ──────────────────────────────────────────────────────
+
+export interface ProviderRoomType {
+	id: string;
+	name: string;
+	roomType: string;
+	description: string | null;
+	pricePerNight: number;
+	unitCount: number | null;
+	maxGuests: number | null;
+	sortOrder: number;
+}
+
+export async function getRoomTypes(listingId: string): Promise<ProviderRoomType[]> {
+	const data = await apiRequest<{ roomTypes?: unknown }>(
+		LISTING_API_URL,
+		`/listings/${encodeURIComponent(listingId)}/room-types`
+	);
+	return (Array.isArray(data.roomTypes) ? data.roomTypes : []) as ProviderRoomType[];
+}
+
+export async function createRoomType(
+	listingId: string,
+	input: {
+		name: string;
+		roomType: string;
+		pricePerNight: number;
+		unitCount?: number;
+		maxGuests?: number;
+	}
+): Promise<void> {
+	await apiRequest<unknown>(
+		LISTING_API_URL,
+		`/listings/${encodeURIComponent(listingId)}/room-types`,
+		{ method: 'POST', body: JSON.stringify(input) }
+	);
+}
+
+export async function updateRoomType(
+	listingId: string,
+	rtId: string,
+	input: Partial<{ name: string; pricePerNight: number; unitCount: number; maxGuests: number }>
+): Promise<void> {
+	await apiRequest<unknown>(
+		LISTING_API_URL,
+		`/listings/${encodeURIComponent(listingId)}/room-types/${encodeURIComponent(rtId)}`,
+		{ method: 'PATCH', body: JSON.stringify(input) }
+	);
+}
+
+export async function deleteRoomType(listingId: string, rtId: string): Promise<void> {
+	await apiRequest<unknown>(
+		LISTING_API_URL,
+		`/listings/${encodeURIComponent(listingId)}/room-types/${encodeURIComponent(rtId)}`,
+		{ method: 'DELETE' }
+	);
 }
