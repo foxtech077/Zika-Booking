@@ -65,6 +65,7 @@
 					email: email.trim().toLowerCase(),
 					password,
 					confirmPassword,
+					dob,
 					acceptedPrivacy: agreedToPrivacy
 				});
 				if (data.tokens?.accessToken && data.user) {

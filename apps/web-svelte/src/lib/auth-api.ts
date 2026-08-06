@@ -97,6 +97,7 @@ export function register(payload: {
 	email: string;
 	password: string;
 	confirmPassword: string;
+	dob?: string;
 	acceptedPrivacy?: boolean;
 }): Promise<Partial<AuthResponse> & { message?: string }> {
 	return request('/auth/register', {
