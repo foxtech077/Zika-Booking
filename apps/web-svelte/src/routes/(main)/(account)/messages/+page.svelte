@@ -11,7 +11,7 @@
 		type Conversation,
 		type ConversationMessage
 	} from '$lib/account-api';
-	import { formatRelativeTime, cn, getInitials } from '$lib/utils';
+	import { formatRelativeTime, formatDateTime, cn, getInitials } from '$lib/utils';
 
 	let conversations = $state<Conversation[]>([]);
 	let messages = $state<ConversationMessage[]>([]);
@@ -24,11 +24,14 @@
 	let search = $state('');
 	let composer = $state('');
 	let sending = $state(false);
+	let sendError = $state<string | null>(null);
 
 	let listTimer: ReturnType<typeof setInterval> | null = null;
 	let threadTimer: ReturnType<typeof setInterval> | null = null;
 	let unreadTimer: ReturnType<typeof setInterval> | null = null;
 	let feedRef: HTMLDivElement | null = $state(null);
+	let composerRef: HTMLTextAreaElement | null = $state(null);
+	let autoSelected = $state(false);
 
 	const activeConversation = $derived(conversations.find((c) => c.id === activeId) ?? null);
 
@@ -50,6 +53,13 @@
 			try {
 				conversations = await getConversations();
 				listError = false;
+				// Auto-select the first thread once on load when none is open and
+				// no deep link was provided.
+				if (!autoSelected && !activeId && conversations.length > 0) {
+					autoSelected = true;
+					activeId = conversations[0].id;
+					void refreshThread(activeId);
+				}
 			} catch {
 				listError = true;
 			} finally {
@@ -99,6 +109,7 @@
 		const body = composer.trim();
 		if (!body || !activeId || sending) return;
 		sending = true;
+		sendError = null;
 		void (async () => {
 			try {
 				const sent = await sendMessage(activeId, body);
@@ -119,12 +130,20 @@
 				composer = '';
 				scrollToBottom();
 			} catch {
-				// keep composer text so the user can retry
+				// Keep the composer text and surface the error so the user can retry.
+				sendError = 'Could not send your message. Please try again.';
 			} finally {
 				sending = false;
 			}
 		})();
 	}
+
+	// Focus the composer when a conversation is opened.
+	$effect(() => {
+		if (activeId && composerRef) {
+			requestAnimationFrame(() => composerRef?.focus());
+		}
+	});
 
 	onMount(() => {
 		refreshConversations();
@@ -184,13 +203,18 @@
 		)}
 	>
 		<div class="border-b border-slate-100 p-4">
-			<div class="flex items-center justify-between">
+			<div class="flex items-center justify-between gap-2">
 				<h2 class="text-lg font-bold text-slate-900">Conversations</h2>
-				<span class="text-xs text-slate-500">
-					{conversations.length} total ·
-					<span class="font-semibold text-[#1D8D2B]">{unreadCount} unread</span>
+				<span
+					class={cn(
+						'shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wide uppercase',
+						unreadCount > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+					)}
+				>
+					{unreadCount > 0 ? `${unreadCount} unread` : 'All read'}
 				</span>
 			</div>
+			<p class="mt-1 text-xs text-slate-500">{conversations.length} total</p>
 			<input
 				type="text"
 				bind:value={search}
@@ -237,8 +261,7 @@
 								'flex w-full items-center gap-3 rounded-xl p-3 text-left transition',
 								activeId === c.id ? 'bg-emerald-50 ring-1 ring-emerald-200' : 'hover:bg-slate-50'
 							)}
-						>
-							<div
+						>							<div
 								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-sm font-bold text-white"
 							>
 								{getInitials(otherName(c))}
@@ -250,13 +273,49 @@
 										{formatRelativeTime(c.updatedAt)}
 									</span>
 								</div>
-								<p class="text-xs text-slate-400">{summary(c)}</p>
+								<div class="mt-0.5 flex items-center gap-2">
+									<span
+										class={cn(
+											'shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold tracking-wider uppercase',
+											c.status === 'closed'
+												? 'bg-amber-100 text-amber-700'
+												: 'bg-emerald-100 text-emerald-700'
+										)}
+									>
+										{c.status}
+									</span>
+									<p class="truncate text-xs text-slate-400">{summary(c)}</p>
+								</div>
 								<p class="mt-0.5 truncate text-xs text-slate-500">
 									{c.lastMessage?.body ?? 'No messages yet'}
 								</p>
 							</div>
 						</button>
 					{/each}
+				</div>
+			{/if}
+			{#if !loadingList && !listError && conversations.length > 0}
+				<div class="border-t border-slate-100 p-2">
+					<button
+						type="button"
+						onclick={refreshConversations}
+						class="flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
+					>
+						<svg
+							class="h-3.5 w-3.5"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+							/>
+						</svg>
+						Refresh conversations
+					</button>
 				</div>
 			{/if}
 		</div>
@@ -292,7 +351,19 @@
 				</div>
 				<div class="min-w-0 flex-1">
 					<p class="truncate text-sm font-bold text-slate-900">{otherName(activeConversation)}</p>
-					<p class="text-xs text-slate-400">{summary(activeConversation)}</p>
+					<div class="flex items-center gap-2">
+						<p class="truncate text-xs text-slate-400">{summary(activeConversation)}</p>
+						<span
+							class={cn(
+								'shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold tracking-wider uppercase',
+								activeConversation.status === 'closed'
+									? 'bg-amber-100 text-amber-700'
+									: 'bg-emerald-100 text-emerald-700'
+							)}
+						>
+							{activeConversation.status}
+						</span>
+					</div>
 				</div>
 				<button
 					type="button"
@@ -334,7 +405,7 @@
 								>
 									<p class="break-words whitespace-pre-wrap">{m.body}</p>
 									<p class="mt-1 text-right text-[10px] text-white/50">
-										{formatRelativeTime(m.createdAt)}
+										{formatDateTime(m.createdAt)}
 									</p>
 								</div>
 							</div>
@@ -360,7 +431,7 @@
 									{/if}
 									<p class="break-words whitespace-pre-wrap">{m.body}</p>
 									<p class="mt-1 text-right text-[10px] text-slate-400">
-										{formatRelativeTime(m.createdAt)}
+										{formatDateTime(m.createdAt)}
 									</p>
 								</div>
 							</div>
@@ -383,8 +454,24 @@
 					}}
 					class="border-t border-slate-100 p-3"
 				>
+					{#if sendError}
+						<div class="mb-2 flex items-center justify-between gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+							<span>{sendError}</span>
+							<button
+								type="button"
+								onclick={() => (sendError = null)}
+								class="rounded p-0.5 opacity-60 transition hover:opacity-100"
+								aria-label="Dismiss"
+							>
+								<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+								</svg>
+							</button>
+						</div>
+					{/if}
 					<div class="flex items-end gap-2">
 						<textarea
+							bind:this={composerRef}
 							bind:value={composer}
 							rows="1"
 							placeholder="Write a message…"

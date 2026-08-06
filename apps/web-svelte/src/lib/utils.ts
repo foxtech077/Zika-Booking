@@ -74,8 +74,7 @@ export function formatDate(
 export function formatRelativeTime(iso: string | null | undefined): string {
 	if (!iso) return '';
 	const then = new Date(iso).getTime();
-	if (isNaN(then)) return '';
-	const diff = Date.now() - then;
+	if (isNaN(then)) return '';	const diff = Date.now() - then;
 	if (diff < 60_000) return 'just now';
 	const minutes = Math.floor(diff / 60_000);
 	if (minutes < 60) return `${minutes}m ago`;
@@ -86,4 +85,18 @@ export function formatRelativeTime(iso: string | null | undefined): string {
 	const weeks = Math.floor(days / 7);
 	if (weeks < 5) return `${weeks}w ago`;
 	return formatDate(iso);
+}
+
+/** Absolute date + time, e.g. "5 Aug 2026, 14:30". */
+export function formatDateTime(iso: string | null | undefined): string {
+	if (!iso) return '';
+	const d = new Date(iso);
+	if (isNaN(d.getTime())) return '';
+	return d.toLocaleString('en', {
+		month: 'short',
+		day: 'numeric',
+		year: 'numeric',
+		hour: '2-digit',
+		minute: '2-digit'
+	});
 }

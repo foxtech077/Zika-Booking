@@ -28,14 +28,7 @@ Scope notes: the provider dashboard and Stripe Connect (section E) are a large, 
 - [x] **B1. Bookings list parity** — FIXED in `apps/web-svelte/src/routes/(main)/(account)/bookings/+page.svelte`: `cancelled_by_provider` → "Cancelled by Host", red styling for all cancelled variants, the confirmed Cancel button is gated on a client-computed `canCancel` (start date in the future), cancellation shows a success/refund banner (or error), and zero-count status filter tabs are hidden — mirroring apps/web.
 - [x] **B2. Wishlist category tabs + per-category empty states** — FIXED. `apps/web-svelte/src/routes/(main)/(account)/wishlist/+page.svelte` now has All/Hotels/Home/Cars tabs with counts and per-category empty states (apps/web's equivalent tabs are commented out there, so this is a live superset).
 - [x] **B3. Reviews page parity** — FIXED in `apps/web-svelte/src/routes/(main)/(account)/reviews/+page.svelte` (+ new `src/lib/review-context.ts`): the rating summary now includes a Hidden stat, provider replies show their date, the write form shows the Listing short id, a post-checkout review context is read from localStorage as a fallback when no `?bookingId`, and the list auto-refreshes every 30s. (The context is written at checkout under A4.)
-- [ ] **B4. Messages parity** — MISSING in `apps/web-svelte/src/routes/(main)/(account)/messages/+page.svelte`:
-  - Per-conversation status badge (closed/open) in list + chat header. web: `apps/web/app/traveller/messages/page.tsx:392-396, 481-485`.
-  - Unread pill badge ("X unread"/"All read"), `:329-333`.
-  - Auto-select the first conversation on load, `:196-199`.
-  - Auto-focus the composer when opened via `?conversationId=`, `:266-272`.
-  - Send-error display (currently keeps text silently), `:121-123`.
-  - List-pane "Refresh conversations" button, `:414-424`.
-  - Absolute timestamps on bubbles (currently relative only), `:136`.
+- [x] **B4. Messages parity** — FIXED in `apps/web-svelte/src/routes/(main)/(account)/messages/+page.svelte` (+ `formatDateTime` util): per-conversation status badges (list + thread header), a global unread pill ("X unread"/"All read"), auto-select of the first conversation on load, composer auto-focus, a send-error banner, a list-pane "Refresh conversations" button, and absolute timestamps on message bubbles.
 - [ ] **B5. Notifications parity** — MISSING (minor) in `apps/web-svelte/src/routes/(main)/(account)/notifications/+page.svelte` + `Header.svelte`:
   - Unread badge on the dropdown Notifications item (only the bell shows it).
   - Bell badge cap "99+" (currently "9+").
