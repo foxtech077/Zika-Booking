@@ -11,6 +11,11 @@
 	import { categoryHref } from '$lib/listing-meta';
 	import { auth } from '$lib/stores/auth.svelte';
 	import { addFavourite, removeFavourite } from '$lib/account-api';
+	import {
+		isFavourited,
+		setFavourite,
+		loadFavourites
+	} from '$lib/stores/favourites.svelte';
 	import { recordRecentlyViewed, createConversation } from '$lib/account-api';
 	import { addLocalRecentlyViewed } from '$lib/recently-viewed';
 
@@ -53,7 +58,9 @@
 	const canFavourite = $derived(auth.isAuthenticated);
 	let favOverride = $state<boolean | null>(null);
 	let favPending = $state(false);
-	const isFav = $derived(favOverride ?? detail?.isFavourited ?? false);
+	// Favourite state comes from the reactive favourites store (loaded once per
+	// session), so a saved listing stays favourited after a refresh.
+	const isFav = $derived(favOverride ?? (detail ? isFavourited(detail.id) : false));
 
 	async function toggleFav(): Promise<void> {
 		if (!canFavourite || !detail || favPending) return;
@@ -63,6 +70,7 @@
 		try {
 			if (next) await addFavourite(detail.id);
 			else await removeFavourite(detail.id);
+			setFavourite(detail.id, next);
 		} catch {
 			// Roll back the optimistic update on failure.
 			favOverride = !next;
@@ -75,6 +83,9 @@
 	// small local list so they still see "recently viewed" on the home page.
 	onMount(() => {
 		if (!detail) return;
+		// Reconcile the heart with the persisted favourites (the SSR detail
+		// load can't carry the auth token, so isFavourited isn't populated).
+		void loadFavourites();
 		const snapshot = {
 			id: detail.id,
 			name: detail.name,

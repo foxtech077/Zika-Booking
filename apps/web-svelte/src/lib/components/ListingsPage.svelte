@@ -1,10 +1,12 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { navigating, page } from '$app/state';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import { cn, todayString } from '$lib/utils';
 	import { location } from '$lib/stores/location.svelte';
+	import { loadFavourites } from '$lib/stores/favourites.svelte';
 	import { LISTING_API_URL, DEFAULT_COORDS } from '$lib/config';
 	import { searchStateFromUrl, type ListingsData } from '$lib/load-listings';
 	import {
@@ -50,6 +52,13 @@
 	);
 	const meta = $derived(CATEGORY_META[category]);
 	const isCar = $derived(category === 'car');
+
+	onMount(() => {
+		// Load the signed-in user's favourites so the result-card hearts
+		// reflect what's already saved (the SSR search load can't carry the
+		// auth token). Idempotent per user.
+		void loadFavourites();
+	});
 
 	let filters = $state<FilterState>(DEFAULT_FILTERS);
 	let sort = $state('recommended');

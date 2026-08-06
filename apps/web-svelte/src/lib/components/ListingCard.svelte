@@ -5,6 +5,7 @@
 	import { listingHref } from '$lib/listing-meta';
 	import { auth } from '$lib/stores/auth.svelte';
 	import { addFavourite, removeFavourite } from '$lib/account-api';
+	import { isFavourited, setFavourite } from '$lib/stores/favourites.svelte';
 	import ListingImage from './ListingImage.svelte';
 
 	let {
@@ -24,7 +25,9 @@
 	const location = $derived([listing.town, listing.country].filter(Boolean).join(', '));
 	let favOverride = $state<boolean | null>(null);
 	let favPending = $state(false);
-	const isFav = $derived(favOverride ?? listing.isFavourited ?? false);
+	// Favourite state comes from the reactive favourites store (loaded once per
+	// session), so a saved listing stays favourited after a refresh.
+	const isFav = $derived(favOverride ?? isFavourited(listing.id));
 
 	async function toggleFav(): Promise<void> {
 		if (!canFavourite || favPending) return;
@@ -34,6 +37,7 @@
 		try {
 			if (next) await addFavourite(listing.id);
 			else await removeFavourite(listing.id);
+			setFavourite(listing.id, next);
 		} catch {
 			// Roll back the optimistic update on failure.
 			favOverride = !next;

@@ -1,13 +1,22 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { PageProps } from './$types';
 	import HeroSearch from '$lib/components/HeroSearch.svelte';
 	import ListingCard from '$lib/components/ListingCard.svelte';
 	import RecentlyViewedStrip from '$lib/components/RecentlyViewedStrip.svelte';
 	import ShimmerImage from '$lib/components/ShimmerImage.svelte';
+	import { loadFavourites } from '$lib/stores/favourites.svelte';
 
 	let { data }: PageProps = $props();
 
 	const featured = $derived(data.featured ?? []);
+
+	onMount(() => {
+		// Load the signed-in user's favourites so the featured-card hearts
+		// reflect what's already saved (the SSR featured load can't carry the
+		// auth token). Idempotent per user.
+		void loadFavourites();
+	});
 
 	const curatedWorlds = [
 		{
