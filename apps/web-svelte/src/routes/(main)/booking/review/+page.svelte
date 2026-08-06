@@ -9,6 +9,7 @@
 	import { storeReviewContext } from '$lib/review-context';
 	import type { Stripe, StripeCardElement } from '@stripe/stripe-js';
 	import { fmtDates, derivePlatform, fmtPlatform } from '$lib/booking-utils';
+	import { cn } from '$lib/utils';
 	import {
 		formatMoney,
 		eurMoney,
@@ -34,7 +35,9 @@
 		fetchPaymentStatus,
 		cancelPayment,
 		convertFx,
-		type CreateIntentResult
+		getSavedPaymentMethods,
+		type CreateIntentResult,
+		type SavedPaymentMethod
 	} from '$lib/payment-api';
 	import { auth, updateUser } from '$lib/stores/auth.svelte';
 	import { acceptTerms } from '$lib/auth-api';
@@ -142,6 +145,10 @@
 	type PayStep = 'payment' | 'stripe_card' | 'polling' | 'confirmed';
 	let payStep = $state<PayStep | null>(null);
 	let payProvider = $state<'stripe' | 'tara'>('stripe');
+	// Saved Stripe cards — a selected method is charged directly instead of
+	// showing the card element.
+	let savedMethods = $state<SavedPaymentMethod[]>([]);
+	let selectedMethodId = $state<string | null>(null);
 	let bookingId = $state('');
 	let bookingRef = $state('');
 	let bookingTotal = $state(0);
@@ -337,6 +344,15 @@
 	onMount(() => {
 		if (!browser || !listingId) return;
 		void acquireLock(true);
+		// Preload the guest's saved Stripe cards so they can be picked instead of
+		// entering card details.
+		if (auth.isAuthenticated) {
+			void getSavedPaymentMethods().then((methods) => {
+				savedMethods = methods;
+				const def = methods.find((m) => m.isDefault) ?? methods[0];
+				selectedMethodId = def ? def.id : null;
+			});
+		}
 	});
 
 	// When the guest toggles car delivery after locking, release the old lock
@@ -651,6 +667,18 @@
 		payError = '';
 		try {
 			if (payProvider === 'stripe') {
+				// A saved card is charged directly (off-session) via initiate.
+				if (selectedMethodId) {
+					const payRes = await initiatePayment({
+						bookingId,
+						paymentProvider: 'stripe',
+						paymentMethodId: selectedMethodId
+					});
+					paymentId = payRes.paymentId;
+					payStep = 'polling';
+					startPolling('Card');
+					return;
+				}
 				const intent: CreateIntentResult = await createPaymentIntent(bookingId);
 				paymentId = intent.paymentId;
 				stripeClientSecret = intent.clientSecret;
@@ -1590,6 +1618,49 @@
 							{/if}
 						</div>
 					</section>
+
+					{#if payProvider === 'stripe' && savedMethods.length > 0}
+						<!-- Saved payment methods -->
+						<section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+							<h3 class="mb-3 flex items-center gap-2 font-bold text-slate-800">Saved Cards</h3>
+							<div class="space-y-2">
+								{#each savedMethods as m (m.id)}
+									<button
+										type="button"
+										onclick={() => (selectedMethodId = m.id)}
+										class={cn(
+											'flex w-full items-center justify-between gap-3 rounded-xl border-2 px-4 py-3 text-left text-sm transition',
+											selectedMethodId === m.id
+												? 'border-[#0B1E3F] bg-[#0B1E3F]/5'
+												: 'border-slate-200 hover:border-slate-300'
+										)}
+									>
+										<span class="font-semibold text-slate-700">
+											{m.cardBrand ? `${m.cardBrand} •••• ${m.cardLast4 ?? ''}` : 'Saved card'}
+										</span>
+										<span class="text-xs text-slate-400">
+											{m.cardExpMonth && m.cardExpYear
+												? `Exp ${String(m.cardExpMonth).padStart(2, '0')}/${String(m.cardExpYear).slice(-2)}`
+												: ''}
+											{m.isDefault ? ' · Default' : ''}
+										</span>
+									</button>
+								{/each}
+								<button
+									type="button"
+									onclick={() => (selectedMethodId = null)}
+									class={cn(
+										'flex w-full items-center justify-between gap-3 rounded-xl border-2 px-4 py-3 text-left text-sm transition',
+										selectedMethodId === null
+											? 'border-[#0B1E3F] bg-[#0B1E3F]/5'
+											: 'border-slate-200 hover:border-slate-300'
+									)}
+								>
+									<span class="font-semibold text-slate-700">Use a new card</span>
+								</button>
+							</div>
+						</section>
+					{/if}
 
 					{#if payProvider === 'tara'}
 						<!-- Mobile Money -->

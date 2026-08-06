@@ -80,6 +80,31 @@ export async function cancelPayment(paymentId: string): Promise<void> {
 	}
 }
 
+export interface SavedPaymentMethod {
+	id: string;
+	type: string;
+	paymentProvider: string;
+	cardBrand: string | null;
+	cardLast4: string | null;
+	cardExpMonth: number | null;
+	cardExpYear: number | null;
+	mobileNumberMasked: string | null;
+	isDefault: boolean;
+}
+
+/** Lists the signed-in user's saved payment methods (Stripe cards / Tara). */
+export async function getSavedPaymentMethods(): Promise<SavedPaymentMethod[]> {
+	try {
+		const data = await apiRequest<{ paymentMethods?: SavedPaymentMethod[] }>(
+			PAYMENT_API_URL,
+			'/guests/me/payment-methods'
+		);
+		return data.paymentMethods ?? [];
+	} catch {
+		return [];
+	}
+}
+
 /** Converts an amount to another currency for display (e.g. listing → XAF). */
 export async function convertFx(
 	amount: number,
