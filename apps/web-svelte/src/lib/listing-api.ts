@@ -554,6 +554,8 @@ export function buildSearchApiParams(s: SearchState): Record<string, string | nu
 
 	if (s.q) {
 		p.q = s.q;
+		// Also sent as `name` for backends that match on it (apps/web parity).
+		p.name = s.q;
 		// Only a resolved place unlocks the "nearby" fallback; an unresolved
 		// query returns exact/partial text matches only (never the category).
 		p.place_resolved = s.placeResolved ? 'true' : 'false';

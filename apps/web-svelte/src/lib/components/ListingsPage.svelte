@@ -111,6 +111,28 @@
 	const hasMore = $derived(allResults.length < initial.totalCount);
 	const activeFilterCount = $derived(countActiveFilters(filters));
 
+	// Client-side text gate, mirroring apps/web: for an unresolved destination
+	// only listings whose name/town/country/address/description (plus car
+	// make/model) contain the search term are rendered, regardless of what the
+	// backend text/radius query returned.
+	const isTextQuery = $derived(query.trim().length > 0);
+	const placeResolved = $derived(seedParams.get('place_resolved') === 'true');
+	const displayResults = $derived.by(() => {
+		if (!isTextQuery || placeResolved) return allResults;
+		const term = query.trim().toLowerCase();
+		return allResults.filter((l) => {
+			const fields: (string | null | undefined)[] = [
+				l.name,
+				l.town,
+				l.country,
+				l.address,
+				l.description
+			];
+			if (l.category === 'car') fields.push(l.carMake, l.carModel);
+			return fields.some((f) => f && f.toLowerCase().includes(term));
+		});
+	});
+
 	function filtersFromParams(sp: URLSearchParams): FilterState {
 		const f = { ...DEFAULT_FILTERS };
 		const n = (k: string): number | null => {
@@ -623,11 +645,11 @@
 						>
 							{#if MapComponent}
 								<MapComponent
-									listings={allResults}
+									listings={displayResults}
 									{hoveredId}
 									onHover={(id: string | null) => (hoveredId = id)}
 									onSelect={(id: string) => {
-										const item = allResults.find((l) => l.id === id);
+										const item = displayResults.find((l) => l.id === id);
 										if (item) void goto(listingHref(item.category, id));
 									}}
 								/>
@@ -647,9 +669,9 @@
 					{/if}
 
 					<div class={cn('min-w-0 flex-1', showMap ? 'overflow-y-auto' : '')}>
-						{#if allResults.length > 0}
+						{#if displayResults.length > 0}
 							<div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-								{#each allResults as listing (listing.id)}
+								{#each displayResults as listing (listing.id)}
 									<ListingCard
 										{listing}
 										hovered={hoveredId === listing.id}
@@ -717,7 +739,7 @@
 									{/if}
 								</button>
 								<p class="mt-2 text-xs text-slate-400">
-									Showing {allResults.length} of {initial.totalCount.toLocaleString()}
+									Showing {displayResults.length} of {initial.totalCount.toLocaleString()}
 								</p>
 							</div>
 						{/if}
