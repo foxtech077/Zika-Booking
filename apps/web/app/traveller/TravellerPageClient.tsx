@@ -60,7 +60,6 @@ interface User {
   firstName: string;
   lastName: string;
   email: string;
-  hostStatus?: "approved" | "pending" | "rejected" | null;
   currentTier: "bronze" | "silver" | "gold" | "diamond";
   loyaltyPoints: number;
 }

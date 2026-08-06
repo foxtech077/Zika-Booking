@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireHost, type AuthRequest } from "../middleware/auth.js";
+import { requireUser, type AuthRequest } from "../middleware/auth.js";
 
 // ── Minimal iCal parser ───────────────────────────────────────────────────────
 
@@ -205,7 +205,7 @@ export async function icalRoutes(app: FastifyInstance) {
 
   // ── GET /listings/:id/ical-feeds ──────────────────────────────────────
   app.get("/listings/:id/ical-feeds", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["iCal Calendar Sync"],
       params: {
@@ -281,7 +281,7 @@ export async function icalRoutes(app: FastifyInstance) {
 
   // ── POST /listings/:id/ical-feeds ─────────────────────────────────────
   app.post("/listings/:id/ical-feeds", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["iCal Calendar Sync"],
       params: {
@@ -374,7 +374,7 @@ export async function icalRoutes(app: FastifyInstance) {
 
   // ── DELETE /listings/:id/ical-feeds/:feedId ───────────────────────────
   app.delete("/listings/:id/ical-feeds/:feedId", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["iCal Calendar Sync"],
       params: {
@@ -422,7 +422,7 @@ export async function icalRoutes(app: FastifyInstance) {
 
   // ── POST /listings/:id/ical-feeds/:feedId/sync ────────────────────────
   app.post("/listings/:id/ical-feeds/:feedId/sync", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["iCal Calendar Sync"],
       params: {
@@ -618,7 +618,7 @@ export async function icalRoutes(app: FastifyInstance) {
 
   // ── GET /listings/:id/channel-status ──────────────────────────────────
   app.get("/listings/:id/channel-status", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["iCal Calendar Sync"],
       params: {

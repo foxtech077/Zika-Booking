@@ -17,8 +17,6 @@ export interface AuthUser {
   emailVerified: boolean;
   currentTier: string;
   loyaltyPoints: number;
-  /** Host profile (Accreditation) status. Only 'approved' may manage listings. */
-  hostStatus?: "approved" | "pending" | "rejected" | null;
   /** Set by the API when the user has never accepted the Terms/Privacy Policy,
    *  or accepted a superseded version. Gates entry to the app. */
   requiresTermsAcceptance?: boolean;

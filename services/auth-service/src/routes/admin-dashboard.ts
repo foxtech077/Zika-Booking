@@ -25,7 +25,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
               type: "object",
               properties: {
                 totalListings: { type: "number" },
-                totalAccreditations: { type: "number" },
                 totalBookings: { type: "number" },
                 totalRevenue: { type: "number" },
                 totalProviders: { type: "number" },
@@ -59,7 +58,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
       const totalUsers = await prisma.user.count({ where: { ...whereDate } });
       const totalAdmins = await prisma.adminUser.count({ where: whereDate });
       const totalAudits = await prisma.auditLog.count({ where: hasDateFilter ? { timestamp: dateFilter } : {} });
-      const accreditationCount = await prisma.accreditation.count({ where: hasDateFilter ? { submittedAt: dateFilter } : {} });
 
       // Listing & Payment schemas (raw queries)
       let listingCount = 0;
@@ -101,7 +99,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
 
       return sendSuccess(reply, 200, {
         totalListings: listingCount,
-        totalAccreditations: accreditationCount,
         totalBookings: bookingCount,
         totalRevenue: paymentTotal,
         totalProviders: totalUsers,
@@ -137,7 +134,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
               type: "object",
               properties: {
                 pendingHotelApprovals: { type: "number" },
-                pendingAccreditationReviews: { type: "number" },
                 pendingRefundRequests: { type: "number" },
               }
             }
@@ -159,10 +155,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
       if (q.endDate) dateFilter.lte = new Date(q.endDate);
       const hasDateFilter = Object.keys(dateFilter).length > 0;
 
-      const whereDate = hasDateFilter ? { submittedAt: dateFilter } : {};
-
-      const pendingAccreditations = await prisma.accreditation.count({ where: { status: "pending", ...whereDate } });
-      
       let hotelCount = 0;
       let refundCount = 0;
 
@@ -185,7 +177,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
 
       return sendSuccess(reply, 200, {
         pendingHotelApprovals: hotelCount,
-        pendingAccreditationReviews: pendingAccreditations,
         pendingRefundRequests: refundCount,
       });
     } catch (err: any) {
@@ -311,7 +302,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
                 totalBookings: { type: "number" },
                 totalRevenue: { type: "number" },
                 totalPayments: { type: "number" },
-                totalAccreditations: { type: "number" },
                 totalProviders: { type: "number" },
                 totalUsers: { type: "number" },
                 totalReports: { type: "number" },
@@ -342,7 +332,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
           totalBookings: 0,
           totalRevenue: 0,
           totalPayments: 0,
-          totalAccreditations: 0,
           totalProviders: 0,
           totalUsers: 0,
           totalReports: 0,
@@ -372,14 +361,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
       const totalRevenue = Number(revenueData?.total || 0);
       const totalPayments = Number(revenueData?.count || 0);
 
-      const totalAccreditations = await prisma.accreditation.count({
-        where: {
-          user: {
-            country: { in: countryScope },
-          }
-        }
-      });
-
       const totalUsers = await prisma.user.count({
         where: {
           country: { in: countryScope },
@@ -398,7 +379,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
         totalBookings,
         totalRevenue,
         totalPayments,
-        totalAccreditations,
         totalProviders: totalUsers,
         totalUsers,
         totalReports,
@@ -626,7 +606,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
               type: "object",
               properties: {
                 totalListings: { type: "number" },
-                totalAccreditations: { type: "number" },
                 totalBookings: { type: "number" },
                 totalRevenue: { type: "number" },
                 totalProviders: { type: "number" },
@@ -659,7 +638,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
       const totalUsers = await prisma.user.count({ where: { ...whereDate } });
       const totalAdmins = await prisma.adminUser.count({ where: whereDate });
       const totalAudits = await prisma.auditLog.count({ where: hasDateFilter ? { timestamp: dateFilter } : {} });
-      const accreditationCount = await prisma.accreditation.count({ where: hasDateFilter ? { submittedAt: dateFilter } : {} });
 
       let listingCount = 0;
       let bookingCount = 0;
@@ -700,7 +678,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
 
       return sendSuccess(reply, 200, {
         totalListings: listingCount,
-        totalAccreditations: accreditationCount,
         totalBookings: bookingCount,
         totalRevenue: paymentTotal,
         totalProviders: totalUsers,
@@ -736,7 +713,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
               type: "object",
               properties: {
                 pendingHotelApprovals: { type: "number" },
-                pendingAccreditationReviews: { type: "number" },
                 pendingRefundRequests: { type: "number" },
               }
             }
@@ -758,10 +734,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
       if (q.endDate) dateFilter.lte = new Date(q.endDate);
       const hasDateFilter = Object.keys(dateFilter).length > 0;
 
-      const whereDate = hasDateFilter ? { submittedAt: dateFilter } : {};
-
-      const pendingAccreditations = await prisma.accreditation.count({ where: { status: "pending", ...whereDate } });
-      
       let hotelCount = 0;
       let refundCount = 0;
 
@@ -784,7 +756,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
 
       return sendSuccess(reply, 200, {
         pendingHotelApprovals: hotelCount,
-        pendingAccreditationReviews: pendingAccreditations,
         pendingRefundRequests: refundCount,
       });
     } catch (err: any) {
@@ -982,7 +953,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
               type: "object",
               properties: {
                 pendingHotelApprovals: { type: "number" },
-                pendingAccreditationReviews: { type: "number" },
                 pendingRefundRequests: { type: "number" },
               }
             }
@@ -1008,7 +978,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
       if (countryScope.length === 0) {
         return sendSuccess(reply, 200, {
           pendingHotelApprovals: 0,
-          pendingAccreditationReviews: 0,
           pendingRefundRequests: 0,
         });
       }
@@ -1019,13 +988,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
         WHERE t.status = 'open' AND l.country = ANY(${countryScope})
       `;
       const hotelCount = Number(hotelData?.count || 0);
-
-      const pendingAccreditations = await prisma.accreditation.count({
-        where: {
-          status: "pending",
-          user: { country: { in: countryScope } }
-        }
-      });
 
       const [refundData] = await prisma.$queryRaw<[{ count: bigint }]>`
         SELECT COUNT(*) as count FROM payments."Refund" r
@@ -1038,7 +1000,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
 
       return sendSuccess(reply, 200, {
         pendingHotelApprovals: hotelCount,
-        pendingAccreditationReviews: pendingAccreditations,
         pendingRefundRequests: refundCount,
       });
     } catch (err: any) {

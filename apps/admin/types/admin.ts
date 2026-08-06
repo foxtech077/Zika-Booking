@@ -54,20 +54,6 @@ export interface AuditLogListResponse {
 
 export type UserStatus = "pending_verification" | "active" | "suspended" | "banned";
 export type UserType = "user";
-export type HostStatus = "approved" | "pending" | "rejected" | null;
-
-export interface HostAccreditation {
-  id: string;
-  status: HostStatus;
-  businessName: string | null;
-  registrationNo: string | null;
-  taxId: string | null;
-  documentsUrl: string | null;
-  submittedAt: string;
-  reviewedAt: string | null;
-  reviewedBy: string | null;
-  rejectionReason: string | null;
-}
 
 export interface PlatformUser {
   id: string;
@@ -83,8 +69,6 @@ export interface PlatformUser {
   country: string | null;
   createdAt: string;
   updatedAt: string;
-  hostStatus?: HostStatus;
-  accreditation?: HostAccreditation | null;
 }
 
 export interface UserListResponse {
