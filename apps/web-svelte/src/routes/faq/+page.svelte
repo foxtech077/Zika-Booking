@@ -208,7 +208,7 @@
 				},
 				{
 					q: 'How do I register as a Provider?',
-					a: 'Sign up for a Kainook account and open your Provider Dashboard at www.kainook.com/dashboard. There is no approval process — you can create listings immediately. Add your business details to complete your profile, then start listing properties.'
+					a: 'Sign up for a Kainook account and open your Provider Dashboard at /dashboard. There is no approval process — you can create listings immediately. Add your business details to complete your profile, then start listing properties.'
 				},
 				{
 					q: 'Is there a fee to list on Kainook?',
@@ -224,7 +224,7 @@
 				},
 				{
 					q: 'How do I update my listing (prices, photos, description)?',
-					a: 'Log in to your Provider Dashboard at www.kainook.com/dashboard or through the app. Go to My Listings, select the listing you wish to edit, and make your changes. Updates to descriptions and photos are reflected on the Platform within a few hours.'
+					a: 'Log in to your Provider Dashboard at /dashboard. Go to My Listings, select the listing you wish to edit, and make your changes. Updates to descriptions and photos are reflected on the Platform within a few hours.'
 				},
 				{
 					q: 'How do I manage availability?',
