@@ -359,6 +359,15 @@
 							Cancellation is no longer available because your check-in has already started.
 						</p>
 					{/if}
+
+					{#if booking.status === 'completed'}
+						<a
+							href={`/reviews?bookingId=${booking.id}&listingName=${encodeURIComponent(booking.listing.title)}`}
+							class="mt-5 block w-full rounded-xl bg-[#16a34a] py-3 text-center text-sm font-semibold text-white transition hover:bg-[#15803d]"
+						>
+							Leave Review
+						</a>
+					{/if}
 				</div>
 			</div>
 		</div>
