@@ -5,13 +5,33 @@
 	import { listingHref } from '$lib/listing-meta';
 	import ListingImage from '$lib/components/ListingImage.svelte';
 	import { goto } from '$app/navigation';
+	import { cn } from '$lib/utils';
 
 	let favourites = $state<FavouriteListing[]>([]);
 	let loading = $state(true);
 	let error = $state(false);
 	let removingId = $state<string | null>(null);
+	let tab = $state<'all' | 'hotel' | 'apartment' | 'car'>('all');
 
 	const count = $derived(favourites.length);
+
+	const TABS: { key: 'all' | 'hotel' | 'apartment' | 'car'; label: string }[] = [
+		{ key: 'all', label: 'All' },
+		{ key: 'hotel', label: 'Hotels' },
+		{ key: 'apartment', label: 'Home' },
+		{ key: 'car', label: 'Cars' }
+	];
+
+	const tabCounts = $derived({
+		all: favourites.length,
+		hotel: favourites.filter((f) => category(f) === 'hotel').length,
+		apartment: favourites.filter((f) => category(f) === 'apartment').length,
+		car: favourites.filter((f) => category(f) === 'car').length
+	});
+
+	const filtered = $derived(
+		tab === 'all' ? favourites : favourites.filter((f) => category(f) === tab)
+	);
 
 	function load(): void {
 		loading = true;
@@ -93,6 +113,29 @@
 		</div>
 	</div>
 
+	<!-- Category tabs -->
+	<div class="flex flex-wrap gap-2">
+		{#each TABS as t (t.key)}
+			{#if t.key === 'all' || tabCounts[t.key] > 0}
+				<button
+					type="button"
+					onclick={() => (tab = t.key)}
+					class={cn(
+						'rounded-full px-4 py-2 text-sm font-semibold transition',
+						tab === t.key
+							? 'bg-[#0c2614] text-white'
+							: 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+					)}
+				>
+					{t.label}
+					<span class={cn('ml-1 text-xs', tab === t.key ? 'text-white/60' : 'text-slate-400')}>
+						{tabCounts[t.key]}
+					</span>
+				</button>
+			{/if}
+		{/each}
+	</div>
+
 	{#if loading}
 		<div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 			{#each [1, 2, 3, 4] as i (i)}
@@ -118,7 +161,7 @@
 				Try Again
 			</button>
 		</div>
-	{:else if favourites.length === 0}
+	{:else if filtered.length === 0}
 		<div class="rounded-2xl border border-slate-100 bg-white p-12 text-center shadow-sm">
 			<div
 				class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-50 text-rose-400"
@@ -137,9 +180,15 @@
 					/>
 				</svg>
 			</div>
-			<h3 class="text-lg font-bold text-slate-800">Your wishlist is empty</h3>
+			<h3 class="text-lg font-bold text-slate-800">
+				{tab === 'all'
+					? 'Your wishlist is empty'
+					: `No saved ${TABS.find((t) => t.key === tab)?.label.toLowerCase()} yet`}
+			</h3>
 			<p class="mx-auto mt-2 max-w-sm text-sm text-slate-500">
-				Tap the heart on any listing to save it here for later.
+				{tab === 'all'
+					? 'Tap the heart on any listing to save it here for later.'
+					: 'Tap the heart on a listing to save it here for later.'}
 			</p>
 			<a
 				href="/"
@@ -150,7 +199,7 @@
 		</div>
 	{:else}
 		<div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-			{#each favourites as f (f.listingId)}
+			{#each filtered as f (f.listingId)}
 				<div
 					class="group relative cursor-pointer overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
 					role="link"
