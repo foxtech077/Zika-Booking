@@ -11,7 +11,7 @@ export const load: PageServerLoad = async ({ params, cookies, fetch }) => {
 	const currency = cookies.get('kainook_currency') ?? undefined;
 	const [detail, reviews] = await Promise.all([
 		fetchListingDetail(fetch, params.id, LISTING_API_URL, currency),
-		fetchListingReviews(fetch, params.id, LISTING_API_URL)
+		fetchListingReviews(fetch, params.id, LISTING_API_URL, 1, 4)
 	]);
 
 	if (!detail) {

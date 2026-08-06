@@ -515,7 +515,11 @@
 				{/if}
 
 				{#if reviews && reviews.reviews.length > 0}
-					<ReviewsSection {reviews} listingName={detail.name} />
+					<ReviewsSection
+						listingId={detail.id}
+						initialReviews={reviews}
+						listingName={detail.name}
+					/>
 				{/if}
 			</div>
 

@@ -453,19 +453,25 @@ export async function fetchListingAvailability(
 	}
 }
 
-/** Fetches the public reviews for a listing. */
+/** Fetches the public reviews for a listing (paginated). */
 export async function fetchListingReviews(
 	fetchFn: typeof fetch,
 	id: string,
-	apiUrl: string
+	apiUrl: string,
+	page = 1,
+	limit = 4
 ): Promise<ListingReviewsResult | null> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 	try {
-		const res = await fetchFn(`${apiUrl}/listings/${encodeURIComponent(id)}/reviews?limit=10`, {
-			headers: { Accept: 'application/json' },
-			signal: controller.signal
-		});
+		const query = new URLSearchParams({ page: String(page), limit: String(limit) });
+		const res = await fetchFn(
+			`${apiUrl}/listings/${encodeURIComponent(id)}/reviews?${query.toString()}`,
+			{
+				headers: { Accept: 'application/json' },
+				signal: controller.signal
+			}
+		);
 		if (!res.ok) return null;
 		const json = (await res.json()) as { success?: boolean; data?: ListingReviewsResult };
 		if (!json?.success) return null;
