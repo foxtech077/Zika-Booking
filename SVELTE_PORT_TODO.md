@@ -30,9 +30,7 @@ Scope notes: the provider dashboard and Stripe Connect (section E) are a large, 
 - [x] **B3. Reviews page parity** — FIXED in `apps/web-svelte/src/routes/(main)/(account)/reviews/+page.svelte` (+ new `src/lib/review-context.ts`): the rating summary now includes a Hidden stat, provider replies show their date, the write form shows the Listing short id, a post-checkout review context is read from localStorage as a fallback when no `?bookingId`, and the list auto-refreshes every 30s. (The context is written at checkout under A4.)
 - [x] **B4. Messages parity** — FIXED in `apps/web-svelte/src/routes/(main)/(account)/messages/+page.svelte` (+ `formatDateTime` util): per-conversation status badges (list + thread header), a global unread pill ("X unread"/"All read"), auto-select of the first conversation on load, composer auto-focus, a send-error banner, a list-pane "Refresh conversations" button, and absolute timestamps on message bubbles.
 - [x] **B5. Notifications parity** — FIXED: the header bell badge now caps at "99+", the avatar-dropdown Notifications item shows the unread count badge, and marking a notification read rolls back on API failure (`apps/web-svelte/src/lib/components/Header.svelte`, `apps/web-svelte/src/routes/(main)/(account)/notifications/+page.svelte`).
-- [ ] **B6. Recently-viewed parity** — MISSING (minor) in `apps/web-svelte/src/routes/(main)/(account)/recently-viewed/+page.svelte`:
-  - "Back → Home" navigation link.
-  - Explicit per-card "View" button (web uses a `View` action).
+- [x] **B6. Recently-viewed parity** — FIXED. `apps/web-svelte/src/routes/(main)/(account)/recently-viewed/+page.svelte` now has a "Back to Home" link and an explicit per-card "View" affordance.
 - [ ] **B7. Account pill-nav** — MISSING (minor). `apps/web-svelte/src/routes/(main)/(account)/+layout.svelte:24-39` nav omits a Notifications entry (reachable only via the header bell).
 - [ ] **B8. Profile host-status row** — N/A. Already removed in web-svelte with the host-accreditation port; do not re-add.
 

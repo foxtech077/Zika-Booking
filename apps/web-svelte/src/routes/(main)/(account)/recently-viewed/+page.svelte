@@ -52,6 +52,21 @@
 </script>
 
 <div class="space-y-6">
+	<a
+		href="/"
+		class="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-[#0c2614]"
+	>
+		<svg
+			class="h-4 w-4"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+			viewBox="0 0 24 24"
+		>
+			<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+		</svg>
+		Back to Home
+	</a>
 	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<div>
 			<h1 class="text-3xl font-bold tracking-tight text-slate-900">Recently Viewed</h1>
@@ -166,11 +181,18 @@
 							<p class="mt-0.5 truncate text-xs text-slate-500">
 								{[l.city, l.countryCode].filter(Boolean).join(', ') || '—'}
 							</p>
-							<p class="mt-2 text-sm font-bold text-slate-900">
-								{l.nightlyRate != null
-									? `${formatMoney(l.nightlyRate, l.currency ?? 'KES')}/night`
-									: '—'}
-							</p>
+							<div class="mt-3 flex items-center justify-between gap-2">
+								<p class="text-sm font-bold text-slate-900">
+									{l.nightlyRate != null
+										? `${formatMoney(l.nightlyRate, l.currency ?? 'KES')}/night`
+										: '—'}
+								</p>
+								<span
+									class="rounded-lg border border-slate-200 px-3 py-1 text-[11px] font-semibold text-[#0c2614] transition group-hover:border-[#1D8D2B] group-hover:text-[#1D8D2B]"
+								>
+									View
+								</span>
+							</div>
 						</div>
 					</div>
 				{/if}
