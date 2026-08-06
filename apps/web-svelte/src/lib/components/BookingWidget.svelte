@@ -30,6 +30,14 @@
 				})
 			: null
 	);
+	/** The chosen room type (defaults to the cheapest), driving price + booking. */
+	let selectedRoomId = $state<string | null>(null);
+	$effect(() => {
+		if (!selectedRoomId && cheapestRoom?.id) selectedRoomId = cheapestRoom.id;
+	});
+	const selectedRoom = $derived(
+		(listing.roomTypes ?? []).find((rt) => rt.id === selectedRoomId) ?? cheapestRoom
+	);
 	/** True when the API returned prices converted into the guest's display currency. */
 	const hasLocalized = $derived(
 		!!listing.localizedCurrency && listing.localizedCurrency !== listing.currency
@@ -48,13 +56,13 @@
 	/** Per-unit rate shown in the headline (display currency when available). */
 	const localizedRate = $derived(
 		hasLocalized
-			? (cheapestRoom?.localizedPricePerNight ??
+			? (selectedRoom?.localizedPricePerNight ??
 					listing.localizedNightlyRate ??
 					listing.localizedDailyRate)
 			: null
 	);
 	/** Per-unit rate in the host's listed (base) currency — the fee breakdown. */
-	const baseRate = $derived(cheapestRoom?.pricePerNight ?? listing.pricePerNight);
+	const baseRate = $derived(selectedRoom?.pricePerNight ?? listing.pricePerNight);
 	const effectiveRate = $derived(hasLocalized ? (localizedRate ?? baseRate) : baseRate);
 
 	const securityDeposit = $derived(
@@ -196,13 +204,13 @@
 
 	const selectedRanges = $derived.by(() => {
 		if (!availData) return null;
-		if (cheapestRoom?.id && Array.isArray(availData.roomTypeAvailability)) {
+		if (selectedRoom?.id && Array.isArray(availData.roomTypeAvailability)) {
 			const rt = (
 				availData.roomTypeAvailability as {
 					roomTypeId: string;
 					unavailableRanges: { start: string; end: string }[];
 				}[]
-			).find((r) => r.roomTypeId === cheapestRoom.id);
+			).find((r) => r.roomTypeId === selectedRoom.id);
 			if (rt) return rt.unavailableRanges;
 		}
 		return availData.unavailableRanges ?? [];
@@ -249,7 +257,7 @@
 			guests: String(guests),
 			nights: String(breakdown?.nights ?? 0),
 			currency: listing.localizedCurrency ?? listing.currency,
-			...(cheapestRoom?.id ? { roomTypeId: cheapestRoom.id } : {})
+			...(selectedRoom?.id ? { roomTypeId: selectedRoom.id } : {})
 		});
 		void goto(`/booking/review?${params.toString()}`);
 	}
@@ -308,7 +316,33 @@
 		</div>
 	{/if}
 
-	{#if cheapestRoom}
+	{#if cheapestRoom && (listing.roomTypes?.length ?? 0) > 1}
+		<div class="mt-3">
+			<label
+				for="booking-room-type"
+				class="mb-1 block text-[10px] font-bold tracking-wider text-slate-400 uppercase"
+			>
+				Room type
+			</label>
+			<select
+				id="booking-room-type"
+				bind:value={selectedRoomId}
+				class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition focus:border-[#1D8D2B] focus:outline-none"
+			>
+				{#each listing.roomTypes ?? [] as rt (rt.id)}
+					<option value={rt.id}>
+						{rt.name}
+						{rt.maxGuests ? ` · up to ${rt.maxGuests} guests` : ''} —
+						{formatMoney(
+							hasLocalized ? (rt.localizedPricePerNight ?? rt.pricePerNight) : rt.pricePerNight,
+							hasLocalized ? (listing.localizedCurrency ?? listing.currency) : listing.currency
+						)}
+						/ {unit}
+					</option>
+				{/each}
+			</select>
+		</div>
+	{:else if cheapestRoom}
 		<p class="mt-3 text-[11px] font-medium text-slate-400">
 			{cheapestRoom.name}{cheapestRoom.maxGuests ? ` · up to ${cheapestRoom.maxGuests} guests` : ''}
 		</p>
