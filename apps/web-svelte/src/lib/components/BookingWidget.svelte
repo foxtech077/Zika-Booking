@@ -87,7 +87,8 @@
 
 	let checkIn = $state('');
 	let checkOut = $state('');
-	let guests = $state(2);
+	let adults = $state(2);
+	let children = $state(0);
 	let deliveryRequested = $state(false);
 	let availData = $state<
 		| { unavailableRanges: { start: string; end: string }[]; roomTypeAvailability?: unknown[] }
@@ -254,7 +255,8 @@
 			listingId: listing.id,
 			start: checkIn,
 			end: checkOut,
-			guests: String(guests),
+			adults: String(adults),
+			children: String(children),
 			nights: String(breakdown?.nights ?? 0),
 			currency: listing.localizedCurrency ?? listing.currency,
 			...(selectedRoom?.id ? { roomTypeId: selectedRoom.id } : {})
@@ -417,22 +419,47 @@
 			<span class="mb-1 block text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
 				Guests
 			</span>
-			<div
-				class="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"
-			>
-				<button
-					type="button"
-					onclick={() => (guests = Math.max(1, guests - 1))}
-					class="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:border-[#1D8D2B] hover:text-[#1D8D2B]"
-					aria-label="Decrease guests">−</button
+			<div class="space-y-2">
+				<div
+					class="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"
 				>
-				<span class="text-sm font-semibold text-slate-800">{guests}</span>
-				<button
-					type="button"
-					onclick={() => (guests = Math.min(listing.maxGuests ?? 20, guests + 1))}
-					class="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:border-[#1D8D2B] hover:text-[#1D8D2B]"
-					aria-label="Increase guests">+</button
+					<span class="text-xs font-semibold text-slate-600">Adults</span>
+					<div class="flex items-center gap-2">
+						<button
+							type="button"
+							onclick={() => (adults = Math.max(1, adults - 1))}
+							class="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:border-[#1D8D2B] hover:text-[#1D8D2B]"
+							aria-label="Decrease adults">−</button
+						>
+						<span class="w-5 text-center text-sm font-semibold text-slate-800">{adults}</span>
+						<button
+							type="button"
+							onclick={() => (adults = Math.min(listing.maxGuests ?? 20, adults + 1))}
+							class="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:border-[#1D8D2B] hover:text-[#1D8D2B]"
+							aria-label="Increase adults">+</button
+						>
+					</div>
+				</div>
+				<div
+					class="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"
 				>
+					<span class="text-xs font-semibold text-slate-600">Children</span>
+					<div class="flex items-center gap-2">
+						<button
+							type="button"
+							onclick={() => (children = Math.max(0, children - 1))}
+							class="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:border-[#1D8D2B] hover:text-[#1D8D2B]"
+							aria-label="Decrease children">−</button
+						>
+						<span class="w-5 text-center text-sm font-semibold text-slate-800">{children}</span>
+						<button
+							type="button"
+							onclick={() => (children = Math.min(8, children + 1))}
+							class="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:border-[#1D8D2B] hover:text-[#1D8D2B]"
+							aria-label="Increase children">+</button
+						>
+					</div>
+				</div>
 			</div>
 		</div>
 	</div>

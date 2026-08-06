@@ -46,7 +46,16 @@
 	const start = $derived(sp.get('start') ?? '');
 	const end = $derived(sp.get('end') ?? '');
 	const nights = $derived(Number(sp.get('nights') ?? 0) || 0);
-	const guests = $derived(Number(sp.get('guests') ?? 2) || 2);
+	const adultsParam = $derived(
+		Number(sp.get('adults') ?? (sp.get('guests') ?? 2)) || 2
+	);
+	const childrenParam = $derived(Number(sp.get('children') ?? 0) || 0);
+	const guests = $derived(adultsParam + childrenParam);
+	const guestLabel = $derived(
+		`${adultsParam} adult${adultsParam !== 1 ? 's' : ''}${
+			childrenParam > 0 ? `, ${childrenParam} child${childrenParam !== 1 ? 'ren' : ''}` : ''
+		}`
+	);
 	const currency = $derived(sp.get('currency') ?? detail.currency);
 	const roomTypeId = $derived(sp.get('roomTypeId') ?? '');
 
@@ -521,8 +530,8 @@
 				guestLastName: lastName.trim(),
 				guestEmail: email.trim(),
 				guestPhone: phone.trim() || undefined,
-				adults: guests,
-				children: 0,
+				adults: adultsParam,
+				children: childrenParam,
 				specialRequests: specialRequests.trim() || undefined,
 				driverFirstName: isCar ? driverFirstName.trim() : undefined,
 				driverLastName: isCar ? driverLastName.trim() : undefined,
@@ -823,7 +832,7 @@
 					</div>
 					<div class="flex justify-between">
 						<dt class="text-slate-400">Guests</dt>
-						<dd class="font-semibold text-slate-700">{guests} guest{guests !== 1 ? 's' : ''}</dd>
+						<dd class="font-semibold text-slate-700">{guestLabel}</dd>
 					</div>
 					<div class="flex justify-between border-t border-slate-100 pt-2">
 						<dt class="text-slate-400">Total Paid</dt>
@@ -938,7 +947,7 @@
 				</div>
 				<div>
 					<p class="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">Guests</p>
-					<p class="mt-0.5 font-semibold">{guests} guest{guests !== 1 ? 's' : ''}</p>
+					<p class="mt-0.5 font-semibold">{guestLabel}</p>
 				</div>
 				<div>
 					<p class="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">Paid with</p>
@@ -1162,7 +1171,7 @@
 							</div>
 							<div>
 								<p class="mb-0.5 text-xs font-medium text-slate-400">Guests</p>
-								<p class="font-semibold text-slate-700">{guests} guest{guests !== 1 ? 's' : ''}</p>
+								<p class="font-semibold text-slate-700">{guestLabel}</p>
 							</div>
 						</div>
 					</section>
