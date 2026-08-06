@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -15,32 +15,24 @@ import {
   Languages,
   Link2,
   Lock,
-  Mail,
-  MapPin,
   MessageSquare,
   RefreshCw,
   Search,
   Shield,
   Smartphone,
-  Upload,
-  User,
   Wallet,
   XCircle,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth";
-import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { CurrencyCombobox } from "@/components/ui/CurrencyCombobox";
-import { CountryCombobox } from "@/components/ui/CountryCombobox";
 import { cn } from "@/lib/utils";
-import { ALL_COUNTRIES, parsePhoneNumber } from "@/lib/countries";
 
 type SettingsTab =
-  | "profile"
   | "account"
   | "notifications"
   | "security"
@@ -63,7 +55,6 @@ interface SectionFeedback {
 
 
 const tabs: Array<{ key: SettingsTab; label: string; icon: ReactNode; keywords: string }> = [
-  { key: "profile", label: "Profile", icon: <User />, keywords: "photo name email phone bio business address visibility" },
   { key: "account", label: "Account", icon: <Globe />, keywords: "timezone language currency format dashboard" },
   { key: "notifications", label: "Notifications", icon: <Bell />, keywords: "booking messages reviews payouts email sms push" },
   { key: "security", label: "Security", icon: <Shield />, keywords: "password two factor sessions devices privacy" },
@@ -186,53 +177,11 @@ function PasswordStrength({ password }: { password: string }) {
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { user, updateUser, clearSession } = useAuthStore();
-  const [tab, setTab] = useState<SettingsTab>("profile");
+  const { clearSession } = useAuthStore();
+  const [tab, setTab] = useState<SettingsTab>("account");
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [sectionFeedback, setSectionFeedback] = useState<Record<string, SectionFeedback | null>>({});
-
-  const [profileForm, setProfileForm] = useState({
-    firstName: user?.firstName ?? "",
-    lastName: user?.lastName ?? "",
-    email: user?.email ?? "",
-    phone: user?.phone ?? "",
-    bio: "",
-    businessName: user?.businessName ?? "",
-    address: "",
-    country: user?.country ?? "",
-    visible: true,
-  });
-
-  const [phoneCountryCode, setPhoneCountryCode] = useState("+254");
-  const [phoneLocalNumber, setPhoneLocalNumber] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    if (user) {
-      setProfileForm({
-        firstName: user.firstName ?? "",
-        lastName: user.lastName ?? "",
-        email: user.email ?? "",
-        phone: user.phone ?? "",
-        bio: "",
-        businessName: user.businessName ?? "",
-        address: "",
-        country: user.country ?? "",
-        visible: true,
-      });
-      const parsed = parsePhoneNumber(user.phone ?? "");
-      setPhoneCountryCode(parsed.countryCode || "+254");
-      setPhoneLocalNumber(parsed.localNumber);
-    }
-  }, [user]);
-
-  const countryDialOptions = useMemo(() => {
-    return ALL_COUNTRIES.map((c) => ({
-      value: c.dialCode,
-      label: `${c.flag} ${c.dialCode}`,
-    }));
-  }, []);
 
   const [accountForm, setAccountForm] = useState({
     timezone: "Asia/Kolkata",
@@ -294,65 +243,6 @@ export default function SettingsPage() {
   }, [search]);
   const visibleTabs = filteredTabs.length > 0 ? filteredTabs : tabs;
 
-  const name = `${profileForm.firstName} ${profileForm.lastName}`.trim() || "Provider";
-
-  const profileMutation = useMutation({
-    mutationFn: () => {
-      const combinedPhone = phoneLocalNumber ? `${phoneCountryCode}${phoneLocalNumber}` : "";
-      if (!combinedPhone) {
-        throw new Error("Phone number is required");
-      }
-      return api.patch("/auth/profile", {
-        firstName: profileForm.firstName,
-        lastName: profileForm.lastName,
-        businessName: profileForm.businessName,
-        country: profileForm.country,
-        phone: combinedPhone,
-      });
-    },
-    onSuccess: (res) => {
-      const updated = res.data?.data?.user ?? res.data?.user;
-      if (updated) {
-        updateUser(updated);
-        setProfileForm((f) => ({
-          ...f,
-          firstName: updated.firstName ?? "",
-          lastName: updated.lastName ?? "",
-          email: updated.email ?? "",
-          phone: updated.phone ?? "",
-          businessName: updated.businessName ?? "",
-          country: updated.country ?? "",
-        }));
-        const parsed = parsePhoneNumber(updated.phone ?? "");
-        setPhoneCountryCode(parsed.countryCode || "+254");
-        setPhoneLocalNumber(parsed.localNumber);
-      }
-      setNotice({ type: "success", text: "Profile settings saved." });
-      setSectionFeedback((current) => ({ ...current, profile: { type: "success", text: "Profile settings saved." } }));
-      setFieldErrors({});
-    },
-    onError: (err: any) => {
-      if (err.message === "Phone number is required") {
-        setFieldErrors({ phone: "Phone number is required" });
-        setNotice({ type: "error", text: "Phone number is required" });
-        setSectionFeedback((current) => ({ ...current, profile: { type: "error", text: "Phone number is required" } }));
-        return;
-      }
-      const responseData = err.response?.data;
-      const fields = responseData?.error?.fields;
-      const errorMessage = responseData?.error?.message || "Profile update failed. Please try again.";
-      
-      if (fields) {
-        setFieldErrors(fields);
-      } else {
-        setFieldErrors({});
-      }
-      
-      setNotice({ type: "error", text: errorMessage });
-      setSectionFeedback((current) => ({ ...current, profile: { type: "error", text: errorMessage } }));
-    },
-  });
-
   const passwordMutation = useMutation({
     mutationFn: () =>
       api.post("/auth/change-password", {
@@ -388,23 +278,6 @@ export default function SettingsPage() {
   });
 
   const resetSection = () => {
-    if (tab === "profile" && user) {
-      setProfileForm({
-        firstName: user.firstName ?? "",
-        lastName: user.lastName ?? "",
-        email: user.email ?? "",
-        phone: user.phone ?? "",
-        bio: "",
-        businessName: user.businessName ?? "",
-        address: "",
-        country: user.country ?? "",
-        visible: true,
-      });
-      const parsed = parsePhoneNumber(user.phone ?? "");
-      setPhoneCountryCode(parsed.countryCode || "+254");
-      setPhoneLocalNumber(parsed.localNumber);
-      setFieldErrors({});
-    }
     setNotice({ type: "success", text: "Section changes reset." });
     setSectionFeedback((current) => ({ ...current, [tab]: { type: "success", text: "Section changes reset." } }));
   };
@@ -497,90 +370,6 @@ export default function SettingsPage() {
         </Card>
 
         <div className="space-y-5">
-          {tab === "profile" && (
-            <SettingsCard
-              title="Profile Settings"
-              subtitle="Control how guests see your provider profile."
-              icon={<User />}
-              feedback={sectionFeedback.profile}
-              footer={
-                <>
-                  <Button loading={profileMutation.isPending} onClick={() => profileMutation.mutate()}>Save Changes</Button>
-                  <Button variant="outline" onClick={resetSection}>Cancel</Button>
-                </>
-              }
-            >
-              <div className="mb-6 flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-center">
-                <Avatar name={name} size="xl" />
-                <div className="flex-1">
-                  <p className="text-lg font-bold text-slate-950">{name}</p>
-                  <p className="text-sm text-slate-500">{profileForm.email || "No email available"}</p>
-                  <Badge label="Provider Account" status="confirmed" />
-                </div>
-                <Button variant="outline" icon={<Upload />}>Change Avatar</Button>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <Input label="First name" value={profileForm.firstName} onChange={(e) => setProfileForm((f) => ({ ...f, firstName: e.target.value }))} leftIcon={<User />} error={fieldErrors.firstName} />
-                <Input label="Last name" value={profileForm.lastName} onChange={(e) => setProfileForm((f) => ({ ...f, lastName: e.target.value }))} error={fieldErrors.lastName} />
-                <Input label="Email address" type="email" value={profileForm.email} disabled leftIcon={<Mail />} hint="Contact support to change your email." />
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
-                    Phone number <span className="text-red-500">*</span>
-                  </label>
-                  <div className="flex gap-2">
-                    <div className="w-[100px] shrink-0">
-                      <Select
-                        value={phoneCountryCode}
-                        onChange={(e) => {
-                          setPhoneCountryCode(e.target.value);
-                          setFieldErrors((prev) => ({ ...prev, phone: "" }));
-                        }}
-                        options={countryDialOptions}
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <Input
-                        value={phoneLocalNumber}
-                        onChange={(e) => {
-                          const cleaned = e.target.value.replace(/[^0-9]/g, "");
-                          setPhoneLocalNumber(cleaned);
-                          setFieldErrors((prev) => ({ ...prev, phone: "" }));
-                        }}
-                        placeholder="e.g. 712345678"
-                        error={fieldErrors.phone}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <Input label="Business / provider name" value={profileForm.businessName} onChange={(e) => setProfileForm((f) => ({ ...f, businessName: e.target.value }))} leftIcon={<Building2 />} error={fieldErrors.businessName} />
-                <CountryCombobox
-                  label="Country"
-                  value={profileForm.country}
-                  onChange={(code) => {
-                    setProfileForm((f) => ({ ...f, country: code }));
-                    setFieldErrors((prev) => ({ ...prev, country: "" }));
-                  }}
-                  error={fieldErrors.country}
-                />
-                <Input label="Address / location" value={profileForm.address} onChange={(e) => setProfileForm((f) => ({ ...f, address: e.target.value }))} leftIcon={<MapPin />} error={fieldErrors.address} className="md:col-span-2" />
-              </div>
-              <div className="mt-4">
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">Bio / About</label>
-                <textarea
-                  value={profileForm.bio}
-                  onChange={(e) => setProfileForm((f) => ({ ...f, bio: e.target.value }))}
-                  rows={4}
-                  className="w-full resize-none rounded-xl border border-border px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary"
-                  placeholder="Tell guests about your business and hosting style."
-                />
-              </div>
-              <div className="mt-4">
-                <Toggle checked={profileForm.visible} onChange={(value) => setProfileForm((f) => ({ ...f, visible: value }))} label="Profile visibility" hint="Allow guests to view your public provider profile." />
-              </div>
-            </SettingsCard>
-          )}
-
           {tab === "account" && (
             <SettingsCard title="Account Preferences" subtitle="Set dashboard defaults, locale, and display preferences." icon={<Globe />} feedback={sectionFeedback.account} footer={<SectionActions loading={fakeSaveMutation.isPending} onSave={() => fakeSaveMutation.mutate("Account preference")} onReset={resetSection} />}>
               <div className="grid gap-4 md:grid-cols-2">

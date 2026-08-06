@@ -158,11 +158,11 @@ export function TopBar({ onToggleSidebar }: TopBarProps) {
                   Back to Kainook
                 </button>
                 <button
-                  onClick={() => { setMenuOpen(false); router.push("/dashboard/settings"); }}
+                  onClick={() => { setMenuOpen(false); router.push("/traveller/profile"); }}
                   className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all"
                 >
                   <User className="w-4 h-4 text-green-600" />
-                  Profile &amp; Settings
+                  Profile
                 </button>
                 <button
                   onClick={() => { setMenuOpen(false); router.push("/faq"); }}

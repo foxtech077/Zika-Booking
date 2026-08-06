@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  User,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -42,6 +43,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Messages",     href: "/dashboard/messaging", icon: <MessageSquare />,   requiresListing: true },
   { label: "Earnings",     href: "/dashboard/earnings",  icon: <DollarSign />,      requiresListing: true },
   { label: "Channel Sync", href: "/dashboard/channel",   icon: <Globe2 />,          requiresListing: true },
+  { label: "Profile",      href: "/traveller/profile",   icon: <User /> },
   { label: "Settings",     href: "/dashboard/settings",  icon: <Settings /> },
 ];
 

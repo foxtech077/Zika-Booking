@@ -101,6 +101,9 @@ export function TravellerHeader({
   const isWishlistActive = pathname?.startsWith(TRAVELLER_ROUTES.wishlist);
   const isProfileActive = pathname?.startsWith(TRAVELLER_ROUTES.profile);
   const isListingsActive = pathname?.startsWith("/dashboard");
+  // The avatar trigger turns dark when the menu is open or on the profile
+  // screen; inner text must flip to light in both cases to keep contrast.
+  const avatarActive = menuOpen || isProfileActive;
   // Any signed-in user can create and manage listings directly.
   const listingsHref = hasListings
     ? TRAVELLER_ROUTES.manageListings
@@ -279,7 +282,7 @@ export function TravellerHeader({
                         <p
                           className={cn(
                             "max-w-[100px] truncate text-xs font-semibold leading-none",
-                            menuOpen ? "text-white" : "text-slate-800",
+                            avatarActive ? "text-white" : "text-slate-800",
                           )}
                         >
                           {fullName}
@@ -287,7 +290,7 @@ export function TravellerHeader({
                         <p
                           className={cn(
                             "mt-0.5 max-w-[100px] truncate text-[10px]",
-                            menuOpen ? "text-green-200/80" : "text-slate-400",
+                            avatarActive ? "text-green-200/80" : "text-slate-400",
                           )}
                         >
                           {user.email}
@@ -296,7 +299,8 @@ export function TravellerHeader({
                       <ChevronDown
                         className={cn(
                           "h-3.5 w-3.5 transition-transform",
-                          menuOpen ? "rotate-180 text-white/70" : "text-slate-400",
+                          menuOpen && "rotate-180",
+                          avatarActive ? "text-white/70" : "text-slate-400",
                         )}
                       />
                     </button>
