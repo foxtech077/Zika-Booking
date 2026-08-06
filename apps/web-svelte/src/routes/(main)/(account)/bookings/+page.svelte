@@ -30,6 +30,8 @@
 	let error = $state<string | null>(null);
 	let filter = $state<Filter>('all');
 	let cancellingId = $state<string | null>(null);
+	let cancelMsg = $state<string | null>(null);
+	let cancelError = $state<string | null>(null);
 
 	// Optional ?highlight=<id|reference> (e.g. from the confirmation email or
 	// the notifications "view booking" link) — scrolls to and emphasises the
@@ -40,6 +42,18 @@
 	let highlightedId = $state<string | null>(null);
 
 	const isCancelled = $derived((s: string) => s.startsWith('cancelled'));
+
+	// Mirrors the server rule: cancellable only while the start date is
+	// strictly in the future (hotels: check-in; cars: pickup).
+	function canCancel(b: GuestBooking): boolean {
+		const start = b.checkIn ?? b.pickupDatetime;
+		return b.status === 'confirmed' && !!start && new Date(start) > new Date();
+	}
+
+	function clearCancelMsg(): void {
+		cancelMsg = null;
+		cancelError = null;
+	}
 
 	const filtered = $derived(
 		bookings.filter((b) => {
@@ -92,6 +106,7 @@
 		if (status === 'confirmed') return 'Confirmed';
 		if (status === 'pending_payment') return 'Payment required';
 		if (status === 'completed') return 'Completed';
+		if (status === 'cancelled_by_provider') return 'Cancelled by Host';
 		if (isCancelled(status)) return 'Cancelled';
 		return status.replace(/_/g, ' ');
 	}
@@ -106,11 +121,13 @@
 		if (status === 'confirmed') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
 		if (status === 'pending_payment') return 'bg-amber-50 text-amber-700 border-amber-200';
 		if (status === 'completed') return 'bg-blue-50 text-blue-700 border-blue-200';
+		if (isCancelled(status)) return 'bg-red-50 text-red-600 border-red-200';
 		return 'bg-slate-100 text-slate-500 border-slate-200';
 	}
 
 	function handleCancel(b: GuestBooking): void {
 		cancellingId = b.id;
+		clearCancelMsg();
 		void (async () => {
 			try {
 				if (b.status === 'pending_payment') {
@@ -121,10 +138,12 @@
 				bookings = bookings.map((x) =>
 					x.id === b.id ? { ...x, status: 'cancelled_by_guest' } : x
 				);
+				cancelMsg = 'Booking cancelled successfully. Refund has been processed.';
 			} catch {
 				bookings = bookings.map((x) =>
 					x.id === b.id ? { ...x, status: 'cancelled_by_guest' } : x
 				);
+				cancelError = 'Could not cancel the booking. Please try again.';
 			} finally {
 				cancellingId = null;
 			}
@@ -167,23 +186,46 @@
 	<!-- Filter chips -->
 	<div class="flex flex-wrap gap-2">
 		{#each FILTERS as f (f.key)}
-			<button
-				type="button"
-				onclick={() => (filter = f.key)}
-				class={cn(
-					'rounded-full px-4 py-2 text-sm font-semibold transition',
-					filter === f.key
-						? 'bg-[#0c2614] text-white'
-						: 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-				)}
-			>
-				{f.label}
-				<span class={cn('ml-1 text-xs', filter === f.key ? 'text-white/60' : 'text-slate-400')}>
-					{counts[f.key]}
-				</span>
-			</button>
+			{#if counts[f.key] > 0}
+				<button
+					type="button"
+					onclick={() => (filter = f.key)}
+					class={cn(
+						'rounded-full px-4 py-2 text-sm font-semibold transition',
+						filter === f.key
+							? 'bg-[#0c2614] text-white'
+							: 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+					)}
+				>
+					{f.label}
+					<span class={cn('ml-1 text-xs', filter === f.key ? 'text-white/60' : 'text-slate-400')}>
+						{counts[f.key]}
+					</span>
+				</button>
+			{/if}
 		{/each}
 	</div>
+
+	{#if cancelMsg || cancelError}
+		<div
+			class={cn(
+				'flex items-start gap-2 rounded-xl border px-4 py-3 text-sm',
+				cancelError ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+			)}
+		>
+			<span>{cancelMsg ?? cancelError}</span>
+			<button
+				type="button"
+				onclick={clearCancelMsg}
+				class="ml-auto rounded p-1 opacity-60 transition hover:opacity-100"
+				aria-label="Dismiss"
+			>
+				<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
+		</div>
+	{/if}
 
 	{#if loading}
 		<div class="space-y-4">
@@ -319,7 +361,7 @@
 
 							{#if b.status === 'confirmed' || b.status === 'pending_payment' || b.status === 'completed'}
 								<div class="mt-3 flex items-center gap-3 border-t border-slate-100 pt-3">
-									{#if b.status === 'confirmed'}
+									{#if b.status === 'confirmed' && canCancel(b)}
 										<span
 											class="inline-block cursor-pointer rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50"
 											role="button"
@@ -339,24 +381,7 @@
 											{cancellingId === b.id ? 'Cancelling…' : 'Cancel booking'}
 										</span>
 									{:else if b.status === 'pending_payment'}
-										<span
-											class="inline-block cursor-pointer rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50"
-											role="button"
-											tabindex="0"
-											onclick={(e) => {
-												e.stopPropagation();
-												handleCancel(b);
-											}}
-											onkeydown={(e) => {
-												if (e.key === 'Enter' || e.key === ' ') {
-													e.preventDefault();
-													e.stopPropagation();
-													handleCancel(b);
-												}
-											}}
-										>
-											{cancellingId === b.id ? 'Cancelling…' : 'Payment required — cancel'}
-										</span>
+										<span class="text-xs font-medium text-amber-600">Payment required</span>
 									{/if}
 									{#if b.status === 'completed'}
 										<a

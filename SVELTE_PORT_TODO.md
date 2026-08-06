@@ -25,12 +25,7 @@ Scope notes: the provider dashboard and Stripe Connect (section E) are a large, 
 
 ## B. Account pages
 
-- [ ] **B1. Bookings list parity** — MISSING/DIFFERENT in `apps/web-svelte/src/routes/(main)/(account)/bookings/+page.svelte`:
-  - `cancelled_by_provider` → "Cancelled by Host" label (currently collapsed to "Cancelled"), `:91-97`.
-  - Red styling for all cancelled variants, `:105-110`.
-  - `canCancel` gating on the list card cancel button (currently shown for any confirmed/pending booking), `:320-360`.
-  - Cancellation success/refund feedback (web shows a result alert), `:112-132`.
-  - Hide zero-count status filter tabs.
+- [x] **B1. Bookings list parity** — FIXED in `apps/web-svelte/src/routes/(main)/(account)/bookings/+page.svelte`: `cancelled_by_provider` → "Cancelled by Host", red styling for all cancelled variants, the confirmed Cancel button is gated on a client-computed `canCancel` (start date in the future), cancellation shows a success/refund banner (or error), and zero-count status filter tabs are hidden — mirroring apps/web.
 - [ ] **B2. Wishlist category tabs + per-category empty states** — MISSING. web has All/Hotels/Home/Cars tabs (currently commented out in web) and per-category empty states; web-svelte has a flat list + single empty state. web: `apps/web/app/traveller/wishlist/WishlistClient.tsx:240-262, 287-299`; web-svelte: `apps/web-svelte/src/routes/(main)/(account)/wishlist/+page.svelte`.
 - [ ] **B3. Reviews page parity** — MISSING in `apps/web-svelte/src/routes/(main)/(account)/reviews/+page.svelte`:
   - "Hidden" stat card in the rating summary (Total/Average/Replies/Hidden). web: `apps/web/app/traveller/reviews/page.tsx:414-421`.
