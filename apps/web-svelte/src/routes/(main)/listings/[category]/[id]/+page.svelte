@@ -10,6 +10,7 @@
 	import { formatMoney } from '$lib/currency-display';
 	import { categoryHref } from '$lib/listing-meta';
 	import { auth } from '$lib/stores/auth.svelte';
+	import { readReviewContext } from '$lib/review-context';
 	import { addFavourite, removeFavourite } from '$lib/account-api';
 	import {
 		isFavourited,
@@ -83,6 +84,18 @@
 			favPending = false;
 		}
 	}
+
+	// Post-checkout "Ready to review" CTA — appears only for the listing that
+	// was just paid for (review context written at payment capture).
+	const reviewCtx = $derived(detail ? readReviewContext() : null);
+	const canReviewNow = $derived(!!reviewCtx && reviewCtx.listingId === detail?.id);
+	const reviewHref = $derived(
+		reviewCtx
+			? `/reviews?bookingId=${encodeURIComponent(reviewCtx.bookingId)}${
+					reviewCtx.listingId ? `&listingId=${encodeURIComponent(reviewCtx.listingId)}` : ''
+				}${reviewCtx.listingName ? `&listingName=${encodeURIComponent(reviewCtx.listingName)}` : ''}`
+			: ''
+	);
 
 	// Record the view — signed-in users get server-side history, guests keep a
 	// small local list so they still see "recently viewed" on the home page.
@@ -524,6 +537,27 @@
 			</div>
 
 			<aside class="h-fit lg:sticky lg:top-24">
+				{#if canReviewNow && reviewCtx}
+					<a
+						href={reviewHref}
+						class="mb-4 block rounded-2xl border border-emerald-200 bg-emerald-50/70 p-5 shadow-[0_12px_40px_rgba(16,185,129,0.08)]"
+					>
+						<p class="text-[11px] font-semibold tracking-[0.24em] text-emerald-700 uppercase">
+							Ready to review
+						</p>
+						<h3 class="mt-1 text-sm font-bold text-slate-950">
+							Share feedback for {reviewCtx.listingName || 'this listing'}
+						</h3>
+						<p class="mt-2 text-xs leading-relaxed text-slate-600">
+							Your most recent completed booking is ready for feedback.
+						</p>
+						<span
+							class="mt-3 inline-block rounded-lg bg-[#16a34a] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#15803d]"
+						>
+							Write a review
+						</span>
+					</a>
+				{/if}
 				<div class="relative min-h-[280px]">
 					{#if WidgetComponent}
 						<WidgetComponent listing={detail} />

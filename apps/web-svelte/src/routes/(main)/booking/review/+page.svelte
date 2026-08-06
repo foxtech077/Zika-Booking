@@ -6,6 +6,7 @@
 	import type { PageProps } from './$types';
 	import { parsePhoneNumber } from 'libphonenumber-js';
 	import { isTaraCountry } from '$lib/tara';
+	import { storeReviewContext } from '$lib/review-context';
 	import type { Stripe, StripeCardElement } from '@stripe/stripe-js';
 	import { fmtDates, derivePlatform, fmtPlatform } from '$lib/booking-utils';
 	import {
@@ -623,6 +624,15 @@
 					};
 					payStep = 'confirmed';
 					recordTermsAcceptance();
+					// Stash the post-checkout review context so the listing page can
+					// offer a "Ready to review" CTA for the stay that was just paid for.
+					if (confirmed?.bookingId) {
+						storeReviewContext({
+							bookingId: confirmed.bookingId,
+							listingId: detail.id,
+							listingName: detail.name
+						});
+					}
 				} else if (status.status === 'failed' || status.status === 'timed_out') {
 					clearPoll();
 					paymentResolvedRef.current = true;
