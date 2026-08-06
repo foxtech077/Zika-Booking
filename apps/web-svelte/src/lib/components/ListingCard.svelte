@@ -4,6 +4,7 @@
 	import { formatMoney, resolvePlatformCurrency } from '$lib/currency-display';
 	import { listingHref } from '$lib/listing-meta';
 	import { auth } from '$lib/stores/auth.svelte';
+	import { addFavourite, removeFavourite } from '$lib/account-api';
 	import ListingImage from './ListingImage.svelte';
 
 	let {
@@ -22,7 +23,24 @@
 	const unit = $derived(isCar ? 'day' : 'night');
 	const location = $derived([listing.town, listing.country].filter(Boolean).join(', '));
 	let favOverride = $state<boolean | null>(null);
+	let favPending = $state(false);
 	const isFav = $derived(favOverride ?? listing.isFavourited ?? false);
+
+	async function toggleFav(): Promise<void> {
+		if (!canFavourite || favPending) return;
+		const next = !isFav;
+		favOverride = next;
+		favPending = true;
+		try {
+			if (next) await addFavourite(listing.id);
+			else await removeFavourite(listing.id);
+		} catch {
+			// Roll back the optimistic update on failure.
+			favOverride = !next;
+		} finally {
+			favPending = false;
+		}
+	}
 	// Favourites are tied to an account — hide the heart for guests and
 	// anonymous checkout sessions.
 	const canFavourite = $derived(auth.isAuthenticated);
@@ -145,9 +163,10 @@
 				type="button"
 				onclick={(e) => {
 					e.preventDefault();
-					favOverride = !isFav;
+					void toggleFav();
 				}}
-				class="absolute top-3 right-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/80 shadow-sm backdrop-blur-sm transition hover:bg-white"
+				disabled={favPending}
+				class="absolute top-3 right-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/80 shadow-sm backdrop-blur-sm transition hover:bg-white disabled:opacity-60"
 				aria-label={isFav ? 'Remove from wishlist' : 'Save to wishlist'}
 			>
 				<svg

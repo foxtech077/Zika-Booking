@@ -10,6 +10,7 @@
 	import { formatMoney } from '$lib/currency-display';
 	import { categoryHref } from '$lib/listing-meta';
 	import { auth } from '$lib/stores/auth.svelte';
+	import { addFavourite, removeFavourite } from '$lib/account-api';
 	import { recordRecentlyViewed, createConversation } from '$lib/account-api';
 	import { addLocalRecentlyViewed } from '$lib/recently-viewed';
 
@@ -47,6 +48,28 @@
 	let messaging = $state(false);
 
 	const canMessage = $derived(!!detail?.allowPreBooking && auth.isAuthenticated);
+
+	// ── Favourites ──────────────────────────────────────────────────────────
+	const canFavourite = $derived(auth.isAuthenticated);
+	let favOverride = $state<boolean | null>(null);
+	let favPending = $state(false);
+	const isFav = $derived(favOverride ?? detail?.isFavourited ?? false);
+
+	async function toggleFav(): Promise<void> {
+		if (!canFavourite || !detail || favPending) return;
+		const next = !isFav;
+		favOverride = next;
+		favPending = true;
+		try {
+			if (next) await addFavourite(detail.id);
+			else await removeFavourite(detail.id);
+		} catch {
+			// Roll back the optimistic update on failure.
+			favOverride = !next;
+		} finally {
+			favPending = false;
+		}
+	}
 
 	// Record the view — signed-in users get server-side history, guests keep a
 	// small local list so they still see "recently viewed" on the home page.
@@ -298,6 +321,30 @@
 		<p class="mt-1 text-sm text-slate-500">{locationLabel}</p>
 
 		<div class="mt-4 flex flex-wrap items-center gap-2">
+			{#if canFavourite}
+				<button
+					type="button"
+					onclick={() => void toggleFav()}
+					disabled={favPending}
+					class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-[#1D8D2B]/50 hover:text-[#0c2614] disabled:cursor-not-allowed disabled:opacity-60"
+					aria-pressed={isFav}
+				>
+					<svg
+						class={isFav ? 'h-3.5 w-3.5 fill-current text-red-500' : 'h-3.5 w-3.5'}
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						viewBox="0 0 24 24"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+						/>
+					</svg>
+					{isFav ? 'Saved' : 'Save'}
+				</button>
+			{/if}
 			<button
 				type="button"
 				onclick={handleShare}
