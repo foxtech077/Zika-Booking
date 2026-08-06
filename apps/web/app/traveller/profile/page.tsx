@@ -380,15 +380,6 @@ export default function TravellerProfilePage() {
                       icon: <Globe className="h-3.5 w-3.5" />,
                     },
                     {
-                      label: "Host status",
-                      value:
-                        user?.hostStatus === "approved" ? "Approved host"
-                        : user?.hostStatus === "pending" ? "Host application pending"
-                        : user?.hostStatus === "rejected" ? "Host application rejected"
-                        : "Not a host",
-                      icon: <Shield className="h-3.5 w-3.5" />,
-                    },
-                    {
                       label: "Account status",
                       value: user?.status,
                       icon: <Shield className="h-3.5 w-3.5" />,

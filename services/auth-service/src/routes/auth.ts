@@ -92,12 +92,7 @@ async function issueTokens(
   status: string,
   country: string | null,
 ) {
-  // Hosting capability is derived from the Accreditation (host profile) row.
-  // Emitted as a JWT claim so downstream services can gate host-only routes
-  // statelessly. A newly-approved host picks this up on next token refresh.
-  const hostStatus = await getHostStatus(userId);
-
-  const accessToken = await signAccessToken({ sub: userId, type: "user", status, country: country ?? undefined, hostStatus });
+  const accessToken = await signAccessToken({ sub: userId, type: "user", status, country: country ?? undefined });
   const refreshToken = generateRefreshToken();
   const tokenHash = hashToken(refreshToken);
   const expiresAt = new Date(Date.now() + REFRESH_TTL * 1000);
@@ -105,24 +100,7 @@ async function issueTokens(
   await prisma.session.create({ data: { userId, tokenHash, expiresAt } });
   reply.setCookie("web_refresh_token", refreshToken, COOKIE_OPTS);
 
-  return { accessToken, expiresIn: Number(process.env["JWT_ACCESS_TTL_SECONDS"] ?? 900), hostStatus };
-}
-
-// ── Helper: resolve host (Accreditation) status ─────────────────────────────
-// Single source of truth for the hostStatus claim (JWT) and the REST user
-// object, so the two can never disagree. Non-fatal: any failure degrades to
-// "not a host" (null) rather than breaking authentication.
-
-async function getHostStatus(userId: string): Promise<"approved" | "pending" | "rejected" | null> {
-  try {
-    const acc = await prisma.accreditation.findUnique({
-      where: { providerId: userId },
-      select: { status: true },
-    });
-    return (acc?.status as "approved" | "pending" | "rejected") ?? null;
-  } catch {
-    return null;
-  }
+  return { accessToken, expiresIn: Number(process.env["JWT_ACCESS_TTL_SECONDS"] ?? 900) };
 }
 
 // ── Helper: map User to public shape ─────────────────────────────────────────
@@ -165,7 +143,6 @@ function publicUser(
     termsAcceptedAt?: Date | null; termsVersion?: string | null;
     privacyAcceptedAt?: Date | null; privacyVersion?: string | null;
   },
-  hostStatus: "approved" | "pending" | "rejected" | null = null,
 ) {
   const legal = {
     termsAcceptedAt: u.termsAcceptedAt ?? null,
@@ -178,7 +155,6 @@ function publicUser(
     status: u.status, userType: u.userType, businessName: u.businessName,
     country: u.country, phone: u.phone, emailVerified: u.emailVerified,
     currentTier: u.currentTier, loyaltyPoints: u.loyaltyPoints,
-    hostStatus,
     termsAcceptedAt: legal.termsAcceptedAt,
     privacyAcceptedAt: legal.privacyAcceptedAt,
     // Two independent gates — see the helpers above. Computed server-side so
@@ -394,7 +370,7 @@ export async function authRoutes(app: FastifyInstance) {
         fireAndForgetBookingClaim(email, tokens.accessToken);
 
         return sendSuccess(reply, 201, {
-          user: publicUser(user, tokens.hostStatus),
+          user: publicUser(user),
           tokens
         });
       }
@@ -735,7 +711,7 @@ export async function authRoutes(app: FastifyInstance) {
 
           return sendSuccess(reply, 200, {
             message: "You're already verified. Welcome back!",
-            user: publicUser(record.user, tokens.hostStatus),
+            user: publicUser(record.user),
             tokens,
           });
         }
@@ -776,7 +752,7 @@ export async function authRoutes(app: FastifyInstance) {
 
           return sendSuccess(reply, 200, {
             message: "Email verified — welcome to Kainook!",
-            user: publicUser(updatedUser, tokens.hostStatus),
+            user: publicUser(updatedUser),
             tokens,
           });
         } catch (err: any) {
@@ -934,7 +910,7 @@ export async function authRoutes(app: FastifyInstance) {
       const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
       // Adopt-by-email: attach any anonymous bookings made under this email.
       fireAndForgetBookingClaim(email, tokens.accessToken);
-      return sendSuccess(reply, 200, { user: publicUser(user, tokens.hostStatus), tokens });
+      return sendSuccess(reply, 200, { user: publicUser(user), tokens });
     } catch {
       return sendError(reply, 400, "LOGIN_FAILED", "Unable to complete sign-in. Please check your credentials and try again.");
     }
@@ -968,7 +944,6 @@ export async function authRoutes(app: FastifyInstance) {
                     emailVerified: { type: "boolean" },
                     currentTier: { type: "string" },
                     loyaltyPoints: { type: "integer" },
-                    hostStatus: { type: "string", enum: ["approved", "pending", "rejected"], nullable: true },
                   }
                 },
                 pointsToNextTier: { type: "integer", nullable: true },
@@ -1004,10 +979,8 @@ export async function authRoutes(app: FastifyInstance) {
       pointsToNextTier = 5000 - user.loyaltyPoints;
     }
     
-    const hostStatus = await getHostStatus(user.id);
-
     return sendSuccess(reply, 200, {
-      user: publicUser(user, hostStatus),
+      user: publicUser(user),
       nextTier,
       pointsToNextTier
     });
@@ -1073,8 +1046,8 @@ export async function authRoutes(app: FastifyInstance) {
       await prisma.session.update({ where: { id: session.id }, data: { revoked: true } });
       const tokens = await issueTokens(reply, session.userId, session.user.userType, session.user.status, session.user.country);
       // Include the fresh user so clients can update their stored profile
-      // (e.g. hostStatus) from the refresh response instead of a second request.
-      return sendSuccess(reply, 200, { tokens, user: publicUser(session.user, tokens.hostStatus) });
+      // from the refresh response instead of a second request.
+      return sendSuccess(reply, 200, { tokens, user: publicUser(session.user) });
     } catch {
       return sendError(reply, 400, "REFRESH_FAILED", "Token refresh failed. Please sign in again.");
     }
@@ -1187,7 +1160,7 @@ export async function authRoutes(app: FastifyInstance) {
 
         fireAndForgetBookingClaim(updatedUser.email, tokens.accessToken);
 
-        return sendSuccess(reply, 200, { message: "Your password has been updated. You're now signed in.", user: publicUser(updatedUser, tokens.hostStatus), tokens });
+        return sendSuccess(reply, 200, { message: "Your password has been updated. You're now signed in.", user: publicUser(updatedUser), tokens });
       } catch (err: any) {
         if (err?.code === "P2025") {
           return sendError(reply, 404, "USER_NOT_FOUND", "User account not found. The account may have been deleted.");
@@ -1417,10 +1390,8 @@ export async function authRoutes(app: FastifyInstance) {
           },
         });
 
-        const hostStatus = await getHostStatus(userId);
-
         return sendSuccess(reply, 200, {
-          user: publicUser(user, hostStatus),
+          user: publicUser(user),
           acceptedAt: acceptedAt.toISOString(),
           termsVersion: CURRENT_TERMS_VERSION,
           privacyVersion: CURRENT_PRIVACY_VERSION,
@@ -1622,135 +1593,6 @@ export async function authRoutes(app: FastifyInstance) {
     }
   );
 
-  // ── Host profile (Accreditation) ───────────────────────────────────────────
-  // Any user can become a host by submitting their business details and
-  // documents. Admin approval gates listing management. The status is minted
-  // into the JWT as hostStatus so downstream services can gate statelessly.
-
-  const hostProfileSchema = z.object({
-    businessName: z.string().min(1, "Business name is required").max(255).optional(),
-    registrationNo: z.string().max(100).optional(),
-    taxId: z.string().max(100).optional(),
-    documentsUrl: z.string().url("Invalid documents URL").optional(),
-  });
-
-  // ── GET /auth/host/profile  (own host profile + status) ───────────────────
-  app.get(
-    "/auth/host/profile",
-    {
-      schema: {
-        tags: ["User Auth"],
-        summary: "Get the current user's host profile (accreditation) and status",
-        security: [{ bearerAuth: [] }],
-      },
-      preHandler: [requireAuth],
-    },
-    async (req: FastifyRequest, reply: FastifyReply) => {
-      try {
-        const userId = (req as FastifyRequest & { userId: string }).userId;
-        const acc = await prisma.accreditation.findUnique({ where: { providerId: userId } });
-        return sendSuccess(reply, 200, {
-          hostProfile: acc
-            ? {
-              id: acc.id,
-              status: acc.status,
-              businessName: acc.businessName,
-              registrationNo: acc.registrationNo,
-              taxId: acc.taxId,
-              documentsUrl: acc.documentsUrl,
-              submittedAt: acc.submittedAt,
-              reviewedAt: acc.reviewedAt,
-              rejectionReason: acc.rejectionReason,
-            }
-            : null,
-        });
-      } catch (err: any) {
-        req.log.error(err, "Failed to fetch host profile");
-        return sendError(reply, 500, "SERVER_ERROR", "Could not fetch your host profile. Please try again.");
-      }
-    }
-  );
-
-  // ── POST /auth/host/profile  (submit or update host profile → pending) ────
-  app.post(
-    "/auth/host/profile",
-    {
-      schema: {
-        tags: ["User Auth"],
-        summary: "Submit or update the user's host profile (accreditation), setting status to pending",
-        security: [{ bearerAuth: [] }],
-        body: {
-          type: "object",
-          properties: {
-            businessName: { type: "string" },
-            registrationNo: { type: "string" },
-            taxId: { type: "string" },
-            documentsUrl: { type: "string", format: "uri" },
-          },
-        },
-      },
-      preHandler: [requireAuth],
-    },
-    async (req: FastifyRequest, reply: FastifyReply) => {
-      try {
-        const userId = (req as FastifyRequest & { userId: string }).userId;
-        const parsed = hostProfileSchema.safeParse(req.body);
-        if (!parsed.success) {
-          return sendError(
-            reply,
-            422,
-            "VALIDATION_ERROR",
-            "Validation failed",
-            zodFieldErrors((parsed.error as ZodError).issues)
-          );
-        }
-        const { businessName, registrationNo, taxId, documentsUrl } = parsed.data;
-
-        const acc = await prisma.accreditation.upsert({
-          where: { providerId: userId },
-          create: {
-            providerId: userId,
-            status: "pending",
-            businessName: businessName ?? null,
-            registrationNo: registrationNo ?? null,
-            taxId: taxId ?? null,
-            documentsUrl: documentsUrl ?? null,
-            submittedAt: new Date(),
-          },
-          update: {
-            status: "pending",
-            businessName: businessName ?? null,
-            registrationNo: registrationNo ?? null,
-            taxId: taxId ?? null,
-            documentsUrl: documentsUrl ?? null,
-            reviewedAt: null,
-            reviewedBy: null,
-            rejectionReason: null,
-            submittedAt: new Date(),
-          },
-        });
-
-        return sendSuccess(reply, 200, {
-          message: "Host profile submitted. It will be reviewed by our team.",
-          hostProfile: {
-            id: acc.id,
-            status: acc.status,
-            businessName: acc.businessName,
-            registrationNo: acc.registrationNo,
-            taxId: acc.taxId,
-            documentsUrl: acc.documentsUrl,
-            submittedAt: acc.submittedAt,
-            reviewedAt: acc.reviewedAt,
-            rejectionReason: acc.rejectionReason,
-          },
-        });
-      } catch (err: any) {
-        req.log.error(err, "Failed to submit host profile");
-        return sendError(reply, 500, "SERVER_ERROR", "Could not submit your host profile. Please try again.");
-      }
-    }
-  );
-
   // ── POST /auth/oauth/google  (UC-1.6) ──────────────────────────────────────
   app.post("/auth/oauth/google", {
     schema: { 
@@ -1815,7 +1657,7 @@ export async function authRoutes(app: FastifyInstance) {
         await sendWelcomeEmail(email, user.firstName).catch(() => null);
         const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
         fireAndForgetBookingClaim(email, tokens.accessToken);
-        return sendSuccess(reply, 201, { user: publicUser(user, tokens.hostStatus), tokens });
+        return sendSuccess(reply, 201, { user: publicUser(user), tokens });
       }
 
       let user = existingByEmail;
@@ -1851,7 +1693,7 @@ export async function authRoutes(app: FastifyInstance) {
 
       const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
       fireAndForgetBookingClaim(user.email, tokens.accessToken);
-      return sendSuccess(reply, 200, { user: publicUser(user, tokens.hostStatus), tokens });
+      return sendSuccess(reply, 200, { user: publicUser(user), tokens });
     } catch (err) {
       return sendError(reply, 400, "OAUTH_FAILED", "Sign in with Google could not be completed. Please try again.");
     }
@@ -1935,7 +1777,7 @@ export async function authRoutes(app: FastifyInstance) {
         await sendWelcomeEmail(appleEmail, user.firstName).catch(() => null);
         const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
         fireAndForgetBookingClaim(user.email, tokens.accessToken);
-        return sendSuccess(reply, 201, { user: publicUser(user, tokens.hostStatus), tokens });
+        return sendSuccess(reply, 201, { user: publicUser(user), tokens });
       }
       if (user.status === "pending_verification") {
         return sendError(reply, 403, "EMAIL_NOT_VERIFIED", "Please verify your email address to sign in.");
@@ -1945,7 +1787,7 @@ export async function authRoutes(app: FastifyInstance) {
 
       const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
       fireAndForgetBookingClaim(user.email, tokens.accessToken);
-      return sendSuccess(reply, 200, { user: publicUser(user, tokens.hostStatus), tokens });
+      return sendSuccess(reply, 200, { user: publicUser(user), tokens });
     } catch (err) {
       return sendError(reply, 400, "OAUTH_FAILED", "Sign in with Apple could not be completed. Please try again.");
     }

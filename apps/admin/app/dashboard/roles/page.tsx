@@ -78,7 +78,7 @@ const ROLE_OPTIONS: { value: AdminRole; label: string }[] = [
 const ROLE_DESCRIPTIONS: Record<string, string> = {
   super_admin: "Full platform access including role management and settings.",
   admin: "Full operational access excluding role management.",
-  country_manager: "Manages listings and accreditation for assigned countries.",
+  country_manager: "Manages listings and bookings for assigned countries.",
   sales: "Manages vouchers, commission, and bookings visibility.",
   support: "Handles user support, bookings, and review moderation.",
   finance: "Access to financial reports, commission, and audit logs.",

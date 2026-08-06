@@ -80,7 +80,6 @@ export default function SettingsPage() {
     { feature: "Booking Auto-Cancel", description: "Auto-cancel unpaid bookings after timeout", status: "enabled" },
     { feature: "Review Moderation", description: "Manual review hide/unhide controls", status: "enabled" },
     { feature: "Commission Override", description: "Per-country commission rate management", status: "enabled" },
-    { feature: "SLA Enforcement", description: "48-hour accreditation review SLA", status: "enabled" },
     { feature: "Voucher System", description: "Percentage and fixed-amount vouchers", status: "enabled" },
     { feature: "Audit Trail", description: "Immutable audit log for all admin actions", status: "enabled" },
   ];

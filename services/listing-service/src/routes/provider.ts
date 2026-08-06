@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireHost, type AuthRequest } from "../middleware/auth.js";
+import { requireUser, type AuthRequest } from "../middleware/auth.js";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -24,7 +24,7 @@ export async function providerRoutes(app: FastifyInstance) {
         tags: ["Provider Portal"],
         description: "Get provider dashboard summary including earnings, bookings, and recent activity",
       },
-      preHandler: [requireHost],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -165,7 +165,7 @@ export async function providerRoutes(app: FastifyInstance) {
         tags: ["Provider Portal"],
         description: "Get a summary of all provider listings with revenue and rating stats",
       },
-      preHandler: [requireHost],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -239,7 +239,7 @@ export async function providerRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireHost],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -342,7 +342,7 @@ export async function providerRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireHost],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -424,7 +424,7 @@ export async function providerRoutes(app: FastifyInstance) {
         tags: ["Provider Portal"],
         description: "Get provider earnings breakdown — all-time totals, last 12 months monthly, and recent payouts",
       },
-      preHandler: [requireHost],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -528,7 +528,7 @@ export async function providerRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireHost],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {

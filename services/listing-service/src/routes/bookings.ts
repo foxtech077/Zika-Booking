@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError, BookingNotFoundError, isPrismaUniqueViolation } from "../lib/errors.js";
-import { requireAuth, requireHost, type AuthRequest } from "../middleware/auth.js";
+import { requireAuth, requireUser, type AuthRequest } from "../middleware/auth.js";
 import { getRedis } from "../lib/redis.js";
 import { randomUUID, randomBytes } from "crypto";
 import { sendBookingConfirmationEmail, sendBookingCancellationEmail } from "../lib/email.js";
@@ -2751,7 +2751,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireHost],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const providerId = (req as AuthRequest).authId;
@@ -2897,7 +2897,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireHost],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const providerId = (req as AuthRequest).authId;
@@ -2998,7 +2998,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           409: errSchema,
         },
       },
-      preHandler: [requireHost],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const providerId = (req as AuthRequest).authId;

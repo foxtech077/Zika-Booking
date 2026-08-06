@@ -14,7 +14,8 @@ Two concepts are gone: **provider** and **traveller** (and "guest" as an
 account type). There is now exactly one account type — **`user`** — and one
 kind of anonymous session — **`anonymous`**.
 
-- A registered `user` can book **and** create listings (hosting is opt-in).
+- A registered `user` can book **and** create listings (hosting is available to
+  every registered account — there is no host application or approval step).
 - An **anonymous** visitor can only browse public things, book, and pay.
   They cannot access settings, my-reservations, favourites, messaging, etc.
 - Anonymous bookings are automatically attached to a user's account when
@@ -35,12 +36,9 @@ endpoint can enforce these rules.
 | `"provider"`| `"user"`   | Real registered account (a user)         |
 | —           | `"anonymous"` | Anonymous checkout session (no account) |
 
-New optional claim:
-
-- `hostStatus: "approved" | "pending" | "rejected" | null` — only present on
-  `user` tokens. `"approved"` unlocks listing management. Minted at
-  login/refresh, so a newly-approved host picks it up on their next token
-  refresh (≤ 15 min).
+There is **no** `hostStatus` claim in the JWT anymore. Host accreditation and
+the `Accreditation` table/enum were removed entirely — every registered user
+can manage listings without an approval step.
 
 ### Account type field
 
@@ -71,17 +69,9 @@ New optional claim:
 - `requireAuth`-protected endpoints (`/auth/me`, `/auth/profile`,
   `/auth/change-password`, `/auth/accept-terms`, `/auth/logout-all`) now
   **reject anonymous tokens** with `403 ACCOUNT_REQUIRED`.
-- New host onboarding:
-  - `GET  /auth/host/profile` — current user's host profile + status
-    (`approved` / `pending` / `rejected` / `null`).
-  - `POST /auth/host/profile` — submit/update host profile → status `pending`
-    (business details + documents). Requires a registered user.
 - `PATCH /auth/profile` — `businessName`/`country`/`phone` are no longer
   restricted to "provider" accounts; any user may set them.
-- Admin: `GET /admin/accreditations` (review queue),
-  `PATCH /admin/accreditations/:id/approve`,
-  `PATCH /admin/accreditations/:id/reject`.
-- `/admin/users` now filters by `hostStatus` instead of `userType`.
+- `/admin/users` filters by account status only (no host-status filter).
 
 ### Listing service (`services/listing-service`)
 
@@ -91,8 +81,7 @@ New middleware guard semantics:
 |--------------|-------------------------------------|----------|
 | `authenticate` | Anyone (optional)                 | Public search / listing detail (enriches `isFavourited` for real users only) |
 | `requireAuth`  | `user` **or** `anonymous`         | Booking, payment-adjacent, own booking documents, `/bookings/claim` |
-| `requireUser`  | `user` only (rejects anonymous)   | Favourites, recently-viewed, my-reservations, loyalty, messaging, notifications, reviews, profile photos |
-| `requireHost`  | `user` with `hostStatus === "approved"` | Create/manage listings, room types, iCal, provider dashboard, provider booking ops, merchant/payouts |
+| `requireUser`  | `user` only (rejects anonymous)   | Favourites, recently-viewed, my-reservations, loyalty, messaging, notifications, reviews, profile photos, **and all listing-management routes** (any registered user) |
 
 Endpoint-level impact:
 
@@ -136,27 +125,28 @@ Endpoint-level impact:
 3. **Rename guest-token usage**: call `POST /auth/anonymous-token` instead of
    `/auth/guest-token`.
 4. **Route on `user.type` / a session flag, not `userType`**:
-   - `"user"` → full experience (booking + can become host).
+   - `"user"` → full experience (booking + hosting).
    - `"anonymous"` → public browsing + booking + payment only.
    - Do **not** treat `userType === "guest"` as "anonymous" anymore — that
      value no longer exists.
 5. **Gate UI on the new guards' errors**: anonymous users hitting
    user-only endpoints get `403 { code: "ACCOUNT_REQUIRED" }`. Show a
    "create an account" prompt instead of an opaque error.
-6. **Host onboarding**: use `GET/POST /auth/host/profile`. Listing creation
-   fails with `403 HOST_REQUIRED` until the host profile is `approved`.
+6. **Host onboarding**: there is none. Any registered user can open
+   `/dashboard` and create/manage listings immediately. Listing creation no
+   longer returns `403 HOST_REQUIRED`.
 7. **Home/dashboard redirect**: all users share one home surface; there is no
-   provider-vs-traveller split anymore. Host dashboard access depends on
-   `hostStatus`, not `userType`.
+   provider-vs-traveller split anymore. Host dashboard access depends only on
+   being signed in.
 
 ### Migration / stale-code checklist
 
 - Remove `userType === "provider"` / `userType === "guest"` comparisons.
 - Remove `guest-token`, `account-type`, `needsAccountType` references.
+- Remove `hostStatus`, `requireHost`, and host-application references
+  (`/auth/host/profile`, `/admin/accreditations`, "become a host" UI).
 - Update any TypeScript that imports `UserType` expecting `"guest" | "provider"`
   — it is now `"user"`.
-- `JwtPayload.type` is `"anonymous" | "user"`; consider a `hostStatus` field
-  for host-gated UI.
 
 ---
 
@@ -165,7 +155,6 @@ Endpoint-level impact:
 | Code                 | Meaning                                                     |
 |----------------------|-------------------------------------------------------------|
 | `403 ACCOUNT_REQUIRED` | Anonymous token hit an account-scoped endpoint. Prompt sign-in/sign-up. |
-| `403 HOST_REQUIRED`    | User token without approved host profile hit listing management. Show host onboarding. |
 | `401 NO_TOKEN`         | Missing/invalid token.                                      |
 
 ---

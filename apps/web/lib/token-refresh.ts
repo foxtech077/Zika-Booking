@@ -48,8 +48,8 @@ export async function refreshAccessToken(): Promise<string | null> {
       try {
         const { useAuthStore } = await import("@/stores/auth");
         const { user, setSession } = useAuthStore.getState();
-        // /auth/refresh now returns the fresh user (including hostStatus), so
-        // prefer it over the possibly-stale stored user.
+        // /auth/refresh returns the fresh user, so prefer it over the
+        // possibly-stale stored user.
         const refreshedUser = body?.data?.user ?? body?.user ?? user;
         if (refreshedUser) setSession(newToken, refreshedUser);
       } catch { /* store unavailable during SSR or teardown */ }

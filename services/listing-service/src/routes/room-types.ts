@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
-import { requireHost, type AuthRequest } from "../middleware/auth.js";
+import { requireUser, type AuthRequest } from "../middleware/auth.js";
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
@@ -84,7 +84,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
   app.post(
     "/listings/:id/room-types",
     {
-      preHandler: [requireHost],
+      preHandler: [requireUser],
       schema: {
         tags: ["Room Types"],
         summary: "Create a new room type for a hotel listing",
@@ -188,7 +188,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
   app.get(
     "/listings/:id/room-types",
     {
-      preHandler: [requireHost],
+      preHandler: [requireUser],
       schema: {
         tags: ["Room Types"],
         summary: "List all room types for a hotel listing",
@@ -249,7 +249,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
   app.get(
     "/listings/:id/room-types/:rtId",
     {
-      preHandler: [requireHost],
+      preHandler: [requireUser],
       schema: {
         tags: ["Room Types"],
         summary: "Get details of a specific room type",
@@ -314,7 +314,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
   app.patch(
     "/listings/:id/room-types/:rtId",
     {
-      preHandler: [requireHost],
+      preHandler: [requireUser],
       schema: {
         tags: ["Room Types"],
         summary: "Update a room type",
@@ -425,7 +425,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
   app.delete(
     "/listings/:id/room-types/:rtId",
     {
-      preHandler: [requireHost],
+      preHandler: [requireUser],
       schema: {
         tags: ["Room Types"],
         summary: "Delete a room type (hard delete if no bookings, else soft deactivate)",

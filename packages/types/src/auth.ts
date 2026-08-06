@@ -101,7 +101,6 @@ export interface JwtPayload {
   type: "anonymous" | "user";
   status: string;
   country?: string | null;  // ISO 3166-1 alpha-2
-  hostStatus?: "approved" | "pending" | "rejected" | null;  // host profile status (user tokens only)
   jti: string;        // JWT ID (unique per token)
   iat: number;
   exp: number;

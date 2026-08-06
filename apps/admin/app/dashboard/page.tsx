@@ -151,12 +151,6 @@ export default function DashboardPage() {
       iconBg: "bg-teal-100",
     },
     {
-      title: "Total Hosts",
-      value: summaryData?.totalAccreditations ?? 0,
-      icon: <BadgeCheck className="h-4 w-4 text-indigo-600" />,
-      iconBg: "bg-indigo-100",
-    },
-    {
       title: "Total Payments",
       value: summaryData?.totalPayments ?? 0,
       icon: <TrendingUp className="h-4 w-4 text-emerald-600" />,
@@ -181,14 +175,6 @@ export default function DashboardPage() {
       badgeColor: "bg-amber-100 text-amber-800 border-amber-200",
     },
     {
-      id: "accreditation-reviews",
-      title: "Accreditation Reviews",
-      count: pendingData?.pendingAccreditationReviews ?? 0,
-      description: "Host applications waiting for verification",
-      link: "/dashboard/host-accreditations",
-      badgeColor: "bg-purple-100 text-purple-800 border-purple-200",
-    },
-    {
       id: "refund-requests",
       title: "Refund Requests",
       count: pendingData?.pendingRefundRequests ?? 0,
@@ -200,7 +186,6 @@ export default function DashboardPage() {
 
   const totalPendingCount =
     (pendingData?.pendingHotelApprovals ?? 0) +
-    (pendingData?.pendingAccreditationReviews ?? 0) +
     (pendingData?.pendingRefundRequests ?? 0);
 
   const activities = activityData ?? [];

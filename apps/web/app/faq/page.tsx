@@ -205,11 +205,11 @@ export default function FAQPage() {
       items: [
         {
           q: "Who can list on Kainook?",
-          a: "Any legitimate business or individual operating a hotel, apartment/residence, or vehicle rental service in a Kainook-supported market can apply to list. You must hold all required local licences, permits, and insurance for your business category."
+          a: "Any business or individual operating a hotel, apartment/residence, or vehicle rental service in a Kainook-supported market can list after creating a Kainook account. You must hold all required local licences, permits, and insurance for your business category."
         },
         {
           q: "How do I register as a Provider?",
-          a: "Visit www.kainook.com/provider or tap \"List Your Property\" in the app. Complete the Provider registration form, upload your business details and required documents, and submit for review. Our team will review your application and respond within 5 business days."
+          a: "Sign up for a Kainook account and open your Provider Dashboard at www.kainook.com/dashboard. There is no approval process — you can create listings immediately. Add your business details to complete your profile, then start listing properties."
         },
         {
           q: "Is there a fee to list on Kainook?",
@@ -217,11 +217,11 @@ export default function FAQPage() {
         },
         {
           q: "How are hotels approved vs apartments and car rentals?",
-          a: "Hotels undergo a manual accreditation and star rating review by Kainook's administration team before their listing goes live. Apartments and car rental listings are activated automatically once documentation requirements are met, subject to ongoing quality monitoring."
+          a: "Hotel listings go through a star rating and quality review by Kainook's administration team before going live. Apartment and car rental listings are activated automatically, subject to ongoing quality monitoring."
         },
         {
           q: "What documents do I need to submit?",
-          a: "Requirements vary by category. Generally: business registration certificate, proof of address, valid operating licence, insurance documents, and bank account details for payouts. Full requirements are listed in the Provider onboarding flow."
+          a: "Requirements vary by category. Generally: business registration certificate, proof of address, valid operating licence, insurance documents, and bank account details for payouts. Full requirements are listed in the listing creation flow."
         },
         {
           q: "How do I update my listing (prices, photos, description)?",
@@ -309,7 +309,7 @@ export default function FAQPage() {
       items: [
         {
           q: "How does Kainook verify Providers?",
-          a: "All Providers must submit business registration documents, licences, and insurance before listing. Hotels also undergo a manual accreditation review. Kainook monitors Provider performance through Guest reviews, complaint reports, and periodic audits."
+          a: "Providers are accountable for holding valid business registration documents, licences, and insurance for their listing category. Hotel listings also undergo a star rating and quality review before going live. Kainook monitors Provider performance through Guest reviews, complaint reports, and periodic audits."
         },
         {
           q: "Is it safe to pay through Kainook?",
