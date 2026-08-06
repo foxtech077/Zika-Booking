@@ -127,8 +127,12 @@
 
 	function handleClick(n: AppNotification): void {
 		if (!n.isRead) {
+			const previous = notifications;
 			notifications = notifications.map((x) => (x.id === n.id ? { ...x, isRead: true } : x));
-			void markNotificationRead(n.id).catch(() => {});
+			// Roll back the optimistic read if the API call fails.
+			void markNotificationRead(n.id).catch(() => {
+				notifications = previous;
+			});
 		}
 		const { bookingId, conversationId, listingId } = n.data ?? {};
 		if (bookingId) void goto(`/bookings?highlight=${bookingId}`);

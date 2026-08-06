@@ -247,7 +247,7 @@
 							<span
 								class="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] leading-none font-bold text-white"
 							>
-								{unreadNotifications > 9 ? '9+' : unreadNotifications}
+								{unreadNotifications > 99 ? '99+' : unreadNotifications}
 							</span>
 						{/if}
 					</a>
@@ -441,6 +441,13 @@
 										/>
 									</svg>
 									<span class="flex-1">Notifications</span>
+									{#if unreadNotifications > 0}
+										<span
+											class="flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] leading-none font-bold text-white"
+										>
+											{unreadNotifications > 99 ? '99+' : unreadNotifications}
+										</span>
+									{/if}
 								</a>
 
 								<a
