@@ -151,10 +151,6 @@
 						await goto(`/auth/verify-pending?email=${encodeURIComponent(email)}`);
 						return;
 					}
-					if (err.code === 'ACCOUNT_PENDING_APPROVAL') {
-						await goto('/');
-						return;
-					}
 					error = err.message;
 				} else {
 					error = 'Unable to connect. Please check your network and try again.';

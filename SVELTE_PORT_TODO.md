@@ -77,7 +77,7 @@ Scope notes: the provider dashboard and Stripe Connect (section E) are a large, 
 - [x] **D2. Reset-password route mismatch** — FIXED. The auth service emails `/reset-password?token=...` but web-svelte's screen lives at `/auth/reset-password`; added `src/routes/reset-password/+page.server.ts` that 308-redirects to `/auth/reset-password`, preserving the token.
 - [ ] **D3. Auth-endpoint 401 recovery** — MISSING. `request()` in `apps/web-svelte/src/lib/auth-api.ts` has no refresh/retry on 401 (web's axios interceptor refreshes and retries). Add token refresh on auth-endpoint 401s.
 - [ ] **D4. `?next=` login behavior** — DIFFERENT. web ignores `?next=` and always goes to `/` (or accept-terms); web-svelte honors `?next`. Decide which behavior is desired.
-- [ ] **D5. `ACCOUNT_PENDING_APPROVAL` redirect target** — DIFFERENT (minor). web → `/dashboard`; web-svelte → `/`. Align if web's target applies.
+- [x] **D5. `ACCOUNT_PENDING_APPROVAL` redirect target** — N/A / resolved. The auth service no longer emits that code (removed with the accreditation flow in PR #342), so it was dead code; removed the branch from `apps/web-svelte/src/routes/auth/login/+page.svelte`.
 - [x] **D6. Register `?email=` prefill** — FIXED. The register page now prefills the email field from `?email=` (via an `$effect`), matching apps/web (`apps/web-svelte/src/routes/auth/register/+page.svelte`).
 - [x] **D7. `/verify` expired-state email recovery** — FIXED. The `/verify` page now recovers the email from the error body's `fields.email` on `TOKEN_EXPIRED`, so "Send a new link" always appears, matching apps/web (`apps/web-svelte/src/routes/verify/+page.svelte`).
 
