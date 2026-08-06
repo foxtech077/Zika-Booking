@@ -23,8 +23,12 @@
 				setTimeout(() => void goto('/'), 2000);
 			} catch (err) {
 				if (err instanceof AuthApiError) {
-					if (err.code === 'TOKEN_EXPIRED') status = 'expired';
-					else if (err.code === 'TOKEN_USED') status = 'used';
+					if (err.code === 'TOKEN_EXPIRED') {
+						// The error body carries the email so "Send a new link"
+						// always works, even when the user never reached success.
+						email = err.fields?.email ?? email;
+						status = 'expired';
+					} else if (err.code === 'TOKEN_USED') status = 'used';
 					else if (err.code === 'INVALID_TOKEN') status = 'invalid';
 					else status = 'error';
 				} else {

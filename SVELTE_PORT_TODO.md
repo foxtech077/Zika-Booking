@@ -79,7 +79,7 @@ Scope notes: the provider dashboard and Stripe Connect (section E) are a large, 
 - [ ] **D4. `?next=` login behavior** — DIFFERENT. web ignores `?next=` and always goes to `/` (or accept-terms); web-svelte honors `?next`. Decide which behavior is desired.
 - [ ] **D5. `ACCOUNT_PENDING_APPROVAL` redirect target** — DIFFERENT (minor). web → `/dashboard`; web-svelte → `/`. Align if web's target applies.
 - [x] **D6. Register `?email=` prefill** — FIXED. The register page now prefills the email field from `?email=` (via an `$effect`), matching apps/web (`apps/web-svelte/src/routes/auth/register/+page.svelte`).
-- [ ] **D7. `/verify` expired-state email recovery** — MISSING (minor). web's `/verify` recovers the email from the error body `fields.email` on expiry so "Send a new link" always appears; web-svelte does not read error fields.
+- [x] **D7. `/verify` expired-state email recovery** — FIXED. The `/verify` page now recovers the email from the error body's `fields.email` on `TOKEN_EXPIRED`, so "Send a new link" always appears, matching apps/web (`apps/web-svelte/src/routes/verify/+page.svelte`).
 
 ## E. Provider dashboard & Stripe Connect (in scope, large/separate effort)
 
