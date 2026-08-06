@@ -1,13 +1,13 @@
-import { AUTH_API_URL } from '$lib/config';
 import type { AuthUser } from '$lib/stores/auth.svelte';
 import { getToken } from '$lib/http';
 
 /**
  * Auth-service client.
  *
- * Fetch-based with `credentials: 'include'` so the httpOnly web_refresh_token
- * cookie is exchanged on login/register/oauth — the browser stores it and the
- * refresh proxy route relays it later.
+ * All calls go through the same-origin `/api/auth/...` proxy route so the
+ * httpOnly `web_refresh_token` Set-Cookie lands on the frontend origin (the
+ * auth API is cross-site to this app, so a direct SameSite=Lax cookie would be
+ * rejected by the browser). The proxy relays cookies server-side.
  */
 
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -57,7 +57,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 		const token = getToken();
 		if (token) headers.Authorization = `Bearer ${token}`;
 
-		const res = await fetch(`${AUTH_API_URL}${path}`, {
+		const res = await fetch(`/api/auth${path}`, {
 			...init,
 			headers,
 			credentials: 'include',

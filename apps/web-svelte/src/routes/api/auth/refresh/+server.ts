@@ -38,12 +38,14 @@ export const POST: RequestHandler = async ({ cookies }) => {
 
 	const body = await upstream.json().catch(() => ({}));
 
-	// Forward the rotated refresh-token cookie to the browser.
+	// Forward the rotated refresh-token cookie to the browser, stripping any
+	// foreign Domain attribute so it is stored on this origin (same-site).
 	const setCookie = upstream.headers.get('set-cookie');
 	if (setCookie) {
+		const sanitized = setCookie.replace(/;\s*Domain=[^;]*/gi, '');
 		return new Response(JSON.stringify(body), {
 			status: upstream.status,
-			headers: { 'content-type': 'application/json', 'set-cookie': setCookie }
+			headers: { 'content-type': 'application/json', 'set-cookie': sanitized }
 		});
 	}
 
