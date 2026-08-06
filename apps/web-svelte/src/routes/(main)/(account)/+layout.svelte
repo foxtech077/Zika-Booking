@@ -35,6 +35,11 @@
 			active: pathname.startsWith('/recently-viewed')
 		},
 		{ label: 'Reviews', href: '/reviews', active: pathname.startsWith('/reviews') },
+		{
+			label: 'Notifications',
+			href: '/notifications',
+			active: pathname.startsWith('/notifications')
+		},
 		{ label: 'Profile', href: '/profile', active: pathname.startsWith('/profile') }
 	]);
 

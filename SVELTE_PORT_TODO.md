@@ -31,7 +31,7 @@ Scope notes: the provider dashboard and Stripe Connect (section E) are a large, 
 - [x] **B4. Messages parity** — FIXED in `apps/web-svelte/src/routes/(main)/(account)/messages/+page.svelte` (+ `formatDateTime` util): per-conversation status badges (list + thread header), a global unread pill ("X unread"/"All read"), auto-select of the first conversation on load, composer auto-focus, a send-error banner, a list-pane "Refresh conversations" button, and absolute timestamps on message bubbles.
 - [x] **B5. Notifications parity** — FIXED: the header bell badge now caps at "99+", the avatar-dropdown Notifications item shows the unread count badge, and marking a notification read rolls back on API failure (`apps/web-svelte/src/lib/components/Header.svelte`, `apps/web-svelte/src/routes/(main)/(account)/notifications/+page.svelte`).
 - [x] **B6. Recently-viewed parity** — FIXED. `apps/web-svelte/src/routes/(main)/(account)/recently-viewed/+page.svelte` now has a "Back to Home" link and an explicit per-card "View" affordance.
-- [ ] **B7. Account pill-nav** — MISSING (minor). `apps/web-svelte/src/routes/(main)/(account)/+layout.svelte:24-39` nav omits a Notifications entry (reachable only via the header bell).
+- [x] **B7. Account pill-nav Notifications** — FIXED. The account page nav now includes a Notifications entry (`apps/web-svelte/src/routes/(main)/(account)/+layout.svelte`).
 - [ ] **B8. Profile host-status row** — N/A. Already removed in web-svelte with the host-accreditation port; do not re-add.
 
 ## C. Home / Search / Listings
