@@ -59,11 +59,10 @@ Scope notes: the provider dashboard and Stripe Connect (section E) are a large, 
 - [x] **D6. Register `?email=` prefill** — FIXED. The register page now prefills the email field from `?email=` (via an `$effect`), matching apps/web (`apps/web-svelte/src/routes/auth/register/+page.svelte`).
 - [x] **D7. `/verify` expired-state email recovery** — FIXED. The `/verify` page now recovers the email from the error body's `fields.email` on `TOKEN_EXPIRED`, so "Send a new link" always appears, matching apps/web (`apps/web-svelte/src/routes/verify/+page.svelte`).
 
-## E. Provider dashboard & Stripe Connect (in scope, large/separate effort)
+## E. Provider dashboard & Stripe Connect
 
-- [ ] **E1. Provider dashboard** — MISSING in web-svelte. web has `apps/web/app/(provider)/dashboard/*`: dashboard overview (financial metrics, bookings, available units), listings (index / new / `[id]/edit` with Apartment/Hotel/Car forms, photo & document uploaders, geocoding), bookings, calendar (monthly availability), channel (iCal sync), earnings (revenue analytics), messaging, notifications, payments (bookings revenue, payout history/details/reports, settings), reviews (+ replies), settings. web-svelte currently links out to `${PROVIDER_URL}/dashboard` instead (`apps/web-svelte/src/lib/components/Header.svelte`, `apps/web-svelte/src/lib/config.ts`).
-  - Requires a decision: build the dashboard in-app, or keep the external link (recommended for now — separate `apps/provider` exists).
-- [ ] **E2. Stripe Connect** — MISSING. Onboarding redirect pages `/stripe/connect/complete` and `/stripe/connect/refresh`, plus the payment-settings onboarding start page and merchant/payout API helpers. web: `apps/web/app/stripe/connect/*`, `apps/web/app/(provider)/dashboard/payments/settings/page.tsx`. Depends on E1.
+- [x] **E1. Provider dashboard** — FIXED (core). A provider dashboard lives under `/dashboard` in web-svelte: `(provider)/+layout.svelte` with an auth guard and sidebar/mobile nav, plus pages for overview (`/provider/dashboard`), listings (list + status toggle + delete + blank-draft create + core edit form), bookings (filter + search), reviews (list + reply), earnings (12-month chart + totals), payments (payouts + Stripe Connect onboarding), messages (guest conversations), notifications, and settings (merchant profile). API client in `src/lib/provider-api.ts`. Scope note: full per-category listing forms (Apartment/Hotel/Car with photos/documents, availability calendar/iCal channel) remain richer in apps/web; the core management flows are covered here.
+- [x] **E2. Stripe Connect** — FIXED. `/stripe/connect/complete` and `/stripe/connect/refresh` pages verify status / refresh the onboarding URL and redirect to `/dashboard/payments` or Stripe; the payments page starts and refreshes Stripe Connect onboarding.
 
 ## Notes
 

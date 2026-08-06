@@ -10,7 +10,6 @@
 		getListingSummary,
 		type ProviderListingSummary
 	} from '$lib/account-api';
-	import { PROVIDER_URL } from '$lib/config';
 	import Avatar from './Avatar.svelte';
 	import CountrySelector from './CountrySelector.svelte';
 	import { cn } from '$lib/utils';
@@ -52,7 +51,7 @@
 		return listingSummary.length > 0;
 	});
 	const listingsHref = $derived(
-		hasListings ? `${PROVIDER_URL}/dashboard` : `${PROVIDER_URL}/dashboard/listings/new`
+		hasListings ? '/dashboard' : '/dashboard/listings/new'
 	);
 	const listingsLabel = $derived(hasListings ? 'Manage Listings' : 'Create Listing');
 
