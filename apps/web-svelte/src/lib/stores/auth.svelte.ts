@@ -130,10 +130,20 @@ export function setSession(token: string, user: AuthUser): void {
 	auth.isAuthenticated = true;
 
 	// A country selected on the user's profile becomes the default browse
-	// location on login — it drives the display currency sent as `currency=`
-	// until the user picks something else. A manual selection always wins, and
-	// anonymous checkout sessions never reach setSession.
-	applyProfileCountry(normalized.country?.trim().toUpperCase());
+	// location on login — it drives the display currency sent as `currency=`.
+	// Applied synchronously with `invalidate: false`: the login/register
+	// navigation that immediately follows re-runs the loads with the new
+	// country/currency, and an invalidateAll fired during that navigation
+	// would abort it, stranding the user on the auth page. A manual selection
+	// always wins, and anonymous sessions never reach setSession.
+	try {
+		const profileCountry = normalized.country?.trim().toUpperCase();
+		if (profileCountry) {
+			applyProfileCountry(profileCountry, { invalidate: false });
+		}
+	} catch {
+		// non-fatal — the profile country is only a default
+	}
 }
 
 export function updateUser(updates: Partial<AuthUser>): void {

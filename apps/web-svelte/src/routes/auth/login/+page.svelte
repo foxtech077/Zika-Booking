@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { login, oauthGoogle, AuthApiError } from '$lib/auth-api';
-	import { setSession } from '$lib/stores/auth.svelte';
+	import { auth, setSession } from '$lib/stores/auth.svelte';
 
 	// Web Application OAuth client — identical to the `webClientId` the mobile
 	// app configures and to the audience auth-service verifies id_tokens against.
@@ -85,6 +85,14 @@
 	}
 
 	onMount(() => {
+		// Already signed in? Don't show the login form — send the user to the
+		// landing page (or wherever the `next` param points). onMount runs once
+		// before the login flow flips auth state, so it never fires during an
+		// in-page login.
+		if (auth.isAuthenticated) {
+			void goto(next);
+			return;
+		}
 		const script = document.createElement('script');
 		script.src = 'https://accounts.google.com/gsi/client';
 		script.async = true;

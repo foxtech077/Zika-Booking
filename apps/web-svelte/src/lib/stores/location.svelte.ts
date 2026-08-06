@@ -242,15 +242,20 @@ export function setCountry(code: string): void {
  * (driving the display currency sent as `currency=` to the listing APIs). A
  * country the user picked manually always wins, so the profile default is
  * skipped when the stored source is already "manual".
+ *
+ * `invalidate` (default true) re-runs the current page's loads so the new
+ * currency is picked up immediately. Login sets it to false: the navigation
+ * that follows a successful login re-runs loads anyway, and calling
+ * invalidateAll while that navigation is in flight would abort it.
  */
-function applyCountry(code: string, source: CountrySource): void {
+function applyCountry(code: string, source: CountrySource, { invalidate = true } = {}): void {
 	const c = getCountry(code);
 	if (!c) return;
 	location.country = c;
 	persistCountry(c.code);
 	persistCurrency(c.currency);
 	persistCountrySource(source);
-	void invalidateAll();
+	if (invalidate) void invalidateAll();
 }
 
 /**
@@ -259,10 +264,13 @@ function applyCountry(code: string, source: CountrySource): void {
  * country the user picked manually always wins, so the profile default is
  * skipped when the stored source is already "manual".
  */
-export function applyProfileCountry(code: string | null | undefined): void {
+export function applyProfileCountry(
+	code: string | null | undefined,
+	opts?: { invalidate?: boolean }
+): void {
 	if (!browser || !code) return;
 	if (readCountrySource() === 'manual') return;
-	applyCountry(code, 'profile');
+	applyCountry(code, 'profile', opts);
 }
 
 /**
