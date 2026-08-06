@@ -11,6 +11,21 @@
 
 	const featured = $derived(data.featured ?? []);
 
+	// The active hotel promotion renders as the badge on the featured cards
+	// (percentage/fixed-off label), mirroring apps/web.
+	const featuredPromoBadge = $derived.by(() => {
+		const p = data.promotion;
+		if (!p) return null;
+		return {
+			labelText:
+				p.labelText ||
+				(p.discountType === 'percentage'
+					? `${p.discountValue}%`
+					: `${p.discountValue} OFF`),
+			labelColour: p.labelColour || '#C84B2F'
+		};
+	});
+
 	// Destination autocomplete blends in town/listing names harvested from the
 	// featured listings, matching apps/web's apiSuggestions behaviour.
 	const heroSuggestions = $derived.by(() => {
@@ -277,7 +292,7 @@
 		{:else}
 			<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
 				{#each featured as listing (listing.id)}
-					<ListingCard {listing} />
+					<ListingCard {listing} promotionBadge={featuredPromoBadge} />
 				{/each}
 			</div>
 

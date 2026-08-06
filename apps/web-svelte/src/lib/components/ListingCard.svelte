@@ -11,11 +11,15 @@
 	let {
 		listing,
 		hovered = false,
+		promotionBadge = null,
 		onmouseenter = () => {},
 		onmouseleave = () => {}
 	}: {
 		listing: PublicListing & Partial<PublicListingDetail>;
 		hovered?: boolean;
+		/** Overrides the listing's own promo badge (e.g. a category-wide active
+		 *  promotion on the home page), mirroring apps/web. */
+		promotionBadge?: { labelText?: string; labelColour?: string } | null;
 		onmouseenter?: () => void;
 		onmouseleave?: () => void;
 	} = $props();
@@ -49,12 +53,13 @@
 	// anonymous checkout sessions.
 	const canFavourite = $derived(auth.isAuthenticated);
 
+	// A passed-in promotion badge wins over any badge the listing carries.
+	const badge = $derived(promotionBadge ?? listing.promoBadge ?? null);
+
 	const promoPct = $derived(
-		listing.promoBadge?.labelText
-			? parseFloat(listing.promoBadge.labelText.replace(/[^0-9.]/g, '')) || 0
-			: 0
+		badge?.labelText ? parseFloat(badge.labelText.replace(/[^0-9.]/g, '')) || 0 : 0
 	);
-	const promoColour = $derived(listing.promoBadge?.labelColour || '#C84B2F');
+	const promoColour = $derived(badge?.labelColour || '#C84B2F');
 	const rawPrice = $derived(listing.pricePerNight);
 	const basePrice = $derived(
 		promoPct > 0
@@ -69,9 +74,7 @@
 	const discountPct = $derived(
 		basePrice > displayPrice ? Math.round(((basePrice - displayPrice) / basePrice) * 100) : 0
 	);
-	const promoLabel = $derived(
-		promoPct > 0 ? (listing.promoBadge?.labelText ?? `${promoPct}% OFF`) : ''
-	);
+	const promoLabel = $derived(promoPct > 0 ? (badge?.labelText ?? `${promoPct}% OFF`) : '');
 
 	const localizedRate = $derived(
 		isCar
