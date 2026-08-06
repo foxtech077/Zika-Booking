@@ -2,10 +2,17 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { getMyReviews, submitReview, type MyReview } from '$lib/account-api';
+	import { readReviewContext, clearReviewContext } from '$lib/review-context';
 	import { formatDate, cn } from '$lib/utils';
 
-	const bookingId = $derived(page.url.searchParams.get('bookingId') ?? '');
-	const listingName = $derived(page.url.searchParams.get('listingName') ?? '');
+	// A ?bookingId/?listingName (or a stored post-checkout context) makes the
+	// "Leave a review" form eligible for that completed booking.
+	const context = $derived(readReviewContext());
+	const bookingId = $derived(page.url.searchParams.get('bookingId') ?? context?.bookingId ?? '');
+	const listingId = $derived(page.url.searchParams.get('listingId') ?? context?.listingId ?? '');
+	const listingName = $derived(
+		page.url.searchParams.get('listingName') ?? context?.listingName ?? ''
+	);
 
 	let reviews = $state<MyReview[]>([]);
 	let loading = $state(true);
@@ -34,12 +41,18 @@
 		})();
 	}
 
-	onMount(load);
+	onMount(() => {
+		load();
+		// Keep the list fresh while the page is open.
+		const timer = setInterval(load, 30_000);
+		return () => clearInterval(timer);
+	});
 
 	const average = $derived(
 		reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0
 	);
 	const replies = $derived(reviews.filter((r) => r.providerReply).length);
+	const hidden = $derived(reviews.filter((r) => r.isHidden).length);
 
 	function handleSubmit(): void {
 		if (rating < 1) {
@@ -63,6 +76,7 @@
 				submittedOk = true;
 				title = '';
 				body = '';
+				clearReviewContext();
 				load();
 			} catch (e) {
 				submitError = (e as Error).message ?? 'Could not submit your review.';
@@ -108,6 +122,9 @@
 				<div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
 					<p class="font-mono text-[11px] font-semibold text-slate-400">
 						Booking {bookingId.slice(0, 8).toUpperCase()}
+						{#if listingId}
+							· Listing {listingId.replace(/-/g, '').slice(0, 8).toUpperCase()}
+						{/if}
 					</p>
 					<p class="mt-1 flex items-center gap-2 text-sm font-semibold text-slate-800">
 						<span class="rounded-full bg-[#16a34a] px-2 py-0.5 text-[10px] font-bold text-white"
@@ -246,7 +263,7 @@
 
 			{#if !loading}
 				<div
-					class="mt-4 grid grid-cols-3 gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-4"
+					class="mt-4 grid grid-cols-4 gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-4"
 				>
 					<div class="text-center">
 						<p class="text-xl font-bold text-slate-900">{reviews.length}</p>
@@ -262,6 +279,10 @@
 					<div class="text-center">
 						<p class="text-xl font-bold text-slate-900">{replies}</p>
 						<p class="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">Replies</p>
+					</div>
+					<div class="text-center">
+						<p class="text-xl font-bold text-slate-900">{hidden}</p>
+						<p class="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">Hidden</p>
 					</div>
 				</div>
 			{/if}
@@ -332,6 +353,11 @@
 							{#if r.providerReply}
 								<div class="mt-3 rounded-xl border border-green-200 bg-green-50 p-3">
 									<p class="text-xs font-bold text-green-800">Provider reply</p>
+									{#if r.providerRepliedAt}
+										<p class="mt-0.5 text-[11px] text-green-600">
+											{formatDate(r.providerRepliedAt)}
+										</p>
+									{/if}
 									<p class="mt-1 text-sm text-green-900">{r.providerReply}</p>
 								</div>
 							{/if}

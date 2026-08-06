@@ -27,12 +27,7 @@ Scope notes: the provider dashboard and Stripe Connect (section E) are a large, 
 
 - [x] **B1. Bookings list parity** — FIXED in `apps/web-svelte/src/routes/(main)/(account)/bookings/+page.svelte`: `cancelled_by_provider` → "Cancelled by Host", red styling for all cancelled variants, the confirmed Cancel button is gated on a client-computed `canCancel` (start date in the future), cancellation shows a success/refund banner (or error), and zero-count status filter tabs are hidden — mirroring apps/web.
 - [x] **B2. Wishlist category tabs + per-category empty states** — FIXED. `apps/web-svelte/src/routes/(main)/(account)/wishlist/+page.svelte` now has All/Hotels/Home/Cars tabs with counts and per-category empty states (apps/web's equivalent tabs are commented out there, so this is a live superset).
-- [ ] **B3. Reviews page parity** — MISSING in `apps/web-svelte/src/routes/(main)/(account)/reviews/+page.svelte`:
-  - "Hidden" stat card in the rating summary (Total/Average/Replies/Hidden). web: `apps/web/app/traveller/reviews/page.tsx:414-421`.
-  - Provider reply date (`providerRepliedAt`) in the reply box, `:332-337`.
-  - Listing-id context in the write form ("Listing {shortId}"), `:109-117`.
-  - localStorage "latest review context" fallback when no `?bookingId` param, web: `apps/web/app/traveller/reviews/page.tsx:203-208`.
-  - 30s auto-refresh of the list.
+- [x] **B3. Reviews page parity** — FIXED in `apps/web-svelte/src/routes/(main)/(account)/reviews/+page.svelte` (+ new `src/lib/review-context.ts`): the rating summary now includes a Hidden stat, provider replies show their date, the write form shows the Listing short id, a post-checkout review context is read from localStorage as a fallback when no `?bookingId`, and the list auto-refreshes every 30s. (The context is written at checkout under A4.)
 - [ ] **B4. Messages parity** — MISSING in `apps/web-svelte/src/routes/(main)/(account)/messages/+page.svelte`:
   - Per-conversation status badge (closed/open) in list + chat header. web: `apps/web/app/traveller/messages/page.tsx:392-396, 481-485`.
   - Unread pill badge ("X unread"/"All read"), `:329-333`.
