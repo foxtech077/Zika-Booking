@@ -412,3 +412,24 @@ export async function sendMessage(
 		}
 	);
 }
+
+// ── Provider listings summary ────────────────────────────────────────────────
+
+export interface ProviderListingSummary {
+	id: string;
+	name: string;
+	category: string;
+	status: string;
+}
+
+/** Fetches the signed-in user's own listings (count drives the header's
+ *  Create/Manage Listings label). Any account can host, so this succeeds for
+ *  every authenticated user. */
+export async function getListingSummary(): Promise<ProviderListingSummary[]> {
+	const data = await apiRequest<{ listings?: unknown }>(
+		LISTING_API_URL,
+		'/provider/listings/summary'
+	);
+	if (!Array.isArray(data?.listings)) return [];
+	return data.listings as ProviderListingSummary[];
+}

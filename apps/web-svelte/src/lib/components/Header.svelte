@@ -4,7 +4,13 @@
 	import { goto } from '$app/navigation';
 	import { auth, clearSession } from '$lib/stores/auth.svelte';
 	import { logout } from '$lib/auth-api';
-	import { getUnreadNotificationCount, getUnreadConversationCount } from '$lib/account-api';
+	import {
+		getUnreadNotificationCount,
+		getUnreadConversationCount,
+		getListingSummary,
+		type ProviderListingSummary
+	} from '$lib/account-api';
+	import { PROVIDER_URL } from '$lib/config';
 	import Avatar from './Avatar.svelte';
 	import CountrySelector from './CountrySelector.svelte';
 	import { cn } from '$lib/utils';
@@ -30,24 +36,36 @@
 	let unreadMessages = $state(0);
 	let notifTimer: ReturnType<typeof setInterval> | null = null;
 	let msgTimer: ReturnType<typeof setInterval> | null = null;
+	// The signed-in user's own listings (null = not yet loaded). Drives the
+	// Create/Manage Listings label in the dropdown and mobile menu.
+	let listingSummary = $state<ProviderListingSummary[] | null>(null);
 
 	const pathname = $derived(String(page.url.pathname));
 	const searchParams = $derived(page.url.searchParams);
 	const searchSignature = $derived(searchParams.toString());
 
-	// Host status is now a normal profile field from the auth service REST
-	// body (publicUser), so the header reads it from the user object — no JWT
-	// decode needed.
-	const hostStatus = $derived(auth.user?.hostStatus ?? null);
-	const hostLabel = $derived(
-		hostStatus === 'approved'
-			? 'Manage Hosting'
-			: hostStatus === 'pending'
-				? 'Host application pending'
-				: hostStatus === 'rejected'
-					? 'Reapply to host'
-					: 'Become a Host'
+	// Any signed-in user can create and manage listings directly — no host
+	// accreditation step. The label switches between Create/Manage based on
+	// whether the user already has listings, mirroring the provider dashboard.
+	const hasListings = $derived.by(() => {
+		if (!auth.isAuthenticated || listingSummary === null) return false;
+		return listingSummary.length > 0;
+	});
+	const listingsHref = $derived(
+		hasListings ? `${PROVIDER_URL}/dashboard` : `${PROVIDER_URL}/dashboard/listings/new`
 	);
+	const listingsLabel = $derived(hasListings ? 'Manage Listings' : 'Create Listing');
+
+	onMount(() => {
+		if (!auth.isAuthenticated) return;
+		void getListingSummary()
+			.then((listings) => {
+				listingSummary = listings;
+			})
+			.catch(() => {
+				listingSummary = [];
+			});
+	});
 
 	function refreshUnread(): void {
 		void (async () => {
@@ -162,6 +180,9 @@
 					{@render navBtn('Hotels', ROUTES.hotels, isHotelsActive)}
 					{@render navBtn('Home', ROUTES.apartments, isApartmentsActive)}
 					{@render navBtn('Car Rentals', ROUTES.cars, isCarsActive)}
+					{#if !auth.user}
+						{@render navBtn('Reservations', ROUTES.bookings, isBookingsActive)}
+					{/if}
 				</nav>
 			</div>
 
@@ -195,7 +216,7 @@
 						Sign In
 					</a>
 					<a
-						href="/auth/login"
+						href="/auth/register"
 						class="rounded-full bg-[#0c2614] px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#081b0d]"
 					>
 						Sign Up
@@ -315,7 +336,7 @@
 								</a>
 
 								<a
-									href="/host"
+									href={listingsHref}
 									onclick={() => (menuOpen = false)}
 									class="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-slate-600 transition-all hover:bg-slate-50 hover:text-slate-900"
 								>
@@ -332,7 +353,7 @@
 											d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72m-13.5 8.65h3.75a.75.75 0 00.75-.75V13.5a.75.75 0 00-.75-.75H6.75a.75.75 0 00-.75.75v3.75c0 .414.336.75.75.75z"
 										/>
 									</svg>
-									{hostLabel}
+									{listingsLabel}
 								</a>
 
 								<div class="my-1 border-t border-slate-100"></div>
@@ -608,11 +629,11 @@
 							{@render mobileNavBtn('My Reviews', ROUTES.reviews, isReviewsActive)}
 							{@render mobileNavBtn('Profile', ROUTES.profile, isProfileActive)}
 							<a
-								href="/host"
+								href={listingsHref}
 								onclick={() => (mobileMenuOpen = false)}
 								class="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1D8D2B] hover:text-[#0c2614]"
 							>
-								<span>{hostLabel}</span>
+								<span>{listingsLabel}</span>
 							</a>
 							<button
 								type="button"
@@ -623,21 +644,24 @@
 							</button>
 						</div>
 					{:else}
-						<div class="grid grid-cols-2 gap-2">
-							<a
-								href="/auth/login"
-								onclick={() => (mobileMenuOpen = false)}
-								class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-700 transition hover:border-[#1D8D2B] hover:text-[#0c2614]"
-							>
-								Sign In
-							</a>
-							<a
-								href="/auth/login"
-								onclick={() => (mobileMenuOpen = false)}
-								class="rounded-xl bg-[#0c2614] px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-[#081b0d]"
-							>
-								Sign Up
-							</a>
+						<div class="grid gap-2">
+							{@render mobileNavBtn('My Reservations', ROUTES.bookings, isBookingsActive)}
+							<div class="grid grid-cols-2 gap-2">
+								<a
+									href="/auth/login"
+									onclick={() => (mobileMenuOpen = false)}
+									class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-700 transition hover:border-[#1D8D2B] hover:text-[#0c2614]"
+								>
+									Sign In
+								</a>
+								<a
+									href="/auth/register"
+									onclick={() => (mobileMenuOpen = false)}
+									class="rounded-xl bg-[#0c2614] px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-[#081b0d]"
+								>
+									Sign Up
+								</a>
+							</div>
 						</div>
 					{/if}
 				</div>

@@ -135,17 +135,6 @@
 
 	const infoItems = $derived.by(() => [
 		{ label: 'Email address', value: auth.user?.email },
-		{
-			label: 'Host status',
-			value:
-				auth.user?.hostStatus === 'approved'
-					? 'Approved host'
-					: auth.user?.hostStatus === 'pending'
-						? 'Host application pending'
-						: auth.user?.hostStatus === 'rejected'
-							? 'Host application rejected'
-							: 'Not a host'
-		},
 		{ label: 'Account status', value: auth.user?.status },
 		{ label: 'Country', value: countryLabel },
 		{ label: 'Loyalty tier', value: tier.label },

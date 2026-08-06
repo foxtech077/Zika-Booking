@@ -43,9 +43,8 @@ export async function refreshAccessToken(): Promise<string | null> {
 				localStorage.setItem(TOKEN_KEY, newToken);
 			}
 
-			// The auth service returns a fresh user alongside the rotated tokens
-			// (including hostStatus), so persist it — otherwise an approved host
-			// would keep a stale profile until the next full login.
+			// The auth service returns a fresh user alongside the rotated tokens,
+			// so persist it.
 			const { auth } = await import('$lib/stores/auth.svelte');
 			const freshUser = body?.data?.user ?? auth.user;
 			if (freshUser) {

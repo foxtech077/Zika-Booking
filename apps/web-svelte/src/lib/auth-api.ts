@@ -197,59 +197,6 @@ export function changePassword(payload: {
 	});
 }
 
-/** Fetch the current user's host profile (accreditation) + status. */
-export async function getHostProfile(): Promise<{
-	status: 'approved' | 'pending' | 'rejected' | null;
-	businessName: string | null;
-	registrationNo: string | null;
-	taxId: string | null;
-	documentsUrl: string | null;
-	submittedAt: string | null;
-	reviewedAt: string | null;
-	rejectionReason: string | null;
-} | null> {
-	const data = await request<{ hostProfile: unknown }>('/auth/host/profile', { method: 'GET' });
-	const p = data.hostProfile as {
-		status?: 'approved' | 'pending' | 'rejected' | null;
-		businessName?: string | null;
-		registrationNo?: string | null;
-		taxId?: string | null;
-		documentsUrl?: string | null;
-		submittedAt?: string | null;
-		reviewedAt?: string | null;
-		rejectionReason?: string | null;
-	} | null;
-	if (!p) return null;
-	return {
-		status: p.status ?? null,
-		businessName: p.businessName ?? null,
-		registrationNo: p.registrationNo ?? null,
-		taxId: p.taxId ?? null,
-		documentsUrl: p.documentsUrl ?? null,
-		submittedAt: p.submittedAt ?? null,
-		reviewedAt: p.reviewedAt ?? null,
-		rejectionReason: p.rejectionReason ?? null
-	};
-}
-
-/** Submit or update the current user's host profile (accreditation → pending). */
-export async function submitHostProfile(payload: {
-	businessName: string;
-	registrationNo?: string;
-	taxId?: string;
-	documentsUrl?: string;
-}): Promise<{ message: string; hostProfile: unknown }> {
-	return request('/auth/host/profile', {
-		method: 'POST',
-		body: JSON.stringify({
-			businessName: payload.businessName,
-			...(payload.registrationNo ? { registrationNo: payload.registrationNo } : {}),
-			...(payload.taxId ? { taxId: payload.taxId } : {}),
-			...(payload.documentsUrl ? { documentsUrl: payload.documentsUrl } : {})
-		})
-	});
-}
-
 // ── Inline validators (mirror @zika/validators rules) ─────────────────────────
 
 export function validateEmail(email: string): string | null {
