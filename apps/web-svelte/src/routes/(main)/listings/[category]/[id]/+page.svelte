@@ -58,12 +58,17 @@
 	const canFavourite = $derived(auth.isAuthenticated);
 	let favOverride = $state<boolean | null>(null);
 	let favPending = $state(false);
+	let showFavAuthPrompt = $state(false);
 	// Favourite state comes from the reactive favourites store (loaded once per
 	// session), so a saved listing stays favourited after a refresh.
 	const isFav = $derived(favOverride ?? (detail ? isFavourited(detail.id) : false));
 
 	async function toggleFav(): Promise<void> {
-		if (!canFavourite || !detail || favPending) return;
+		if (!canFavourite) {
+			showFavAuthPrompt = true;
+			return;
+		}
+		if (!detail || favPending) return;
 		const next = !isFav;
 		favOverride = next;
 		favPending = true;
@@ -332,30 +337,28 @@
 		<p class="mt-1 text-sm text-slate-500">{locationLabel}</p>
 
 		<div class="mt-4 flex flex-wrap items-center gap-2">
-			{#if canFavourite}
-				<button
-					type="button"
-					onclick={() => void toggleFav()}
-					disabled={favPending}
-					class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-[#1D8D2B]/50 hover:text-[#0c2614] disabled:cursor-not-allowed disabled:opacity-60"
-					aria-pressed={isFav}
+			<button
+				type="button"
+				onclick={() => void toggleFav()}
+				disabled={favPending}
+				class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-[#1D8D2B]/50 hover:text-[#0c2614] disabled:cursor-not-allowed disabled:opacity-60"
+				aria-pressed={isFav}
+			>
+				<svg
+					class={isFav ? 'h-3.5 w-3.5 fill-current text-red-500' : 'h-3.5 w-3.5'}
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					viewBox="0 0 24 24"
 				>
-					<svg
-						class={isFav ? 'h-3.5 w-3.5 fill-current text-red-500' : 'h-3.5 w-3.5'}
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						viewBox="0 0 24 24"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-						/>
-					</svg>
-					{isFav ? 'Saved' : 'Save'}
-				</button>
-			{/if}
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+					/>
+				</svg>
+				{isFav ? 'Saved' : 'Save'}
+			</button>
 			<button
 				type="button"
 				onclick={handleShare}
@@ -588,5 +591,51 @@
 				</div>
 			</div>
 		{/if}
+	</div>
+{/if}
+
+{#if showFavAuthPrompt}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+		role="dialog"
+		aria-modal="true"
+		tabindex="-1"
+		onclick={(e) => {
+			if (e.target === e.currentTarget) showFavAuthPrompt = false;
+		}}
+		onkeydown={(e) => {
+			if (e.key === 'Escape') showFavAuthPrompt = false;
+		}}
+	>
+		<div class="w-full max-w-sm rounded-2xl border border-slate-100 bg-white p-6 text-center shadow-2xl">
+			<div
+				class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-500"
+			>
+				<svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+					/>
+				</svg>
+			</div>
+			<h3 class="text-lg font-bold text-slate-900">Sign in to save</h3>
+			<p class="mt-1 text-sm text-slate-500">
+				Create a free account or sign in to save {detail?.name} to your wishlist.
+			</p>
+			<a
+				href={`/auth/login?next=${encodeURIComponent(page.url.pathname)}`}
+				class="mt-5 block w-full rounded-xl bg-[#0c2614] py-2.5 text-sm font-semibold text-white transition hover:bg-[#081b0d]"
+			>
+				Sign in
+			</a>
+			<button
+				type="button"
+				onclick={() => (showFavAuthPrompt = false)}
+				class="mt-2 w-full rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+			>
+				Not now
+			</button>
+		</div>
 	</div>
 {/if}

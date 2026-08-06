@@ -33,8 +33,15 @@
 	// session), so a saved listing stays favourited after a refresh.
 	const isFav = $derived(favOverride ?? isFavourited(listing.id));
 
+	// The heart is always shown; guests tapping it get a sign-in prompt.
+	let showFavAuthPrompt = $state(false);
+
 	async function toggleFav(): Promise<void> {
-		if (!canFavourite || favPending) return;
+		if (!canFavourite) {
+			showFavAuthPrompt = true;
+			return;
+		}
+		if (favPending) return;
 		const next = !isFav;
 		favOverride = next;
 		favPending = true;
@@ -49,8 +56,7 @@
 			favPending = false;
 		}
 	}
-	// Favourites are tied to an account — hide the heart for guests and
-	// anonymous checkout sessions.
+	// Favourites are tied to an account — only signed-in users can save.
 	const canFavourite = $derived(auth.isAuthenticated);
 
 	// A passed-in promotion badge wins over any badge the listing carries.
@@ -165,32 +171,30 @@
 			</div>
 		{/if}
 
-		{#if canFavourite}
-			<button
-				type="button"
-				onclick={(e) => {
-					e.preventDefault();
-					void toggleFav();
-				}}
-				disabled={favPending}
-				class="absolute top-3 right-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/80 shadow-sm backdrop-blur-sm transition hover:bg-white disabled:opacity-60"
-				aria-label={isFav ? 'Remove from wishlist' : 'Save to wishlist'}
+		<button
+			type="button"
+			onclick={(e) => {
+				e.preventDefault();
+				void toggleFav();
+			}}
+			disabled={favPending}
+			class="absolute top-3 right-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/80 shadow-sm backdrop-blur-sm transition hover:bg-white disabled:opacity-60"
+			aria-label={isFav ? 'Remove from wishlist' : 'Save to wishlist'}
+		>
+			<svg
+				class={isFav ? 'h-3.5 w-3.5 fill-current text-red-500' : 'h-3.5 w-3.5 text-slate-500'}
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				viewBox="0 0 24 24"
 			>
-				<svg
-					class={isFav ? 'h-3.5 w-3.5 fill-current text-red-500' : 'h-3.5 w-3.5 text-slate-500'}
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					viewBox="0 0 24 24"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-					/>
-				</svg>
-			</button>
-		{/if}
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+				/>
+			</svg>
+		</button>
 	</div>
 
 	<div class="p-4">
@@ -263,3 +267,47 @@
 		</div>
 	</div>
 </a>
+
+{#if showFavAuthPrompt}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+		role="dialog"
+		aria-modal="true"
+		tabindex="-1"
+		onclick={(e) => {
+			if (e.target === e.currentTarget) showFavAuthPrompt = false;
+		}}
+		onkeydown={(e) => {
+			if (e.key === 'Escape') showFavAuthPrompt = false;
+		}}
+	>
+		<div class="w-full max-w-sm rounded-2xl border border-slate-100 bg-white p-6 text-center shadow-2xl">
+			<div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-500">
+				<svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+					/>
+				</svg>
+			</div>
+			<h3 class="text-lg font-bold text-slate-900">Sign in to save</h3>
+			<p class="mt-1 text-sm text-slate-500">
+				Create a free account or sign in to save {listing.name} to your wishlist.
+			</p>
+			<a
+				href="/auth/login"
+				class="mt-5 block w-full rounded-xl bg-[#0c2614] py-2.5 text-sm font-semibold text-white transition hover:bg-[#081b0d]"
+			>
+				Sign in
+			</a>
+			<button
+				type="button"
+				onclick={() => (showFavAuthPrompt = false)}
+				class="mt-2 w-full rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+			>
+				Not now
+			</button>
+		</div>
+	</div>
+{/if}
