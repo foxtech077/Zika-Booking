@@ -506,6 +506,7 @@ export interface SearchState {
 	pickupDate?: string;
 	returnDate?: string;
 	guests?: number;
+	rooms?: number;
 	sort: string;
 	priceMax?: number;
 	rating?: number;
@@ -558,6 +559,7 @@ export function buildSearchApiParams(s: SearchState): Record<string, string | nu
 		p.place_resolved = s.placeResolved ? 'true' : 'false';
 	}
 	if (s.guests && s.guests > 1) p.guests = s.guests;
+	if (s.rooms && s.rooms > 1) p.rooms = s.rooms;
 	if (s.priceMax && s.priceMax < 500000) p.price_max = s.priceMax;
 	if (s.rating) p.rating_min = s.rating;
 	if (s.amenities.length) p.amenity_ids = expandAmenities(s.amenities);

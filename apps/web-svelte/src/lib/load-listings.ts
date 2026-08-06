@@ -51,6 +51,7 @@ export function searchStateFromUrl(
 		pickupDate: sp.get('pickup') ?? undefined,
 		returnDate: sp.get('return') ?? undefined,
 		guests: num('guests'),
+		rooms: num('rooms'),
 		sort: sp.get('sort') ?? 'recommended',
 		priceMax: num('price_max'),
 		rating: num('rating'),
