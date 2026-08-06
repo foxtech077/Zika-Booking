@@ -74,7 +74,7 @@
 		endDate = '',
 		onChange,
 		label = 'Dates',
-		placeholder = 'CHECK-IN - CHECK-OUT',
+		placeholder = 'Add dates',
 		isCar = false,
 		minDate = getTodayString(),
 		variant = 'default',
@@ -179,7 +179,7 @@
 					: 'night';
 			return `${fmtDisplayDate(startDate)} – ${fmtDisplayDate(endDate)} (${displayNights} ${unit})`;
 		}
-		return isCar ? 'PICK-UP - RETURN' : placeholder;
+		return isCar ? 'Rental dates' : placeholder;
 	});
 
 	const isSearchBar = $derived(variant === 'searchBar' || variant === 'minimal');
