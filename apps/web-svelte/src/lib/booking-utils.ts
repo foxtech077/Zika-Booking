@@ -1,5 +1,13 @@
 import { formatMoney } from '$lib/currency-display';
 
+/** Human-readable cancellation policies (mirrors apps/web's POLICY_LABEL). */
+export const CANCELLATION_POLICY_LABEL: Record<string, string> = {
+	flexible: 'Flexible — free cancellation until 48 hours before check-in',
+	moderate: 'Moderate — full refund up to 7 days before, 50% from 48 hours before',
+	strict: 'Strict — 50% refund up to 14 days before',
+	non_refundable: 'Non-refundable'
+};
+
 /** Formats a YYYY-MM-DD pair as e.g. "12 Aug – 15 Aug 2026". */
 export function fmtDates(start: string, end: string): string {
 	const fmt = (s: string): string => {

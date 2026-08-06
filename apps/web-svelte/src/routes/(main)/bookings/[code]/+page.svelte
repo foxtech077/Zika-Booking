@@ -8,6 +8,7 @@
 		cancelBookingByManageToken,
 		type BookingDetail
 	} from '$lib/account-api';
+	import { CANCELLATION_POLICY_LABEL } from '$lib/booking-utils';
 	import { formatDate, cn } from '$lib/utils';
 	import { formatMoney } from '$lib/currency-display';
 	import { listingHref } from '$lib/listing-meta';
@@ -358,6 +359,17 @@
 						<p class="mt-4 text-sm leading-relaxed text-slate-500">
 							Cancellation is no longer available because your check-in has already started.
 						</p>
+					{/if}
+
+					{#if booking.cancellationPolicy}
+						<div class="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+							<p class="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+								Cancellation Policy
+							</p>
+							<p class="mt-1 text-xs leading-relaxed text-slate-600">
+								{CANCELLATION_POLICY_LABEL[booking.cancellationPolicy] ?? booking.cancellationPolicy}
+							</p>
+						</div>
 					{/if}
 
 					{#if booking.status === 'completed'}
