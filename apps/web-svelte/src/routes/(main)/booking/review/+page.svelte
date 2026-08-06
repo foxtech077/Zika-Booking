@@ -25,9 +25,11 @@
 		renewLock,
 		releaseLock,
 		validateVoucher,
+		getVoucherWallet,
 		clearToken,
 		type PricingPreview,
-		type CreateBookingResult
+		type CreateBookingResult,
+		type WalletVoucher
 	} from '$lib/booking-api';
 	import {
 		createPaymentIntent,
@@ -115,6 +117,7 @@
 	let voucherApplying = $state(false);
 	let voucherDiscount = $state(0);
 	let voucherApplied = $state(false);
+	let walletVouchers = $state<WalletVoucher[]>([]);
 
 	// ── Submit / confirmation state ──────────────────────────────────────────
 	let submitting = $state(false);
@@ -355,6 +358,15 @@
 		}
 	});
 
+	// Load the guest's voucher wallet once the listing context is known.
+	$effect(() => {
+		if (!browser || !detail) return;
+		const activity = isCar ? 'cars' : detail.category === 'apartment' ? 'apartments' : 'hotels';
+		void getVoucherWallet(activity, detail.country).then((vouchers) => {
+			walletVouchers = vouchers;
+		});
+	});
+
 	// When the guest toggles car delivery after locking, release the old lock
 	// and then re-acquire with the new preference. The re-lock runs quietly
 	// (no skeleton) so the form doesn't jump away while pricing updates.
@@ -487,6 +499,7 @@
 				totalAmount: breakdown.base,
 				activity: isCar ? 'cars' : detail.category === 'apartment' ? 'apartments' : 'hotels',
 				guestId: auth.user?.id ?? 'guest',
+				guestTier: auth.user?.currentTier,
 				guestCountry: detail.country
 			});
 			if (res.valid && res.discountAmount > 0) {
@@ -1363,6 +1376,26 @@
 					<!-- Voucher -->
 					<section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 						<h3 class="mb-4 flex items-center gap-2 font-bold text-slate-800">Discount Code</h3>
+						{#if walletVouchers.length > 0 && !voucherApplied}
+							<label
+								for="wallet-voucher"
+								class="mb-1.5 block text-xs font-medium text-slate-600"
+							>
+								Your voucher wallet
+							</label>
+							<select
+								id="wallet-voucher"
+								bind:value={voucherCode}
+								class="mb-3 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-[#1D8D2B]"
+							>
+								<option value="">Choose a wallet voucher…</option>
+								{#each walletVouchers as w (w.voucherId)}
+									<option value={w.code}>
+										{w.title || w.code} — {w.discountType === 'percentage' ? `${w.discountValue}%` : `${fmtPlatform(w.discountValue, detail.currency)}`} off
+									</option>
+								{/each}
+							</select>
+						{/if}
 						{#if voucherApplied}
 							<div class="flex items-center justify-between">
 								<span class="text-sm font-semibold text-emerald-700">

@@ -193,3 +193,37 @@ export async function validateVoucher(input: ValidateVoucherInput): Promise<Vouc
 		body: JSON.stringify(input)
 	});
 }
+
+export interface WalletVoucher {
+	voucherId: string;
+	code: string;
+	title: string;
+	description: string | null;
+	activityScope: string;
+	discountType: string;
+	discountValue: number;
+	maxDiscount: number | null;
+	minOrderValue: number | null;
+	validUntil: string;
+	hoursUntilExpiry: number;
+	status: string;
+	assignedAt: string;
+}
+
+/** Fetches the signed-in guest's auto-assigned voucher wallet. */
+export async function getVoucherWallet(
+	activity: string,
+	guestCountry?: string
+): Promise<WalletVoucher[]> {
+	try {
+		const query = new URLSearchParams({ activity });
+		if (guestCountry) query.set('guestCountry', guestCountry);
+		const data = await apiRequest<{ vouchers?: WalletVoucher[] }>(
+			LISTING_API_URL,
+			`/vouchers/wallet?${query.toString()}`
+		);
+		return data.vouchers ?? [];
+	} catch {
+		return [];
+	}
+}
