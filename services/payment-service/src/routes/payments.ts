@@ -3,7 +3,8 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { stripe, toStripeAmount } from "../lib/stripe.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
-import { requireUser, requireAdmin, requireInternalService, type GuestRequest } from "../middleware/auth.js";
+import { requireUser, requireAdminPermission, requireInternalService, type GuestRequest } from "../middleware/auth.js";
+import { AdminPermission } from "@zika/types";
 import { cancelPayout } from "../services/payout.service.js";
 import { issueRefund, RefundLimitExceededError, InvalidPaymentStatusError, handleConfirmFailure } from "../services/refund.service.js";
 import { initiateTaraPayment } from "../lib/tara.js";
@@ -11,7 +12,7 @@ import { computeTaraCharge, getTaraPhoneCountry, TaraNotAllowedError } from "../
 import { sendPaymentLinkEmail } from "../services/email.services.js";
 import { resolveEurCharge, EurQuoteUnavailableError, type EurChargeResult } from "../services/eurCharge.service.js";
 import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
-import { extractCountryCode, generateDisplayId } from "../lib/paymentReference.js";
+import { extractCountryCode, generateDisplayId, resolvePaymentCountry } from "../lib/paymentReference.js";
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"];
 
@@ -145,6 +146,7 @@ export async function paymentRoutes(app: FastifyInstance) {
       data: {
         displayId,
         bookingId,
+        countryCode: resolvePaymentCountry(booking as any),
         paymentProvider: "stripe",
         status: "initiated",
         amount,
@@ -224,6 +226,7 @@ export async function paymentRoutes(app: FastifyInstance) {
       data: {
         displayId,
         bookingId,
+        countryCode: resolvePaymentCountry(booking as any),
         paymentProvider: "tara",
         status: "initiated",
         amount,
@@ -460,6 +463,7 @@ export async function paymentRoutes(app: FastifyInstance) {
       data: {
         displayId,
         bookingId,
+        countryCode: resolvePaymentCountry(booking as any),
         paymentProvider: "stripe",
         status: "initiated",
         amount,
@@ -656,6 +660,7 @@ export async function paymentRoutes(app: FastifyInstance) {
       data: {
         displayId,
         bookingId,
+        countryCode: resolvePaymentCountry(booking as any),
         paymentProvider,
         status: "initiated",
         amount,
@@ -956,7 +961,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         if (serviceKey && serviceKey === process.env["INTERNAL_SERVICE_KEY"]) {
           return;
         }
-        await requireAdmin(req, reply);
+        await requireAdminPermission(AdminPermission.RefundsProcess)(req, reply);
       }
     ],
     schema: {

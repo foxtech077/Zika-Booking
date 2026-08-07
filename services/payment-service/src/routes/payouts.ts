@@ -1,8 +1,10 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
-import { requireAccount, requireAdmin, requireInternalService, type GuestRequest } from "../middleware/auth.js";
+import { requireAccount, requireAdminPermission, requireInternalService, assertResourceCountryScope, countryScopeFilter, type GuestRequest } from "../middleware/auth.js";
 import { sendError } from "../lib/errors.js";
+import { AdminPermission } from "@zika/types";
 import { processEligiblePayouts } from "../services/payout.service.js";
+import { writeAdminAudit } from "../lib/audit.js";
 
 export async function payoutRoutes(app: FastifyInstance) {
   // ── GET /provider/me/payouts ────────────────────────────────────────────────
@@ -94,14 +96,14 @@ export async function payoutRoutes(app: FastifyInstance) {
         },
       },
     },
-    preHandler: [requireAdmin],
+    preHandler: [requireAdminPermission(AdminPermission.PayoutsRead)],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const query = req.query as { page?: string; limit?: string; status?: string; providerId?: string };
     const page = Math.max(1, parseInt(query.page ?? "1", 10));
     const limit = Math.max(1, Math.min(100, parseInt(query.limit ?? "20", 10)));
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: any = { ...countryScopeFilter(req) };
     if (query.status) where.status = query.status;
     if (query.providerId) where.providerId = query.providerId;
 
@@ -135,7 +137,7 @@ export async function payoutRoutes(app: FastifyInstance) {
         properties: { id: { type: "string" } },
       },
     },
-    preHandler: [requireAdmin],
+    preHandler: [requireAdminPermission(AdminPermission.PayoutsRead)],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const payout = await prisma.payout.findUnique({
@@ -143,6 +145,7 @@ export async function payoutRoutes(app: FastifyInstance) {
       include: { merchant: true },
     });
     if (!payout) return sendError(reply, 404, "NOT_FOUND", "Payout not found.");
+    if (!assertResourceCountryScope(req, reply, payout.countryCode)) return;
     reply.send({ success: true, data: payout });
   });
 
@@ -165,13 +168,14 @@ export async function payoutRoutes(app: FastifyInstance) {
         },
       },
     },
-    preHandler: [requireAdmin],
+    preHandler: [requireAdminPermission(AdminPermission.PayoutsManage)],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const { providerPayoutId } = (req.body ?? {}) as { providerPayoutId?: string };
 
     const payout = await prisma.payout.findUnique({ where: { id } });
     if (!payout) return sendError(reply, 404, "NOT_FOUND", "Payout not found.");
+    if (!assertResourceCountryScope(req, reply, payout.countryCode)) return;
     if (payout.status === "paid") return sendError(reply, 400, "ALREADY_PAID", "Payout is already marked as paid.");
     if (payout.status === "cancelled") return sendError(reply, 400, "CANCELLED", "Cannot mark a cancelled payout as paid.");
 
@@ -196,6 +200,14 @@ export async function payoutRoutes(app: FastifyInstance) {
       JSON.stringify({ bookingId: updated.bookingId, amount: Number(updated.amount), currency: updated.currency })
     ).catch((err: any) => req.log.error({ err }, "Failed to send payout notification"));
 
+    await writeAdminAudit(req, {
+      action: "payout_marked_paid",
+      targetType: "payout",
+      targetId: id,
+      oldValue: `status:${payout.status}`,
+      newValue: `status:paid;providerPayoutId:${providerPayoutId ?? ""}`,
+    });
+
     reply.send({ success: true, data: updated });
   });
 
@@ -211,12 +223,13 @@ export async function payoutRoutes(app: FastifyInstance) {
         properties: { id: { type: "string" } },
       },
     },
-    preHandler: [requireAdmin],
+    preHandler: [requireAdminPermission(AdminPermission.PayoutsManage)],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
 
     const payout = await prisma.payout.findUnique({ where: { id } });
     if (!payout) return sendError(reply, 404, "NOT_FOUND", "Payout not found.");
+    if (!assertResourceCountryScope(req, reply, payout.countryCode)) return;
     if (payout.status === "paid") return sendError(reply, 400, "ALREADY_PAID", "Cannot cancel a paid payout.");
     if (payout.status === "cancelled") return sendError(reply, 400, "ALREADY_CANCELLED", "Payout is already cancelled.");
     if (payout.status === "processing") {
@@ -226,6 +239,14 @@ export async function payoutRoutes(app: FastifyInstance) {
     const updated = await prisma.payout.update({
       where: { id },
       data: { status: "cancelled", updatedAt: new Date() },
+    });
+
+    await writeAdminAudit(req, {
+      action: "payout_cancelled",
+      targetType: "payout",
+      targetId: id,
+      oldValue: `status:${payout.status}`,
+      newValue: "status:cancelled",
     });
 
     reply.send({ success: true, data: updated });
@@ -239,7 +260,7 @@ export async function payoutRoutes(app: FastifyInstance) {
       description: "Trigger the payout processor immediately (runs all eligible scheduled payouts)",
       security: [{ bearerAuth: [] }],
     },
-    preHandler: [requireAdmin],
+    preHandler: [requireAdminPermission(AdminPermission.PayoutsManage)],
   }, async (_req: FastifyRequest, reply: FastifyReply) => {
     void processEligiblePayouts().catch((err) =>
       console.error("[payout] Manual trigger failed:", err),
@@ -260,12 +281,13 @@ export async function payoutRoutes(app: FastifyInstance) {
         properties: { id: { type: "string" } },
       },
     },
-    preHandler: [requireAdmin],
+    preHandler: [requireAdminPermission(AdminPermission.PayoutsManage)],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
 
     const payout = await prisma.payout.findUnique({ where: { id } });
     if (!payout) return sendError(reply, 404, "NOT_FOUND", "Payout not found.");
+    if (!assertResourceCountryScope(req, reply, payout.countryCode)) return;
     if (payout.status !== "failed") return sendError(reply, 400, "NOT_FAILED", "Only failed payouts can be retried.");
 
     const updated = await prisma.payout.update({
@@ -276,6 +298,14 @@ export async function payoutRoutes(app: FastifyInstance) {
         scheduledAt: new Date(), // process on next job run
         updatedAt: new Date(),
       },
+    });
+
+    await writeAdminAudit(req, {
+      action: "payout_retried",
+      targetType: "payout",
+      targetId: id,
+      oldValue: `status:${payout.status}`,
+      newValue: "status:scheduled",
     });
 
     reply.send({ success: true, data: updated });

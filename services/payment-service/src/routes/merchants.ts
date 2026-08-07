@@ -1,8 +1,10 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { stripe } from "../lib/stripe.js";
-import { requireAccount, requireAdmin, type GuestRequest, type AdminRequest } from "../middleware/auth.js";
+import { requireAccount, requireAdminPermission, assertResourceCountryScope, countryScopeFilter, type GuestRequest, type AdminRequest } from "../middleware/auth.js";
 import { sendError } from "../lib/errors.js";
+import { AdminPermission } from "@zika/types";
+import { writeAdminAudit } from "../lib/audit.js";
 
 const PROVIDER_BASE_URL = process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005";
 
@@ -87,14 +89,14 @@ export async function merchantRoutes(app: FastifyInstance) {
         },
       },
     },
-    preHandler: [requireAdmin],
+    preHandler: [requireAdminPermission(AdminPermission.MerchantsRead)],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const query = req.query as { page?: string; limit?: string; verified?: string };
     const page = Math.max(1, parseInt(query.page ?? "1", 10));
     const limit = Math.max(1, Math.min(100, parseInt(query.limit ?? "20", 10)));
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: any = { ...countryScopeFilter(req) };
     if (query.verified !== undefined) where.isVerified = query.verified === "true";
 
     const [merchants, total] = await Promise.all([
@@ -121,7 +123,7 @@ export async function merchantRoutes(app: FastifyInstance) {
         properties: { id: { type: "string" } },
       },
     },
-    preHandler: [requireAdmin],
+    preHandler: [requireAdminPermission(AdminPermission.MerchantsRead)],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const merchant = await prisma.merchant.findUnique({
@@ -129,6 +131,7 @@ export async function merchantRoutes(app: FastifyInstance) {
       include: { payouts: { orderBy: { createdAt: "desc" } } },
     });
     if (!merchant) return sendError(reply, 404, "NOT_FOUND", "Merchant not found.");
+    if (!assertResourceCountryScope(req, reply, merchant.country)) return;
     reply.send({ success: true, data: merchant });
   });
 
@@ -150,13 +153,14 @@ export async function merchantRoutes(app: FastifyInstance) {
         properties: { isVerified: { type: "boolean" } },
       },
     },
-    preHandler: [requireAdmin],
+    preHandler: [requireAdminPermission(AdminPermission.MerchantsManage)],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const { isVerified } = req.body as { isVerified: boolean };
 
     const merchant = await prisma.merchant.findUnique({ where: { id } });
     if (!merchant) return sendError(reply, 404, "NOT_FOUND", "Merchant not found.");
+    if (!assertResourceCountryScope(req, reply, merchant.country)) return;
 
     const updated = await prisma.merchant.update({
       where: { id },
@@ -176,6 +180,14 @@ export async function merchantRoutes(app: FastifyInstance) {
         },
       });
     }
+
+    await writeAdminAudit(req, {
+      action: "merchant_verify_changed",
+      targetType: "merchant",
+      targetId: id,
+      oldValue: `isVerified:${merchant.isVerified}`,
+      newValue: `isVerified:${isVerified}`,
+    });
 
     reply.send({ success: true, data: updated });
   });
