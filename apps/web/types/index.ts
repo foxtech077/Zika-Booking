@@ -21,6 +21,7 @@ export interface HotelRoomType {
   roomType: "standard" | "superior" | "deluxe" | "suite" | "junior_suite" | "studio" | "family_room" | "presidential_suite";
   description?: string | null;
   pricePerNight: number;
+  localizedPricePerNight?: number | null;
   unitCount: number;
   maxGuests?: number | null;
   sortOrder: number;
@@ -41,6 +42,12 @@ export interface PublicListingDetail {
   description: string;
   pricePerNight: number;
   currency: string;
+  /** Present only when the search/detail call was made with a `currency` param
+   *  the API could actually convert to. Browsing-display only — the booking
+   *  breakdown (dates × nights, fees, deposit) always stays in `currency`,
+   *  the listing's real currency; never substitute these into that math. */
+  localizedPricePerNight?: number | null;
+  localizedCurrency?: string | null;
   minStayNights: number;
   /** Service-fee rate for this listing's country, as a decimal fraction
    *  (0.05 = 5%). Served by GET /listings/:id/public — the same value the
