@@ -15,6 +15,24 @@ export function extractCountryCode(reference: string): string {
   return parts.length >= 3 ? parts[parts.length - 1]! : "XX";
 }
 
+/**
+ * Resolve the ISO-3166-1 alpha-2 country for a payment from the booking's
+ * listing country when available, falling back to the reference suffix
+ * (KAIN-XXXXXX-CC). Used for the immutable country-code snapshot.
+ */
+export function resolvePaymentCountry(
+  booking: { listing?: { country?: string | null } | null; reference?: string | null } | null | undefined,
+): string | null {
+  const listingCountry = booking?.listing?.country;
+  if (listingCountry && listingCountry.length === 2) return listingCountry.toUpperCase();
+  const reference = booking?.reference;
+  if (reference) {
+    const cc = extractCountryCode(reference);
+    if (cc && cc.length === 2) return cc.toUpperCase();
+  }
+  return null;
+}
+
 export async function generateDisplayId(countryCode: string): Promise<string> {
   await ensurePaymentSequence();
   const result = await prisma.$queryRaw<{ nextval: bigint }[]>`SELECT nextval('payments.payment_seq') AS nextval`;

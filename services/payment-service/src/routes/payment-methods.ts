@@ -7,7 +7,7 @@ import { requireAccount, type GuestRequest } from "../middleware/auth.js";
 import { initiateTaraPayment } from "../lib/tara.js";
 import { computeTaraCharge, getTaraPhoneCountry, TaraNotAllowedError } from "../lib/taraEligibility.js";
 import { isTaraCountry } from "@zika/types";
-import { extractCountryCode } from "../lib/paymentReference.js";
+import { extractCountryCode, resolvePaymentCountry } from "../lib/paymentReference.js";
 
 // ── Constants & helpers for Tara payment ────────────────────────────────────
 
@@ -421,6 +421,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
         await prisma.payment.create({
           data: {
             bookingId: booking.id,
+            countryCode: resolvePaymentCountry(booking as any),
             status: "pending",
             paymentProvider: "tara",
             amount: Number(booking.totalAmount),
@@ -430,6 +431,8 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
             attemptNumber,
             idempotencyKey,
             providerPaymentId: taraResult.taraReference,
+            paymentMethodType: "mobile_money",
+            mobileNumber,
           },
         });
 

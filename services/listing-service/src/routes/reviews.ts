@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireUser, requireHost, type AuthRequest } from "../middleware/auth.js";
+import { requireUser, type AuthRequest } from "../middleware/auth.js";
 import { requireAdmin } from "../middleware/auth.js";
 import { fireNotification } from "../lib/notifications.js";
 import { sendListingAutoSuspendedEmail } from "../lib/email.js";
@@ -420,7 +420,7 @@ async function fetchProviderEmail(providerId: string): Promise<string | null> {
         }
       }
     },
-    preHandler: [requireHost]
+    preHandler: [requireUser]
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const providerId = (req as AuthRequest).authId;

@@ -130,16 +130,7 @@ async function main() {
       emailVerified: true, currentTier: "bronze", loyaltyPoints: 0,
     },
   });
-  await authPrisma.accreditation.upsert({
-    where: { providerId: "cmos7y8zp0009j9kc5o4ed3c0" },
-    update: { status: "approved", businessName: "Kainook Rentals Ltd" },
-    create: {
-      providerId: "cmos7y8zp0009j9kc5o4ed3c0",
-      status: "approved",
-      businessName: "Kainook Rentals Ltd",
-    },
-  });
-  console.log("  ✔ testprovider99@zika.com  (password: Password123!, host approved)");
+  console.log("  ✔ testprovider99@zika.com  (password: Password123!)");
 
   // ── 4. listings schema — execute seed.sql ──────────────────────────────────
   console.log("\nExecuting seed.sql into listings schema...");

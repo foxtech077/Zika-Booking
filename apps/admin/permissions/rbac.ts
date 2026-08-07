@@ -1,13 +1,17 @@
 import type { AdminRole } from "@/types/admin";
 
+// Backend payment permissions are enforced server-side. The frontend reuses the
+// SAME single source of truth from @zika/types so a policy change in one place
+// updates backend + frontend together. The sidebar map below is navigation-only
+// (frontend UI labels); data-access gating uses the shared helpers.
+export { roleHasPermission, roleScopePolicy, AdminScope, AdminPermission } from "@zika/types";
+
 // ── Permission definitions ────────────────────────────────────────────────────
 
 export type Permission =
   | "view_dashboard"
   | "view_users"
   | "manage_users"
-  | "view_accreditation"
-  | "manage_accreditation"
   | "view_listings"
   | "manage_listings"
   | "view_bookings"
@@ -40,7 +44,6 @@ export type Permission =
 const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
   super_admin: [
     "view_dashboard", "view_users", "manage_users",
-    "view_accreditation", "manage_accreditation",
     "view_listings", "manage_listings",
     "view_bookings", "manage_bookings", "manage_manual_booking",
     "view_finance", "manage_finance",
@@ -59,7 +62,6 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
   ],
   admin: [
     "view_dashboard", "view_users", "manage_users",
-    "view_accreditation", "manage_accreditation",
     "view_listings", "manage_listings",
     "view_bookings", "manage_bookings", "manage_manual_booking",
     "view_finance",
@@ -78,7 +80,6 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
   ],
   country_manager: [
     "view_dashboard",
-    "view_accreditation", "manage_accreditation",
     "view_listings", "manage_listings",
     "view_bookings", "manage_manual_booking",
     "view_finance",
@@ -100,7 +101,6 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_dashboard",
     "view_bookings",
     "view_messaging",
-    "view_refunds",
     "view_commission",
   ],
   finance: [
@@ -166,8 +166,7 @@ export const NAV_GROUPS: NavGroup[] = [
     group: "Operations",
     items: [
       { label: "Users", href: "/dashboard/users", icon: "Users", permission: "view_users" },
-      { label: "Host Applications", href: "/dashboard/host-accreditations", icon: "BadgeCheck", permission: "view_accreditation" },
-      { label: "Listing Review", href: "/dashboard/accreditation", icon: "Building2", permission: "view_accreditation" },
+      { label: "Listing Review", href: "/dashboard/accreditation", icon: "Building2", permission: "view_listings" },
       { label: "Moderation Queue", href: "/dashboard/moderation", icon: "ShieldAlert", permission: "view_reviews" },
       { label: "Listings", href: "/dashboard/listings", icon: "Building2", permission: "view_listings" },
       { label: "Bookings", href: "/dashboard/bookings", icon: "CalendarDays", permission: "view_bookings" },

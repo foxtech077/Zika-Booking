@@ -17,6 +17,8 @@ import { Input } from "@/components/ui/Input";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { SYSTEM_COUNTRIES } from "@/lib/countries";
+import { roleHasPermission, roleScopePolicy, AdminPermission, AdminScope } from "@/permissions/rbac";
+import type { AdminRole } from "@/types/admin";
 
 const COUNTRY_OPTIONS = SYSTEM_COUNTRIES.map((c) => ({
   value: c.code,
@@ -87,15 +89,17 @@ export default function PayoutManagementPage() {
 
   const payouts: Payout[] = Array.isArray(data) ? data : [];
 
+  const isCountryScoped = roleScopePolicy(user?.role as AdminRole) === AdminScope.CountryScoped;
+
   // Filter payouts based on activeTab, countryScope and search
   const filteredPayouts = useMemo(() => {
     return payouts.filter((p) => {
       // 1. Status Tab filter
       if (p.status !== activeTab) return false;
 
-      // 2. Role Scope Filter (Country Manager)
-      if (user?.role === "country_manager") {
-        const hasScope = user.countryScope?.includes(p.merchant?.country ?? "");
+      // 2. Role Scope Filter (country_manager / sales)
+      if (isCountryScoped) {
+        const hasScope = user?.countryScope?.includes(p.merchant?.country ?? "");
         if (!hasScope) return false;
       }
 
@@ -114,7 +118,7 @@ export default function PayoutManagementPage() {
 
       return true;
     });
-  }, [payouts, activeTab, user, countryFilter, searchQuery]);
+  }, [payouts, activeTab, user, countryFilter, searchQuery, isCountryScoped]);
 
   const [limit, setLimit] = useState(10);
   const paginatedPayouts = useMemo(() => {
@@ -126,8 +130,8 @@ export default function PayoutManagementPage() {
   const tabCounts = useMemo(() => {
     const counts = { scheduled: 0, processing: 0, paid: 0, failed: 0, cancelled: 0 };
     payouts.forEach((p) => {
-      if (user?.role === "country_manager") {
-        const hasScope = user.countryScope?.includes(p.merchant?.country ?? "");
+      if (isCountryScoped) {
+        const hasScope = user?.countryScope?.includes(p.merchant?.country ?? "");
         if (!hasScope) return;
       }
       if (counts[p.status] !== undefined) {
@@ -137,8 +141,8 @@ export default function PayoutManagementPage() {
     return counts;
   }, [payouts, user]);
 
-  // Check roles
-  const canModifyPayouts = user?.role === "super_admin" || user?.role === "finance";
+  // Check permissions (shared backend policy — admin + finance + super_admin)
+  const canModifyPayouts = roleHasPermission(user?.role as AdminRole, AdminPermission.PayoutsManage);
 
   // Mutations
   const processNowMut = useMutation({
@@ -292,11 +296,11 @@ export default function PayoutManagementPage() {
   ];
 
   const CM_OPTIONS = useMemo(() => {
-    if (user?.role === "country_manager") {
-      return COUNTRY_OPTIONS.filter((opt) => user.countryScope?.includes(opt.value));
+    if (isCountryScoped) {
+      return COUNTRY_OPTIONS.filter((opt) => user?.countryScope?.includes(opt.value));
     }
     return COUNTRY_OPTIONS;
-  }, [user]);
+  }, [user, isCountryScoped]);
 
   if (!mounted) {
     return (

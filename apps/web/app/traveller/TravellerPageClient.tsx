@@ -61,7 +61,6 @@ interface User {
   firstName: string;
   lastName: string;
   email: string;
-  hostStatus?: "approved" | "pending" | "rejected" | null;
   currentTier: "bronze" | "silver" | "gold" | "diamond";
   loyaltyPoints: number;
 }
@@ -2316,7 +2315,7 @@ export default function TravellerDashboard() {
                       <h2 className="text-xl font-semibold mb-5">What this place offers</h2>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {detailListing.amenities.map((a) => (
-                          <div key={a.id} className="flex items-center gap-3 text-slate-700 text-sm">
+                          <div key={a.amenityKey} className="flex items-center gap-3 text-slate-700 text-sm">
                             <svg className="w-5 h-5 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>

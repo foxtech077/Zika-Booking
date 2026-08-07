@@ -124,18 +124,8 @@ function activeLock(booking: Booking) {
   return booking.status === "pending_payment" && Number.isFinite(created) && Date.now() - created < 5 * 60 * 1000;
 }
 
-function formatGuestName(fullName: string) {
-  const parts = fullName.trim().split(/\s+/).filter(Boolean);
-  if (parts.length <= 1) return parts[0] ?? "Guest";
-  const first = parts[0] ?? "Guest";
-  const last = parts[parts.length - 1] ?? "";
-  return `${first} ${last.charAt(0)}.`;
-}
-
 function normalizeBooking(raw: unknown): Booking {
   const item = raw as Record<string, unknown>;
-  const first = readString(item.guestFirstName);
-  const last = readString(item.guestLastName);
   const listingId = readString(item.listingId);
   const category = readString(item.listingCategory, "apartment") as Booking["listingCategory"];
   const start = category === "car" ? item.pickupDatetime : item.checkIn;
@@ -147,7 +137,7 @@ function normalizeBooking(raw: unknown): Booking {
     listingId,
     listingName: readString(item.listingTitle ?? item.listingName, "Listing"),
     listingCategory: category,
-    guestName: formatGuestName(`${first} ${last}`.trim() || readString(item.guestName, "Guest")),
+    guestName: readString(item.guestName, "Guest"),
     checkIn: toDateOnly(readString(start, new Date().toISOString())),
     checkOut: toDateOnly(readString(end, new Date().toISOString())),
     guests: readNumber(item.adults) + readNumber(item.children),
@@ -248,11 +238,12 @@ function MetricCard({ label, value, hint, financial }: { label: string; value: R
   );
 }
 
-function EmptyState({ title, message }: { title: string; message: string }) {
+function EmptyState({ title, message, action }: { title: string; message: string; action?: ReactNode }) {
   return (
     <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center">
       <p className="font-semibold text-slate-900">{title}</p>
       <p className="mt-1 text-sm text-slate-500">{message}</p>
+      {action && <div className="mt-4 flex justify-center">{action}</div>}
     </div>
   );
 }
@@ -432,7 +423,15 @@ export default function ProviderDashboardPage() {
         {isLoading ? (
           <div className="h-56 animate-pulse rounded-xl bg-slate-100" />
         ) : availableUnits.length === 0 ? (
-          <EmptyState title="No listings" message="Create a listing to track availability." />
+          <EmptyState
+            title="No listings"
+            message="Create a listing to track availability."
+            action={
+              <Link href="/dashboard/listings/new">
+                <Button icon={<ArrowRight />}>Create Listing</Button>
+              </Link>
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">

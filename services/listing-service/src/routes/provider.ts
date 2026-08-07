@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireHost, type AuthRequest } from "../middleware/auth.js";
+import { requireUser, type AuthRequest } from "../middleware/auth.js";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -11,6 +11,18 @@ const blockDatesSchema = z.object({
   endDate:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   reason:    z.string().max(200).optional(),
 });
+
+// ── Guest display-name masking ────────────────────────────────────────────────
+// PRD §12.2: providers may only ever see "First name + last initial"
+// (e.g. "Amara D."). Full surname, email and phone are NEVER exposed to
+// providers; all contact goes through the in-app messaging tool.
+function guestDisplayName(first: string | null | undefined, last: string | null | undefined): string {
+  const f = (first ?? "").trim();
+  const l = (last ?? "").trim();
+  if (!f) return "Guest";
+  if (!l) return f;
+  return `${f} ${l.charAt(0)}.`;
+}
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -24,7 +36,7 @@ export async function providerRoutes(app: FastifyInstance) {
         tags: ["Provider Portal"],
         description: "Get provider dashboard summary including earnings, bookings, and recent activity",
       },
-      preHandler: [requireHost],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -136,8 +148,7 @@ export async function providerRoutes(app: FastifyInstance) {
           reference:       b.reference,
           listingTitle:    b.listing.name,
           listingCategory: b.listing.category,
-          guestName:       `${b.guestFirstName} ${b.guestLastName}`,
-          guestEmail:      b.guestEmail,
+          guestName:       guestDisplayName(b.guestFirstName, b.guestLastName),
           checkIn:         b.checkIn?.toISOString().slice(0, 10) ?? null,
           checkOut:        b.checkOut?.toISOString().slice(0, 10) ?? null,
           pickupDatetime:  b.pickupDatetime?.toISOString() ?? null,
@@ -165,7 +176,7 @@ export async function providerRoutes(app: FastifyInstance) {
         tags: ["Provider Portal"],
         description: "Get a summary of all provider listings with revenue and rating stats",
       },
-      preHandler: [requireHost],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -234,12 +245,12 @@ export async function providerRoutes(app: FastifyInstance) {
             },
             search: {
               type: "string",
-              description: "Search by reference, guest first name, last name, or email",
+              description: "Search by booking reference or guest name",
             },
           },
         },
       },
-      preHandler: [requireHost],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -286,9 +297,7 @@ export async function providerRoutes(app: FastifyInstance) {
           listingTitle:       b.listing.name,
           listingCategory:    b.listing.category,
           guestFirstName:     b.guestFirstName,
-          guestLastName:      b.guestLastName,
-          guestEmail:         b.guestEmail,
-          guestPhone:         b.guestPhone,
+          guestName:          guestDisplayName(b.guestFirstName, b.guestLastName),
           adults:             b.adults,
           children:           b.children,
           checkIn:            b.checkIn?.toISOString().slice(0, 10) ?? null,
@@ -342,7 +351,7 @@ export async function providerRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireHost],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -400,7 +409,7 @@ export async function providerRoutes(app: FastifyInstance) {
           listingName:       r.listing.name,
           listingCategory:   r.listing.category,
           bookingReference:  r.booking.reference,
-          guestName:         `${r.booking.guestFirstName} ${r.booking.guestLastName}`,
+          guestName:         guestDisplayName(r.booking.guestFirstName, r.booking.guestLastName),
           rating:            r.rating,
           title:             r.title,
           body:              r.body,
@@ -424,7 +433,7 @@ export async function providerRoutes(app: FastifyInstance) {
         tags: ["Provider Portal"],
         description: "Get provider earnings breakdown — all-time totals, last 12 months monthly, and recent payouts",
       },
-      preHandler: [requireHost],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -528,7 +537,7 @@ export async function providerRoutes(app: FastifyInstance) {
           },
         },
       },
-      preHandler: [requireHost],
+      preHandler: [requireUser],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
@@ -588,7 +597,7 @@ export async function providerRoutes(app: FastifyInstance) {
           start:     b.checkIn?.toISOString().slice(0, 10) ?? b.pickupDatetime?.toISOString().slice(0, 10) ?? null,
           end:       b.checkOut?.toISOString().slice(0, 10) ?? b.returnDatetime?.toISOString().slice(0, 10) ?? null,
           status:    b.status,
-          guestName: `${b.guestFirstName} ${b.guestLastName}`,
+          guestName: guestDisplayName(b.guestFirstName, b.guestLastName),
           type:      "booking",
         })),
         blockedRanges: blockedDates.map((bd) => ({

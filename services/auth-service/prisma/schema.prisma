@@ -27,14 +27,6 @@ enum UserStatus {
   @@schema("auth")
 }
 
-enum AccreditationStatus {
-  pending
-  approved
-  rejected
-
-  @@schema("auth")
-}
-
 enum UserType {
   user
 
@@ -129,7 +121,6 @@ model User {
   verificationTokens   VerificationToken[]
   sessions             Session[]
   emailLogs            EmailLog[]
-  accreditation        Accreditation?
   notifications        Notification[]
   deviceTokens         DeviceToken[]
   loyaltyTransactions  LoyaltyTransaction[]
@@ -305,29 +296,6 @@ model AuditLog {
   @@index([adminId])
   @@index([targetId])
   @@index([timestamp])
-  @@schema("auth")
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Provider Accreditations
-// ─────────────────────────────────────────────────────────────────────────────
-
-model Accreditation {
-  id              String              @id @default(cuid())
-  providerId      String              @unique
-  user            User                @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  status          AccreditationStatus @default(pending)
-  businessName    String?             @db.VarChar(255)
-  registrationNo  String?             @db.VarChar(100)
-  taxId           String?             @db.VarChar(100)
-  documentsUrl    String?             @db.Text
-  submittedAt     DateTime            @default(now())
-  reviewedAt      DateTime?
-  reviewedBy      String?
-  rejectionReason String?             @db.Text
-  updatedAt       DateTime            @updatedAt
-
-  @@index([status])
   @@schema("auth")
 }
 

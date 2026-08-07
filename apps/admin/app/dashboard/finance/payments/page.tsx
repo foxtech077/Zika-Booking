@@ -15,6 +15,8 @@ import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { paymentPayoutApi } from "@/lib/payment-api";
+import { roleScopePolicy, AdminScope } from "@/permissions/rbac";
+import type { AdminRole } from "@/types/admin";
 
 const COUNTRY_OPTIONS = [
   { value: "MT", label: "MT" },
@@ -61,9 +63,18 @@ export default function BookingPaymentsPage() {
 
   const payments = data?.data ?? [];
 
+  // Country scope (country_manager / sales): only show records in assigned countries.
+  const isCountryScoped = roleScopePolicy(user?.role as AdminRole) === AdminScope.CountryScoped;
+
   // Handle Search & Filter Logic
   const filteredPayments = useMemo(() => {
     return payments.filter((p: any) => {
+      // 0. Country Scope Filter
+      if (isCountryScoped) {
+        const hasScope = user?.countryScope?.includes(p.countryCode ?? "");
+        if (!hasScope) return false;
+      }
+
       // 1. Status Filter
       if (status && p.status !== status) return false;
 
@@ -79,7 +90,7 @@ export default function BookingPaymentsPage() {
 
       return true;
     });
-  }, [payments, status, searchQuery]);
+  }, [payments, status, searchQuery, isCountryScoped, user]);
 
   // Paginate the filtered results on the client side
   const paginatedPayments = useMemo(() => {
@@ -178,8 +189,8 @@ export default function BookingPaymentsPage() {
   };
 
   const CM_OPTIONS = useMemo(() => {
-    if (user?.role === "country_manager") {
-      return COUNTRY_OPTIONS.filter((opt) => user.countryScope?.includes(opt.value));
+    if (roleScopePolicy(user?.role as AdminRole) === AdminScope.CountryScoped) {
+      return COUNTRY_OPTIONS.filter((opt) => user?.countryScope?.includes(opt.value));
     }
     return COUNTRY_OPTIONS;
   }, [user]);

@@ -540,11 +540,18 @@ enum BookingStatus {
     // Never cleared — stays valid until checkout + 24h.
     manageToken String? @unique @map("manage_token") @db.VarChar(100)
 
+    // Reservation lock expiry (server-authoritative). Webhooks confirming a
+    // booking are honoured up to CONFIRM_GRACE_MS after this; beyond that the
+    // payment is auto-refunded instead of confirming. Null = legacy row, falls
+    // back to createdAt + lock TTL.
+    lockExpiresAt DateTime? @map("lock_expires_at")
+
     listing   Listing            @relation(fields: [listingId], references: [id])
     roomType  HotelRoomType?     @relation(fields: [roomTypeId], references: [id])
     statusLog BookingStatusLog[]
     review    ListingReview?
 
+    @@index([status, createdAt])
     @@map("bookings")
     @@schema("listing")
   }

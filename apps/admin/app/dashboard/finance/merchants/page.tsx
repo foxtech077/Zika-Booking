@@ -27,6 +27,8 @@ import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ConfirmModal } from "@/components/modals/Modals";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { roleHasPermission, roleScopePolicy, AdminPermission, AdminScope } from "@/permissions/rbac";
+import type { AdminRole } from "@/types/admin";
 
 // -- Types ---------------------------------------------------------------------
 
@@ -313,7 +315,7 @@ export default function MerchantManagementPage() {
 
   useEffect(() => { setMounted(true); }, []);
 
-  const canManage = user?.role === "super_admin" || user?.role === "finance";
+  const canManage = roleHasPermission(user?.role as AdminRole, AdminPermission.MerchantsManage);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-merchants", verifiedFilter],
@@ -326,17 +328,24 @@ export default function MerchantManagementPage() {
 
   const allMerchants: Merchant[] = Array.isArray(data) ? data : [];
 
+  const isCountryScoped = roleScopePolicy(user?.role as AdminRole) === AdminScope.CountryScoped;
+
   const filtered = useMemo(() => {
-    if (!searchQuery) return allMerchants;
-    const q = searchQuery.toLowerCase();
-    return allMerchants.filter((m) =>
-      (m.businessName ?? "").toLowerCase().includes(q) ||
-      (m.bankAccountName ?? "").toLowerCase().includes(q) ||
-      (m.country ?? "").toLowerCase().includes(q) ||
-      m.id.toLowerCase().includes(q) ||
-      m.userId.toLowerCase().includes(q)
-    );
-  }, [allMerchants, searchQuery]);
+    return allMerchants.filter((m) => {
+      // Country scope (country_manager / sales): only merchants in assigned countries
+      if (isCountryScoped) {
+        const hasScope = user?.countryScope?.includes(m.country ?? "");
+        if (!hasScope) return false;
+      }
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      return (m.businessName ?? "").toLowerCase().includes(q) ||
+        (m.bankAccountName ?? "").toLowerCase().includes(q) ||
+        (m.country ?? "").toLowerCase().includes(q) ||
+        m.id.toLowerCase().includes(q) ||
+        m.userId.toLowerCase().includes(q);
+    });
+  }, [allMerchants, searchQuery, isCountryScoped, user]);
 
   const paginated = useMemo(() => {
     const start = (page - 1) * limit;

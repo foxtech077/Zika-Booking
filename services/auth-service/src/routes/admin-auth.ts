@@ -29,6 +29,7 @@ import {
 import { sendError, sendSuccess, zodFieldErrors } from "../lib/errors";
 import { incrementCounter } from "../lib/redis";
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
+import { verifyAdminSession, toIntrospectResponse } from "../lib/adminSession";
 
 const SESSION_INACTIVITY = Number(process.env["ADMIN_SESSION_INACTIVITY_SECONDS"] ?? 28800);
 const SESSION_TTL_DAYS = 30;
@@ -766,7 +767,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
   // ── GET /admin/users ──────────────────────────────────────────────────────
   app.get("/admin/users", { schema: { tags: ["Admin Users"] }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { q = "", status, hostStatus, page = "1", limit = "20" } = req.query as Record<string, string>;
+    const { q = "", status, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
 
@@ -785,10 +786,6 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
     if (status) {
       and.push({ status: status as "pending_verification" | "active" | "suspended" | "banned" });
-    }
-
-    if (hostStatus && ["pending", "approved", "rejected"].includes(hostStatus)) {
-      and.push({ accreditation: { status: hostStatus as "pending" | "approved" | "rejected" } });
     }
 
     if (and.length > 0) {
@@ -817,7 +814,6 @@ export async function adminUserRoutes(app: FastifyInstance) {
             country: true,
             createdAt: true,
             updatedAt: true,
-            accreditation: { select: { status: true, submittedAt: true, reviewedAt: true, rejectionReason: true } },
           },
           orderBy: { createdAt: "desc" },
         }),
@@ -958,95 +954,6 @@ export async function adminUserRoutes(app: FastifyInstance) {
       return sendSuccess(reply, 200, { message: "Account permanently banned." });
     } catch {
       return sendError(reply, 400, "BAN_FAILED", "Account could not be banned. Please try again.");
-    }
-  });
-
-  // ── GET /admin/accreditations  (host profile review queue) ────────────────
-  app.get("/admin/accreditations", { schema: { tags: ["Admin Users"], querystring: { type: "object", properties: { status: { type: "string", enum: ["pending", "approved", "rejected"] }, page: { type: "string", pattern: "^[0-9]+$" }, limit: { type: "string", pattern: "^[0-9]+$" } } } }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const q = req.query as Record<string, string>;
-    const status = q["status"];
-    const page = parseInt(q["page"] ?? "1", 10);
-    const limit = Math.min(parseInt(q["limit"] ?? "20", 10), 100);
-    const skip = (page - 1) * limit;
-
-    const where: any = {};
-    if (status) where.status = status as "pending" | "approved" | "rejected";
-
-    try {
-      const [total, accreditations] = await Promise.all([
-        prisma.accreditation.count({ where }),
-        prisma.accreditation.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy: { submittedAt: "desc" },
-          include: {
-            user: {
-              select: {
-                id: true, firstName: true, lastName: true, email: true,
-                country: true, phone: true, status: true, createdAt: true,
-              },
-            },
-          },
-        }),
-      ]);
-
-      return sendSuccess(reply, 200, { accreditations, total, page, limit });
-    } catch {
-      return sendError(reply, 400, "FETCH_FAILED", "Accreditations could not be retrieved. Please try again.");
-    }
-  });
-
-  // ── PATCH /admin/accreditations/:id/approve ───────────────────────────────
-  app.patch("/admin/accreditations/:id/approve", { schema: { tags: ["Admin Users"] }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const adminId = (req as FastifyRequest & { adminId: string }).adminId;
-    const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
-    const { id: targetId } = req.params as { id: string };
-
-    try {
-      const acc = await prisma.accreditation.findUnique({ where: { id: targetId }, include: { user: { select: { email: true, firstName: true } } } });
-      if (!acc) return sendError(reply, 404, "NOT_FOUND", "Host profile not found.");
-      if (acc.status === "approved") return sendError(reply, 409, "INVALID_STATUS", "Host profile is already approved.");
-
-      const updated = await prisma.accreditation.update({
-        where: { id: targetId },
-        data: { status: "approved", reviewedAt: new Date(), reviewedBy: adminId, rejectionReason: null },
-      });
-
-      await writeAudit(adminId, adminRole, "host_approved", req, {
-        targetType: "accreditation", targetId, oldValue: acc.status, newValue: "approved",
-      });
-
-      return sendSuccess(reply, 200, { message: "Host profile approved.", hostProfile: updated });
-    } catch {
-      return sendError(reply, 400, "APPROVE_FAILED", "Host profile could not be approved. Please try again.");
-    }
-  });
-
-  // ── PATCH /admin/accreditations/:id/reject ────────────────────────────────
-  app.patch("/admin/accreditations/:id/reject", { schema: { tags: ["Admin Users"], body: { type: "object", properties: { reason: { type: "string" } } } }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const adminId = (req as FastifyRequest & { adminId: string }).adminId;
-    const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
-    const { id: targetId } = req.params as { id: string };
-    const { reason } = (req.body ?? {}) as { reason?: string };
-
-    try {
-      const acc = await prisma.accreditation.findUnique({ where: { id: targetId } });
-      if (!acc) return sendError(reply, 404, "NOT_FOUND", "Host profile not found.");
-      if (acc.status === "rejected") return sendError(reply, 409, "INVALID_STATUS", "Host profile is already rejected.");
-
-      const updated = await prisma.accreditation.update({
-        where: { id: targetId },
-        data: { status: "rejected", reviewedAt: new Date(), reviewedBy: adminId, rejectionReason: reason ?? null },
-      });
-
-      await writeAudit(adminId, adminRole, "host_rejected", req, {
-        targetType: "accreditation", targetId, oldValue: acc.status, newValue: "rejected", reason,
-      });
-
-      return sendSuccess(reply, 200, { message: "Host profile rejected.", hostProfile: updated });
-    } catch {
-      return sendError(reply, 400, "REJECT_FAILED", "Host profile could not be rejected. Please try again.");
     }
   });
 }
@@ -1304,6 +1211,57 @@ export async function adminOperatorRoutes(app: FastifyInstance) {
         return sendError(reply, 404, "ADMIN_NOT_FOUND", "Admin account not found.");
       }
       return sendError(reply, 400, "UPDATE_FAILED", "Admin role could not be updated. Please try again.");
+    }
+  });
+
+  // ── POST /internal/admin/introspect — service-to-service session introspection ──
+  // Verifies the admin session JWT against the DB (signature, revocation,
+  // inactivity) and returns the canonical role + country scope. Other services
+  // (payment, listing) call this so admin authorization never trusts stale
+  // JWT claims. Gated by the shared INTERNAL_SERVICE_KEY.
+  app.post("/internal/admin/introspect", {
+    schema: {
+      tags: ["Admin Auth"],
+      description: "Internal: verify an admin session and return canonical role + country scope",
+      body: {
+        type: "object",
+        required: ["token"],
+        properties: { token: { type: "string" } },
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                adminId: { type: "string" },
+                sessionId: { type: "string" },
+                role: { type: "string" },
+                countryScope: { type: "array", items: { type: "string" } },
+                scope: { type: "string" },
+              },
+              required: ["adminId", "sessionId", "role", "countryScope", "scope"],
+            },
+          },
+        },
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const serviceKey = req.headers["x-service-key"];
+    if (!process.env["INTERNAL_SERVICE_KEY"] || serviceKey !== process.env["INTERNAL_SERVICE_KEY"]) {
+      return sendError(reply, 403, "FORBIDDEN", "Invalid or missing service token.");
+    }
+
+    const { token } = req.body as { token: string };
+    if (!token) return sendError(reply, 401, "NO_TOKEN", "Admin session token required.");
+
+    try {
+      const ctx = await verifyAdminSession(token);
+      return sendSuccess(reply, 200, toIntrospectResponse(ctx));
+    } catch (err: any) {
+      return sendError(reply, 401, err?.code ?? "INVALID_SESSION", err?.message ?? "Invalid session.");
     }
   });
 }

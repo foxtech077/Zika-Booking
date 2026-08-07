@@ -89,9 +89,8 @@ export interface ProviderBooking {
   listingTitle: string | null;
   listingCategory: ListingCategory;
   guestFirstName: string;
-  guestLastName: string;
-  guestEmail: string;
-  guestPhone: string | null;
+  // PRD §12.2: providers only ever see "First L." — never full surname, email or phone.
+  guestName: string;
   adults: number | null;
   children: number | null;
   checkIn: string | null;

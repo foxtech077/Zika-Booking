@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
-import { requireHost, type AuthRequest } from "../middleware/auth.js";
+import { requireUser, type AuthRequest } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
   createPresignedUploadUrl,
@@ -224,7 +224,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings — Create new draft (UC-2.1)
   app.post("/listings", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["Listings"],
       body: {
@@ -261,6 +261,25 @@ export async function listingRoutes(app: FastifyInstance) {
         return sendError(reply, 422, "VALIDATION_ERROR", "Invalid listing category.");
       }
 
+      // Reuse an existing blank draft instead of spawning a new empty listing on
+      // every create click. All edit forms require a name before saving, so a
+      // draft with `name: null` has never had content and is safe to reopen.
+      // Deleted (soft-deleted) drafts are excluded — returning one would bounce
+      // the user to an edit page that 404s.
+      const existing = await prisma.listing.findFirst({
+        where: {
+          providerId,
+          status: "draft",
+          name: null,
+          category: category as "hotel" | "apartment" | "car",
+          deletedAt: null,
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      if (existing) {
+        return sendSuccess(reply, 200, { id: existing.id, category: existing.category, status: existing.status });
+      }
+
       const listing = await prisma.listing.create({
         data: { providerId, category: category as "hotel" | "apartment" | "car" },
       });
@@ -274,7 +293,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // GET /listings — My listings (UC-2.6 entry point)
   app.get("/listings", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["Listings"],
       querystring: {
@@ -395,7 +414,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // GET /listings/:id — Get listing detail (UC-2.6)
   app.get("/listings/:id", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["Listings"],
       params: {
@@ -516,7 +535,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // PATCH /listings/:id — Update listing fields (UC-2.2 auto-save)
   app.patch("/listings/:id", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["Listings"],
       params: {
@@ -801,7 +820,7 @@ export async function listingRoutes(app: FastifyInstance) {
         },
       },
     },
-    preHandler: [requireHost],
+    preHandler: [requireUser],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { authId: providerId } = req as AuthRequest;
@@ -900,7 +919,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings/:id/activate — Apartment auto-activation (UC-3.5) + Car activation (UC-4.5)
   app.post("/listings/:id/activate", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1099,7 +1118,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings/:id/deactivate — UC-2.13 / UC-3.7
   app.post("/listings/:id/deactivate", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1149,7 +1168,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings/:id/reactivate — UC-2.13 A1 / UC-3.7
   app.post("/listings/:id/reactivate", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1303,7 +1322,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // DELETE /listings/:id — Soft-delete draft (UC-2.13 A2)
   app.delete("/listings/:id", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1354,7 +1373,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings/:id/photos/presign — Request presigned S3 upload URL
   app.post("/listings/:id/photos/presign", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1425,7 +1444,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings/:id/photos/confirm — Register photo after S3 upload
   app.post("/listings/:id/photos/confirm", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1494,7 +1513,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // PATCH /listings/:id/photos/reorder — Update photo positions (UC-2.5 A1, A2)
   app.patch("/listings/:id/photos/reorder", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1555,7 +1574,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // DELETE /listings/:id/photos/:photoId — Remove photo (UC-2.5 A3)
   app.delete("/listings/:id/photos/:photoId", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1620,7 +1639,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings/:id/documents/presign — Request presigned S3 URL for document
   app.post("/listings/:id/documents/presign", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1684,7 +1703,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings/:id/documents/confirm — Register document after S3 upload
   app.post("/listings/:id/documents/confirm", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["Listings"],
       params: {
@@ -1783,7 +1802,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // DELETE /listings/:id/documents/:docId — Remove document before submission
   app.delete("/listings/:id/documents/:docId", {
-    preHandler: [requireHost],
+    preHandler: [requireUser],
     schema: {
       tags: ["Listings"],
       params: {

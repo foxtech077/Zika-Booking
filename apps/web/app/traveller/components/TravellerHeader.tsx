@@ -1,17 +1,16 @@
 "use client";
 
+import { Avatar } from "@/components/ui/Avatar";
+import { useUnreadNotificationCount } from "@/hooks/useNotifications";
+import { logoutUser } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { fetchUnreadConversationCount } from "@/services/traveller";
+import { useAuthStore } from "@/stores/auth";
+import { useQuery } from "@tanstack/react-query";
+import { Bell, Building2, ChevronDown, FileText, Heart, HelpCircle, LogOut, Menu, MessageSquare, Shield, Star, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { useState, useEffect, useRef } from "react";
-import { ChevronDown, Heart, LogOut, Menu, MessageSquare, Star, User, HelpCircle, Shield, FileText, Bell, Building2 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Avatar } from "@/components/ui/Avatar";
-import { useAuthStore } from "@/stores/auth";
-import { logoutUser } from "@/lib/api";
-import { fetchUnreadConversationCount } from "@/services/traveller";
-import { useUnreadNotificationCount } from "@/hooks/useNotifications";
-import { useListingSummary } from "@/hooks/listings";
+import { useEffect, useRef, useState } from "react";
 import { CurrencyDropdown } from "./CurrencyDropdown";
 
 const TRAVELLER_ROUTES = {
@@ -62,10 +61,6 @@ export function TravellerHeader({
   });
 
   const { data: unreadNotifData } = useUnreadNotificationCount(!!user);
-  // Decides which of "Create Listing" / "Manage Listings" to show. Never fires
-  // for a signed-out visitor.
-  const { data: listingSummaryData } = useListingSummary(!!user);
-  const hasListings = (listingSummaryData?.listings.length ?? 0) > 0;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -102,19 +97,12 @@ export function TravellerHeader({
   const isWishlistActive = pathname?.startsWith(TRAVELLER_ROUTES.wishlist);
   const isProfileActive = pathname?.startsWith(TRAVELLER_ROUTES.profile);
   const isListingsActive = pathname?.startsWith("/dashboard");
-  // Users without an approved host profile are routed through the host
-  // onboarding flow before they can create/manage listings.
-  const canHost = user?.hostStatus === "approved";
-  const listingsHref = !canHost
-    ? "/dashboard/host"
-    : hasListings
-      ? TRAVELLER_ROUTES.manageListings
-      : TRAVELLER_ROUTES.createListing;
-  const listingsLabel = !canHost
-    ? "Become a Host"
-    : hasListings
-      ? "Manage Listings"
-      : "Create Listing";
+  // The avatar trigger turns dark when the menu is open or on the profile
+  // screen; inner text must flip to light in both cases to keep contrast.
+  const avatarActive = menuOpen || isProfileActive;
+  // Any signed-in user manages their listings from the dashboard.
+  const listingsHref = TRAVELLER_ROUTES.manageListings;
+  const listingsLabel = "My Listings";
 
   const lockTimer =
     lockSecondsLeft != null
@@ -290,7 +278,7 @@ export function TravellerHeader({
                         <p
                           className={cn(
                             "max-w-[100px] truncate text-xs font-semibold leading-none",
-                            menuOpen ? "text-white" : "text-slate-800",
+                            avatarActive ? "text-white" : "text-slate-800",
                           )}
                         >
                           {fullName}
@@ -298,7 +286,7 @@ export function TravellerHeader({
                         <p
                           className={cn(
                             "mt-0.5 max-w-[100px] truncate text-[10px]",
-                            menuOpen ? "text-green-200/80" : "text-slate-400",
+                            avatarActive ? "text-green-200/80" : "text-slate-400",
                           )}
                         >
                           {user.email}
@@ -307,7 +295,8 @@ export function TravellerHeader({
                       <ChevronDown
                         className={cn(
                           "h-3.5 w-3.5 transition-transform",
-                          menuOpen ? "rotate-180 text-white/70" : "text-slate-400",
+                          menuOpen && "rotate-180",
+                          avatarActive ? "text-white/70" : "text-slate-400",
                         )}
                       />
                     </button>
