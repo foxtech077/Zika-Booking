@@ -19,6 +19,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
 import { ListingImage } from "../../components/ListingImage";
 import { K } from "../../constants/theme";
+import { useAuthStore } from "../../store/auth";
+import { SignInRequired } from "../../components/SignInRequired";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 
 const { width: W } = Dimensions.get("window");
@@ -597,6 +599,14 @@ function ListHeader({ stats, search, onSearchChange, activeChip, onChipChange }:
 const FETCH_KEY = (status: string) => ["myBookings", status, 0] as const;
 
 export default function BookingsScreen() {
+  // Guests can browse and book; this screen is account-only. Returned
+  // before any other hook — the tab layout remounts on session change so
+  // the hook count never shifts under React.
+  const authedUser = useAuthStore((s) => s.user);
+  if (!authedUser) {
+    return <SignInRequired icon="airplane-outline" title="Sign in to see your trips" message="Your bookings and trip history live in your account. Guests can still book without signing in — you will get a confirmation by email." />;
+  }
+
   const [activeChip, setActiveChip] = useState<ChipKey>("all");
   const [search, setSearch] = useState("");
   const qc = useQueryClient();

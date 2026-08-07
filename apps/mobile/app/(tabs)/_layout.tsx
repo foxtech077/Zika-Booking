@@ -48,16 +48,24 @@ export default function TabLayout() {
   const user = useAuthStore((s) => s.user);
   const insets = useSafeAreaInsets();
 
-  if (!user) return <Redirect href="/(auth)/login" />;
-
-  if (user.userType === "provider") {
+  // No auth gate: browsing and anonymous checkout are open to guests. Each
+  // account-only tab renders its own sign-in prompt instead, so a guest can
+  // still see where those features live.
+  //
+  // Status gates only apply to someone who actually has an account.
+  if (user) {
     if (user.status === "pending_verification") return <Redirect href="/pending-approval" />;
     if (user.status === "suspended" || user.status === "banned") return <Redirect href="/suspended" />;
-    return <Redirect href="/(provider)" />;
   }
 
   return (
     <Tabs
+      // Remount every tab when the session flips. The account-only tabs return
+      // their sign-in prompt before calling any hooks, so without a remount a
+      // guest signing in would re-render the same instance with a different
+      // number of hooks — React throws on that. Remounting also drops the
+      // previous session's cached screen state, which is what we want here.
+      key={user ? "signed-in" : "guest"}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: K.colors.tabActive,

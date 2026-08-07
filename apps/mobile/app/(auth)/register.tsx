@@ -16,13 +16,13 @@ import {
   ImageBackground,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Link, router, useLocalSearchParams } from "expo-router";
+import { Link, router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { registerSchema } from "@zika/validators";
 import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
-import { handleRoleAndStatusRedirect, GoogleSignInButton } from "./login";
+import { handlePostAuthRedirect, GoogleSignInButton } from "./login";
 import type { ApiResponse, PublicUser } from "@zika/types";
 import { useKeyboard } from "../../hooks/useKeyboard";
 import { ALL_COUNTRIES, POPULAR_COUNTRIES, type CountryData } from "../../constants/countries";
@@ -44,9 +44,7 @@ interface FieldErrors {
   email?: string;
   password?: string;
   confirmPassword?: string;
-  businessName?: string;
   country?: string;
-  phone?: string;
   general?: string;
 }
 
@@ -55,19 +53,16 @@ export default function RegisterScreen() {
   const setLocalCurrency = useAuthStore((s) => s.setLocalCurrency);
   const isKeyboardOpen = useKeyboard();
 
-  const params = useLocalSearchParams<{ userType?: string }>();
-  const [userType, setUserType] = useState<"guest" | "provider">(
-    params.userType === "provider" ? "provider" : "guest"
-  );
+  // There is no account type at signup. Everyone registers the same way; a
+  // user who later wants to host applies separately, and that application is
+  // where business details are collected.
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
     email: "",
     password: "",
     confirmPassword: "",
-    businessName: "",
     country: "",
-    phone: "",
   });
   const [errors, setErrors] = useState<FieldErrors>({});
   // Privacy Policy is accepted at registration; the Terms & Conditions are
@@ -96,10 +91,7 @@ export default function RegisterScreen() {
         email: form.email.trim(),
         password: form.password,
         confirmPassword: form.confirmPassword,
-        userType,
-        businessName: userType === "provider" ? form.businessName.trim() || undefined : undefined,
         country: form.country || undefined,
-        phone: userType === "provider" ? form.phone.trim() || undefined : undefined,
         acceptedPrivacy: agreedToPrivacy,
       };
       const res = await api.post<ApiResponse<{
@@ -112,7 +104,7 @@ export default function RegisterScreen() {
     onSuccess: async (data) => {
       if (data.success && data.data?.user && data.data?.tokens) {
         await setAuth(data.data.user, data.data.tokens.accessToken);
-        handleRoleAndStatusRedirect(data.data.user);
+        handlePostAuthRedirect(data.data.user);
       } else {
         router.push({ pathname: "/(auth)/verify-pending", params: { email: form.email } });
       }
@@ -154,10 +146,7 @@ export default function RegisterScreen() {
       email: form.email.trim(),
       password: form.password,
       confirmPassword: form.confirmPassword,
-      userType,
-      businessName: userType === "provider" ? form.businessName.trim() || undefined : undefined,
       country: form.country || undefined,
-      phone: userType === "provider" ? form.phone.trim() || undefined : undefined,
     };
     const result = registerSchema.safeParse(payload);
     if (!result.success) {
@@ -182,13 +171,13 @@ export default function RegisterScreen() {
     }
   }
 
-  // ── Hero colours change by account type ─────────────────────────────────────
-  const isProvider = userType === "provider";
-  const heroBg = isProvider ? "#011F2E" : GREEN;
-  const heroAccent = isProvider ? TEAL : ACCENT;
-  const btnColor = isProvider ? "#0D7377" : GREEN;
-  const heroTagline = isProvider ? "List your property, grow your business" : "Discover & book premium stays";
-  const heroTitle = isProvider ? "Partner Host" : "Traveller";
+  // ── Hero ────────────────────────────────────────────────────────────────────
+  // One signup experience — the hero no longer changes by account type.
+  const heroBg = GREEN;
+  const heroAccent = ACCENT;
+  const btnColor = GREEN;
+  const heroTagline = "Discover & book premium stays";
+  const heroTitle = "Join Kainook";
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
@@ -233,41 +222,10 @@ export default function RegisterScreen() {
 
           <View style={{ paddingHorizontal: 24, marginTop: -30 }}>
             <Text style={ss.cardTitle}>Create Account</Text>
-            {/* ── Account type tabs ── */}
-            <View style={ss.tabRow}>
-              <TouchableOpacity
-                style={[ss.tab, userType === "guest" && ss.tabActive]}
-                onPress={() => { setUserType("guest"); setErrors({}); }}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="airplane-outline"
-                  size={15}
-                  color={userType === "guest" ? GREEN : MUTED}
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={[ss.tabTxt, userType === "guest" && ss.tabTxtActive]}>Traveller</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[ss.tab, userType === "provider" && [ss.tabActive, ss.tabActiveProvider]]}
-                onPress={() => { setUserType("provider"); setErrors({}); }}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="home-outline"
-                  size={15}
-                  color={userType === "provider" ? TEAL : MUTED}
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={[ss.tabTxt, userType === "provider" && [ss.tabTxtActive, { color: TEAL }]]}>
-                  Partner Host
-                </Text>
-              </TouchableOpacity>
-            </View>
 
             {/* ── Section header ── */}
             <Text style={ss.sectionTitle}>
-              {isProvider ? "Provider Details" : "Personal Details"}
+              Personal Details
             </Text>
 
             {/* ── First Name ── */}
@@ -319,63 +277,24 @@ export default function RegisterScreen() {
               {errors.email ? <Text style={ss.fieldErr}>{errors.email}</Text> : null}
             </View>
 
-            {/* ── Provider fields ── */}
-            {isProvider && (
-              <>
-                <Text style={[ss.sectionTitle, { marginTop: 4 }]}>Business Details</Text>
-
-                <View style={ss.field}>
-                  <Text style={ss.label}>Business Name</Text>
-                  <View style={[ss.inputRow, errors.businessName ? ss.inputErr : null]}>
-                    <Ionicons name="business-outline" size={17} color={MUTED} style={ss.inputIcon} />
-                    <TextInput
-                      style={ss.input}
-                      value={form.businessName}
-                      onChangeText={(v) => { set("businessName")(v); clearErr("businessName"); }}
-                      placeholder="Serena Hotels Ltd."
-                      placeholderTextColor="#9CA3AF"
-                    />
-                  </View>
-                  {errors.businessName ? <Text style={ss.fieldErr}>{errors.businessName}</Text> : null}
-                </View>
-
-                <View style={ss.field}>
-                  <Text style={ss.label}>Country</Text>
-                  <TouchableOpacity
-                    style={[ss.inputRow, errors.country ? ss.inputErr : null]}
-                    onPress={() => setCountryModalVisible(true)}
-                    activeOpacity={0.75}
-                  >
-                    <Ionicons name="globe-outline" size={17} color={MUTED} style={ss.inputIcon} />
-                    <Text style={[ss.input, { paddingVertical: 13, color: selectedCountry ? TEXT : "#9CA3AF" }]}>
-                      {selectedCountry ? `${selectedCountry.flag}  ${selectedCountry.name}` : "Select your country"}
-                    </Text>
-                    <Ionicons name="chevron-down" size={14} color={MUTED} style={{ marginLeft: 4 }} />
-                  </TouchableOpacity>
-                  {errors.country ? <Text style={ss.fieldErr}>{errors.country}</Text> : null}
-                </View>
-
-                <View style={ss.field}>
-                  <Text style={ss.label}>Phone number</Text>
-                  <View style={[ss.inputRow, errors.phone ? ss.inputErr : null]}>
-                    <Ionicons name="call-outline" size={17} color={MUTED} style={ss.inputIcon} />
-                    <TextInput
-                      style={ss.input}
-                      value={form.phone}
-                      onChangeText={(v) => {
-                        const cleaned = v.replace(/[^+\d\s-]/g, "");
-                        set("phone")(cleaned);
-                        clearErr("phone");
-                      }}
-                      placeholder="+254 712 345 678"
-                      placeholderTextColor="#9CA3AF"
-                      keyboardType="phone-pad"
-                    />
-                  </View>
-                  {errors.phone ? <Text style={ss.fieldErr}>{errors.phone}</Text> : null}
-                </View>
-              </>
-            )}
+            {/* Country is shown to everyone: it seeds the local display currency
+                (see handleSelectCountry). It used to sit inside a provider-only
+                block, which left travellers with no way to set it. */}
+            <View style={ss.field}>
+              <Text style={ss.label}>Country</Text>
+              <TouchableOpacity
+                style={[ss.inputRow, errors.country ? ss.inputErr : null]}
+                onPress={() => setCountryModalVisible(true)}
+                activeOpacity={0.75}
+              >
+                <Ionicons name="globe-outline" size={17} color={MUTED} style={ss.inputIcon} />
+                <Text style={[ss.input, { paddingVertical: 13, color: selectedCountry ? TEXT : "#9CA3AF" }]}>
+                  {selectedCountry ? `${selectedCountry.flag}  ${selectedCountry.name}` : "Select your country"}
+                </Text>
+                <Ionicons name="chevron-down" size={14} color={MUTED} style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+              {errors.country ? <Text style={ss.fieldErr}>{errors.country}</Text> : null}
+            </View>
 
             {/* ── Security section ── */}
             <Text style={[ss.sectionTitle, { marginTop: 4 }]}>Security</Text>
@@ -469,27 +388,22 @@ export default function RegisterScreen() {
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
                 <>
-                  <Text style={ss.btnTxt}>
-                    {isProvider ? "Register as Partner Host" : "Create Traveller Account"}
-                  </Text>
+                  <Text style={ss.btnTxt}>Create Account</Text>
                   <Ionicons name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 8 }} />
                 </>
               )}
             </TouchableOpacity>
 
-            {/* Google sign-in (travellers only) */}
-            {!isProvider && (
-              <>
-                <View style={ss.divRow}>
-                  <View style={ss.divLine} />
-                  <Text style={ss.divTxt}>or</Text>
-                  <View style={ss.divLine} />
-                </View>
-                <GoogleSignInButton
-                  onError={(msg) => setErrors({ general: msg })}
-                />
-              </>
-            )}
+            {/* Google sign-in — available to everyone now that signup is uniform */}
+            <View style={ss.divRow}>
+              <View style={ss.divLine} />
+              <Text style={ss.divTxt}>or</Text>
+              <View style={ss.divLine} />
+            </View>
+            <GoogleSignInButton
+              onError={(msg) => setErrors({ general: msg })}
+            />
+
 
             {/* Sign in link */}
             <View style={ss.linkRow}>
@@ -630,20 +544,6 @@ const ss = StyleSheet.create({
     marginBottom: 14,
     letterSpacing: -0.3,
   },
-
-  // Tab row
-  tabRow: {
-    flexDirection: "row", gap: 10, marginBottom: 22,
-    backgroundColor: INPUT_BG, borderRadius: 12, padding: 4,
-  },
-  tab: {
-    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
-    paddingVertical: 10, borderRadius: 10,
-  },
-  tabActive: { backgroundColor: "#fff", shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
-  tabActiveProvider: {},
-  tabTxt: { fontSize: 13, fontWeight: "600", color: MUTED },
-  tabTxtActive: { color: GREEN },
 
   // Section header
   sectionTitle: {

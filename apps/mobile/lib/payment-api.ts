@@ -1,5 +1,6 @@
 import axios from "axios";
 import { useAuthStore } from "../store/auth";
+import { getCachedAnonymousToken } from "./anonymous";
 import { payLog } from "./payment-logger";
 
 const getPaymentBaseUrl = () => {
@@ -24,7 +25,17 @@ export const paymentApi = axios.create({
 
 paymentApi.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken;
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  } else {
+    // Anonymous checkout must be able to pay. Fallback only, so an account
+    // token always wins.
+    const anon = getCachedAnonymousToken();
+    if (anon) {
+      config.headers.Authorization = `Bearer ${anon}`;
+      (config as any)._anon = true;
+    }
+  }
   const fullUrl = `${config.baseURL ?? PAYMENT_BASE_URL}${config.url ?? ""}`;
   const method = (config.method ?? "GET").toUpperCase();
   console.log(`[PAYMENT-API] ▶ ${method} ${fullUrl}`);
@@ -75,8 +86,11 @@ paymentApi.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const original = error.config as (typeof error.config) & { _retry?: boolean };
+    const original = error.config as (typeof error.config) & { _retry?: boolean; _anon?: boolean };
     if (error.response?.status === 401 && !original._retry) {
+      // Anonymous sessions have no refresh cookie; refreshing always fails and
+      // its failure path clears an unrelated account session.
+      if (original._anon) return Promise.reject(error);
       original._retry = true;
       payLog("warn", "PAYMENT-API", "401 received — attempting token refresh");
       if (!refreshing) {
@@ -84,8 +98,11 @@ paymentApi.interceptors.response.use(
           try {
             const res = await axios.post(`${AUTH_BASE_URL}/auth/refresh`, {}, { withCredentials: true });
             const token = (res.data as any).data.tokens.accessToken;
-            const { user } = useAuthStore.getState();
-            if (user) await useAuthStore.getState().setAuth(user, token);
+            // Prefer the refreshed user object; reusing the cached one keeps
+            // server-side changes (hostStatus especially) out of the store.
+            const refreshedUser = (res.data as any).data.user;
+            const nextUser = refreshedUser ?? useAuthStore.getState().user;
+            if (nextUser) await useAuthStore.getState().setAuth(nextUser, token);
             payLog("success", "PAYMENT-API", "Token refresh succeeded — retrying original request");
           } catch {
             payLog("error", "PAYMENT-API", "Token refresh FAILED — clearing auth");

@@ -15,6 +15,7 @@ import { GiveReviewEntry } from "./components/GiveReviewEntry";
 import { useAuthStore } from "@/stores/auth";
 import { capitalize } from "@/lib/utils";
 import { derivePlatform, fmtMoney } from "@/lib/platform-currency";
+import { useCurrencyStore } from "@/stores/currency";
 import { useFavourites } from "@/hooks/useFavourites";
 import ListingCard from "./components/ListingCard";
 import { ActivityPromoBanner, PersonalVoucherBanner } from "./components/PromoBanner";
@@ -744,6 +745,29 @@ export default function TravellerDashboard() {
       setLoadingQuickDrop(false);
     }
   }
+
+  // Re-fetch whatever's currently on screen when the display currency changes.
+  // listingApi's request interceptor already attaches the new `currency` param
+  // to every call; these are plain axios calls (not react-query), so nothing
+  // re-runs on its own without this — unlike mobile, where the same screens
+  // are keyed by currency in a react-query queryKey.
+  const currency = useCurrencyStore((s) => s.currency);
+  const currencyMountedRef = useRef(false);
+  useEffect(() => {
+    if (!currencyMountedRef.current) {
+      currencyMountedRef.current = true;
+      return;
+    }
+    if (activeTab === "home") loadFeaturedListings(featuredCategory);
+    if (activeTab === "search") handleSearch();
+    // handleSelectListing is a full "open this listing" reset — it clears
+    // lockToken/secondsLeft, the applied voucher, and detail-view dates.
+    // Skipping it while a lock is active avoids silently abandoning an
+    // in-progress checkout (and orphaning the lock server-side, since this
+    // path never calls abandonLock()) just because the guest switched
+    // currency in the header.
+    if (selectedListingId && !lockToken) handleSelectListing(selectedListingId);
+  }, [currency]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch wallet vouchers for the personal banner as soon as the user is authenticated
   useEffect(() => {

@@ -17,7 +17,6 @@ import {
   useMarkAllNotificationsRead,
   type AppNotification,
 } from "../hooks/notifications";
-import { useAuthStore } from "../store/auth";
 import { K } from "../constants/theme";
 
 // ── Category helpers ──────────────────────────────────────────────────────────
@@ -178,8 +177,6 @@ function EmptyState() {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function NotificationsScreen() {
-  const user = useAuthStore((s) => s.user);
-  const isProvider = user?.userType === "provider";
 
   const { data, isLoading, isError, refetch, isRefetching } = useNotifications();
   const markRead    = useMarkNotificationRead();
@@ -238,13 +235,18 @@ export default function NotificationsScreen() {
 
     const { bookingId, conversationId, listingId } = item.data ?? {};
     if (bookingId) {
-      router.push((isProvider ? `/provider/booking/${bookingId}` : `/booking/${bookingId}`) as any);
+      // Which view to open is a property of the notification, not of the
+      // account: a user can be both guest and host. Only sales_escalation is
+      // addressed to the host (fired at booking.providerId); every other
+      // booking notification is addressed to the guest.
+      const isHostNotification = item.type === "sales_escalation";
+      router.push((isHostNotification ? `/provider/booking/${bookingId}` : `/booking/${bookingId}`) as any);
     } else if (conversationId) {
       router.push(`/conversation/${conversationId}` as any);
     } else if (listingId) {
       router.push(`/listing/${listingId}` as any);
     }
-  }, [isProvider, markRead]);
+  }, [markRead]);
 
   function handleMarkAllRead() {
     setAllLocallyRead(true);

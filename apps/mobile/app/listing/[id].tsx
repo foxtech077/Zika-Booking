@@ -708,7 +708,11 @@ export default function ListingDetailScreen() {
   const isCar = listing.category === "car";
   const isHotel = listing.category === "hotel";
   const isApartment = listing.category === "apartment";
-  const isProvider = user?.userType === "provider";
+  // Previously "is this a provider account". Any user can now both host and
+  // book, so the question that actually matters on this screen is whether the
+  // viewer owns *this* listing — you cannot book, favourite or message
+  // yourself, but you can do all three on someone else's listing.
+  const isOwnListing = !!user && !!listing.providerId && listing.providerId === user.id;
 
   const photos = [...(listing.photos ?? [])].sort((a, b) => a.position - b.position);
 
@@ -941,15 +945,8 @@ export default function ListingDetailScreen() {
   const avgRating = reviewsData?.averageRating;
   const locationStr = [listing.town, listing.country].filter(Boolean).join(", ");
 
-  function handleBook() {
+  function goToBooking() {
     if (!listing) return;
-    if (!user) {
-      Alert.alert("Sign in required", "You need to be signed in to book.", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Sign In", onPress: () => router.push("/(auth)/login" as any) },
-      ]);
-      return;
-    }
     if (isCar) {
       router.push({
         pathname: "/book/[listingId]",
@@ -977,6 +974,28 @@ export default function ListingDetailScreen() {
         },
       });
     }
+  }
+
+  function handleBook() {
+    if (!listing) return;
+    // Booking without an account is supported — an anonymous token is minted
+    // at the start of the checkout flow. Signing in is still offered first,
+    // because a booking made under an account shows up in Trips and can be
+    // managed later, whereas an anonymous one is only recoverable by email
+    // until the guest registers with that same address.
+    if (!user) {
+      Alert.alert(
+        "Continue as guest?",
+        "You can book without an account. Signing in keeps this booking in your Trips and saves your details for next time.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Sign in", onPress: () => router.push("/(auth)/login" as any) },
+          { text: "Continue as guest", onPress: goToBooking },
+        ],
+      );
+      return;
+    }
+    goToBooking();
   }
 
   async function handleMessageHost() {
@@ -1021,7 +1040,7 @@ export default function ListingDetailScreen() {
           >
             <Ionicons name="share-outline" size={20} color={TEXT} />
           </TouchableOpacity>
-          {user && !isProvider && (
+          {user && !isOwnListing && (
             <TouchableOpacity
               style={s.circleBtn}
               onPress={() => favMut.mutate({ isFav })}
@@ -1328,7 +1347,7 @@ export default function ListingDetailScreen() {
               </View>
             </View>
           </View>
-          {!isProvider && listing.providerId && (
+          {!isOwnListing && listing.providerId && (
             <TouchableOpacity
               style={s.msgHostBtn}
               onPress={() => {
@@ -1569,9 +1588,9 @@ export default function ListingDetailScreen() {
           )}
         </View>
 
-        {isProvider ? (
+        {isOwnListing ? (
           <View style={s.providerBtn}>
-            <Text style={s.providerBtnText}>Provider view</Text>
+            <Text style={s.providerBtnText}>This is your listing</Text>
           </View>
         ) : !hasDates ? (
           <TouchableOpacity style={s.selectDatesBtn} onPress={() => setShowDatePicker(true)}>

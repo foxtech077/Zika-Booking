@@ -199,7 +199,7 @@ async function fetchBookingLookup() {
 
     for (const booking of data.bookings ?? []) {
       lookup.set(booking.id, {
-        guestName: `${booking.guestFirstName} ${booking.guestLastName}`.trim() || "Guest",
+        guestName: booking.guestName ?? "Guest",
         listingName: booking.listingTitle ?? "Listing",
         bookingReference: booking.reference,
       });

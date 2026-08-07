@@ -3001,6 +3001,17 @@ export async function adminListingRoutes(app: FastifyInstance) {
         },
       });
 
+      // Release the voucher consumed at confirmation (confirmed bookings only)
+      if (booking.status === "confirmed" && (booking as any).voucherCode) {
+        await prisma.voucher.updateMany({
+          where: { code: (booking as any).voucherCode, usageCount: { gt: 0 } },
+          data: { usageCount: { decrement: 1 } },
+        }).catch(() => {});
+        await prisma.voucherRedemption.deleteMany({
+          where: { bookingId: id },
+        }).catch(() => {});
+      }
+
       if (refundAmount > 0) {
         const idempotencyKey = generateRefundIdempotencyKey(id, "admin_cancel");
         triggerPaymentRefund(id, refundAmount, reason || "Cancelled by admin", idempotencyKey).catch((err) => {

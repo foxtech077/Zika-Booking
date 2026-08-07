@@ -986,8 +986,9 @@ export default function HomeScreen() {
     retry: false,
   });
 
-  const { data: loyalty } = useLoyaltyProfile();
-  const { data: notifData } = useUnreadNotificationCount();
+  // Both are account-scoped; a guest would only get 401s.
+  const { data: loyalty } = useLoyaltyProfile(!!user);
+  const { data: notifData } = useUnreadNotificationCount(!!user);
   const notifCount = notifData?.count ?? 0;
 
   const { data: recentBookings, refetch: refetchRecentBookings } = useQuery<RecentBooking[]>({

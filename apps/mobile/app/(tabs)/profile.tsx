@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   View,
   Text,
@@ -14,15 +15,27 @@ import { useAuthStore } from "../../store/auth";
 import { useProfileScreenData } from "../../hooks/profile";
 import { normalizeTier } from "../../constants/loyaltyTiers";
 import { K } from "../../constants/theme";
+import { SignInRequired } from "../../components/SignInRequired";
 import { ProfileHeader } from "../../components/profile/ProfileHeader";
 import { MembershipCard } from "../../components/profile/MembershipCard";
 import { SettingsSection } from "../../components/profile/SettingsSection";
 import { MenuRow } from "../../components/profile/MenuRow";
 import { ProfileSkeleton } from "../../components/profile/ProfileSkeleton";
+import { CurrencyPickerModal } from "../../components/CurrencyPickerModal";
 
 export default function ProfileScreen() {
+  // Guests can browse and book; this screen is account-only. Returned
+  // before any other hook — the tab layout remounts on session change so
+  // the hook count never shifts under React.
   const storeUser = useAuthStore((s) => s.user);
+  if (!storeUser) {
+    return <SignInRequired icon="person-circle-outline" title="Sign in to Kainook" message="Manage your bookings, saved places, rewards and hosting from your account." />;
+  }
+
   const clearAuth = useAuthStore((s) => s.clearAuth);
+  const localCurrency = useAuthStore((s) => s.localCurrency);
+  const setLocalCurrency = useAuthStore((s) => s.setLocalCurrency);
+  const [currencyModalVisible, setCurrencyModalVisible] = useState(false);
   const { data, isLoading, isError, isFetching, refetch } = useProfileScreenData();
 
   const logoutMutation = useMutation({
@@ -41,6 +54,26 @@ export default function ProfileScreen() {
   const lastName = data?.lastName ?? storeUser?.lastName ?? "";
   const email = data?.email ?? storeUser?.email ?? "";
   const photoUrl = data?.photoUrl ?? storeUser?.photoUrl ?? null;
+
+  // Same precedence as the fields above — fresh /auth/me first, cached user as
+  // the immediate-paint fallback.
+  //
+  // Mirrors apps/web/app/traveller/components/TravellerHeader.tsx's canHost /
+  // listingsHref / listingsLabel: an approved host switches into the hosting
+  // tab bar (web's equivalent is routing into the separate dashboard Shell);
+  // anyone else goes to the application first.
+  const hostStatus = data?.hostStatus ?? storeUser?.hostStatus ?? null;
+  const isApprovedHost = hostStatus === "approved";
+  const hostRowLabel =
+    hostStatus === "pending" ? "Host application" :
+    hostStatus === "rejected" ? "Host application" :
+    isApprovedHost ? "Switch to Hosting" :
+    "Become a Host";
+  const hostRowSublabel =
+    hostStatus === "pending" ? "Under review" :
+    hostStatus === "rejected" ? "Not approved — tap to resubmit" :
+    isApprovedHost ? "Manage your listings and bookings" :
+    "List your property or vehicle";
   const verified = data?.emailVerified ?? storeUser?.emailVerified ?? false;
 
   const showSkeleton = isLoading && !storeUser;
@@ -98,8 +131,38 @@ export default function ProfileScreen() {
               <MenuRow icon="bookmark-outline" label="Saved Listings" sublabel="Places you've bookmarked" onPress={() => router.push("/(tabs)/saved" as any)} showBorder={false} />
             </SettingsSection>
 
+            {/* Hosting is applied for, not chosen at signup. An approved host
+                switches into the hosting tab bar — a second, sibling Tabs
+                navigator at (provider)/ with its own Dashboard/Listings/
+                Bookings/Messages/Profile, mirroring how web replaces the
+                traveller header with the dashboard Shell. Anyone else goes to
+                the application, which shows their current status. Without
+                this row both destinations are unreachable — the only route in
+                used to be an automatic redirect for provider accounts, which
+                no longer exist. */}
+            <SettingsSection title="Hosting">
+              {isApprovedHost ? (
+                <MenuRow
+                  icon="business-outline"
+                  label={hostRowLabel}
+                  sublabel={hostRowSublabel}
+                  onPress={() => router.replace("/(provider)" as any)}
+                  showBorder={false}
+                />
+              ) : (
+                <MenuRow
+                  icon="business-outline"
+                  label={hostRowLabel}
+                  sublabel={hostRowSublabel}
+                  onPress={() => router.push("/host" as any)}
+                  showBorder={false}
+                />
+              )}
+            </SettingsSection>
+
             <SettingsSection title="Preferences">
-              <MenuRow icon="notifications-outline" label="Notifications" sublabel="Push, email & SMS alerts" onPress={() => router.push("/notifications" as any)} showBorder={false} />
+              <MenuRow icon="notifications-outline" label="Notifications" sublabel="Push, email & SMS alerts" onPress={() => router.push("/notifications" as any)} />
+              <MenuRow icon="cash-outline" label="Currency" sublabel={`Prices shown in ${localCurrency ?? "USD"}`} onPress={() => setCurrencyModalVisible(true)} showBorder={false} />
             </SettingsSection>
 
             <SettingsSection title="Support & Legal">
@@ -122,6 +185,16 @@ export default function ProfileScreen() {
           </>
         )}
       </ScrollView>
+
+      <CurrencyPickerModal
+        visible={currencyModalVisible}
+        selected={localCurrency ?? "USD"}
+        onSelect={(code) => {
+          void setLocalCurrency(code);
+          setCurrencyModalVisible(false);
+        }}
+        onClose={() => setCurrencyModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }

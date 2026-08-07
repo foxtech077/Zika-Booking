@@ -17,6 +17,7 @@ import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
 import { K } from "../../constants/theme";
+import { SignInRequired } from "../../components/SignInRequired";
 import { useActivePromotion, ActivePromotion, applyPromotion } from "../../lib/promotions";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 
@@ -167,9 +168,16 @@ function SavedCard({ item, onRemove, removePending, signedPhotoUrl, promotion }:
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function SavedScreen() {
+  // Guests can browse and book; this screen is account-only. Returned
+  // before any other hook — the tab layout remounts on session change so
+  // the hook count never shifts under React.
+  const authedUser = useAuthStore((s) => s.user);
+  if (!authedUser) {
+    return <SignInRequired icon="bookmark-outline" title="Sign in to save listings" message="Saved places sync to your account so they follow you across devices." />;
+  }
+
   const router = useRouter();
   const qc     = useQueryClient();
-  const user   = useAuthStore((s) => s.user);
   const localCurrency = useAuthStore((s) => s.localCurrency);
 
   const hotelPromo = useActivePromotion("hotel");
@@ -203,23 +211,9 @@ export default function SavedScreen() {
     [favouriteIds, signedPhotoQueries],
   );
 
-  // Provider guard
-  if (user?.userType === "provider") {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Saved</Text>
-        </View>
-        <View style={styles.emptyContainer}>
-          <View style={styles.emptyIconWrap}>
-            <Ionicons name="information-circle-outline" size={32} color={K.colors.textMuted} />
-          </View>
-          <Text style={styles.emptyTitle}>Not available</Text>
-          <Text style={styles.emptySub}>Favourites are for traveller accounts.</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  // No account-type guard: everyone can save listings. This early return also
+  // sat above the useQuery below, so it silently changed the hook count between
+  // renders — removing it fixes that too.
 
   const { isLoading, refetch, isRefetching } = useQuery<FavouritesResponse>({
     // Prices are localized per currency by the API, so the currency is part of

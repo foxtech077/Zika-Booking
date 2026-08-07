@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { listingApi } from "../../lib/listing-api";
+import { useAuthStore } from "../../store/auth";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -180,13 +181,35 @@ function RecentBookingRow({ booking }: { booking: RecentBooking }) {
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function ProviderDashboardScreen() {
+  // /provider/dashboard requires an approved host; for anyone else it only
+  // ever 403s. Not linked from the tab bar (href: null), but still a routable
+  // path, so it guards itself rather than trusting that.
+  const user = useAuthStore((s) => s.user);
+  const isHost = user?.hostStatus === "approved";
+
   const { data, isLoading, isError, refetch, isRefetching } = useQuery<DashboardData>({
     queryKey: ["providerDashboard"],
     queryFn: async () => {
       const res = await listingApi.get<{ data: DashboardData }>("/provider/dashboard");
       return res.data.data;
     },
+    enabled: isHost,
   });
+
+  if (!isHost) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Dashboard</Text>
+        </View>
+        <View style={styles.errorState}>
+          <Text style={styles.errorText}>
+            Hosting is not active on this account yet.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (isLoading) return <LoadingSkeleton />;
 

@@ -25,7 +25,6 @@ export default function EditProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const isKeyboardOpen = useKeyboard();
-  const isProvider = user?.userType === "provider";
   // Triggers a fetch here too (if the cached photo is stale/missing) rather
   // than relying solely on the Profile tab having already populated it.
   const { data: freshPhotoUrl } = useProfilePhoto();
@@ -33,6 +32,13 @@ export default function EditProfileScreen() {
   const [firstName, setFirstName] = useState(user?.firstName ?? "");
   const [lastName, setLastName] = useState(user?.lastName ?? "");
   const [businessName, setBusinessName] = useState(user?.businessName ?? "");
+  // Business name belongs to host onboarding, not to an account type, so it is
+  // shown only to users who already have one rather than to every traveller.
+  //
+  // Frozen at mount, like the field values above: deriving it live from the
+  // store would make the input vanish mid-edit the moment someone cleared it
+  // and saved, with no way to type it back in.
+  const [showBusinessField] = useState(() => !!user?.businessName);
 
   const mutation = useUpdateProfile();
 
@@ -44,14 +50,14 @@ export default function EditProfileScreen() {
   const hasChanges =
     trimmedFirst !== (user?.firstName ?? "") ||
     trimmedLast !== (user?.lastName ?? "") ||
-    (isProvider && trimmedBusiness !== (user?.businessName ?? ""));
+    (showBusinessField && trimmedBusiness !== (user?.businessName ?? ""));
 
   function handleSave() {
     // Only send fields that actually changed.
     const patch: UpdateProfilePayload = {};
     if (trimmedFirst !== (user?.firstName ?? "")) patch.firstName = trimmedFirst;
     if (trimmedLast !== (user?.lastName ?? "")) patch.lastName = trimmedLast;
-    if (isProvider && trimmedBusiness !== (user?.businessName ?? "")) patch.businessName = trimmedBusiness || null;
+    if (showBusinessField && trimmedBusiness !== (user?.businessName ?? "")) patch.businessName = trimmedBusiness || null;
 
     if (Object.keys(patch).length === 0) {
       router.back();
@@ -109,7 +115,7 @@ export default function EditProfileScreen() {
           <View style={s.card}>
             <Field label="First Name *" value={firstName} onChangeText={setFirstName} placeholder="Ada" autoCapitalize="words" />
             <Field label="Last Name *" value={lastName} onChangeText={setLastName} placeholder="Okafor" autoCapitalize="words" />
-            {isProvider && (
+            {showBusinessField && (
               <Field
                 label="Business Name"
                 value={businessName}

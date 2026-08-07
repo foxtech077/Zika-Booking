@@ -21,6 +21,8 @@ import * as SecureStore from "expo-secure-store";
 import { listingApi } from "../../lib/listing-api";
 import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
+import { ensureAnonymousToken } from "../../lib/anonymous";
+import { derivePlatform, isConverted, fmtMoney } from "../../lib/platform-currency";
 import { useReleaseLock } from "../../hooks/booking";
 import { VoucherSelector } from "../../components/checkout/VoucherSelector";
 import type { ActivityScope } from "../../lib/types/voucher";
@@ -42,6 +44,12 @@ interface PricingPreview {
   total: number;
   currency: string;
   cancellationPolicyName?: string;
+  // Charge currency returned by /bookings/initiate — EUR for Stripe, XAF for
+  // Tara. The breakdown above stays in the listing currency; these describe
+  // what the card/mobile-money account is actually debited.
+  platformCurrency?: string | null;
+  platformAmount?: number | null;
+  platformRate?: number | null;
 }
 
 interface LockState {
@@ -423,6 +431,21 @@ export default function BookingFlowScreen() {
       setLockError(null);
       setLockErrorMessage(null);
 
+      // Anonymous checkout: a signed-out guest still needs a bearer token for
+      // the booking and payment endpoints. Minted here, before the first call
+      // in the flow, so every later request (initiate, lock, create, pay)
+      // finds it already cached. Awaited rather than fired off, because the
+      // interceptor reads the token synchronously.
+      if (!user) {
+        const anonToken = await ensureAnonymousToken();
+        if (!anonToken) {
+          setLockLoading(false);
+          setLockError("ANON_TOKEN_FAILED");
+          setLockErrorMessage("Could not start checkout. Please check your connection and try again.");
+          return;
+        }
+      }
+
       // Try active lock recovery first
       try {
         const cachedLockRaw = await SecureStore.getItemAsync("ZIKA_ACTIVE_LOCK");
@@ -481,6 +504,9 @@ export default function BookingFlowScreen() {
           taxAmount: raw.taxAmount ?? undefined,
           deliveryFee: raw.deliveryFee ?? undefined,
           securityDeposit: raw.securityDeposit ?? undefined,
+          platformCurrency: raw.platformCurrency ?? null,
+          platformAmount: raw.platformAmount ?? null,
+          platformRate: raw.platformRate ?? null,
           total: raw.totalAmount ?? 0,
           currency: raw.currency ?? "",
         };
@@ -582,6 +608,9 @@ export default function BookingFlowScreen() {
                 taxAmount: raw.taxAmount ?? undefined,
                 deliveryFee: raw.deliveryFee ?? undefined,
                 securityDeposit: raw.securityDeposit ?? undefined,
+                platformCurrency: raw.platformCurrency ?? null,
+                platformAmount: raw.platformAmount ?? null,
+                platformRate: raw.platformRate ?? null,
                 total: raw.totalAmount ?? 0,
                 currency: raw.currency ?? "",
               },
@@ -677,7 +706,12 @@ export default function BookingFlowScreen() {
       // Persist the Terms acceptance the guest gave above, once per account.
       // Best-effort: the booking already exists, so a failure here must not
       // block the guest from reaching payment — it only means we ask again.
-      if (needsTermsAcceptance) {
+      //
+      // Requires an account: /auth/accept-terms writes to the user record, and
+      // an anonymous checkout has none, so it would 403. The checkbox is still
+      // shown and enforced in the UI for anonymous guests; only the server-side
+      // record is skipped.
+      if (needsTermsAcceptance && user) {
         void api
           .post("auth/accept-terms", { acceptedTerms: true })
           .then(() => updateUser({ requiresTermsAcceptance: false } as Partial<PublicUser>))
@@ -1320,13 +1354,28 @@ export default function BookingFlowScreen() {
 
                   // Total = Subtotal after discount + Service fee + Taxes + Delivery fee + Security deposit
                   const displayTotal = subAfterDiscount + sFee + tFee + dFee + sDep;
+                  // Cards are charged in EUR and Tara in XAF, so when the
+                  // charge currency differs from the listing's, show what the
+                  // account is actually debited rather than leaving the guest
+                  // to discover it at the payment sheet.
+                  const platform = derivePlatform(pricing, pricing.currency, displayTotal);
                   return (
-                    <View style={[styles.priceRow, styles.totalRow]}>
-                      <Text style={styles.totalLabel}>Total</Text>
-                      <Text style={styles.totalValue}>
-                        {formatCurrency(displayTotal, pricing.currency)}
-                      </Text>
-                    </View>
+                    <>
+                      <View style={[styles.priceRow, styles.totalRow]}>
+                        <Text style={styles.totalLabel}>Total</Text>
+                        <Text style={styles.totalValue}>
+                          {formatCurrency(displayTotal, pricing.currency)}
+                        </Text>
+                      </View>
+                      {isConverted(platform) && (
+                        <View style={styles.priceRow}>
+                          <Text style={styles.priceLabel}>You will be charged</Text>
+                          <Text style={styles.priceValue}>
+                            {fmtMoney(platform.platformAmount, platform.platformCurrency)}
+                          </Text>
+                        </View>
+                      )}
+                    </>
                   );
                 })()}
               </View>
