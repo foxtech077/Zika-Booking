@@ -15,4 +15,4 @@ RUN cd services/auth-service && npx prisma generate
 RUN pnpm --filter @zika/auth-service build
 WORKDIR /app/services/auth-service
 EXPOSE 3001
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "pnpm db:migrate:deploy && node dist/index.js"]
