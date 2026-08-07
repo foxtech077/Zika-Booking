@@ -72,7 +72,7 @@ export const ADMIN_ROLE_PERMISSIONS: Readonly<Record<AdminRole, readonly AdminPe
     AdminPermission.PayoutsRead,
   ],
   [AdminRole.Sales]: [],
-  [AdminRole.Support]: [AdminPermission.RefundsRead],
+  [AdminRole.Support]: [],
   [AdminRole.Finance]: [
     AdminPermission.PaymentsRead,
     AdminPermission.RefundsRead,
@@ -97,20 +97,20 @@ export const ADMIN_ROLE_SCOPE: Readonly<Record<AdminRole, AdminScope>> = {
 };
 
 export function roleHasPermission(
-  role: AdminRole | undefined | null,
+  role: AdminRole | string | undefined | null,
   permission: AdminPermission,
 ): boolean {
   if (!role) return false;
-  return ADMIN_ROLE_PERMISSIONS[role]?.includes(permission) ?? false;
+  return ADMIN_ROLE_PERMISSIONS[role as AdminRole]?.includes(permission) ?? false;
 }
 
-export function roleScopePolicy(role: AdminRole | undefined | null): AdminScope {
+export function roleScopePolicy(role: AdminRole | string | undefined | null): AdminScope {
   if (!role) return AdminScope.CountryScoped;
-  return ADMIN_ROLE_SCOPE[role] ?? AdminScope.CountryScoped;
+  return ADMIN_ROLE_SCOPE[role as AdminRole] ?? AdminScope.CountryScoped;
 }
 
 export function isCountryInScope(
-  role: AdminRole | undefined | null,
+  role: AdminRole | string | undefined | null,
   countryScope: readonly string[] | undefined | null,
   countryCode: string | null | undefined,
 ): boolean {

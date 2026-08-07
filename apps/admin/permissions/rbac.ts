@@ -1,5 +1,11 @@
 import type { AdminRole } from "@/types/admin";
 
+// Backend payment permissions are enforced server-side. The frontend reuses the
+// SAME single source of truth from @zika/types so a policy change in one place
+// updates backend + frontend together. The sidebar map below is navigation-only
+// (frontend UI labels); data-access gating uses the shared helpers.
+export { roleHasPermission, roleScopePolicy, AdminScope, AdminPermission } from "@zika/types";
+
 // ── Permission definitions ────────────────────────────────────────────────────
 
 export type Permission =
@@ -95,7 +101,6 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_dashboard",
     "view_bookings",
     "view_messaging",
-    "view_refunds",
     "view_commission",
   ],
   finance: [
