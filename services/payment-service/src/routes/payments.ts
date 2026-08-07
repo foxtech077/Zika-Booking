@@ -238,6 +238,8 @@ export async function paymentRoutes(app: FastifyInstance) {
         chargedCurrency: "XAF",
         chargedRate: charge.rate,
         idempotencyKey: `tara-link-${bookingId}-${Date.now()}`,
+        paymentMethodType: "mobile_money",
+        mobileNumber: (booking["guestPhone"] as string | undefined) ?? undefined,
       },
     });
 
@@ -347,6 +349,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         chargedAmount: charge.amountXaf,
         chargedCurrency: "XAF",
         chargedRate: charge.rate,
+        mobileNumber: rawPhone,
       },
     });
 
@@ -666,6 +669,8 @@ export async function paymentRoutes(app: FastifyInstance) {
         ...(eur ? { chargedAmount: eur.amountEur, chargedCurrency: "EUR", chargedRate: eur.rate } : {}),
         attemptNumber,
         idempotencyKey,
+        paymentMethodType: paymentProvider === "tara" ? "mobile_money" : undefined,
+        ...(paymentProvider === "tara" && mobileNumber ? { mobileNumber } : {}),
       },
     });
 
@@ -810,6 +815,7 @@ export async function paymentRoutes(app: FastifyInstance) {
             chargedAmount: charge.amountXaf,
             chargedCurrency: "XAF",
             chargedRate: charge.rate,
+            mobileNumber,
           },
         });
 

@@ -77,6 +77,8 @@ model Payment {
   cardBrand           String?
   cardLast4           String?         @db.Char(4)
   mobileNumberMasked  String?
+  mobileNumber        String?
+  voucherPdfKey       String?
   failureCode         String?
   failureMessage      String?
   capturedAt          DateTime?

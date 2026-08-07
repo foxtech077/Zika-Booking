@@ -430,6 +430,8 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
             attemptNumber,
             idempotencyKey,
             providerPaymentId: taraResult.taraReference,
+            paymentMethodType: "mobile_money",
+            mobileNumber,
           },
         });
 

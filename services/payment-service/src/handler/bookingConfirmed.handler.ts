@@ -14,7 +14,7 @@ const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
 function scheduleGuestEmailRetry(
   booking: any,
   invoice: any,
-  voucher: { fileName: string; pdfUrl: string; pdfBuffer: Buffer },
+  voucher: { fileName: string; pdfUrl: string; pdfBuffer: Buffer; s3Key: string },
   paymentId: string,
   attempt: number,
 ): void {
@@ -70,6 +70,24 @@ async function confirmBooking(bookingId: string, paymentId: string, paymentProvi
  
 }
 console.log("AFTER CONFIRM");
+
+function paymentMethodLabel(payment: {
+  paymentProvider: string;
+  paymentMethodType?: string | null;
+  mobileNumberMasked?: string | null;
+  mobileNumber?: string | null;
+  cardLast4?: string | null;
+}): string {
+  const isMobileMoney =
+    payment.paymentProvider === "tara" || payment.paymentMethodType === "mobile_money";
+  if (isMobileMoney) {
+    const tail =
+      payment.mobileNumberMasked ??
+      (payment.mobileNumber ? payment.mobileNumber.slice(-4) : null);
+    return tail ? `Mobile Money •••• ${tail}` : "Mobile Money";
+  }
+  return payment.cardLast4 ? `Card •••• ${payment.cardLast4}` : "Card";
+}
 
 function normalizeBooking(booking: any) {
   const isCar = booking.listingType === "car";
@@ -154,6 +172,10 @@ export async function bookingConfirmedHandler(payment: any) {
 
   const booking = normalizeBooking(rawBooking);
 
+  // Use the actual payment method recorded on the payment record (the booking
+  // row has no method column, so this drives the email/PDF display).
+  booking.paymentMethod = paymentMethodLabel(dbPayment);
+
   console.log("[PAYOUT TRACE] providerId =", rawBooking.providerId);
   console.log("[PAYOUT TRACE] providerPayout =", rawBooking.providerPayout);
   console.log("[PAYOUT TRACE] currency =", rawBooking.currency);
@@ -201,7 +223,7 @@ export async function bookingConfirmedHandler(payment: any) {
   const invoice = buildInvoice(booking, charge);
 
   // 3. PDF/Voucher generation and S3 upload
-  let voucher: { fileName: string; pdfUrl: string; pdfBuffer: Buffer };
+  let voucher: { fileName: string; pdfUrl: string; pdfBuffer: Buffer; s3Key: string };
 
   if (!dbPayment.voucherGenerated) {
     console.log(`[webhook] Voucher not generated. Executing PDF generation and S3 upload.`);
@@ -210,18 +232,26 @@ export async function bookingConfirmedHandler(payment: any) {
     // Update flag in database
     await prisma.payment.update({
       where: { id: payment.id },
-      data: { voucherGenerated: true }
+      data: { voucherGenerated: true, voucherPdfKey: voucher.s3Key }
     });
     console.log(`[webhook] Voucher generated successfully for booking ${bookingId}`);
   } else {
     console.log(`[webhook] Voucher already generated. Skipping PDF generation and S3 upload.`);
     // Recovery behavior: reconstruct metadata and download the voucher PDF from S3
-    const s3Key = `invoice/${booking.id}/KAIN-${booking.code}.pdf`;
+    const s3Key = dbPayment.voucherPdfKey ?? `invoice/${booking.id}/KAIN-${booking.code}.pdf`;
     const pdfUrl = await getPublicUrl(s3Key);
     const fileName = `KAIN-${booking.code}.pdf`;
-    
+
     const pdfBuffer = await downloadBuffer(s3Key);
-    voucher = { fileName, pdfUrl, pdfBuffer };
+    voucher = { fileName, pdfUrl, pdfBuffer, s3Key };
+
+    // Backfill the stored key if it was missing on an older payment record
+    if (!dbPayment.voucherPdfKey) {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { voucherPdfKey: s3Key },
+      });
+    }
   }
 
   // 4. SEND EMAILS
