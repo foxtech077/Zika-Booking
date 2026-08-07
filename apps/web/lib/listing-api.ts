@@ -1,8 +1,15 @@
 import axios from "axios";
 import { refreshAccessToken, clearAuthSession } from "@/lib/token-refresh";
 import { getAnonymousToken, ensureAnonymousToken } from "@/lib/anonymous";
+import { useCurrencyStore } from "@/stores/currency";
 
 const TOKEN_KEY = "zika:access_token";
+
+// Endpoints that return localized prices when given a `currency` query param.
+// Scoped deliberately, mirroring apps/mobile/lib/listing-api.ts: attaching it
+// to every listing-service call would send a meaningless param to booking,
+// provider and upload routes.
+const LOCALIZED_PRICE_ENDPOINTS = /(^|\/)(search|listings\/[^/]+\/public)(\?|$)/;
 
 export const listingApi = axios.create({
   baseURL: process.env.NEXT_PUBLIC_LISTING_API_URL,
@@ -29,6 +36,19 @@ listingApi.interceptors.request.use((config) => {
       }
     }
   }
+
+  // Ask for prices in the guest's chosen display currency. Several call sites
+  // build query params as plain objects (not the URL itself), so checking
+  // both the URL and an already-set params.currency avoids double-setting it.
+  const url = config.url ?? "";
+  if ((config.method ?? "get").toLowerCase() === "get" && LOCALIZED_PRICE_ENDPOINTS.test(url)) {
+    const currency = useCurrencyStore.getState().currency;
+    const alreadySet = url.includes("currency=") || (config.params as any)?.currency;
+    if (currency && !alreadySet) {
+      config.params = { ...(config.params ?? {}), currency };
+    }
+  }
+
   return config;
 });
 

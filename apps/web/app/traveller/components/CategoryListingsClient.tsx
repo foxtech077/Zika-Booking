@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { listingApi } from "@/lib/listing-api";
 import { useAuthStore } from "@/stores/auth";
+import { useCurrencyStore } from "@/stores/currency";
 import { useFavourites } from "@/hooks/useFavourites";
 import { logoutUser } from "@/lib/api";
 import dynamic from "next/dynamic";
@@ -991,6 +992,24 @@ export default function CategoryListingsClient({ category }: Props) {
     fetchListings(0, false);
     fetchPromotion();
   }, [category]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-fetch with the new currency param — listingApi's interceptor attaches
+  // it automatically, but a plain axios call like fetchListings only re-runs
+  // when something here explicitly asks it to.
+  //
+  // Uses its own ref rather than initialFetch: that ref is already flipped to
+  // true by the mount effect above before this effect's first run (both fire
+  // in the same commit), so checking it here would never actually skip the
+  // first run and would fire a redundant fetch alongside the real initial one.
+  const currency = useCurrencyStore((s) => s.currency);
+  const currencyMountedRef = useRef(false);
+  useEffect(() => {
+    if (!currencyMountedRef.current) {
+      currencyMountedRef.current = true;
+      return;
+    }
+    fetchListings(0, false);
+  }, [currency]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ─────────────────────────────────────────────────────────── */
   /* Filter debounce — auto-search when sort changes             */

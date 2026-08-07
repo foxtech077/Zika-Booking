@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   View,
   Text,
@@ -20,6 +21,7 @@ import { MembershipCard } from "../../components/profile/MembershipCard";
 import { SettingsSection } from "../../components/profile/SettingsSection";
 import { MenuRow } from "../../components/profile/MenuRow";
 import { ProfileSkeleton } from "../../components/profile/ProfileSkeleton";
+import { CurrencyPickerModal } from "../../components/CurrencyPickerModal";
 
 export default function ProfileScreen() {
   // Guests can browse and book; this screen is account-only. Returned
@@ -31,6 +33,9 @@ export default function ProfileScreen() {
   }
 
   const clearAuth = useAuthStore((s) => s.clearAuth);
+  const localCurrency = useAuthStore((s) => s.localCurrency);
+  const setLocalCurrency = useAuthStore((s) => s.setLocalCurrency);
+  const [currencyModalVisible, setCurrencyModalVisible] = useState(false);
   const { data, isLoading, isError, isFetching, refetch } = useProfileScreenData();
 
   const logoutMutation = useMutation({
@@ -156,7 +161,8 @@ export default function ProfileScreen() {
             </SettingsSection>
 
             <SettingsSection title="Preferences">
-              <MenuRow icon="notifications-outline" label="Notifications" sublabel="Push, email & SMS alerts" onPress={() => router.push("/notifications" as any)} showBorder={false} />
+              <MenuRow icon="notifications-outline" label="Notifications" sublabel="Push, email & SMS alerts" onPress={() => router.push("/notifications" as any)} />
+              <MenuRow icon="cash-outline" label="Currency" sublabel={`Prices shown in ${localCurrency ?? "USD"}`} onPress={() => setCurrencyModalVisible(true)} showBorder={false} />
             </SettingsSection>
 
             <SettingsSection title="Support & Legal">
@@ -179,6 +185,16 @@ export default function ProfileScreen() {
           </>
         )}
       </ScrollView>
+
+      <CurrencyPickerModal
+        visible={currencyModalVisible}
+        selected={localCurrency ?? "USD"}
+        onSelect={(code) => {
+          void setLocalCurrency(code);
+          setCurrencyModalVisible(false);
+        }}
+        onClose={() => setCurrencyModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
