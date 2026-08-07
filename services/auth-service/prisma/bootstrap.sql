@@ -26,9 +26,12 @@
 -- can trip Prisma's migration bookkeeping (P1014) and, if the search_path does
 -- not point at public, install the extension into the wrong schema. Installing
 -- it here first makes the listing migration's CREATE EXTENSION IF NOT EXISTS a
--- no-op. postgis_topology creates the `topology` schema on its own.
+-- no-op.
+--
+-- NOTE: postgis_topology is intentionally NOT installed here — it is not used
+-- by any service and requires superuser privileges (unlike the trusted
+-- postgis extension), so the app DB user would be unable to create it.
 CREATE EXTENSION IF NOT EXISTS postgis SCHEMA public;
-CREATE EXTENSION IF NOT EXISTS postgis_topology;
 
 -- Schemas must exist before the tables below can be created.
 CREATE SCHEMA IF NOT EXISTS listing;
