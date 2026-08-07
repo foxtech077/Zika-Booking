@@ -124,18 +124,8 @@ function activeLock(booking: Booking) {
   return booking.status === "pending_payment" && Number.isFinite(created) && Date.now() - created < 5 * 60 * 1000;
 }
 
-function formatGuestName(fullName: string) {
-  const parts = fullName.trim().split(/\s+/).filter(Boolean);
-  if (parts.length <= 1) return parts[0] ?? "Guest";
-  const first = parts[0] ?? "Guest";
-  const last = parts[parts.length - 1] ?? "";
-  return `${first} ${last.charAt(0)}.`;
-}
-
 function normalizeBooking(raw: unknown): Booking {
   const item = raw as Record<string, unknown>;
-  const first = readString(item.guestFirstName);
-  const last = readString(item.guestLastName);
   const listingId = readString(item.listingId);
   const category = readString(item.listingCategory, "apartment") as Booking["listingCategory"];
   const start = category === "car" ? item.pickupDatetime : item.checkIn;
@@ -147,7 +137,7 @@ function normalizeBooking(raw: unknown): Booking {
     listingId,
     listingName: readString(item.listingTitle ?? item.listingName, "Listing"),
     listingCategory: category,
-    guestName: formatGuestName(`${first} ${last}`.trim() || readString(item.guestName, "Guest")),
+    guestName: readString(item.guestName, "Guest"),
     checkIn: toDateOnly(readString(start, new Date().toISOString())),
     checkOut: toDateOnly(readString(end, new Date().toISOString())),
     guests: readNumber(item.adults) + readNumber(item.children),
