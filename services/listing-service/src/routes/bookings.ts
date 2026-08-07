@@ -21,6 +21,10 @@ import {
 
 const LOCK_TTL_MS = 300_000; // 5 minutes
 
+// How long after the reservation lock expires a payment webhook is still
+// honoured. Webhooks arriving beyond this are auto-refunded (grace window).
+const GRACE_MS = Number(process.env["CONFIRM_GRACE_MS"] ?? 120_000); // 2 minutes
+
 // ── Sequence bootstrap ────────────────────────────────────────────────────────
 
 async function ensureBookingSequence(): Promise<void> {
@@ -1037,6 +1041,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           pickupDatetime: body.pickupDatetime,
           returnDatetime: body.returnDatetime,
           deliveryRequested: body.deliveryRequested ?? false,
+          expiresAt: new Date(Date.now() + LOCK_TTL_MS).toISOString(),
           renewed: false,
         };
 
@@ -1277,6 +1282,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           ? `rlk:${ctx.listingId}:${ctx.roomTypeId}:${ctx.checkIn ?? ctx.pickupDatetime?.slice(0, 10)}:${ctx.checkOut ?? ctx.returnDatetime?.slice(0, 10)}`
           : `rlk:${ctx.listingId}:${ctx.checkIn ?? ctx.pickupDatetime?.slice(0, 10)}:${ctx.checkOut ?? ctx.returnDatetime?.slice(0, 10)}`;
         ctx.renewed = true;
+        ctx.expiresAt = new Date(Date.now() + LOCK_TTL_MS).toISOString();
 
         await redis.pexpire(lockKey, LOCK_TTL_MS);
         await redis.set(`rlk:ctx:${lockToken}`, JSON.stringify(ctx), "PX", LOCK_TTL_MS);
@@ -1748,6 +1754,9 @@ export async function bookingRoutes(app: FastifyInstance) {
             status: "pending_payment",
             manageToken,
 
+            // Server-authoritative lock expiry for the grace window.
+            lockExpiresAt: new Date(ctx.expiresAt ?? Date.now() + LOCK_TTL_MS),
+
             checkIn: body.checkIn ? new Date(body.checkIn) : undefined,
             checkOut: body.checkOut ? new Date(body.checkOut) : undefined,
             pickupDatetime: body.pickupDatetime
@@ -1952,6 +1961,16 @@ export async function bookingRoutes(app: FastifyInstance) {
                 throw Object.assign(new Error("Already processed"), { code: "ALREADY_PROCESSED" });
               }
 
+              // Grace window: the payment webhook is only honoured up to
+              // GRACE_MS after the reservation lock expired. Beyond that the
+              // booking is auto-cancelled and the payment refunded.
+              const lockExpires =
+                booking.lockExpiresAt ??
+                new Date(new Date(booking.createdAt).getTime() + LOCK_TTL_MS);
+              if (Date.now() > lockExpires.getTime() + GRACE_MS) {
+                throw Object.assign(new Error("Grace expired"), { code: "GRACE_EXPIRED" });
+              }
+
               // Re-validate that no other confirmed booking occupies these dates.
               const startDate = booking.checkIn ?? booking.pickupDatetime;
               const endDate = booking.checkOut ?? booking.returnDatetime;
@@ -2049,6 +2068,45 @@ export async function bookingRoutes(app: FastifyInstance) {
               error: {
                 code: "DATES_UNAVAILABLE",
                 message: "These dates are no longer available. Your payment will be refunded.",
+              },
+            });
+          }
+
+          if (txErr.code === "GRACE_EXPIRED") {
+            // Payment webhook arrived after the reservation grace window —
+            // auto-cancel and refund points. The payment service auto-refunds
+            // the captured amount when it receives this 409.
+            await prisma.booking.update({
+              where: { id },
+              data: {
+                status: "cancelled_by_system",
+                cancellationReason: "Payment confirmed after the reservation grace period.",
+                cancelledAt: new Date(),
+                cancelledBy: "system",
+              },
+            }).catch(() => { });
+            await prisma.bookingStatusLog.create({
+              data: {
+                bookingId: id,
+                fromStatus: "pending_payment",
+                toStatus: "cancelled_by_system",
+                actorType: "system",
+                reason: "Payment confirmed after reservation grace period.",
+              },
+            }).catch(() => { });
+            const redeemedPoints = Number((booking as any).redeemPoints ?? 0);
+            if (redeemedPoints > 0) {
+              await prisma.$executeRawUnsafe(`
+                UPDATE auth."User"
+                SET "loyaltyPoints" = "loyaltyPoints" + $1, "updatedAt" = NOW()
+                WHERE id = $2
+              `, redeemedPoints, booking.guestId).catch(() => { });
+            }
+            return reply.status(409).send({
+              success: false,
+              error: {
+                code: "GRACE_EXPIRED",
+                message: "The reservation grace period has passed. Your payment will be refunded.",
               },
             });
           }

@@ -5,8 +5,8 @@ import { stripe, toStripeAmount } from "../lib/stripe.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireUser, requireAdmin, requireInternalService, type GuestRequest } from "../middleware/auth.js";
 import { cancelPayout } from "../services/payout.service.js";
-import { calculateAlreadyRefunded } from "../services/refund.service.js";
-import { initiateTaraPayment, initiateTaraReversal } from "../lib/tara.js";
+import { issueRefund, RefundLimitExceededError, InvalidPaymentStatusError, handleConfirmFailure } from "../services/refund.service.js";
+import { initiateTaraPayment } from "../lib/tara.js";
 import { computeTaraCharge, getTaraPhoneCountry, TaraNotAllowedError } from "../lib/taraEligibility.js";
 import { sendPaymentLinkEmail } from "../services/email.services.js";
 import { resolveEurCharge, EurQuoteUnavailableError, type EurChargeResult } from "../services/eurCharge.service.js";
@@ -15,12 +15,6 @@ import { extractCountryCode, generateDisplayId } from "../lib/paymentReference.j
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"];
 
-class RefundLimitExceededError extends Error {
-  constructor() {
-    super("Refund limit exceeded");
-    this.name = "RefundLimitExceededError";
-  }
-}
 const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
 
 function internalHeaders(): Record<string, string> {
@@ -756,8 +750,18 @@ export async function paymentRoutes(app: FastifyInstance) {
         });
 
         // Confirm the booking (set status → confirmed, send emails, generate PDF)
-        bookingConfirmedHandler({ id: payment.id, metadata: { bookingId } }).catch((err) => {
-          console.error("[payments/initiate] bookingConfirmedHandler failed:", err);
+        bookingConfirmedHandler({ id: payment.id, metadata: { bookingId } }).catch(async (err) => {
+          // Money is already captured here. If the booking can no longer be
+          // confirmed (cancelled, dates taken, grace expired), auto-refund it.
+          const paymentRow = await prisma.payment.findUnique({ where: { id: payment.id } });
+          if (!paymentRow) {
+            console.error("[payments/initiate] Payment row missing for confirm failure:", err);
+            return;
+          }
+          const handled = await handleConfirmFailure(paymentRow, err);
+          if (!handled) {
+            console.error("[payments/initiate] bookingConfirmedHandler failed:", err);
+          }
         });
 
         return sendSuccess(reply, 201, { paymentId: payment.id, displayId: payment.displayId });
@@ -992,122 +996,32 @@ export async function paymentRoutes(app: FastifyInstance) {
       return sendError(reply, 404, "PAYMENT_NOT_FOUND", "No payment found for this booking.");
     }
 
-    // Validate payment status (must be captured or partially_refunded)
-    if (!["captured", "partially_refunded"].includes(payment.status)) {
-      return sendError(
-        reply,
-        400,
-        "INVALID_PAYMENT_STATUS",
-        "Only captured or partially refunded payments can be refunded."
-      );
-    }
-
-    // 2. Check idempotency using idempotency-key header
-    const idempotencyKey = req.headers["idempotency-key"] as string;
-    if (idempotencyKey) {
-      const existingRefund = await prisma.refund.findUnique({ where: { idempotencyKey } });
-      if (existingRefund) {
-        return sendSuccess(reply, 200, { refundId: existingRefund.id, status: existingRefund.status });
-      }
-    }
-
-    // 3. Atomically lock row, check balance and create refund record inside an interactive transaction
-    let refund;
+    // 2. Idempotency via idempotency-key header + atomic issue (shared logic).
+    const idempotencyKey = (req.headers["idempotency-key"] as string) ?? null;
     try {
-      refund = await prisma.$transaction(async (tx) => {
-        // Lock the Payment row in PostgreSQL to prevent concurrent transactions from double-spending or exceeding limits
-        await tx.$executeRaw`SELECT 1 FROM payments."Payment" WHERE id = ${payment.id} FOR UPDATE`;
-
-        // Calculate already refunded within this transaction lock
-        const refundSum = await tx.refund.aggregate({
-          where: { paymentId: payment.id, status: { not: "failed" } },
-          _sum: { amount: true },
-        });
-        const alreadyRefunded = Number(refundSum._sum.amount ?? 0);
-
-        if (alreadyRefunded + refundAmount > Number(payment.amount)) {
-          throw new RefundLimitExceededError();
-        }
-
-        // Insert refund row inside the transaction
-        return await tx.refund.create({
-          data: {
-            paymentId: payment.id,
-            bookingId,
-            amount: refundAmount,
-            currency: payment.currency,
-            reason: reason ?? null,
-            status: "pending",
-            idempotencyKey: idempotencyKey ?? null,
-          },
-        });
+      const refund = await issueRefund(payment, {
+        amount: refundAmount,
+        reason: reason ?? null,
+        idempotencyKey,
       });
-    } catch (err) {
+      return sendSuccess(reply, refund.status === "submitted" ? 201 : 200, {
+        refundId: refund.id,
+        status: refund.status,
+      });
+    } catch (err: any) {
       if (err instanceof RefundLimitExceededError) {
         return sendError(reply, 400, "INVALID_AMOUNT", "Refund amount exceeds captured payment amount.");
       }
-      throw err;
-    }
-
-    // 4. Provider-specific refund logic
-    switch (payment.paymentProvider) {
-      case "stripe": {
-        try {
-          const re = await stripe.refunds.create(
-            {
-              payment_intent: payment.providerPaymentId ?? undefined,
-              amount: toStripeAmount(refundAmount, payment.currency),
-              reason: "requested_by_customer",
-            },
-            { idempotencyKey: `stripe-refund-${refund.id}` }
-          );
-
-          await prisma.refund.update({
-            where: { id: refund.id },
-            data: { status: "submitted", providerRefundId: re.id },
-          });
-
-          return sendSuccess(reply, 201, { refundId: refund.id, status: "submitted" });
-        } catch (stripeErr) {
-          const message = stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
-          await prisma.refund.update({
-            where: { id: refund.id },
-            data: { status: "failed", failureReason: message },
-          });
-          return sendError(reply, 502, "REFUND_FAILED", "Failed to submit refund to Stripe.");
-        }
-      }
-      case "tara": {
-        try {
-          const reversal = await initiateTaraReversal({
-            taraReference: payment.providerPaymentId ?? "",
-            amount: refundAmount,
-            reason: reason ?? "requested_by_customer",
-          });
-
-          await prisma.refund.update({
-            where: { id: refund.id },
-            data: { status: "submitted", providerRefundId: reversal.reversalId },
-          });
-
-          return sendSuccess(reply, 201, { refundId: refund.id, status: "submitted" });
-        } catch (taraErr) {
-          const message = taraErr instanceof Error ? taraErr.message : String(taraErr);
-          await prisma.refund.update({
-            where: { id: refund.id },
-            data: { status: "failed", failureReason: message },
-          });
-          return sendError(reply, 502, "REFUND_FAILED", "Failed to submit Tara reversal.");
-        }
-      }
-      default: {
+      if (err instanceof InvalidPaymentStatusError) {
         return sendError(
           reply,
           400,
-          "UNSUPPORTED_PROVIDER",
-          `Unsupported payment provider: ${payment.paymentProvider}`
+          "INVALID_PAYMENT_STATUS",
+          "Only captured or partially refunded payments can be refunded."
         );
       }
+      req.log.error({ err }, "Failed to issue refund");
+      return sendError(reply, 502, "REFUND_FAILED", err?.message ?? "Failed to submit refund.");
     }
   });
 

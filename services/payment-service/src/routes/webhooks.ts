@@ -4,7 +4,7 @@
   import { sendError } from "../lib/errors.js";
   import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
   import { PaymentStatus, RefundStatus } from "../generated/index.js";
-  import { notifyBookingServiceOfRefund, queueFailedRefundNotification, calculateAlreadyRefunded } from "../services/refund.service.js";
+  import { notifyBookingServiceOfRefund, queueFailedRefundNotification, calculateAlreadyRefunded, handleConfirmFailure } from "../services/refund.service.js";
 
   import Stripe from "stripe";
 
@@ -171,10 +171,27 @@
           });
 
           //  emails + PDF + confirm booking — runs only once
-          await bookingConfirmedHandler({
-            id: payment.id,
-            metadata: { bookingId: payment.bookingId },
-          });
+          try {
+            await bookingConfirmedHandler({
+              id: payment.id,
+              metadata: { bookingId: payment.bookingId },
+            });
+          } catch (err: any) {
+            // If the booking can no longer be confirmed (cancelled, dates taken,
+            // grace expired), auto-refund the captured money instead of leaving
+            // it captured with no confirmed booking. On transient failures let
+            // the provider retry.
+            const handled = await handleConfirmFailure(
+              { ...payment, status: "captured" },
+              err,
+              req.log,
+            );
+            if (handled) {
+              return reply.send({ received: true });
+            }
+            req.log.error(err, "payment_intent.succeeded transient confirm failure");
+            return reply.code(500).send({ error: "payment_intent.succeeded handler failed: " + (err?.message || "Unknown error") });
+          }
 
           return reply.send({ received: true });
         } catch (err: any) {
@@ -467,6 +484,14 @@
               metadata: { bookingId: payment.bookingId },
             });
           } catch (err: any) {
+            const handled = await handleConfirmFailure(
+              { ...payment, status: "captured" },
+              err,
+              app.log,
+            );
+            if (handled) {
+              return reply.status(200).send({ received: true });
+            }
             app.log.error(`[tara-webhook] Error processing successful payment: ${err.message}`, err);
             return reply.status(500).send({
               error: "Internal Server Error",
