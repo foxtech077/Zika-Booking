@@ -269,6 +269,8 @@ export interface FavouriteListing {
     countryCode: string | null;
     nightlyRate: number | null;
     currency: string | null;
+    localizedNightlyRate?: number | null;
+    localizedCurrency?: string | null;
     primaryPhotoUrl: string | null;
   };
 }
@@ -306,6 +308,8 @@ export interface RecentlyViewedItem {
     city: string | null;
     nightlyRate: number | null;
     currency: string | null;
+    localizedNightlyRate?: number | null;
+    localizedCurrency?: string | null;
     primaryPhotoUrl: string | null;
   };
 }

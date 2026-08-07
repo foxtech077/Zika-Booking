@@ -97,6 +97,7 @@ export default function RecentlyViewedPage() {
             {items.map((item) => {
               const l = item.listing;
               const isCar = l.category === "car";
+              const rate = l.localizedNightlyRate ?? l.nightlyRate;
               return (
                 <div
                   key={item.listingId}
@@ -133,7 +134,7 @@ export default function RecentlyViewedPage() {
                       <div>
                         <p className="text-[9px] uppercase font-bold text-slate-400 tracking-widest">Per {isCar ? "day" : "night"}</p>
                         <p className="text-base font-bold text-[#024622]">
-                          {l.currency ?? "KES"} {l.nightlyRate ? l.nightlyRate.toLocaleString() : "—"}
+                          {l.localizedCurrency ?? l.currency ?? "KES"} {rate != null ? rate.toLocaleString() : "—"}
                         </p>
                       </div>
                       {/* Address the listing in the URL. This used to stash the

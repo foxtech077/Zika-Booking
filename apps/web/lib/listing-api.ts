@@ -9,7 +9,7 @@ const TOKEN_KEY = "zika:access_token";
 // Scoped deliberately, mirroring apps/mobile/lib/listing-api.ts: attaching it
 // to every listing-service call would send a meaningless param to booking,
 // provider and upload routes.
-const LOCALIZED_PRICE_ENDPOINTS = /(^|\/)(search|listings\/[^/]+\/public)(\?|$)/;
+const LOCALIZED_PRICE_ENDPOINTS = /(^|\/)(search|listings\/[^/]+\/public|guests\/me\/favourites|guests\/me\/recently-viewed)(\?|$)/;
 
 export const listingApi = axios.create({
   baseURL: process.env.NEXT_PUBLIC_LISTING_API_URL,

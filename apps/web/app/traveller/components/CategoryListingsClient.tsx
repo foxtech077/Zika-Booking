@@ -166,6 +166,23 @@ function mapListing(l: any): PublicListingDetail {
       return basePrice;
     })(),
     currency: l.currency || "KES",
+    // Only present when /search was called with a `currency` param the API
+    // could actually convert to. Browsing-display only.
+    localizedPricePerNight: (() => {
+      if (l.localizedCurrency == null) return null;
+      if ((l.category === "hotel" || l.listingType === "hotel") && Array.isArray(rawRoomTypes) && rawRoomTypes.length > 0) {
+        const activeRts = rawRoomTypes.filter((rt: any) => rt.isActive !== false);
+        if (activeRts.length > 0) {
+          const prices = activeRts
+            .map((rt: any) => Number(rt.localizedPricePerNight ?? rt.pricePerNight))
+            .filter((p: number) => !isNaN(p) && p > 0);
+          if (prices.length > 0) return Math.min(...prices);
+        }
+      }
+      const base = Number(l.localizedNightlyRate ?? l.localizedDailyRate ?? 0);
+      return base > 0 ? base : null;
+    })(),
+    localizedCurrency: l.localizedCurrency ?? null,
     minStayNights: l.minStayNights || 1,
     checkinTime: l.checkinTime || "",
     checkoutTime: l.checkoutTime || "",

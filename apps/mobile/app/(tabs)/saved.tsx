@@ -32,6 +32,8 @@ interface FavouriteListing {
   countryCode: string | null;
   nightlyRate: number | null;
   currency: string | null;
+  localizedNightlyRate?: number | null;
+  localizedCurrency?: string | null;
   primaryPhotoUrl: string | null;
 }
 
@@ -57,9 +59,10 @@ function daysAgo(dateStr: string): string {
 }
 
 function priceLabel(listing: FavouriteListing): string {
-  if (listing.nightlyRate == null) return "Price on request";
+  const rate = listing.localizedNightlyRate ?? listing.nightlyRate;
+  if (rate == null) return "Price on request";
   const unit = listing.category === "car" ? "day" : "night";
-  return `${listing.currency ?? ""} ${listing.nightlyRate.toLocaleString()} / ${unit}`;
+  return `${listing.localizedCurrency ?? listing.currency ?? ""} ${rate.toLocaleString()} / ${unit}`;
 }
 
 function categoryLabel(cat: string): string {
@@ -96,7 +99,9 @@ function SavedCard({ item, onRemove, removePending, signedPhotoUrl, promotion }:
   const { listing, savedAt, listingId } = item;
   const location = [listing.city, listing.countryCode].filter(Boolean).join(", ");
   const unit = listing.category === "car" ? "day" : "night";
-  const promoted = applyPromotion(listing.nightlyRate, promotion ?? null);
+  const rate = listing.localizedNightlyRate ?? listing.nightlyRate;
+  const rateCurrency = listing.localizedCurrency ?? listing.currency;
+  const promoted = applyPromotion(rate, promotion ?? null);
 
   return (
     <TouchableOpacity
@@ -139,10 +144,10 @@ function SavedCard({ item, onRemove, removePending, signedPhotoUrl, promotion }:
         {promoted.hasPromotion && promoted.discountedPrice != null ? (
           <View>
             <Text style={styles.cardPriceStrike}>
-              {listing.currency ?? ""} {listing.nightlyRate?.toLocaleString()} / {unit}
+              {rateCurrency ?? ""} {rate?.toLocaleString()} / {unit}
             </Text>
             <Text style={styles.cardPrice}>
-              {listing.currency ?? ""} {Math.round(promoted.discountedPrice).toLocaleString()} / {unit}
+              {rateCurrency ?? ""} {Math.round(promoted.discountedPrice).toLocaleString()} / {unit}
             </Text>
             <Text style={styles.promoLabel}>🔥 {promoted.labelText}</Text>
           </View>

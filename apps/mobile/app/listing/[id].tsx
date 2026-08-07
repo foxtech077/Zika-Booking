@@ -59,6 +59,8 @@ interface PublicListing {
   town: string | null; country: string | null; lat: number | null; lng: number | null;
   pricePerNight: number | null; pricePerDay: number | null; currency: string | null;
   nightlyRate?: number | null; dailyRate?: number | null;
+  localizedNightlyRate?: number | null; localizedDailyRate?: number | null;
+  localizedCurrency?: string | null;
   cancellationPolicy: string | null; minStayNights: number | null;
   /** Service-fee rate for this listing's country, as a decimal fraction (0.05 = 5%).
    *  Served by GET /listings/:id/public — the same value the booking flow charges. */
@@ -651,8 +653,15 @@ export default function ListingDetailScreen() {
     retry: false,
   });
 
-  // Room types collection
-  const roomTypes = listing?.roomTypes ?? listing?.hotelRoomTypes ?? [];
+  // Room types collection. This whole screen is a pre-booking marketing
+  // preview — the real charge is computed server-side on /book/[listingId] —
+  // so swapping in the localized price here (when the API converted one) is
+  // safe and keeps every price on the page, header down to the sticky footer,
+  // reading from the same already-localized pricePerNight.
+  const roomTypes = (listing?.roomTypes ?? listing?.hotelRoomTypes ?? []).map((rt) => ({
+    ...rt,
+    pricePerNight: rt.localizedPricePerNight ?? rt.pricePerNight,
+  }));
 
   // Auto select first room type when data loads
   useEffect(() => {
@@ -719,12 +728,15 @@ export default function ListingDetailScreen() {
   // Selected room type object if hotel has room types
   const selectedRoomType = roomTypes.find((r) => r.id === selectedRoomTypeId) ?? roomTypes[0];
 
-  // Derive base rate per night/day before discount
+  // Derive base rate per night/day before discount. Prefers the localized
+  // fields — this whole screen is a browsing/marketing preview (the real
+  // charge is computed server-side on /book/[listingId]), so showing it in
+  // the guest's chosen display currency here is safe.
   const baseRate = isCar
-    ? Number(listing.dailyRate ?? listing.pricePerDay ?? 0)
+    ? Number(listing.localizedDailyRate ?? listing.dailyRate ?? listing.pricePerDay ?? 0)
     : selectedRoomType
       ? Number(selectedRoomType.pricePerNight || 0)
-      : Number(listing.nightlyRate ?? listing.pricePerNight ?? 0);
+      : Number(listing.localizedNightlyRate ?? listing.nightlyRate ?? listing.pricePerNight ?? 0);
 
   const rateLabel = isCar ? "per day" : "per night";
   // Shares the web listing URL. `/?listing=<id>` is the canonical
@@ -1019,7 +1031,7 @@ export default function ListingDetailScreen() {
     }
   }
 
-  const curr = listing.currency ?? "XAF";
+  const curr = listing.localizedCurrency ?? listing.currency ?? "XAF";
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>

@@ -66,7 +66,10 @@ export const ListingCard: React.FC<ListingCardProps> = ({
     }
   }
 
-  const rawRate = listing.pricePerNight || 0;
+  // Browsing-display price — falls back to the listing's own currency when no
+  // display-currency conversion was requested or available for this listing.
+  const rawRate = listing.localizedPricePerNight ?? listing.pricePerNight ?? 0;
+  const rateCurrency = listing.localizedCurrency ?? listing.currency;
   const isCar = listing.category === "car";
   const unit = isCar ? "day" : "night";
 
@@ -170,11 +173,11 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             </p>
             <div className="text-right shrink-0 ml-2">
               <p className="text-sm font-bold text-slate-800">
-                {listing.currency} {displayPrice.toLocaleString()}
+                {rateCurrency} {displayPrice.toLocaleString()}
                 <span className="text-[10px] font-medium text-slate-400">/{unit}</span>
               </p>
               {displayPrice < basePrice && (
-                <p className="text-[9px] text-slate-400 line-through leading-none">{listing.currency} {basePrice.toLocaleString()}</p>
+                <p className="text-[9px] text-slate-400 line-through leading-none">{rateCurrency} {basePrice.toLocaleString()}</p>
               )}
             </div>
           </div>
@@ -335,10 +338,10 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xl font-bold text-slate-900 leading-tight">
-              {listing.currency} {displayPrice > 0 ? displayPrice.toLocaleString() : "—"}
+              {rateCurrency} {displayPrice > 0 ? displayPrice.toLocaleString() : "—"}
             </p>
             {basePrice > displayPrice && (
-              <p className="text-[10px] text-slate-400 line-through leading-none">{listing.currency} {basePrice.toLocaleString()}</p>
+              <p className="text-[10px] text-slate-400 line-through leading-none">{rateCurrency} {basePrice.toLocaleString()}</p>
             )}
             <p className="text-[9px] uppercase font-bold text-slate-400 tracking-widest">Per {unit}</p>
           </div>
