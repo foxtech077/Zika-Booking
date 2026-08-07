@@ -12,6 +12,18 @@ const blockDatesSchema = z.object({
   reason:    z.string().max(200).optional(),
 });
 
+// ── Guest display-name masking ────────────────────────────────────────────────
+// PRD §12.2: providers may only ever see "First name + last initial"
+// (e.g. "Amara D."). Full surname, email and phone are NEVER exposed to
+// providers; all contact goes through the in-app messaging tool.
+function guestDisplayName(first: string | null | undefined, last: string | null | undefined): string {
+  const f = (first ?? "").trim();
+  const l = (last ?? "").trim();
+  if (!f) return "Guest";
+  if (!l) return f;
+  return `${f} ${l.charAt(0)}.`;
+}
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 export async function providerRoutes(app: FastifyInstance) {
@@ -136,8 +148,7 @@ export async function providerRoutes(app: FastifyInstance) {
           reference:       b.reference,
           listingTitle:    b.listing.name,
           listingCategory: b.listing.category,
-          guestName:       `${b.guestFirstName} ${b.guestLastName}`,
-          guestEmail:      b.guestEmail,
+          guestName:       guestDisplayName(b.guestFirstName, b.guestLastName),
           checkIn:         b.checkIn?.toISOString().slice(0, 10) ?? null,
           checkOut:        b.checkOut?.toISOString().slice(0, 10) ?? null,
           pickupDatetime:  b.pickupDatetime?.toISOString() ?? null,
@@ -234,7 +245,7 @@ export async function providerRoutes(app: FastifyInstance) {
             },
             search: {
               type: "string",
-              description: "Search by reference, guest first name, last name, or email",
+              description: "Search by booking reference or guest name",
             },
           },
         },
@@ -286,9 +297,7 @@ export async function providerRoutes(app: FastifyInstance) {
           listingTitle:       b.listing.name,
           listingCategory:    b.listing.category,
           guestFirstName:     b.guestFirstName,
-          guestLastName:      b.guestLastName,
-          guestEmail:         b.guestEmail,
-          guestPhone:         b.guestPhone,
+          guestName:          guestDisplayName(b.guestFirstName, b.guestLastName),
           adults:             b.adults,
           children:           b.children,
           checkIn:            b.checkIn?.toISOString().slice(0, 10) ?? null,
@@ -400,7 +409,7 @@ export async function providerRoutes(app: FastifyInstance) {
           listingName:       r.listing.name,
           listingCategory:   r.listing.category,
           bookingReference:  r.booking.reference,
-          guestName:         `${r.booking.guestFirstName} ${r.booking.guestLastName}`,
+          guestName:         guestDisplayName(r.booking.guestFirstName, r.booking.guestLastName),
           rating:            r.rating,
           title:             r.title,
           body:              r.body,
@@ -588,7 +597,7 @@ export async function providerRoutes(app: FastifyInstance) {
           start:     b.checkIn?.toISOString().slice(0, 10) ?? b.pickupDatetime?.toISOString().slice(0, 10) ?? null,
           end:       b.checkOut?.toISOString().slice(0, 10) ?? b.returnDatetime?.toISOString().slice(0, 10) ?? null,
           status:    b.status,
-          guestName: `${b.guestFirstName} ${b.guestLastName}`,
+          guestName: guestDisplayName(b.guestFirstName, b.guestLastName),
           type:      "booking",
         })),
         blockedRanges: blockedDates.map((bd) => ({

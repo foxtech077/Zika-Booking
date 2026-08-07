@@ -289,7 +289,7 @@ const MobileBookingCard = ({ booking, onViewDetails }: any) => (
             <div className="flex items-center gap-2 mb-1">
                 <User className="w-3 h-3 text-gray-400" />
                 <span className="text-sm font-medium text-gray-900">
-                    {formatGuestName(`${booking.guestFirstName} ${booking.guestLastName}`)}
+                    {booking.guestName ?? "Guest"}
                 </span>
             </div>
         </div>
@@ -1006,7 +1006,7 @@ export default function BookingsPage() {
                 "Customer",
                 <>
                     <div className="truncate text-sm font-semibold text-slate-950">
-                        {formatGuestName(`${booking.guestFirstName} ${booking.guestLastName}`)}
+                        {booking.guestName ?? "Guest"}
                     </div>
                 </>
             )}
@@ -1277,7 +1277,7 @@ export default function BookingsPage() {
                                                 </div>
                                             </div>
                                             <p className="mt-2 text-sm text-gray-600">
-                                                {formatGuestName(`${selectedBooking.guestFirstName} ${selectedBooking.guestLastName}`)}
+                                                {selectedBooking.guestName ?? "Guest"}
                                             </p>
                                         </div>
                                         <button
@@ -1302,7 +1302,7 @@ export default function BookingsPage() {
                                             <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
                                                 <span className="text-sm font-medium text-gray-600">Name</span>
                                                 <span className="text-sm font-semibold text-gray-900">
-                                                    {formatGuestName(`${selectedBooking.guestFirstName} ${selectedBooking.guestLastName}`)}
+                                                    {selectedBooking.guestName ?? "Guest"}
                                                 </span>
                                             </div>
                                             <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-500 leading-relaxed border border-slate-100">
