@@ -1,9 +1,11 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
-import { requireAdmin } from "../middleware/auth.js";
+import { requireAdminPermission, assertResourceCountryScope, countryScopeFilter, type AdminRequest } from "../middleware/auth.js";
 import { sendError } from "../lib/errors.js";
+import { AdminPermission } from "@zika/types";
 import { PaymentStatus, RefundStatus } from "../generated/index.js";
 import { notifyBookingServiceOfRefund, queueFailedRefundNotification, calculateAlreadyRefunded } from "../services/refund.service.js";
+import { writeAdminAudit } from "../lib/audit.js";
 
 export async function adminPaymentRoutes(app: FastifyInstance) {
   // ── GET /admin/payments ─────────────────────────────────────────────────────
@@ -19,7 +21,7 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
         },
       },
     },
-    preHandler: [requireAdmin],
+    preHandler: [requireAdminPermission(AdminPermission.PaymentsRead)],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const query = req.query as { page?: string; limit?: string };
@@ -27,13 +29,16 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
       const limit = Math.max(1, Math.min(100, parseInt(query.limit || "20", 10)));
       const skip = (page - 1) * limit;
 
+      const scope = countryScopeFilter(req);
+
       const [payments, total] = await Promise.all([
         prisma.payment.findMany({
+          where: scope,
           orderBy: { createdAt: "desc" },
           skip,
           take: limit,
         }),
-        prisma.payment.count(),
+        prisma.payment.count({ where: scope }),
       ]);
 
       reply.send({
@@ -57,11 +62,15 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
       tags: ["Admin Payments"],
       description: "Get pending refunds",
     },
-    preHandler: [requireAdmin],
+    preHandler: [requireAdminPermission(AdminPermission.RefundsRead)],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
+      const scope = countryScopeFilter(req);
       const refunds = await prisma.refund.findMany({
-        where: { status: "pending" },
+        where: {
+          status: "pending",
+          ...(scope ? { payment: { is: scope } } : {}),
+        },
         include: { payment: true },
         orderBy: { createdAt: "desc" },
       });
@@ -94,7 +103,7 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
         },
       },
     },
-    preHandler: [requireAdmin],
+    preHandler: [requireAdminPermission(AdminPermission.RefundsProcess)],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = req.params as { id: string };
@@ -104,6 +113,8 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
       if (!refund) {
         return sendError(reply, 404, "REFUND_NOT_FOUND", "Refund not found.");
       }
+      const payment = await prisma.payment.findUnique({ where: { id: refund.paymentId } });
+      if (!assertResourceCountryScope(req, reply, payment?.countryCode)) return;
       if (refund.status !== RefundStatus.pending && refund.status !== RefundStatus.submitted) {
         return sendError(reply, 400, "REFUND_NOT_PROCESSABLE", "Refund is not processable (must be pending or submitted).");
       }
@@ -117,12 +128,38 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
             updatedAt: new Date(),
           },
         });
+        await writeAdminAudit(req, {
+          action: "refund_denied",
+          targetType: "refund",
+          targetId: id,
+          oldValue: `status:${refund.status}`,
+          newValue: `status:${RefundStatus.failed};reason:${reason ?? ""}`,
+        });
         reply.send({ success: true, data: updated });
         return;
       }
  
       // "approve" action
-      // In a real system, call Stripe API to execute refund here.
+      // Execute the actual provider refund via the shared refund service so the
+      // money is genuinely returned to the guest (Stripe refund / Tara reversal).
+      const { issueRefund } = await import("../services/refund.service.js");
+      const approved = await issueRefund(
+        {
+          id: payment!.id,
+          bookingId: refund.bookingId,
+          paymentProvider: payment!.paymentProvider,
+          providerPaymentId: payment!.providerPaymentId,
+          amount: payment!.amount,
+          currency: payment!.currency,
+          status: payment!.status,
+        },
+        {
+          amount: Number(refund.amount),
+          reason: reason ?? "Approved by admin",
+          idempotencyKey: `refund:${refund.id}:admin-approve`,
+        },
+      );
+
       const updated = await prisma.refund.update({
         where: { id },
         data: {
@@ -132,7 +169,6 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
         },
       });
 
-      const payment = await prisma.payment.findUnique({ where: { id: refund.paymentId } });
       const provider = payment?.paymentProvider ?? "unknown";
 
       // Calculate total refunded amount to determine full or partial refund
@@ -167,6 +203,14 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
           refundedAtDate
         );
       }
+
+      await writeAdminAudit(req, {
+        action: "refund_approved",
+        targetType: "refund",
+        targetId: id,
+        oldValue: `status:${refund.status};providerStatus:${approved.status}`,
+        newValue: `status:${RefundStatus.succeeded};refundId:${approved.id}`,
+      });
 
       reply.send({ success: true, data: updated });
     } catch (err) {

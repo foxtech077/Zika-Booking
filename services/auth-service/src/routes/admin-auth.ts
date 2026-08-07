@@ -29,6 +29,7 @@ import {
 import { sendError, sendSuccess, zodFieldErrors } from "../lib/errors";
 import { incrementCounter } from "../lib/redis";
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
+import { verifyAdminSession, toIntrospectResponse } from "../lib/adminSession";
 
 const SESSION_INACTIVITY = Number(process.env["ADMIN_SESSION_INACTIVITY_SECONDS"] ?? 28800);
 const SESSION_TTL_DAYS = 30;
@@ -1210,6 +1211,57 @@ export async function adminOperatorRoutes(app: FastifyInstance) {
         return sendError(reply, 404, "ADMIN_NOT_FOUND", "Admin account not found.");
       }
       return sendError(reply, 400, "UPDATE_FAILED", "Admin role could not be updated. Please try again.");
+    }
+  });
+
+  // ── POST /internal/admin/introspect — service-to-service session introspection ──
+  // Verifies the admin session JWT against the DB (signature, revocation,
+  // inactivity) and returns the canonical role + country scope. Other services
+  // (payment, listing) call this so admin authorization never trusts stale
+  // JWT claims. Gated by the shared INTERNAL_SERVICE_KEY.
+  app.post("/internal/admin/introspect", {
+    schema: {
+      tags: ["Admin Auth"],
+      description: "Internal: verify an admin session and return canonical role + country scope",
+      body: {
+        type: "object",
+        required: ["token"],
+        properties: { token: { type: "string" } },
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                adminId: { type: "string" },
+                sessionId: { type: "string" },
+                role: { type: "string" },
+                countryScope: { type: "array", items: { type: "string" } },
+                scope: { type: "string" },
+              },
+              required: ["adminId", "sessionId", "role", "countryScope", "scope"],
+            },
+          },
+        },
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const serviceKey = req.headers["x-service-key"];
+    if (!process.env["INTERNAL_SERVICE_KEY"] || serviceKey !== process.env["INTERNAL_SERVICE_KEY"]) {
+      return sendError(reply, 403, "FORBIDDEN", "Invalid or missing service token.");
+    }
+
+    const { token } = req.body as { token: string };
+    if (!token) return sendError(reply, 401, "NO_TOKEN", "Admin session token required.");
+
+    try {
+      const ctx = await verifyAdminSession(token);
+      return sendSuccess(reply, 200, toIntrospectResponse(ctx));
+    } catch (err: any) {
+      return sendError(reply, 401, err?.code ?? "INVALID_SESSION", err?.message ?? "Invalid session.");
     }
   });
 }

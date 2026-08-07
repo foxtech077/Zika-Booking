@@ -1,3 +1,5 @@
+import type { AdminRole } from "./admin-auth";
+
 export type UserStatus = "pending_verification" | "active" | "suspended" | "banned";
 export type UserType = "user";
 export type OAuthProvider = "google" | "apple";
@@ -38,14 +40,6 @@ export interface PublicUser {
   termsAcceptedAt?: string | Date | null;
   privacyAcceptedAt?: string | Date | null;
 }
-
-export type AdminRole =
-  | "super_admin"
-  | "admin"
-  | "country_manager"
-  | "sales"
-  | "support"
-  | "finance";
 
 export interface AdminUser {
   id: string;

@@ -199,6 +199,7 @@ export async function bookingConfirmedHandler(payment: any) {
         providerId: rawBooking.providerId,
         amount: Number(rawBooking.providerPayout),
         currency: rawBooking.currency,
+        countryCode: rawBooking.listing?.country ?? null,
       });
       console.log("[PAYOUT TRACE] createPendingPayout() completed");
     } catch (err) {

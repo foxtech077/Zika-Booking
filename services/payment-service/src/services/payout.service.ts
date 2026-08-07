@@ -9,6 +9,8 @@ export interface SchedulePayoutParams {
   amount: number;
   currency: string;
   checkInAt: Date;
+  /** ISO 3166-1 alpha-2 of the booking's listing country (country-scoped admin auth). */
+  countryCode?: string | null;
 }
 
 export async function schedulePayout(
@@ -17,7 +19,7 @@ export async function schedulePayout(
   console.log("========== schedulePayout ENTER ==========");
   console.log(params);
   try {
-    const { bookingId, providerId, amount, currency, checkInAt } = params;
+    const { bookingId, providerId, amount, currency, checkInAt, countryCode } = params;
 
     if (amount <= 0) return;
     console.log("[PAYOUT TRACE] amount validation passed");
@@ -50,6 +52,7 @@ export async function schedulePayout(
         merchantId: merchant.id,
         bookingId,
         providerId,
+        countryCode: countryCode ?? null,
         amount,
         currency,
         scheduledAt,
@@ -79,13 +82,22 @@ export interface CreatePendingPayoutParams {
   currency: string;
 }
 
+export interface CreatePendingPayoutParams {
+  bookingId: string;
+  providerId: string;
+  amount: number;
+  currency: string;
+  /** ISO 3166-1 alpha-2 of the booking's listing country (country-scoped admin auth). */
+  countryCode?: string | null;
+}
+
 export async function createPendingPayout(
   params: CreatePendingPayoutParams,
 ): Promise<void> {
   console.log("========== createPendingPayout ENTER ==========");
   console.log(params);
   try {
-    const { bookingId, providerId, amount, currency } = params;
+    const { bookingId, providerId, amount, currency, countryCode } = params;
 
     if (amount <= 0) return;
     console.log("[PAYOUT TRACE] amount validation passed");
@@ -114,6 +126,7 @@ export async function createPendingPayout(
         merchantId: merchant.id,
         bookingId,
         providerId,
+        countryCode: countryCode ?? null,
         amount,
         currency,
         status: "pending",
