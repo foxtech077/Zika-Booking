@@ -3,7 +3,7 @@ ALTER TABLE listing.listings ADD COLUMN IF NOT EXISTS location public.geography(
 
 -- Backfill existing lat/lng data into the geography column
 UPDATE listing.listings
-SET location = ST_SetSRID(ST_MakePoint(lng, lat), 4326)::public.geography
+SET location = public.ST_SetSRID(public.ST_MakePoint(lng, lat), 4326)::public.geography
 WHERE lat IS NOT NULL AND lng IS NOT NULL;
 
 -- Drop the old decimal lat/lng columns (no IF EXISTS — if they're missing something is wrong)
