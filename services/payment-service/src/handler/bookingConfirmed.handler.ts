@@ -64,10 +64,19 @@ async function confirmBooking(bookingId: string, paymentId: string, paymentProvi
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
-    
-    throw new Error(`Failed to confirm booking: status ${response.status}. Response: ${errorText}`);
+    let code: string | undefined;
+    try {
+      const body = JSON.parse(errorText);
+      code = body?.error?.code;
+    } catch {
+      // non-JSON error body — code stays undefined
+    }
+    const err = new Error(`Failed to confirm booking: status ${response.status}. Response: ${errorText}`) as any;
+    err.statusCode = response.status;
+    err.code = code;
+    err.definitive = response.status < 500;
+    throw err;
   }
- 
 }
 console.log("AFTER CONFIRM");
 
@@ -212,7 +221,11 @@ export async function bookingConfirmedHandler(payment: any) {
     console.log("STEP-4 BEFORE PDF");
 
   } else {
-    throw new Error(`Booking ${bookingId} has unexpected status: ${booking.status}`);
+    const err: any = new Error(`Booking ${bookingId} has unexpected status: ${booking.status}`);
+    err.statusCode = 409;
+    err.code = `UNEXPECTED_BOOKING_STATUS_${booking.status}`;
+    err.definitive = true;
+    throw err;
   }
 
   // Override transactionId with the payment displayId (human-readable) or internal ID
