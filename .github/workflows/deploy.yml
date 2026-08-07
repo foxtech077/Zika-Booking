@@ -1,13 +1,15 @@
-name: Deploy to EC2
+name: Deploy to EC2 / ECS
 on:
   push:
     branches:
       - dev
+      - main
 env:
   AWS_REGION: af-south-1
   ECR_REGISTRY: 891924441446.dkr.ecr.af-south-1.amazonaws.com
 jobs:
   build-and-push:
+    if: github.ref == 'refs/heads/dev'
     name: Build & Push (${{ matrix.service }})
     runs-on: ubuntu-latest
     strategy:
@@ -59,8 +61,8 @@ jobs:
           cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
           cache-to: type=inline
           build-args: ${{ matrix.build_args }}
-
   deploy:
+    if: github.ref == 'refs/heads/dev'
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
@@ -85,4 +87,91 @@ jobs:
             docker compose run --rm payment-service pnpm exec prisma migrate deploy
             docker compose up -d --remove-orphans
             docker image prune -f
-
+  build-and-push-prod:
+    if: github.ref == 'refs/heads/main'
+    name: Build & Push Prod (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      matrix:
+        include:
+          - service: auth-service
+            dockerfile: services/auth-service/Dockerfile
+            image: zika/auth-service
+          - service: listing-service
+            dockerfile: services/listing-service/Dockerfile
+            image: zika/listing-service
+          - service: payment-service
+            dockerfile: services/payment-service/Dockerfile
+            image: zika/payment-service
+          - service: web
+            dockerfile: apps/web/Dockerfile
+            image: zika/web
+            build_args: |
+              NEXT_PUBLIC_API_URL=https://api.kainook.com/auth
+              NEXT_PUBLIC_AUTH_API_URL=https://api.kainook.com/auth
+              NEXT_PUBLIC_LISTING_API_URL=https://api.kainook.com/listings
+              NEXT_PUBLIC_PAYMENT_API_URL=https://api.kainook.com/payments
+          - service: admin
+            dockerfile: apps/admin/Dockerfile
+            image: zika/admin
+            build_args: |
+              NEXT_PUBLIC_API_URL=https://api.kainook.com
+              NEXT_PUBLIC_AUTH_API_URL=https://api.kainook.com/auth
+              NEXT_PUBLIC_LISTING_API_URL=https://api.kainook.com/listings
+              NEXT_PUBLIC_PAYMENT_API_URL=https://api.kainook.com/payments
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_PROD_DEPLOY_ROLE_ARN }}
+          aws-region: af-south-1
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push ${{ matrix.service }}
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
+            ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:prod-${{ github.sha }}
+          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
+          cache-to: type=inline
+          build-args: ${{ matrix.build_args }}
+  deploy-prod:
+    if: github.ref == 'refs/heads/main'
+    needs: build-and-push-prod
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_PROD_DEPLOY_ROLE_ARN }}
+          aws-region: af-south-1
+      - name: Deploy auth-service (owns migrations for auth, listing, payments)
+        run: |
+          aws ecs update-service --cluster kainook-prod-cluster --service kainook-auth --force-new-deployment --region af-south-1
+          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-auth --region af-south-1
+      - name: Deploy listing-service
+        run: |
+          aws ecs update-service --cluster kainook-prod-cluster --service kainook-listing --force-new-deployment --region af-south-1
+          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-listing --region af-south-1
+      - name: Deploy payment-service
+        run: |
+          aws ecs update-service --cluster kainook-prod-cluster --service kainook-payment --force-new-deployment --region af-south-1
+          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-payment --region af-south-1
+      - name: Deploy web and admin
+        run: |
+          aws ecs update-service --cluster kainook-prod-cluster --service kainook-web --force-new-deployment --region af-south-1
+          aws ecs update-service --cluster kainook-prod-cluster --service kainook-admin --force-new-deployment --region af-south-1
+          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-web --region af-south-1
+          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-admin --region af-south-1
