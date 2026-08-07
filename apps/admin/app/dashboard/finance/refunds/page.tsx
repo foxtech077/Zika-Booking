@@ -16,7 +16,7 @@ import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { paymentPayoutApi } from "@/lib/payment-api";
-import { canAccess } from "@/permissions/rbac";
+import { roleHasPermission, roleScopePolicy, AdminPermission, AdminScope } from "@/permissions/rbac";
 import type { AdminRole } from "@/types/admin";
 
 const COUNTRY_OPTIONS = [
@@ -94,7 +94,7 @@ export default function RefundManagementPage() {
   const selectedTxDetails = null;
   const maxRefundValue = 0;
 
-  const canModifyRefunds = canAccess(user?.role as AdminRole, "manage_finance") || user?.role === "country_manager";
+  const canModifyRefunds = roleHasPermission(user?.role as AdminRole, AdminPermission.RefundsProcess);
 
   const processMutation = useMutation({
     mutationFn: async ({ id, action, reason }: { id: string; action: "approve" | "deny"; reason?: string }) => {
@@ -234,8 +234,8 @@ export default function RefundManagementPage() {
   ];
 
   const CM_OPTIONS = useMemo(() => {
-    if (user?.role === "country_manager") {
-      return COUNTRY_OPTIONS.filter((opt) => user.countryScope?.includes(opt.value));
+    if (roleScopePolicy(user?.role as AdminRole) === AdminScope.CountryScoped) {
+      return COUNTRY_OPTIONS.filter((opt) => user?.countryScope?.includes(opt.value));
     }
     return COUNTRY_OPTIONS;
   }, [user]);

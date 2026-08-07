@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { cn, slugToLabel, getCountryNames } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
-import { canAccess, NAV_GROUPS, type Permission } from "@/permissions/rbac";
+import { canAccess, roleScopePolicy, AdminScope, NAV_GROUPS, type Permission } from "@/permissions/rbac";
 import type { AdminRole } from "@/types/admin";
 import { Avatar } from "@/components/ui/Avatar";
 import { api } from "@/lib/api";
@@ -149,7 +149,7 @@ export function Sidebar() {
                 )}>
                   {slugToLabel(user.role)}
                 </span>
-                {user.role === "country_manager" && (
+                {roleScopePolicy(user.role as AdminRole) === AdminScope.CountryScoped && (
                   <p className="text-[10px] text-white/50 leading-relaxed break-words whitespace-normal mt-0.5">
                     {getCountryNames(user.countryScope)}
                   </p>
