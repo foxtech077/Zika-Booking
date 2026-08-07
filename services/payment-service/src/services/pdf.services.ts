@@ -211,5 +211,5 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
     console.error("Failed to delete temp file:", err);
   }
 
-  return { fileName, pdfUrl, pdfBuffer };
+  return { fileName, pdfUrl, pdfBuffer, s3Key };
 }

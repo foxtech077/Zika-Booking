@@ -453,6 +453,7 @@
                 status: "captured",
                 capturedAt: new Date(),
                 paymentMethodType: "mobile_money",
+                mobileNumber: body.phoneNumber ?? undefined,
               },
             });
           } else {
