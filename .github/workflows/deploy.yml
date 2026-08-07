@@ -26,18 +26,18 @@ jobs:
             dockerfile: apps/web/Dockerfile
             image: zika/web
             build_args: |
-              NEXT_PUBLIC_API_URL=https://api.kainook.com/auth
-              NEXT_PUBLIC_AUTH_API_URL=https://api.kainook.com/auth
-              NEXT_PUBLIC_LISTING_API_URL=https://api.kainook.com/listings
-              NEXT_PUBLIC_PAYMENT_API_URL=https://api.kainook.com/payments
+              NEXT_PUBLIC_API_URL=https://dev.api.kainook.com/auth
+              NEXT_PUBLIC_AUTH_API_URL=https://dev.api.kainook.com/auth
+              NEXT_PUBLIC_LISTING_API_URL=https://dev.api.kainook.com/listings
+              NEXT_PUBLIC_PAYMENT_API_URL=https://dev.api.kainook.com/payments
           - service: admin
             dockerfile: apps/admin/Dockerfile
             image: zika/admin
             build_args: |
-              NEXT_PUBLIC_API_URL=https://api.kainook.com
-              NEXT_PUBLIC_AUTH_API_URL=https://api.kainook.com/auth
-              NEXT_PUBLIC_LISTING_API_URL=https://api.kainook.com/listings
-              NEXT_PUBLIC_PAYMENT_API_URL=https://api.kainook.com/payments
+              NEXT_PUBLIC_API_URL=https://dev.api.kainook.com
+              NEXT_PUBLIC_AUTH_API_URL=https://dev.api.kainook.com/auth
+              NEXT_PUBLIC_LISTING_API_URL=https://dev.api.kainook.com/listings
+              NEXT_PUBLIC_PAYMENT_API_URL=https://dev.api.kainook.com/payments
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -85,3 +85,4 @@ jobs:
             docker compose run --rm payment-service pnpm exec prisma migrate deploy
             docker compose up -d --remove-orphans
             docker image prune -f
+
