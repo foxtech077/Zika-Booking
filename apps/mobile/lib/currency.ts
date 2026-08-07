@@ -21,6 +21,28 @@ export function getCurrencyForCountry(countryCode?: string | null): { code: stri
   return COUNTRY_CURRENCY_MAP[countryCode.toUpperCase()] ?? { code: "USD", symbol: "$" };
 }
 
+// Deduped list of every currency in ALL_COUNTRIES, for a currency-choice picker
+// (as opposed to COUNTRY_CURRENCY_MAP, which is keyed by country). USD/EUR/GBP
+// pinned first since they're the most commonly picked regardless of the
+// guest's own country.
+const PINNED_CODES = ["USD", "EUR", "GBP"];
+export const ALL_CURRENCIES: { code: string; symbol: string }[] = (() => {
+  const seen = new Set<string>();
+  const rest: { code: string; symbol: string }[] = [];
+  for (const c of ALL_COUNTRIES) {
+    if (seen.has(c.currency)) continue;
+    seen.add(c.currency);
+    rest.push({ code: c.currency, symbol: c.symbol });
+  }
+  const pinned = PINNED_CODES
+    .map((code) => rest.find((c) => c.code === code))
+    .filter((c): c is { code: string; symbol: string } => !!c);
+  const remaining = rest
+    .filter((c) => !PINNED_CODES.includes(c.code))
+    .sort((a, b) => a.code.localeCompare(b.code));
+  return [...pinned, ...remaining];
+})();
+
 export function formatCurrency(amount: number | null | undefined, currency = "USD"): string {
   if (amount == null) return "—";
   try {

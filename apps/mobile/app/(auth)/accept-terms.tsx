@@ -29,7 +29,7 @@ import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
 import { K } from "../../constants/theme";
 import type { ApiResponse, PublicUser } from "@zika/types";
-import { handleRoleAndStatusRedirect } from "./login";
+import { handlePostAuthRedirect } from "./login";
 
 export default function AcceptTermsScreen() {
   const user = useAuthStore((s) => s.user);
@@ -51,7 +51,7 @@ export default function AcceptTermsScreen() {
     onSuccess: async (data) => {
       await updateUser({ ...(data.user as Partial<PublicUser>) });
       // Re-run the normal post-auth routing now that the gate is satisfied.
-      handleRoleAndStatusRedirect({ ...(user as PublicUser), ...(data.user as PublicUser) });
+      handlePostAuthRedirect({ ...(user as PublicUser), ...(data.user as PublicUser) });
     },
     onError: (err: any) => {
       setError(

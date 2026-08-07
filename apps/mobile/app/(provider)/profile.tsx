@@ -110,6 +110,19 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Mirrors web's "Back to Kainook" (TopBar.tsx) — the way out of the
+            hosting tab bar back to the traveller one. There is no separate
+            provider account, so this is a return trip, not a sign-out. */}
+        <MenuCard>
+          <MenuRow
+            iconName="home-outline"
+            iconBg="#f0fdf4"
+            label="Back to Kainook"
+            sub="Switch to travelling"
+            onPress={() => router.replace("/(tabs)" as any)}
+          />
+        </MenuCard>
+
         <Text style={s.sectionLabel}>LISTINGS</Text>
         <MenuCard>
           <MenuRow iconName="star-outline"     iconBg="#fffbeb" label="My Reviews"    sub="Guest ratings & your replies"    onPress={() => router.push("/(provider)/reviews" as any)} />

@@ -45,9 +45,10 @@ export function useNotifications() {
   });
 }
 
-export function useUnreadNotificationCount() {
+export function useUnreadNotificationCount(enabled = true) {
   return useQuery<NotifUnreadCount>({
     queryKey: NOTIF_QK.unreadCount,
+    enabled,
     queryFn: async () => {
       const res = await listingApi.get<{ data: RawNotifUnreadCount }>("/notifications/unread-count");
       return { count: res.data.data.unreadCount };

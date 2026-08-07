@@ -21,6 +21,7 @@ import { VoucherCard, voucherActivityLabel, fmtVoucherDate } from "../../compone
 import { SkeletonPulse } from "../../components/ui/SkeletonPulse";
 import { useAuthStore } from "../../store/auth";
 import { K } from "../../constants/theme";
+import { SignInRequired } from "../../components/SignInRequired";
 import { TIER_COLORS, TIER_ICON, CARD_CFG, TIER_BENEFITS, TIER_ORDER } from "../../constants/loyaltyTiers";
 import type { LoyaltyTier, PointsTransaction } from "../../lib/types/loyalty";
 import type { WalletVoucher } from "../../lib/types/voucher";
@@ -504,8 +505,15 @@ function BenefitsCard({ tier }: { tier: LoyaltyTier }) {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function LoyaltyScreen() {
-  const router = useRouter();
+  // Guests can browse and book; this screen is account-only. Returned
+  // before any other hook — the tab layout remounts on session change so
+  // the hook count never shifts under React.
   const storeUser = useAuthStore((s) => s.user);
+  if (!storeUser) {
+    return <SignInRequired icon="trophy-outline" title="Sign in to earn rewards" message="Points and tier benefits are tied to your account." />;
+  }
+
+  const router = useRouter();
 
   const { data: profile, isLoading: profileLoading, isError: profileError, refetch: refetchProfile, isFetching: profileFetching } = useLoyaltyProfile();
   const { data: historyPages, isLoading: historyLoading, isError: historyError, refetch: refetchHistory } = usePointsHistoryInfinite();

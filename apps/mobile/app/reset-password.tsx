@@ -19,7 +19,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../lib/api";
 import { useAuthStore } from "../store/auth";
-import { handleRoleAndStatusRedirect } from "./(auth)/login";
+import { handlePostAuthRedirect } from "./(auth)/login";
 import type { ApiResponse, AuthResponse } from "@zika/types";
 import { useKeyboard } from "../hooks/useKeyboard";
 
@@ -75,7 +75,7 @@ export default function ResetPasswordScreen() {
     onSuccess: async (data) => {
       await setAuth(data.user, data.tokens.accessToken);
       Alert.alert("Success", "Your password has been updated. You're now signed in.", [
-        { text: "OK", onPress: () => handleRoleAndStatusRedirect(data.user) },
+        { text: "OK", onPress: () => handlePostAuthRedirect(data.user) },
       ]);
     },
     onError: (err: unknown) => {

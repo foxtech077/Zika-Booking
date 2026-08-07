@@ -26,6 +26,7 @@ import { useFcmNotifications } from "../hooks/useFcmNotifications";
 
 const screenOptionsByName: Record<string, object> = {
   "pending-approval": { headerShown: false },
+  host: { headerShown: false },
   suspended: { headerShown: false },
   "(provider)": { headerShown: false },
   wallet: { headerShown: false },

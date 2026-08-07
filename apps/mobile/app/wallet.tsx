@@ -11,7 +11,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { listingApi } from "../lib/listing-api";
-import { useAuthStore } from "../store/auth";
 import { K } from "../constants/theme";
 
 interface MonthlyEntry {
@@ -78,9 +77,6 @@ function PayoutRow({ item, i }: { item: RecentPayout; i: number }) {
 }
 
 export default function WalletScreen() {
-  const localCurrency = useAuthStore((s) => s.localCurrency);
-  const currency = localCurrency ?? "USD";
-
   const { data, isLoading, isError, refetch, isRefetching } = useQuery<EarningsData>({
     queryKey: ["providerEarnings"],
     queryFn: async () => {
@@ -88,6 +84,16 @@ export default function WalletScreen() {
       return res.data.data;
     },
   });
+
+  // allTime/monthly totals carry no currency of their own — the API only
+  // states it per-payout (RecentPayout.currency). localCurrency is the
+  // guest's arbitrary browsing-display preference (picked from Profile), not
+  // this host's real payout currency, so it must never label real earnings.
+  // Falling back to a real payout's currency is an approximation too if a
+  // provider is ever paid out in more than one currency, but it's still tied
+  // to actual money instead of an unrelated setting.
+  const recentPayouts = data?.recentPayouts ?? [];
+  const currency = recentPayouts[0]?.currency ?? "USD";
 
   // Current month earnings
   const monthly = data?.monthly ?? [];

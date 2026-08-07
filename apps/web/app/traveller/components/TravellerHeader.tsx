@@ -1,16 +1,17 @@
 "use client";
 
+import { Avatar } from "@/components/ui/Avatar";
+import { useUnreadNotificationCount } from "@/hooks/useNotifications";
+import { logoutUser } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { fetchUnreadConversationCount } from "@/services/traveller";
+import { useAuthStore } from "@/stores/auth";
+import { useQuery } from "@tanstack/react-query";
+import { Bell, Building2, ChevronDown, FileText, Heart, HelpCircle, LogOut, Menu, MessageSquare, Shield, Star, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { useState, useEffect, useRef } from "react";
-import { ChevronDown, Heart, LogOut, Menu, MessageSquare, Star, User, HelpCircle, Shield, FileText, Bell, Building2 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Avatar } from "@/components/ui/Avatar";
-import { useAuthStore } from "@/stores/auth";
-import { logoutUser } from "@/lib/api";
-import { fetchUnreadConversationCount } from "@/services/traveller";
-import { useUnreadNotificationCount } from "@/hooks/useNotifications";
+import { useEffect, useRef, useState } from "react";
+import { CurrencyDropdown } from "./CurrencyDropdown";
 
 const TRAVELLER_ROUTES = {
   destinations: "/",
@@ -216,6 +217,10 @@ export function TravellerHeader({
               >
                 <Menu className="h-5 w-5 text-slate-700" />
               </button>
+
+              <div className="hidden sm:block">
+                <CurrencyDropdown />
+              </div>
 
               {/* Unauthenticated */}
               {!user && !hasAuthToken && (
@@ -447,6 +452,9 @@ export function TravellerHeader({
           {mobileMenuOpen && (
             <div className="border-t border-slate-100 bg-white px-4 py-4 sm:px-6 lg:px-8 md:hidden">
               <div className="space-y-4">
+                <div className="flex justify-end">
+                  <CurrencyDropdown />
+                </div>
                 <div className="grid gap-2">
                   {mobileNavBtn("Destinations", TRAVELLER_ROUTES.destinations, isDestinationsActive)}
                   {mobileNavBtn("Hotels", TRAVELLER_ROUTES.hotels, isHotelsActive)}

@@ -51,7 +51,7 @@ async function importAnonViews() {
 }
 
 // ─── redirect helper ─────────────────────────────────────────────────────────
-export function handleRoleAndStatusRedirect(user: PublicUser) {
+export function handlePostAuthRedirect(user: PublicUser) {
   // Privacy Policy gate — required at registration per the client's spec.
   // Every post-auth path funnels through here (email/password login, register,
   // Google sign-in, email verification and password reset), so this single
@@ -63,15 +63,21 @@ export function handleRoleAndStatusRedirect(user: PublicUser) {
     router.replace("/(auth)/accept-terms" as any);
     return;
   }
-  if (user.userType === "provider") {
-    if (user.status === "pending_verification")
-      router.replace("/pending-approval");
-    else if (user.status === "suspended" || user.status === "banned")
-      router.replace("/suspended");
-    else router.replace("/(provider)");
-  } else {
-    router.replace("/(tabs)");
+  // Status gates apply to everyone. They used to run only for provider
+  // accounts, which left the same checks off for travellers for no reason.
+  // The API already refuses to issue a session in these states, so these are
+  // a backstop for a persisted session whose status has since changed.
+  if (user.status === "pending_verification") {
+    router.replace("/pending-approval");
+    return;
   }
+  if (user.status === "suspended" || user.status === "banned") {
+    router.replace("/suspended");
+    return;
+  }
+  // One destination for every account. Listing management lives inside the
+  // app rather than behind a separate provider entry point.
+  router.replace("/(tabs)");
 }
 
 // ─── Google Sign-In ───────────────────────────────────────────────────────────
@@ -161,7 +167,7 @@ export function GoogleSignInButton({
     onSuccess: async (data) => {
       await setAuth(data.user, data.tokens.accessToken);
       void importAnonViews();
-      handleRoleAndStatusRedirect(data.user);
+      handlePostAuthRedirect(data.user);
     },
     onError: (err: unknown) => {
       const errObj = err as any;
@@ -281,7 +287,7 @@ export default function LoginScreen() {
     onSuccess: async (data) => {
       await setAuth(data.user, data.tokens.accessToken);
       void importAnonViews();
-      handleRoleAndStatusRedirect(data.user);
+      handlePostAuthRedirect(data.user);
     },
     onError: (err: unknown) => {
       const data = (err as any)?.response?.data ?? err;
@@ -490,7 +496,7 @@ function AppleButton({ onError }: { onError: (m: string) => void }) {
     },
     onSuccess: async (data) => {
       await setAuth(data.user, data.tokens.accessToken);
-      handleRoleAndStatusRedirect(data.user);
+      handlePostAuthRedirect(data.user);
     },
     onError: () => onError("Apple Sign-In failed. Please try again."),
   });

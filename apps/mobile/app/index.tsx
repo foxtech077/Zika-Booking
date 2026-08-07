@@ -26,22 +26,28 @@ export default function SplashScreen() {
 
   if (isHydrated) {
     if (user) {
-      if (user.userType === "guest") {
-        return <Redirect href="/(tabs)" />;
-      } else if (user.userType === "provider") {
-        if (user.status === "pending_verification") {
-          return <Redirect href="/pending-approval" />;
-        } else if (user.status === "suspended" || user.status === "banned") {
-          return <Redirect href="/suspended" />;
-        } else {
-          return <Redirect href={"/(provider)" as any} />;
-        }
+      // Every signed-in account lands in the same place. The previous version
+      // matched on userType "guest"/"provider" with no fallback branch, so once
+      // the API collapsed that field to a single value neither arm matched and
+      // execution fell through to the login redirect below — sending users who
+      // held a perfectly valid session back to the sign-in screen on every
+      // launch. Status is the only thing that diverts anyone now.
+      if (user.status === "pending_verification") {
+        return <Redirect href="/pending-approval" />;
       }
+      if (user.status === "suspended" || user.status === "banned") {
+        return <Redirect href="/suspended" />;
+      }
+      return <Redirect href="/(tabs)" />;
     }
     
+    // Signed out is a supported way to use the app, not a dead end: guests can
+    // browse, book and pay without an account (anonymous checkout), and are
+    // asked to sign in only when they reach something account-scoped. Sending
+    // them to the login screen here made guest booking unreachable.
     const onboardingCompleted = useAuthStore.getState().hasCompletedOnboarding;
     if (onboardingCompleted) {
-      return <Redirect href="/(auth)/login" />;
+      return <Redirect href="/(tabs)" />;
     }
     return <Redirect href="/(auth)/onboarding" />;
   }

@@ -16,9 +16,10 @@ type MeResponse = {
   pointsToNextTier: number | null;
 };
 
-export function useLoyaltyProfile() {
+export function useLoyaltyProfile(enabled = true) {
   return useQuery<LoyaltyProfile>({
     queryKey: LOYALTY_QK.profile,
+    enabled,
     queryFn: async () => {
       const res = await api.get<ApiResponse<MeResponse>>("/auth/me");
       if (!res.data.success) throw res.data;

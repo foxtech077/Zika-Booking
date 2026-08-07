@@ -18,6 +18,7 @@ import { useConversations } from "../../hooks/messaging";
 import { listingApi } from "../../lib/listing-api";
 import ConversationCard, { ConversationCardSkeleton } from "../../components/messaging/ConversationCard";
 import { K } from "../../constants/theme";
+import { SignInRequired } from "../../components/SignInRequired";
 import type { ListingBasics } from "../../hooks/messaging";
 import { INACTIVE_LISTING } from "../../hooks/messaging";
 
@@ -86,7 +87,14 @@ function EmptyState({ hasFilter }: { hasFilter: boolean }) {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function MessagesScreen() {
+  // Guests can browse and book; this screen is account-only. Returned
+  // before any other hook — the tab layout remounts on session change so
+  // the hook count never shifts under React.
   const user = useAuthStore((s) => s.user);
+  if (!user) {
+    return <SignInRequired icon="chatbubbles-outline" title="Sign in to view messages" message="Messaging a host requires an account so replies reach you." />;
+  }
+
   const currentUserId = user?.id ?? "";
   const { data, isLoading, isError, refetch, isFetching } = useConversations();
   const conversations = data?.conversations ?? [];
