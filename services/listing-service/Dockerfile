@@ -15,4 +15,4 @@ RUN cd services/listing-service && npx prisma generate
 RUN pnpm --filter @zika/listing-service build
 WORKDIR /app/services/listing-service
 EXPOSE 3003
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "pnpm db:migrate:deploy && node dist/index.js"]
