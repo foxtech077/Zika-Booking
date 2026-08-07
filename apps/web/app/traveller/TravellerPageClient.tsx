@@ -654,6 +654,25 @@ export default function TravellerDashboard() {
         return basePrice;
       })(),
       currency: l.currency || "KES",
+      // Only present when /search was called with a `currency` param the API
+      // could actually convert to (see LOCALIZED_PRICE_ENDPOINTS in
+      // lib/listing-api.ts). Browsing-display only — booking pricing always
+      // uses the fields above, never these.
+      localizedPricePerNight: (() => {
+        if (l.localizedCurrency == null) return null;
+        if ((l.category === "hotel" || l.listingType === "hotel") && Array.isArray(rawRoomTypes) && rawRoomTypes.length > 0) {
+          const activeRts = rawRoomTypes.filter((rt: any) => rt.isActive !== false);
+          if (activeRts.length > 0) {
+            const prices = activeRts
+              .map((rt: any) => Number(rt.localizedPricePerNight ?? rt.pricePerNight))
+              .filter((p: number) => !isNaN(p) && p > 0);
+            if (prices.length > 0) return Math.min(...prices);
+          }
+        }
+        const base = Number(l.localizedNightlyRate ?? l.localizedDailyRate ?? 0);
+        return base > 0 ? base : null;
+      })(),
+      localizedCurrency: l.localizedCurrency ?? null,
       minStayNights: l.minStayNights || 1,
       checkinTime: l.checkinTime || "",
       checkoutTime: l.checkoutTime || "",
@@ -1327,6 +1346,24 @@ export default function TravellerDashboard() {
             return basePrice;
           })(),
           currency: item.currency,
+          // Browsing-display price header only — the booking breakdown below
+          // (dates × nights, fees, deposit) always uses pricePerNight/currency
+          // above, never these.
+          localizedPricePerNight: (() => {
+            if (item.localizedCurrency == null) return null;
+            if ((item.category === "hotel" || item.listingType === "hotel") && Array.isArray(rawRoomTypes) && rawRoomTypes.length > 0) {
+              const activeRts = rawRoomTypes.filter((rt: any) => rt.isActive !== false);
+              if (activeRts.length > 0) {
+                const prices = activeRts
+                  .map((rt: any) => Number(rt.localizedPricePerNight ?? rt.pricePerNight))
+                  .filter((p: number) => !isNaN(p) && p > 0);
+                if (prices.length > 0) return Math.min(...prices);
+              }
+            }
+            const base = Number(item.localizedNightlyRate ?? item.localizedDailyRate ?? 0);
+            return base > 0 ? base : null;
+          })(),
+          localizedCurrency: item.localizedCurrency ?? null,
           minStayNights: item.minStayNights,
           checkinTime: item.checkinTime,
           checkoutTime: item.checkoutTime,
@@ -2404,7 +2441,13 @@ export default function TravellerDashboard() {
                       const selectedRt = isHotel
                         ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
                         : null;
-                      const basePrice = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
+                      // Browsing header only — matches the search-card price. The
+                      // checkout breakdown further down always uses the raw
+                      // (non-localized) pricePerNight/currency instead.
+                      const priceCurrency = detailListing.localizedCurrency ?? detailListing.currency;
+                      const basePrice = selectedRt
+                        ? (selectedRt.localizedPricePerNight ?? selectedRt.pricePerNight)
+                        : (detailListing.localizedPricePerNight ?? detailListing.pricePerNight);
 
                       // Calculate discount
                       const hasLongStay = detailListing.longStayDiscountEnabled;
@@ -2426,11 +2469,11 @@ export default function TravellerDashboard() {
                           <div>
                             <div className="flex items-baseline gap-2 flex-wrap">
                               <span className="text-2xl font-extrabold text-slate-900">
-                                {detailListing.currency} {displayPrice.toLocaleString()}
+                                {priceCurrency} {displayPrice.toLocaleString()}
                               </span>
                               {basePrice > displayPrice && (
                                 <span className="text-sm font-semibold line-through text-slate-400">
-                                  {detailListing.currency} {basePrice.toLocaleString()}
+                                  {priceCurrency} {basePrice.toLocaleString()}
                                 </span>
                               )}
                             </div>
@@ -2590,7 +2633,7 @@ export default function TravellerDashboard() {
                                 {detailListing.roomTypes
                                   .filter((rt) => rt.isActive !== false)
                                   .map((rt) => {
-                                    const baseRtPrice = rt.pricePerNight;
+                                    const baseRtPrice = rt.localizedPricePerNight ?? rt.pricePerNight;
                                     let displayRtPrice = baseRtPrice;
                                     const isValidPromo = activePromotion && activePromotion.activity === detailListing.category && isPromotionValid(activePromotion);
                                     const hasLongStay = detailListing.longStayDiscountEnabled;
@@ -2605,9 +2648,10 @@ export default function TravellerDashboard() {
                                       displayRtPrice = Number((baseRtPrice * (1 - longStayPct / 100)).toFixed(2));
                                     }
 
+                                    const rtCurrency = detailListing.localizedCurrency ?? detailListing.currency;
                                     return (
                                       <option key={rt.id} value={rt.id}>
-                                        {rt.name} — {detailListing.currency} {displayRtPrice.toLocaleString()}/night{baseRtPrice > displayRtPrice ? ` (was ${detailListing.currency} ${baseRtPrice.toLocaleString()})` : ""}
+                                        {rt.name} — {rtCurrency} {displayRtPrice.toLocaleString()}/night{baseRtPrice > displayRtPrice ? ` (was ${rtCurrency} ${baseRtPrice.toLocaleString()})` : ""}
                                       </option>
                                     );
                                   })}
@@ -3685,7 +3729,7 @@ export default function TravellerDashboard() {
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-[#1D8D2B] uppercase tracking-wider">{item.category}</p>
                         <p className="text-sm font-bold text-slate-900 line-clamp-1 group-hover:text-[#1D8D2B] transition">{item.name}</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">{item.currency} {item.pricePerNight.toLocaleString()} / {item.category === "car" ? "day" : "night"}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{item.localizedCurrency ?? item.currency} {(item.localizedPricePerNight ?? item.pricePerNight).toLocaleString()} / {item.category === "car" ? "day" : "night"}</p>
                       </div>
                     </button>
                   ))}

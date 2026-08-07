@@ -19,7 +19,7 @@ export const listingApi = axios.create({
 // Endpoints that return localized prices when given a `currency` query param.
 // Scoped deliberately: attaching it to every listing-service call would send a
 // meaningless param to booking, provider and upload routes.
-const LOCALIZED_PRICE_ENDPOINTS = /(^|\/)(search|listings\/[^/]+\/public)(\?|$)/;
+const LOCALIZED_PRICE_ENDPOINTS = /(^|\/)(search|listings\/[^/]+\/public|guests\/me\/favourites|guests\/me\/recently-viewed)(\?|$)/;
 
 listingApi.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken;

@@ -47,6 +47,10 @@ function mapListing(item: any): PublicListingDetail | null {
       return basePrice;
     })(),
     currency: raw.currency || "KES",
+    // Only present when the favourites call was made with a `currency` param
+    // the API could actually convert to. Browsing-display only.
+    localizedPricePerNight: raw.localizedNightlyRate ?? raw.localizedDailyRate ?? null,
+    localizedCurrency: raw.localizedCurrency ?? null,
     minStayNights: raw.minStayNights || 1,
     checkinTime: raw.checkinTime || "",
     checkoutTime: raw.checkoutTime || "",

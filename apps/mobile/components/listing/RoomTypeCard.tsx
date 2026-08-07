@@ -8,6 +8,7 @@ export interface RoomType {
   roomType: string;
   description?: string | null;
   pricePerNight: number | string;
+  localizedPricePerNight?: number | string | null;
   unitCount?: number | null;
   maxGuests?: number | null;
   isActive?: boolean;
