@@ -1,4 +1,5 @@
 import axios from "axios";
+import type { PublicUser } from "@zika/types";
 import { useAuthStore } from "../store/auth";
 
 const getBaseUrl = () => {
@@ -7,7 +8,7 @@ const getBaseUrl = () => {
   return base.endsWith("/") ? base : `${base}/`;
 };
 
-const BASE_URL = getBaseUrl();
+export const BASE_URL = getBaseUrl();
 
 export const api = axios.create({
   baseURL: BASE_URL,
@@ -63,9 +64,17 @@ api.interceptors.response.use(
         refreshing = (async () => {
           try {
             const res = await axios.post(`${BASE_URL}auth/refresh`, {}, { withCredentials: true });
-            const token = (res.data as { data: { tokens: { accessToken: string } } }).data.tokens.accessToken;
-            const { user } = useAuthStore.getState();
-            if (user) await useAuthStore.getState().setAuth(user, token);
+            const body = (res.data as {
+              data: { tokens: { accessToken: string }; user?: PublicUser };
+            }).data;
+            const token = body.tokens.accessToken;
+            // Prefer the user object the refresh returns. Reusing the cached
+            // one kept server-side changes out of the app — hostStatus above
+            // all, which is minted into the new token but would then disagree
+            // with the stale copy in the store.
+            const { user: cachedUser } = useAuthStore.getState();
+            const nextUser = body.user ?? cachedUser;
+            if (nextUser) await useAuthStore.getState().setAuth(nextUser, token);
           } catch {
             await useAuthStore.getState().clearAuth();
           } finally {

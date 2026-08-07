@@ -6,7 +6,7 @@ import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
 import { FormField } from "../../components/ui/FormField";
 import { Button } from "../../components/ui/Button";
-import { handleRoleAndStatusRedirect } from "./login";
+import { handlePostAuthRedirect } from "./login";
 import type { ApiResponse, AuthResponse } from "@zika/types";
 import { useKeyboard } from "../../hooks/useKeyboard";
 
@@ -30,7 +30,7 @@ export default function ResetPasswordScreen() {
     onSuccess: async (data) => {
       await setAuth(data.user, data.tokens.accessToken);
       Alert.alert("Success", "Your password has been updated. You're now signed in.");
-      handleRoleAndStatusRedirect(data.user);
+      handlePostAuthRedirect(data.user);
     },
     onError: (err: unknown) => {
       const data = (err as { error?: { code?: string; message?: string; fields?: Record<string, string> } }).error;

@@ -11,7 +11,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useAuthStore } from "../store/auth";
-import { handleRoleAndStatusRedirect } from "./(auth)/login";
+import { handlePostAuthRedirect } from "./(auth)/login";
 import { K } from "../constants/theme";
 import type { ApiResponse, AuthResponse } from "@zika/types";
 
@@ -42,7 +42,7 @@ export default function VerifyScreen() {
       await setAuth(data.user, data.tokens.accessToken);
       const isAlready = (data.message ?? "").toLowerCase().includes("already");
       setState(isAlready ? "already_verified" : "success");
-      setTimeout(() => handleRoleAndStatusRedirect(data.user), 1500);
+      setTimeout(() => handlePostAuthRedirect(data.user), 1500);
     },
     onError: (err: unknown) => {
       const code =

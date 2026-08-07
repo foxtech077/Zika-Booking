@@ -3,7 +3,9 @@ import { Stack } from "expo-router";
 export default function ListingsLayout() {
   return (
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
-      <Stack.Screen name="index" options={{ title: "My Listings" }} />
+      {/* No "index" screen here — listing management lives at (provider)/listings
+          now that the tab bar switch reuses the fuller, already-built provider
+          Listings tab instead of this stopgap list screen. */}
       <Stack.Screen name="new" options={{ title: "New Listing", headerShown: false }} />
       <Stack.Screen name="hotel" options={{ title: "Hotel Listing", headerShown: false }} />
       <Stack.Screen name="apartment" options={{ title: "Home Listing", headerShown: false }} />

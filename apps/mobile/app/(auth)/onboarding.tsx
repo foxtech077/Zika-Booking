@@ -52,18 +52,19 @@ export default function OnboardingScreen() {
     }
   }).current;
 
+
   async function goNext() {
     if (activeIndex < SLIDES.length - 1) {
       flatRef.current?.scrollToIndex({ index: activeIndex + 1, animated: true });
     } else {
       await setCompletedOnboarding(true);
-      router.replace("/(auth)/login");
+      router.replace("/(tabs)");
     }
   }
 
   async function skip() {
     await setCompletedOnboarding(true);
-    router.replace("/(auth)/login");
+    router.replace("/(tabs)");
   }
 
   return (

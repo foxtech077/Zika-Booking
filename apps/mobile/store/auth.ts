@@ -3,6 +3,7 @@ import * as SecureStore from "expo-secure-store";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import type { PublicUser } from "@zika/types";
 import { getCurrencyForCountry } from "../lib/currency";
+import { clearAnonymousToken, hydrateAnonymousToken } from "../lib/anonymous";
 
 const ACCESS_TOKEN_KEY = "zika_access_token";
 const USER_KEY = "zika_user";
@@ -44,6 +45,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   localCurrency: "USD", // default fallback
 
   setAuth: async (user, accessToken) => {
+    // A real session supersedes any anonymous one. Clearing it here stops a
+    // leftover anonymous token from being picked up as a fallback later.
+    await clearAnonymousToken();
     const currency = getCurrencyForCountry(user.country).code;
     await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
     await SecureStore.setItemAsync(USER_KEY, JSON.stringify(stripPersistedFields(user)));
@@ -76,6 +80,7 @@ clearAuth: async () => {
     await Promise.all([
       SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY),
       SecureStore.deleteItemAsync(USER_KEY),
+      clearAnonymousToken(),
     ]);
   } catch (error) {
     console.warn("Failed to clear auth storage:", error);
@@ -105,6 +110,9 @@ clearAuth: async () => {
         SecureStore.getItemAsync(ONBOARDING_COMPLETED_KEY).catch(() => null),
         SecureStore.getItemAsync(LOCAL_CURRENCY_KEY).catch(() => null),
       ]);
+      // Interceptors read the anonymous token synchronously, so warm its cache
+      // during hydration alongside the account session.
+      await hydrateAnonymousToken().catch(() => {});
       const user = userJson ? (JSON.parse(userJson) as PublicUser) : null;
       const localCurrency = currencyVal || (user ? getCurrencyForCountry(user.country).code : "USD");
       set({

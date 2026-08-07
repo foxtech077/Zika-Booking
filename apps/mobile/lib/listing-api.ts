@@ -1,5 +1,6 @@
 import axios from "axios";
 import { useAuthStore } from "../store/auth";
+import { getCachedAnonymousToken } from "./anonymous";
 
 const getListingBaseUrl = () => {
   const envUrl = process.env["EXPO_PUBLIC_LISTING_API_URL"];
@@ -22,7 +23,17 @@ const LOCALIZED_PRICE_ENDPOINTS = /(^|\/)(search|listings\/[^/]+\/public)(\?|$)/
 
 listingApi.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken;
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  } else {
+    // Anonymous checkout: only ever a fallback, so a signed-in user can never
+    // have their account token displaced by a leftover anonymous one.
+    const anon = getCachedAnonymousToken();
+    if (anon) {
+      config.headers.Authorization = `Bearer ${anon}`;
+      (config as any)._anon = true;
+    }
+  }
 
   // Ask for prices in the guest's local currency. Several screens build their
   // URLs as template strings rather than a params object, so doing this here
@@ -83,16 +94,23 @@ listingApi.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const original = error.config as (typeof error.config) & { _retry?: boolean };
+    const original = error.config as (typeof error.config) & { _retry?: boolean; _anon?: boolean };
     if (error.response?.status === 401 && !original._retry) {
+      // Anonymous tokens are stateless with no refresh cookie, so refreshing is
+      // guaranteed to fail — and the failure path calls clearAuth(), which
+      // would wipe an unrelated signed-in session. Let the caller handle it.
+      if (original._anon) return Promise.reject(error);
       original._retry = true;
       if (!refreshing) {
         refreshing = (async () => {
           try {
             const res = await axios.post(`${AUTH_BASE_URL}/auth/refresh`, {}, { withCredentials: true });
             const token = (res.data as any).data.tokens.accessToken;
-            const { user } = useAuthStore.getState();
-            if (user) await useAuthStore.getState().setAuth(user, token);
+            // Prefer the refreshed user object; reusing the cached one keeps
+            // server-side changes (hostStatus especially) out of the store.
+            const refreshedUser = (res.data as any).data.user;
+            const nextUser = refreshedUser ?? useAuthStore.getState().user;
+            if (nextUser) await useAuthStore.getState().setAuth(nextUser, token);
           } catch {
             await useAuthStore.getState().clearAuth();
           } finally {
