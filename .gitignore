@@ -12,3 +12,6 @@ coverage
 *.log
 .DS_Store
 prisma/migrations/*.sql
+.opencode
+graphify-out
+AGENTS.md

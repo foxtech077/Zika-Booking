@@ -1,311 +1,852 @@
 "use client";
+
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Ticket, Plus, ToggleLeft, ToggleRight, Trash2, Edit2, DollarSign } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
+import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
+import { Card, SectionHeader } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { FormField } from "@/components/ui/FormField";
+import { Input, Select, CustomDropdown } from "@/components/ui/Input";
+import countries from "i18n-iso-countries";
+import enLocale from "i18n-iso-countries/langs/en.json";
+import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
+import { SlideDrawer } from "@/components/drawers/SlideDrawer";
+import { formatDate, formatCurrency, formatRelativeTime } from "@/lib/utils";
+import type { VoucherWithFinancials } from "@/types/admin";
+import { DatePicker } from "@/components/ui/DatePicker";
+import { useAuthStore } from "@/stores/auth";
+import { canAccess } from "@/permissions/rbac";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface Voucher {
-  id: string;
-  code: string;
-  discountType: "percentage" | "fixed";
-  discountValue: number;
-  minOrderValue: number | null;
-  maxDiscount: number | null;
-  usageLimit: number | null;
-  usageCount: number;
-  redemptionCount: number;
-  validFrom: string;
-  validUntil: string;
-  isActive: boolean;
-  createdBy: string;
-  createdAt: string;
+countries.registerLocale(enLocale);
+function codeToFlag(code: string) {
+  return code.toUpperCase().replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
 }
+const COUNTRY_OPTIONS = [
+  { value: "all", label: "🌍 All Countries" },
+  ...Object.keys(countries.getAlpha2Codes()).map((c) => ({
+    value: c,
+    label: `${codeToFlag(c)} ${countries.getName(c, "en")} (${c})`,
+  })),
+];
+const fetchVouchers = (params: Record<string, string>) =>
+  listingApi.get(`/admin/vouchers?${new URLSearchParams(params)}`).then((r) => {
+    // ── DEBUG: Temporary logging — remove before production ──────────────────
+    console.group(`[Vouchers] Fetch — isActive=${params.isActive ?? "(all)"}`);
+    console.log("Params sent:", params);
+    console.log("Raw r.data:", r.data);
+    // Unwrap envelope: { success, data: { vouchers, total } } or { success, data: [...] }
+    const body = r.data?.data ?? r.data;
+    console.log("Unwrapped body:", body);
+    const vouchers: any[] = body?.vouchers ?? (Array.isArray(body) ? body : []);
+    const total: number = body?.total ?? body?.count ?? body?.pagination?.total ?? vouchers.length;
+    console.log(`Resolved vouchers (${vouchers.length}):`, vouchers);
+    console.log("Resolved total:", total);
+    console.groupEnd();
+    // ─────────────────────────────────────────────────────────────────────────
+    return { vouchers, total };
+  });
 
-interface VouchersResponse {
-  vouchers: Voucher[];
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
+      <span className="text-sm text-slate-500">{label}</span>
+      <span className="text-sm font-medium text-slate-900">{value}</span>
+    </div>
+  );
 }
-
-interface CreateVoucherBody {
-  code: string;
-  discountType: "percentage" | "fixed";
-  discountValue: string;
-  minOrderValue: string;
-  maxDiscount: string;
-  usageLimit: string;
-  validFrom: string;
-  validUntil: string;
-}
-
-const EMPTY_FORM: CreateVoucherBody = {
-  code: "",
-  discountType: "percentage",
-  discountValue: "",
-  minOrderValue: "",
-  maxDiscount: "",
-  usageLimit: "",
-  validFrom: "",
-  validUntil: "",
-};
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-}
-
-function isExpired(validUntil: string) {
-  return new Date(validUntil) < new Date();
-}
-
-function statusBadge(v: Voucher) {
-  if (!v.isActive) return { label: "Inactive", cls: "bg-gray-100 text-gray-600" };
-  if (isExpired(v.validUntil)) return { label: "Expired", cls: "bg-red-100 text-red-700" };
-  if (v.usageLimit !== null && v.usageCount >= v.usageLimit) return { label: "Exhausted", cls: "bg-orange-100 text-orange-700" };
-  if (new Date(v.validFrom) > new Date()) return { label: "Scheduled", cls: "bg-blue-100 text-blue-700" };
-  return { label: "Active", cls: "bg-green-100 text-green-700" };
-}
-
-// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function VouchersPage() {
   const qc = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<CreateVoucherBody>(EMPTY_FORM);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const { user } = useAuthStore();
+  const role = user?.role;
+  const todayYMD = (() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  })();
+  const canCreateVoucher = role === "super_admin";
+  const hasManagePermission = canAccess(role, "manage_vouchers");
+  const [page, setPage] = useState(1);
+  const getVoucherStatus = (v: VoucherWithFinancials) => {
+    const now = new Date();
+    const nowYMD = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
+    const expiry = new Date(v.validUntil);
+    const expiryYMD = `${expiry.getUTCFullYear()}-${String(expiry.getUTCMonth() + 1).padStart(2, "0")}-${String(expiry.getUTCDate()).padStart(2, "0")}`;
+    const isExpired = v.validUntil && expiryYMD < nowYMD;
+    const isExhausted = v.usageLimit && (v.redemptionCount ?? v.usageCount ?? 0) >= v.usageLimit;
 
-  const { data, isLoading, error } = useQuery<VouchersResponse>({
-    queryKey: ["admin-vouchers"],
-    queryFn: async () => {
-      const res = await listingApi.get<{ data: VouchersResponse }>("/admin/vouchers");
-      return res.data.data;
+    if (isExpired) return { label: "Expired", status: "expired" };
+    if (isExhausted) return { label: "Exhausted", status: "banned" };
+    if (v.isActive) return { label: "Active", status: "active" };
+    return { label: "Paused", status: "deactivated" };
+  };
+  const [limit, setLimit] = useState(10);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [addModal, setAddModal] = useState(false);
+  const [selected, setSelected] = useState<VoucherWithFinancials | null>(null);
+  const [form, setForm] = useState({
+    id: "",
+    title: "",
+    code: "",
+    discountType: "percentage" as "percentage" | "fixed",
+    discountValue: "",
+    maxDiscount: "",
+    minOrderValue: "",
+    activityScope: "universal",
+    countryScope: "",
+    validFrom: "",
+    validUntil: "",
+    usageLimit: "",
+    usagePerGuest: "",
+    applicableTiers: [] as string[],
+    autoAssign: false,
+    isActive: true,
+  });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-vouchers", page, limit, statusFilter],
+    queryFn: () => {
+      const params: Record<string, string> = {
+        page: String(page),
+        limit: String(limit),
+      };
+      if (statusFilter) {
+        params.status = statusFilter;
+      }
+      return fetchVouchers(params);
     },
   });
 
-  const createMutation = useMutation({
-    mutationFn: async () => {
-      const code = form.code.trim().toUpperCase();
-      if (!code) throw new Error("Voucher code is required.");
-      const discountValue = parseFloat(form.discountValue);
-      if (isNaN(discountValue) || discountValue <= 0) throw new Error("Discount value must be greater than 0.");
-      if (form.discountType === "percentage" && discountValue > 100) throw new Error("Percentage discount cannot exceed 100.");
-      if (!form.validFrom || !form.validUntil) throw new Error("Valid from and valid until dates are required.");
-      if (new Date(form.validUntil) <= new Date(form.validFrom)) throw new Error("Valid until must be after valid from.");
+  const vouchersList: VoucherWithFinancials[] = (data?.vouchers ?? []).filter((v) => {
+    if (!statusFilter) return true;
+    const { status } = getVoucherStatus(v);
+    if (statusFilter === "active") return status === "active";
+    if (statusFilter === "paused") return status === "deactivated";
+    if (statusFilter === "expired") return status === "expired";
+    if (statusFilter === "exhausted") return status === "banned";
+    return true;
+  });
+  const total = data?.total ?? 0;
 
-      const body: Record<string, unknown> = {
-        code,
-        discountType: form.discountType,
-        discountValue,
-        validFrom: new Date(form.validFrom).toISOString(),
-        validUntil: new Date(form.validUntil).toISOString(),
-      };
-      if (form.minOrderValue) body.minOrderValue = parseFloat(form.minOrderValue);
-      if (form.maxDiscount) body.maxDiscount = parseFloat(form.maxDiscount);
-      if (form.usageLimit) body.usageLimit = parseInt(form.usageLimit, 10);
+  const [editModal, setEditModal] = useState(false);
 
-      await listingApi.post("/admin/vouchers", body);
-    },
+  const createMut = useMutation({
+    mutationFn: (body: any) => listingApi.post("/admin/vouchers", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-vouchers"] });
-      setForm(EMPTY_FORM);
-      setShowForm(false);
-      setFormError(null);
-      setSuccessMsg("Voucher created successfully.");
-      setTimeout(() => setSuccessMsg(null), 3000);
-    },
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message;
-      setFormError(msg ?? (err as Error).message ?? "Failed to create voucher.");
+      setAddModal(false);
+      setForm({
+        id: "", title: "", code: "", discountType: "percentage", discountValue: "", maxDiscount: "", minOrderValue: "", activityScope: "universal",
+        countryScope: "", validFrom: "", validUntil: "", usageLimit: "",
+        usagePerGuest: "", applicableTiers: [], autoAssign: false, isActive: true
+      });
     },
   });
 
-  function updateField(key: keyof CreateVoucherBody, value: string) {
-    setForm((p) => ({ ...p, [key]: value }));
-    setFormError(null);
-  }
+  const updateMut = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: any }) =>
+      listingApi.patch(`/admin/vouchers/${id}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-vouchers"] });
+      setEditModal(false);
+      setSelected(null);
+      setForm({
+        id: "", title: "", code: "", discountType: "percentage", discountValue: "", maxDiscount: "", minOrderValue: "", activityScope: "universal",
+        countryScope: "", validFrom: "", validUntil: "", usageLimit: "",
+        usagePerGuest: "", applicableTiers: [], autoAssign: false, isActive: true
+      });
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.error?.message ?? err?.message ?? "Failed to update voucher");
+    }
+  });
+
+  const openEdit = (v: VoucherWithFinancials, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    // Parse ISO dates back to YYYY-MM-DD
+    const parseDateLocal = (dateStr: string) => {
+      if (!dateStr) return "";
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return "";
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const yyyy = d.getFullYear();
+      const mm = pad(d.getMonth() + 1);
+      const dd = pad(d.getDate());
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
+    setForm({
+      id: v.id,
+      title: v.title || "",
+      code: v.code || "",
+      discountType: v.discountType,
+      discountValue: String(v.discountValue || ""),
+      maxDiscount: String(v.maxDiscount || ""),
+      minOrderValue: String(v.minOrderValue || ""),
+      activityScope: v.activityScope || "universal",
+      countryScope: v.countryScope || "",
+      validFrom: parseDateLocal(v.validFrom),
+      validUntil: parseDateLocal(v.validUntil),
+      usageLimit: String(v.usageLimit || ""),
+      usagePerGuest: String(v.usageLimitPerGuest || ""),
+      applicableTiers: v.applicableTiers ?? [],
+      autoAssign: v.autoAssign ?? false,
+      isActive: v.isActive ?? true,
+    });
+    setAddModal(false);
+    setEditModal(true);
+  };
+
+  const handleCancel = () => {
+    setAddModal(false);
+    setEditModal(false);
+    setForm({
+      id: "", title: "", code: "", discountType: "percentage", discountValue: "", maxDiscount: "", minOrderValue: "", activityScope: "universal",
+      countryScope: "", validFrom: "", validUntil: "", usageLimit: "",
+      usagePerGuest: "", applicableTiers: [], autoAssign: false, isActive: true
+    });
+  };
+
+  const handleSave = () => {
+    if (form.code.length < 6) {
+      alert("Voucher code must be at least 6 characters.");
+      return;
+    }
+    if (form.code.length > 12) {
+      alert("Voucher code must not exceed 12 characters.");
+      return;
+    }
+
+    const payload = {
+      title: form.title,
+      code: form.code.toUpperCase(),
+      discountType: form.discountType,
+      discountValue: parseFloat(form.discountValue),
+      maxDiscount: form.maxDiscount ? parseFloat(form.maxDiscount) : null,
+      minOrderValue: form.minOrderValue ? parseFloat(form.minOrderValue) : null,
+      activityScope: form.activityScope,
+      countryScope: form.countryScope ? form.countryScope : null,
+      validFrom: form.validFrom ? new Date(form.validFrom).toISOString() : undefined,
+      validUntil: form.validUntil ? new Date(form.validUntil).toISOString() : undefined,
+      usageLimit: form.usageLimit ? parseInt(form.usageLimit) : null,
+      usageLimitPerGuest: form.usagePerGuest ? parseInt(form.usagePerGuest) : 1,
+      applicableTiers: form.applicableTiers.length > 0 ? form.applicableTiers : [],
+      autoAssign: form.autoAssign,
+      isActive: form.isActive,
+    };
+
+    if (editModal) {
+      updateMut.mutate({ id: form.id, body: payload });
+    } else {
+      createMut.mutate(payload);
+    }
+  };
+
+  const [deleteConfirm, setDeleteConfirm] = useState<VoucherWithFinancials | null>(null);
+
+  const toggleMut = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      listingApi.patch(`/admin/vouchers/${id}`, { isActive }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-vouchers"] }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => listingApi.delete(`/admin/vouchers/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-vouchers"] });
+      setDeleteConfirm(null);
+      setSelected(null);
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.error?.message ?? err?.message ?? "Failed to delete voucher");
+    }
+  });
+
+  const handleDelete = () => {
+    if (!deleteConfirm) return;
+    deleteMut.mutate(deleteConfirm.id);
+  };
+
+  const columns: Column<VoucherWithFinancials>[] = [
+    {
+      key: "code",
+      label: "Code",
+      render: (v) => (
+        <div>
+          <span className="font-mono font-bold text-sm tracking-wider text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
+            {v.code}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: "discount",
+      label: "Discount",
+      render: (v) => (
+        <div>
+          <p className="font-semibold text-slate-900">
+            {v.discountType === "percentage"
+              ? `${v.discountValue}% off`
+              : formatCurrency(v.discountValue, "USD")}
+          </p>
+          {v.minOrderValue && (
+            <p className="text-xs text-slate-500">
+              Min. order: {formatCurrency(v.minOrderValue, "USD")}
+            </p>
+          )}
+          {v.maxDiscount && v.discountType === "percentage" && (
+            <p className="text-xs text-slate-500">
+              Max. discount: {formatCurrency(v.maxDiscount, "USD")}
+            </p>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "applicableFor",
+      label: "Applicable For",
+      render: (v) => {
+        const labels: Record<string, string> = {
+          universal: "Universal",
+          hotels: "Hotels",
+          apartments: "Apartments",
+          cars: "Cars",
+          hotels_apartments: "Hotels & Apartments",
+        };
+        return <span className="capitalize text-sm text-slate-700">{labels[v.activityScope || "universal"] || v.activityScope}</span>;
+      },
+    },
+    {
+      key: "countries",
+      label: "Applicable Countries",
+      render: (v) => {
+        if (!v.countryScope) return <span className="text-sm text-slate-700">🌍 All Countries</span>;
+        const countryName = countries.getName(v.countryScope, "en");
+        return (
+          <span className="text-sm text-slate-700">
+            {codeToFlag(v.countryScope)} {countryName ? `${countryName} (${v.countryScope.toUpperCase()})` : v.countryScope.toUpperCase()}
+          </span>
+        );
+      },
+    },
+    {
+      key: "applicableTiers",
+      label: "Applicable Tiers",
+      render: (v) => {
+        const tiers = v.applicableTiers ?? [];
+        if (tiers.length === 0) return <span className="text-sm text-slate-500">All Tiers</span>;
+        const tierColors: Record<string, string> = {
+          bronze: "bg-orange-100 text-orange-700",
+          silver: "bg-slate-100 text-slate-700",
+          gold: "bg-amber-100 text-amber-700",
+          diamond: "bg-blue-100 text-blue-700 border-blue-200",
+        };
+        return (
+          <div className="flex flex-wrap gap-1">
+            {tiers.map((tier: string) => (
+              <span key={tier} className={`inline-flex items-center rounded-full font-medium px-2 py-0.5 text-xs capitalize ${tierColors[tier] ?? "bg-slate-100 text-slate-600"}`}>
+                {tier}
+              </span>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
+      key: "usage",
+      label: "Usage",
+      render: (v) => (
+        <div>
+          <p className="text-sm font-medium">
+            {(v.redemptionCount ?? v.usageCount ?? 0).toLocaleString()}
+            {v.usageLimit ? ` / ${v.usageLimit.toLocaleString()}` : ""}
+          </p>
+          {v.usageLimit && (
+            <div className="mt-1 h-1.5 bg-slate-100 rounded-full overflow-hidden w-24">
+              <div
+                className="h-full bg-primary rounded-full"
+                style={{ width: `${Math.min(((v.redemptionCount ?? v.usageCount ?? 0) / v.usageLimit) * 100, 100)}%` }}
+              />
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "financial",
+      label: "Discount Given",
+      render: (v) => (
+        <div className="text-right">
+          <p className="text-sm font-semibold text-slate-900">
+            {formatCurrency(v.totalDiscountGiven ?? 0)}
+          </p>
+          {(v.avgDiscountPerRedemption ?? 0) > 0 && (
+            <p className="text-xs text-slate-500">
+              Avg: {formatCurrency(v.avgDiscountPerRedemption)}
+            </p>
+          )}
+        </div>
+      ),
+      align: "right",
+    },
+    {
+      key: "validity",
+      label: "Validity",
+      render: (v) => (
+        <div className="text-xs text-slate-600">
+          <p>{formatDate(v.validFrom)} →</p>
+          <p>{formatDate(v.validUntil)}</p>
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (v) => {
+        const { label, status } = getVoucherStatus(v);
+        return <Badge label={label} status={status} />;
+      },
+    },
+    {
+      key: "actions",
+      label: "",
+      align: "right",
+      render: (v) => (
+        <div className="flex justify-end items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          {hasManagePermission && (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleMut.mutate({ id: v.id, isActive: !v.isActive }); }}
+                className={`p-1.5 rounded-lg transition-colors ${v.isActive ? "text-success hover:bg-success/5" : "text-slate-400 hover:bg-slate-100"}`}
+                title={v.isActive ? "Deactivate" : "Activate"}
+              >
+                {v.isActive ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
+              </button>
+              <button
+                onClick={(e) => openEdit(v, e)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-slate-50 transition-colors"
+                title="Edit Voucher"
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteConfirm(v);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors"
+                title="Delete Voucher"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   return (
-    <div className="p-8 max-w-5xl">
-      <div className="flex items-center justify-between mb-1">
-        <h1 className="text-2xl font-bold text-gray-900">Vouchers</h1>
-        <Button onClick={() => { setShowForm((v) => !v); setFormError(null); }}>
-          {showForm ? "Cancel" : "Create Voucher"}
-        </Button>
-      </div>
-      <p className="text-sm text-gray-500 mb-8">
-        Create and manage discount vouchers for guests.
-      </p>
-
-      {successMsg && (
-        <p className="text-sm text-green-600 bg-green-50 border border-green-200 rounded-lg px-4 py-3 mb-5">{successMsg}</p>
-      )}
-
-      {/* Create form */}
-      {showForm && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-          <h2 className="font-semibold text-gray-900 mb-4 text-sm">New Voucher</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-            <FormField
-              label="Voucher code"
-              value={form.code}
-              onChange={(e) => updateField("code", e.target.value.toUpperCase())}
-              placeholder="e.g. SUMMER25"
-              maxLength={30}
-            />
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Discount type</label>
-              <select
-                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                value={form.discountType}
-                onChange={(e) => updateField("discountType", e.target.value)}
-              >
-                <option value="percentage">Percentage (%)</option>
-                <option value="fixed">Fixed amount</option>
-              </select>
-            </div>
-            <FormField
-              label={`Discount value (${form.discountType === "percentage" ? "%" : "amount"})`}
-              type="number"
-              value={form.discountValue}
-              onChange={(e) => updateField("discountValue", e.target.value)}
-              placeholder={form.discountType === "percentage" ? "e.g. 15" : "e.g. 1000"}
-              min="0"
-              step="0.01"
-            />
-            <FormField
-              label="Min order value (optional)"
-              type="number"
-              value={form.minOrderValue}
-              onChange={(e) => updateField("minOrderValue", e.target.value)}
-              placeholder="e.g. 5000"
-              min="0"
-            />
-            {form.discountType === "percentage" && (
-              <FormField
-                label="Max discount cap (optional)"
-                type="number"
-                value={form.maxDiscount}
-                onChange={(e) => updateField("maxDiscount", e.target.value)}
-                placeholder="e.g. 2000"
-                min="0"
-              />
-            )}
-            <FormField
-              label="Usage limit (optional)"
-              type="number"
-              value={form.usageLimit}
-              onChange={(e) => updateField("usageLimit", e.target.value)}
-              placeholder="Leave blank for unlimited"
-              min="1"
-            />
-            <FormField
-              label="Valid from"
-              type="datetime-local"
-              value={form.validFrom}
-              onChange={(e) => updateField("validFrom", e.target.value)}
-            />
-            <FormField
-              label="Valid until"
-              type="datetime-local"
-              value={form.validUntil}
-              onChange={(e) => updateField("validUntil", e.target.value)}
-            />
-          </div>
-
-          {formError && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{formError}</p>
-          )}
-
-          <div className="flex gap-3">
+    <div className="space-y-5 max-w-screen-xl">
+      <SectionHeader
+        title="Vouchers"
+        description={`${total.toLocaleString()} vouchers`}
+        action={
+          canCreateVoucher && (
             <Button
-              variant="secondary"
-              onClick={() => { setShowForm(false); setForm(EMPTY_FORM); setFormError(null); }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => createMutation.mutate()}
-              loading={createMutation.isPending}
+              variant="primary"
+              size="sm"
+              onClick={() => setAddModal(true)}
+              leftIcon={<Plus className="h-4 w-4" />}
             >
               Create Voucher
             </Button>
+          )
+        }
+      />
+
+      <Card padding="none">
+        <FilterBar
+          filters={[
+            {
+              key: "status",
+              label: "All Statuses",
+              value: statusFilter,
+              onChange: (v) => { setStatusFilter(v); setPage(1); },
+              options: [
+                { value: "active", label: "Active" },
+                { value: "paused", label: "Paused" },
+                { value: "expired", label: "Expired" },
+                { value: "exhausted", label: "Exhausted" },
+              ],
+            },
+          ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
+        />
+        <DataTable
+          columns={columns}
+          data={vouchersList}
+          loading={isLoading}
+          onRowClick={(v) => setSelected(v)}
+          emptyTitle="No vouchers found"
+          emptyDescription="Create your first promotional voucher."
+          emptyIcon={<Ticket className="h-10 w-10" />}
+        />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
+      </Card>
+
+      {/* Voucher Details Drawer */}
+      <SlideDrawer
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        title={`Voucher Details: ${selected?.code}`}
+        description={selected?.title || "Voucher configuration and usage details"}
+        width="md"
+      >
+        {selected && (
+          <div className="space-y-6">
+            {/* General Info */}
+            <div className="bg-slate-50/60 rounded-xl p-5 border border-slate-100 space-y-4">
+              <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Configuration Details</h3>
+              <InfoRow label="Title" value={selected.title || "—"} />
+              <InfoRow label="Voucher Code" value={<span className="font-mono font-bold text-sm tracking-wider text-slate-900 bg-slate-100 px-2 py-0.5 rounded">{selected.code}</span>} />
+              <InfoRow label="Discount Type" value={<span className="capitalize">{selected.discountType}</span>} />
+              <InfoRow label="Discount Value" value={selected.discountType === "percentage" ? `${selected.discountValue}%` : formatCurrency(selected.discountValue, "USD")} />
+              {selected.discountType === "percentage" && selected.maxDiscount && (
+                <InfoRow label="Max Discount Amount" value={formatCurrency(selected.maxDiscount, "USD")} />
+              )}
+              {selected.minOrderValue && (
+                <InfoRow label="Min Order Value" value={formatCurrency(selected.minOrderValue, "USD")} />
+              )}
+            </div>
+
+            {/* Eligibility & Target */}
+            <div className="bg-slate-50/60 rounded-xl p-5 border border-slate-100 space-y-4">
+              <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Target & Eligibility</h3>
+              <InfoRow
+                label="Applicable For"
+                value={(() => {
+                  const labels: Record<string, string> = {
+                    universal: "Universal (All Categories)",
+                    hotels: "Hotels Only",
+                    apartments: "Apartments Only",
+                    cars: "Car Rentals Only",
+                    hotels_apartments: "Hotels & Apartments",
+                  };
+                  return labels[selected.activityScope || "universal"] || selected.activityScope;
+                })()}
+              />
+              <InfoRow
+                label="Applicable Countries"
+                value={
+                  selected.countryScope ? (
+                    <span>
+                      {codeToFlag(selected.countryScope)} {countries.getName(selected.countryScope, "en")} ({selected.countryScope.toUpperCase()})
+                    </span>
+                  ) : (
+                    "🌍 All Countries"
+                  )
+                }
+              />
+              <InfoRow
+                label="Applicable Tiers"
+                value={
+                  selected.applicableTiers && selected.applicableTiers.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {selected.applicableTiers.map((tier) => {
+                        const tierColors: Record<string, string> = {
+                          bronze: "bg-orange-100 text-orange-700",
+                          silver: "bg-slate-100 text-slate-700",
+                          gold: "bg-amber-100 text-amber-700",
+                          diamond: "bg-blue-100 text-blue-700 border-blue-200",
+                        };
+                        return (
+                          <span key={tier} className={`inline-flex items-center rounded-full font-medium px-2 py-0.5 text-xs capitalize ${tierColors[tier] ?? "bg-slate-100 text-slate-600"}`}>
+                            {tier}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    "All Tiers"
+                  )
+                }
+              />
+              <InfoRow label="Auto Assign" value={selected.autoAssign ? "Enabled" : "Disabled"} />
+              <InfoRow
+                label="Status"
+                value={
+                  (() => {
+                    const { label, status } = getVoucherStatus(selected);
+                    return <Badge label={label} status={status} />;
+                  })()
+                }
+              />
+            </div>
+
+            {/* Limits & Validity */}
+            <div className="bg-slate-50/60 rounded-xl p-5 border border-slate-100 space-y-4">
+              <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Usage & Validity</h3>
+              <InfoRow label="Usage Limit" value={selected.usageLimit ? `${selected.usageLimit.toLocaleString()} total redemptions` : "Unlimited"} />
+              <InfoRow label="Usage Per Guest" value={selected.usageLimitPerGuest ? `${selected.usageLimitPerGuest.toLocaleString()} per user` : "Unlimited"} />
+              <InfoRow label="Max Redemptions Per User" value={selected.usageLimitPerGuest ? `${selected.usageLimitPerGuest.toLocaleString()} times` : "Unlimited"} />
+              <InfoRow label="Redeemed Count" value={`${(selected.redemptionCount ?? selected.usageCount ?? 0).toLocaleString()} times`} />
+              <InfoRow label="Valid From" value={formatDate(selected.validFrom)} />
+              <InfoRow label="Valid Until" value={formatDate(selected.validUntil)} />
+            </div>
+
+            {/* Financial Impact */}
+            <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-5 border border-amber-200 space-y-4">
+              <h3 className="text-sm font-semibold text-slate-900 border-b border-amber-200 pb-2 flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-amber-600" />
+                Financial Impact
+              </h3>
+              <InfoRow 
+                label="Total Discount Given" 
+                value={
+                  <span className="text-amber-600 font-bold">
+                    {formatCurrency(selected.totalDiscountGiven ?? 0)}
+                  </span>
+                } 
+              />
+              <InfoRow 
+                label="Avg Discount per Redemption" 
+                value={formatCurrency(selected.avgDiscountPerRedemption ?? 0)} 
+              />
+              <InfoRow 
+                label="Total Booking Value" 
+                value={formatCurrency(selected.totalBookingValue ?? 0)} 
+              />
+              <InfoRow 
+                label="Revenue Impact" 
+                value={
+                  <span className={`font-medium ${(selected.totalDiscountGiven ?? 0) > 0 ? "text-amber-600" : "text-slate-500"}`}>
+                    {(selected.totalBookingValue ?? 0) > 0 
+                      ? `${((selected.totalDiscountGiven ?? 0) / (selected.totalBookingValue ?? 1) * 100).toFixed(1)}% discount rate`
+                      : "No redemptions yet"
+                    }
+                  </span>
+                } 
+              />
+            </div>
+          </div>
+        )}
+      </SlideDrawer>
+
+      {/* Create / Edit voucher modal */}
+      <ActionModal
+        open={addModal || editModal}
+        onClose={handleCancel}
+        title={editModal ? "Edit Voucher" : "Create Voucher"}
+        description={editModal ? "Update promotional voucher configuration." : "Configure a new promotional voucher code."}
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={handleCancel}>Cancel</Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={createMut.isPending || updateMut.isPending}
+              onClick={handleSave}
+              disabled={!form.title || !form.code || !form.discountValue || !form.validFrom || !form.validUntil}
+            >
+              {editModal ? "Save Changes" : "Create Voucher"}
+            </Button>
+          </>
+        }
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <Input
+              id="voucher-title"
+              label="Voucher Title"
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="Summer Special 20%"
+              required
+            />
+          </div>
+          <div className="col-span-2">
+            <Input
+              id="voucher-code"
+              label="Voucher Code"
+              value={form.code}
+              onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
+              placeholder="SUMMER20"
+              className="font-mono uppercase tracking-wider"
+              maxLength={12}
+              required
+            />
+          </div>
+          <CustomDropdown
+            id="discount-type"
+            label="Discount Type"
+            placeholder="Select discount type..."
+            options={[
+              { value: "percentage", label: "Percentage (%)" },
+              { value: "fixed", label: "Fixed Amount" },
+            ]}
+            value={form.discountType}
+            onChange={(val: any) => setForm((f) => ({ ...f, discountType: val as "percentage" | "fixed" }))}
+          />
+          <Input
+            id="discount-value"
+            label={form.discountType === "percentage" ? "Discount %" : "Discount Amount"}
+            type="number"
+            value={form.discountValue}
+            onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
+            placeholder={form.discountType === "percentage" ? "20" : "50"}
+            required
+          />
+          <Input
+            id="max-discount"
+            label="Max Discount Amount"
+            type="number"
+            value={form.maxDiscount}
+            onChange={(e) => setForm((f) => ({ ...f, maxDiscount: e.target.value }))}
+            placeholder="e.g. 100"
+            hint="Only for percentage discounts"
+            disabled={form.discountType !== "percentage"}
+          />
+          <Input
+            id="min-order-value"
+            label="Min Order Value"
+            type="number"
+            value={form.minOrderValue}
+            onChange={(e) => setForm((f) => ({ ...f, minOrderValue: e.target.value }))}
+            placeholder="e.g. 50"
+            hint="Minimum spend required"
+          />
+          <CustomDropdown
+            id="activity-scope"
+            label="Applicable For"
+            placeholder="Select application scope..."
+            options={[
+              { value: "universal", label: "Universal" },
+              { value: "hotels", label: "Hotels" },
+              { value: "apartments", label: "Apartments" },
+              { value: "cars", label: "Cars" },
+              { value: "hotels_apartments", label: "Hotels & Apartments" },
+            ]}
+            value={form.activityScope}
+            onChange={(val: any) => setForm((f) => ({ ...f, activityScope: val }))}
+          />
+
+
+          <div className="col-span-2">
+            <CustomDropdown
+              id="country-scope"
+              label="Country Scope"
+              placeholder="Select country scope..."
+              options={COUNTRY_OPTIONS}
+              value={form.countryScope || "all"}
+              onChange={(val: any) =>
+                setForm((f) => ({
+                  ...f,
+                  countryScope: val === "all" ? "" : val,
+                }))
+              }
+              variant="blue"
+            />
+          </div>
+          <Input
+            id="usage-limit"
+            label="Usage Limit"
+            type="number"
+            value={form.usageLimit}
+            onChange={(e) => setForm((f) => ({ ...f, usageLimit: e.target.value }))}
+            placeholder="100"
+            hint="Leave empty for unlimited"
+          />
+          <Input
+            id="usage-per-guest"
+            label="Usage Per Guest"
+            type="number"
+            value={form.usagePerGuest}
+            onChange={(e) => setForm((f) => ({ ...f, usagePerGuest: e.target.value }))}
+            placeholder="1"
+            hint="Max redemptions per user"
+          />
+          <DatePicker
+            id="valid-from"
+            label="Valid From"
+            placeholder="Select start date"
+            value={form.validFrom}
+            onChange={(val) => setForm((f) => ({ ...f, validFrom: val }))}
+            minDate={todayYMD}
+            required
+          />
+          <DatePicker
+            id="valid-until"
+            label="Valid Until"
+            placeholder="Select end date"
+            value={form.validUntil}
+            onChange={(val) => setForm((f) => ({ ...f, validUntil: val }))}
+            minDate={form.validFrom || todayYMD}
+            required
+          />
+          <div className="col-span-2">
+            <p className="block text-sm font-medium text-slate-700 mb-1">Applicable Tiers</p>
+            <div className="flex gap-4">
+              {["bronze", "silver", "gold", "diamond"].map((tier) => (
+                <label key={tier} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.applicableTiers.includes(tier)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setForm((f) => ({ ...f, applicableTiers: [...f.applicableTiers, tier] }));
+                      } else {
+                        setForm((f) => ({ ...f, applicableTiers: f.applicableTiers.filter((t) => t !== tier) }));
+                      }
+                    }}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm capitalize text-slate-700">{tier}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="col-span-2 flex gap-6 mt-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.autoAssign}
+                onChange={(e) => setForm((f) => ({ ...f, autoAssign: e.target.checked }))}
+                className="w-4 h-4"
+              />
+              <span className="text-sm font-medium text-slate-700">Auto Assign</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
+                className="w-4 h-4"
+              />
+              <span className="text-sm font-medium text-slate-700">Active Status</span>
+            </label>
           </div>
         </div>
-      )}
+      </ActionModal>
 
-      {/* Vouchers table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Code</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Discount</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Usage</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Valid period</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <tr>
-                <td colSpan={5} className="text-center py-12 text-gray-400">Loading…</td>
-              </tr>
-            ) : error ? (
-              <tr>
-                <td colSpan={5} className="text-center py-12 text-red-400">Failed to load vouchers.</td>
-              </tr>
-            ) : !data?.vouchers.length ? (
-              <tr>
-                <td colSpan={5} className="text-center py-12 text-gray-400">
-                  No vouchers yet. Create one above to get started.
-                </td>
-              </tr>
-            ) : data.vouchers.map((v) => {
-              const badge = statusBadge(v);
-              return (
-                <tr key={v.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition">
-                  <td className="px-4 py-3">
-                    <p className="font-mono font-semibold text-gray-900">{v.code}</p>
-                    {v.minOrderValue !== null && (
-                      <p className="text-xs text-gray-500">Min order: {v.minOrderValue}</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-gray-900">
-                      {v.discountType === "percentage"
-                        ? `${v.discountValue}%`
-                        : `${v.discountValue} (fixed)`}
-                    </p>
-                    {v.maxDiscount !== null && (
-                      <p className="text-xs text-gray-500">Cap: {v.maxDiscount}</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="text-gray-900">
-                      {v.usageCount} / {v.usageLimit !== null ? v.usageLimit : "unlimited"}
-                    </p>
-                    {v.redemptionCount !== v.usageCount && (
-                      <p className="text-xs text-gray-500">{v.redemptionCount} redemptions</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">
-                    <p>{formatDate(v.validFrom)}</p>
-                    <p className="text-xs text-gray-500">to {formatDate(v.validUntil)}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${badge.cls}`}>
-                      {badge.label}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        open={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={handleDelete}
+        title="Delete Voucher"
+        description={`Are you sure you want to permanently delete the voucher "${deleteConfirm?.code}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleteMut.isPending}
+      />
     </div>
   );
 }

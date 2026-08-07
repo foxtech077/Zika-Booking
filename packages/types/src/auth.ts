@@ -8,7 +8,7 @@ export interface RegisterPayload {
   email: string;
   password: string;
   confirmPassword: string;
-  userType: "guest" | "provider";
+  userType?: "user";
   businessName?: string;
   country?: string;
 }
@@ -34,7 +34,6 @@ export interface ResetPasswordPayload {
 
 export interface GoogleOAuthPayload {
   idToken: string;
-  userType?: "guest" | "provider";
   businessName?: string;
   country?: string;
 }
@@ -42,7 +41,6 @@ export interface GoogleOAuthPayload {
 export interface AppleOAuthPayload {
   authorizationCode: string;
   identityToken: string;
-  userType?: "guest" | "provider";
   businessName?: string;
   country?: string;
 }
@@ -99,9 +97,10 @@ export interface WebAuthnChallengeResponse {
 // ── JWT payload shapes ───────────────────────────────────────────────────────
 
 export interface JwtPayload {
-  sub: string;        // userId
-  type: "guest" | "provider";
+  sub: string;        // userId (or anon_* id for anonymous tokens)
+  type: "anonymous" | "user";
   status: string;
+  country?: string | null;  // ISO 3166-1 alpha-2
   jti: string;        // JWT ID (unique per token)
   iat: number;
   exp: number;
@@ -119,6 +118,7 @@ export interface AdminSessionPayload {
   sub: string;        // adminUserId
   role: string;
   sessionId: string;
+  countryScope?: string[];
   iat: number;
   exp: number;
 }

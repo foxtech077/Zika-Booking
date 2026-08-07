@@ -1,3 +1,184 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ── CSS Custom Properties ──────────────────────────────────────────────────── */
+:root {
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 68px;
+  --topbar-height: 60px;
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Base ────────────────────────────────────────────────────────────────────── */
+@layer base {
+  * { @apply border-border; }
+
+  html {
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body { @apply bg-surface-subtle text-slate-900; }
+
+  /* Dark mode */
+  .dark body { @apply bg-slate-950 text-slate-100; }
+}
+
+/* ── Utility Classes ─────────────────────────────────────────────────────────── */
+@layer utilities {
+  /* Hide scrollbar but keep scrollability */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+
+  /* Custom thin scrollbar */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #e2e8f0 transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #e2e8f0;
+    border-radius: 3px;
+  }
+
+  /* Glass effect */
+  .glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  /* Sidebar background gradient */
+  .sidebar-bg {
+    background: linear-gradient(180deg, #022C22 0%, #033D2F 50%, #064E3B 100%);
+    color: #FFFFFF;
+  }
+
+  /* Active menu item */
+  .nav-active {
+    background-color: #059669;
+    border-radius: 0.375rem; /* rounded-md */
+    color: #FFFFFF;
+  }
+
+  /* Section header */
+  .header-green {
+    color: #10B981;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* Icon color */
+  .icon-green {
+    color: #10B981;
+  }
+
+  /* Text gradient */
+  .text-gradient-primary {
+    background: linear-gradient(135deg, #10b981, #047857);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Dot pulse (for live indicator) */
+  .dot-pulse { position: relative; }
+  .dot-pulse::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: inherit;
+    animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+
+  @keyframes ping {
+    75%, 100% { transform: scale(2.5); opacity: 0; }
+  }
+
+  /* Card hover lift */
+  .card-hover { @apply transition-all duration-200 hover:shadow-card-md hover:-translate-y-px; }
+
+  /* Focus ring */
+  .focus-ring { @apply focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary; }
+
+  /* Gradient backgrounds */
+  .gradient-primary { background: linear-gradient(135deg, #10b981 0%, #047857 100%); }
+
+  /* Status dot colors */
+  .status-dot-green { @apply bg-success; }
+  .status-dot-red   { @apply bg-danger; }
+  .status-dot-amber { @apply bg-warning; }
+  .status-dot-blue  { @apply bg-info; }
+  .status-dot-gray  { @apply bg-slate-400; }
+
+  /* Number formatting */
+  .tabular { font-variant-numeric: tabular-nums; }
+}
+
+/* ── Print Styles ───────────────────────────────────────────────────────────── */
+@page {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+@media print {
+  /* Hide sidebar, topbar */
+  aside, header {
+    display: none !important;
+  }
+
+  /* Override the Shell layout */
+  #app-shell {
+    display: block !important;
+    overflow: visible !important;
+    height: auto !important;
+    transform: scale(0.78);
+    transform-origin: top left;
+    width: 128%;
+  }
+
+  #app-shell > div {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Make main content full width */
+  main {
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0.5rem !important;
+    overflow: visible !important;
+  }
+
+  /* Compact cards and stat rows */
+  .grid {
+    gap: 0.5rem !important;
+  }
+
+  /* Smaller table text */
+  table {
+    font-size: 0.7rem !important;
+  }
+
+  table th, table td {
+    padding: 0.25rem 0.5rem !important;
+  }
+
+  /* Compact section spacing */
+  .space-y-6 > * + * {
+    margin-top: 0.75rem !important;
+  }
+}

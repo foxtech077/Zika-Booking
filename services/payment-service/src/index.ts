@@ -1,8 +1,16 @@
+import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
+import { registerBullBoard, startJobs, stopJobs } from "./jobs.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { paymentMethodRoutes } from "./routes/payment-methods.js";
+import { adminPaymentRoutes } from "./routes/admin-payments.js";
+import { merchantRoutes } from "./routes/merchants.js";
+import { payoutRoutes } from "./routes/payouts.js";
+import { prisma } from "./lib/prisma.js";
 
 const PORT = Number(process.env["PORT"] ?? 3004);
 const HOST = process.env["HOST"] ?? "0.0.0.0";
@@ -13,9 +21,73 @@ async function build() {
     trustProxy: true,
   });
 
+  // ── Swgger API documentation ─────────────────────────────────────────────
+  await app.register(swagger, {
+    openapi: {
+      info: {
+        title: "Kainook Payment Service API",
+        description: "API documentation for Kainook Payment Service",
+        version: "0.0.1",
+      },
+      servers: [
+        {
+          url: `http://localhost:${PORT}`,
+          description: "Local development server",
+        },
+        {
+          url: "https://api.kainook.com",
+          description: "Production server",
+        },
+      ],
+      tags: [
+        { name: "Payments", description: "Payment initiation, status lookup and refund management" },
+        { name: "Payment Methods", description: "Saved payment method management — add, list and remove" },
+        { name: "Webhooks", description: "Stripe webhook event handling (internal)" },
+      ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: "http",
+            scheme: "bearer",
+            bearerFormat: "JWT",
+            description: "Enter your Bearer Access Token (without 'Bearer ' prefix)",
+          },
+        },
+      },
+      security: [
+        {
+          bearerAuth: [],
+        },
+      ],
+    },
+  });
+
+  await app.register(swaggerUi, {
+    routePrefix: "/docs",
+    uiConfig: {
+      docExpansion: "list",
+      deepLinking: false,
+    },
+  });
+
   // ── CORS ──────────────────────────────────────────────────────────────────
+  const isDev = process.env["NODE_ENV"] !== "production";
+  const LOCALHOST_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3002",
+    "http://localhost:3005",
+  ];
   await app.register(cors, {
-    origin: "*",
+    origin: isDev
+      ? true
+      : [
+        process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
+        process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
+        process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005",
+        "https://kainook.com",
+        ...LOCALHOST_ORIGINS,
+      ],
+    credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
   });
 
@@ -25,9 +97,8 @@ async function build() {
     "application/json",
     { parseAs: "buffer" },
     (req, body, done) => {
-      // For the Stripe webhook route, we need the raw Buffer.
-      // For all other routes, parse as JSON.
-      if (req.routeOptions?.url === "/payments/stripe/webhook") {
+      if (req.routeOptions?.url === "/stripe/webhook") {
+        (req as any).rawBody = body;  //  save raw buffer here
         done(null, body);
         return;
       }
@@ -43,11 +114,6 @@ async function build() {
   // ── Health check ──────────────────────────────────────────────────────────
   app.get("/health", async () => ({ status: "ok", service: "payment-service", timestamp: new Date().toISOString() }));
 
-  // ── Route plugins ─────────────────────────────────────────────────────────
-  await app.register(paymentRoutes);
-  await app.register(webhookRoutes);
-  await app.register(paymentMethodRoutes);
-
   // ── Global error handler ──────────────────────────────────────────────────
   app.setErrorHandler((error: any, _req, reply) => {
     app.log.error(error);
@@ -61,6 +127,17 @@ async function build() {
     });
   });
 
+  // ── Route plugins ─────────────────────────────────────────────────────────
+  await app.register(paymentRoutes,);
+  await app.register(webhookRoutes,);
+  await app.register(paymentMethodRoutes,);
+  await app.register(adminPaymentRoutes,);
+  await app.register(merchantRoutes,);
+  await app.register(payoutRoutes,);
+
+  // ── Bull Board UI for background jobs ──────────────────────────────────────
+  registerBullBoard(app);
+
   return app;
 }
 
@@ -70,8 +147,13 @@ async function main() {
   // ── Graceful shutdown ─────────────────────────────────────────────────────
   const shutdown = async (signal: string) => {
     app.log.info(`[Payment Service] ${signal} received. Shutting down gracefully…`);
-    await app.close();
-    process.exit(0);
+    try {
+      await stopJobs();
+      await app.close();
+      await prisma.$disconnect();
+    } finally {
+      process.exit(0);
+    }
   };
 
   process.on("SIGINT", () => void shutdown("SIGINT"));
@@ -80,6 +162,9 @@ async function main() {
   try {
     await app.listen({ port: PORT, host: HOST });
     console.log(`[Payment Service] listening on ${HOST}:${PORT}`);
+
+    await startJobs();
+    console.log(`[Payment Service] Background jobs registered.`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

@@ -16,13 +16,19 @@ export const registerSchema = z
     email: z.string().email("Please enter a valid email address").toLowerCase(),
     password: passwordSchema,
     confirmPassword: z.string(),
-    userType: z.enum(["guest", "provider"]),
     businessName: z.string().min(1, "Business name is required").max(255).optional(),
+    phone: z
+      .string()
+      .regex(/^\+[1-9]\d{6,14}$/, "Phone number must be in international format (e.g. +254712345678)")
+      .optional()
+      .or(z.literal("")),
     country: z
       .string()
       .length(2, "Please select your country")
       .toUpperCase()
       .optional(),
+    acceptedTerms: z.boolean().optional(),
+    acceptedPrivacy: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.password !== data.confirmPassword) {
@@ -31,22 +37,6 @@ export const registerSchema = z
         message: "Passwords do not match",
         path: ["confirmPassword"],
       });
-    }
-    if (data.userType === "provider") {
-      if (!data.businessName) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Business name is required",
-          path: ["businessName"],
-        });
-      }
-      if (!data.country) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Please select your country",
-          path: ["country"],
-        });
-      }
     }
   });
 
@@ -96,9 +86,12 @@ export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 // ── Google OAuth ──────────────────────────────────────────────────────────────
 export const googleOAuthSchema = z.object({
   idToken: z.string().min(1),
-  userType: z.enum(["guest", "provider"]).optional(),
   businessName: z.string().max(255).optional(),
   country: z.string().length(2).toUpperCase().optional(),
+  phone: z
+    .string()
+    .regex(/^\+[1-9]\d{6,14}$/, "Phone must be in international format")
+    .optional(),
 });
 
 export type GoogleOAuthInput = z.infer<typeof googleOAuthSchema>;
@@ -107,9 +100,12 @@ export type GoogleOAuthInput = z.infer<typeof googleOAuthSchema>;
 export const appleOAuthSchema = z.object({
   authorizationCode: z.string().min(1),
   identityToken: z.string().min(1),
-  userType: z.enum(["guest", "provider"]).optional(),
   businessName: z.string().max(255).optional(),
   country: z.string().length(2).toUpperCase().optional(),
+  phone: z
+    .string()
+    .regex(/^\+[1-9]\d{6,14}$/, "Phone must be in international format")
+    .optional(),
 });
 
 export type AppleOAuthInput = z.infer<typeof appleOAuthSchema>;
@@ -137,31 +133,3 @@ export const recoveryCodeSchema = z.object({
 });
 
 export type RecoveryCodeInput = z.infer<typeof recoveryCodeSchema>;
-
-// ── Account type update (post-OAuth) ─────────────────────────────────────────
-export const accountTypeSchema = z
-  .object({
-    userType: z.enum(["guest", "provider"]),
-    businessName: z.string().min(1).max(255).optional(),
-    country: z.string().length(2).toUpperCase().optional(),
-  })
-  .superRefine((data, ctx) => {
-    if (data.userType === "provider") {
-      if (!data.businessName) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Business name is required",
-          path: ["businessName"],
-        });
-      }
-      if (!data.country) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Please select your country",
-          path: ["country"],
-        });
-      }
-    }
-  });
-
-export type AccountTypeInput = z.infer<typeof accountTypeSchema>;

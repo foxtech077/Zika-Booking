@@ -3,13 +3,15 @@
 // Run: pnpm db:migrate   →  applies pending migrations to the DB
 
 generator client {
-  provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
+  provider      = "prisma-client-js"
+  output        = "../src/generated"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["auth"]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -21,16 +23,21 @@ enum UserStatus {
   active
   suspended
   banned
+
+  @@schema("auth")
 }
 
 enum UserType {
-  guest
-  provider
+  user
+
+  @@schema("auth")
 }
 
 enum OAuthProvider {
   google
   apple
+
+  @@schema("auth")
 }
 
 enum LoyaltyTier {
@@ -38,11 +45,15 @@ enum LoyaltyTier {
   silver
   gold
   diamond
+
+  @@schema("auth")
 }
 
 enum TokenType {
   email_verification
   password_reset
+
+  @@schema("auth")
 }
 
 enum EmailLogType {
@@ -53,12 +64,16 @@ enum EmailLogType {
   account_suspended
   account_reinstated
   account_banned
+
+  @@schema("auth")
 }
 
 enum EmailLogStatus {
   sent
   failed
   bounced
+
+  @@schema("auth")
 }
 
 enum AdminRole {
@@ -68,6 +83,8 @@ enum AdminRole {
   sales
   support
   finance
+
+  @@schema("auth")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -81,9 +98,10 @@ model User {
   email           String        @unique @db.VarChar(255)
   passwordHash    String?       @db.VarChar(255)   // null for OAuth-only accounts
   status          UserStatus    @default(pending_verification)
-  userType        UserType
-  businessName    String?       @db.VarChar(255)   // providers only
-  country         String?       @db.Char(2)         // providers only (ISO 3166-1)
+  userType        UserType      @default(user)
+  businessName    String?       @db.VarChar(255)   // host onboarding details
+  country         String?       @db.Char(2)         // ISO 3166-1
+  phone           String?       @db.VarChar(30)
   emailVerified   Boolean       @default(false)
   emailVerifiedAt DateTime?
   oauthProvider   OAuthProvider?
@@ -91,17 +109,49 @@ model User {
   oauthRevoked    Boolean       @default(false)
   currentTier     LoyaltyTier   @default(bronze)
   loyaltyPoints   Int           @default(0)
+  photoUrl        String?       @db.Text
+  termsAcceptedAt   DateTime?
+  termsVersion      String?     @db.VarChar(20)
+  privacyAcceptedAt DateTime?
+  privacyVersion    String?     @db.VarChar(20)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
   // Relations
-  verificationTokens VerificationToken[]
-  sessions           Session[]
-  emailLogs          EmailLog[]
+  verificationTokens   VerificationToken[]
+  sessions             Session[]
+  emailLogs            EmailLog[]
+  notifications        Notification[]
+  deviceTokens         DeviceToken[]
+  loyaltyTransactions  LoyaltyTransaction[]
 
   @@unique([oauthProvider, oauthSub])
   @@index([email])
   @@index([status])
+  @@schema("auth")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Loyalty transaction ledger
+// ─────────────────────────────────────────────────────────────────────────────
+
+model LoyaltyTransaction {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  // earned | redeemed | reversed_earned | refunded_redeemed | admin_adjustment
+  type        String   @db.VarChar(30)
+  points      Int
+  balanceAfter Int     @map("balance_after")
+  bookingId   String?  @map("booking_id") @db.VarChar(255)
+  description String?  @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([bookingId])
+  @@map("loyalty_transactions")
+  @@schema("auth")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,6 +172,7 @@ model VerificationToken {
 
   @@index([userId, tokenType])
   @@index([expiresAt])
+  @@schema("auth")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -139,6 +190,7 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+  @@schema("auth")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -158,6 +210,7 @@ model EmailLog {
 
   @@index([userId])
   @@index([recipient])
+  @@schema("auth")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -185,6 +238,7 @@ model AdminUser {
 
   @@index([email])
   @@index([role])
+  @@schema("auth")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -203,6 +257,7 @@ model AdminSession {
   expiresAt    DateTime
 
   @@index([adminUserId])
+  @@schema("auth")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -218,6 +273,7 @@ model AdminRecoveryCode {
   createdAt   DateTime  @default(now())
 
   @@index([adminUserId])
+  @@schema("auth")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -240,4 +296,38 @@ model AuditLog {
   @@index([adminId])
   @@index([targetId])
   @@index([timestamp])
+  @@schema("auth")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Notifications
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   @db.VarChar(50)
+  title     String   @db.VarChar(100)
+  body      String   @db.Text
+  isRead    Boolean  @default(false)
+  data      Json?    @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@schema("auth")
+}
+
+model DeviceToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @db.VarChar(500)
+  platform  String   @db.VarChar(10)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, token])
+  @@index([userId])
+  @@schema("auth")
 }

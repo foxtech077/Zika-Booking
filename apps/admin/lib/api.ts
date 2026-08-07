@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const api = axios.create({
-  baseURL: "/api",
+  baseURL: process.env.NEXT_PUBLIC_API_URL,
   withCredentials: true,
   timeout: 15_000,
 });
@@ -26,3 +26,34 @@ api.interceptors.request.use((config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
+
+// Helper to identify auth flow requests
+export function isAuthFlowRequest(url: string | undefined): boolean {
+  if (!url) return false;
+  // Consider any admin auth endpoint as part of the auth flow
+  return /\/admin\/auth/.test(url);
+}
+
+api.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    const status = error?.response?.status;
+    const code = error?.response?.data?.error?.code ?? "";
+    const isAuthFlow = isAuthFlowRequest(error?.config?.url);
+
+    const isAuthFailure =
+      status === 401 ||
+      (status === 403 && ["ACCOUNT_BANNED", "ACCOUNT_SUSPENDED", "ACCOUNT_INACTIVE"].includes(code));
+
+    const isLoginPage = typeof window !== "undefined" && window.location.pathname.includes("/login");
+
+    if (isAuthFailure && !isLoginPage && typeof window !== "undefined") {
+      // Clear all admin session data then hard‑navigate to login
+      sessionStorage.removeItem("zika:admin_session");
+      sessionStorage.removeItem("zika:admin_auth");
+      window.location.href = "/admin/login";
+    }
+
+    return Promise.reject(error);
+  }
+);

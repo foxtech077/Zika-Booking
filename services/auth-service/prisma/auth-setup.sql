@@ -1,9 +1,21 @@
+-- Accent-insensitive search support (unaccent + pg_trgm for partial matching).
+-- Installed into public (where postgis lives) because the search service
+-- references them as public.f_unaccent / public.gin_trgm_ops.
+CREATE EXTENSION IF NOT EXISTS unaccent SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public;
+
+-- unaccent(text) is not IMMUTABLE on every server, but index expressions must
+-- be immutable, so the search service uses this stable wrapper.
+CREATE OR REPLACE FUNCTION public.f_unaccent(text) RETURNS text
+LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+AS 'SELECT public.unaccent($1)';
+
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'UserStatus') THEN
     CREATE TYPE "UserStatus" AS ENUM ('pending_verification', 'active', 'suspended', 'banned');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'UserType') THEN
-    CREATE TYPE "UserType" AS ENUM ('guest', 'provider');
+    CREATE TYPE "UserType" AS ENUM ('user');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'OAuthProvider') THEN
     CREATE TYPE "OAuthProvider" AS ENUM ('google', 'apple');

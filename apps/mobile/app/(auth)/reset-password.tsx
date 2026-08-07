@@ -6,19 +6,22 @@ import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
 import { FormField } from "../../components/ui/FormField";
 import { Button } from "../../components/ui/Button";
+import { handleRoleAndStatusRedirect } from "./login";
 import type { ApiResponse, AuthResponse } from "@zika/types";
+import { useKeyboard } from "../../hooks/useKeyboard";
 
 export default function ResetPasswordScreen() {
-  // Token comes from deep link: zikabooking://reset-password?token=...
+  // Token comes from deep link: kainook://reset-password?token=...
   const { token } = useLocalSearchParams<{ token?: string }>();
   const [form, setForm] = useState({ password: "", confirmPassword: "" });
+  const isKeyboardOpen = useKeyboard();
   const [errors, setErrors] = useState<{ password?: string; confirmPassword?: string; general?: string }>({});
   const setAuth = useAuthStore((s) => s.setAuth);
 
   const mutation = useMutation({
     mutationFn: async () => {
       if (!token) throw new Error("Missing token");
-      const res = await api.post<ApiResponse<AuthResponse & { message: string }>>("/auth/reset-password", {
+      const res = await api.post<ApiResponse<AuthResponse & { message: string }>>("auth/reset-password", {
         token, password: form.password, confirmPassword: form.confirmPassword,
       });
       if (!res.data.success) throw res.data;
@@ -27,7 +30,7 @@ export default function ResetPasswordScreen() {
     onSuccess: async (data) => {
       await setAuth(data.user, data.tokens.accessToken);
       Alert.alert("Success", "Your password has been updated. You're now signed in.");
-      router.replace("/(tabs)");
+      handleRoleAndStatusRedirect(data.user);
     },
     onError: (err: unknown) => {
       const data = (err as { error?: { code?: string; message?: string; fields?: Record<string, string> } }).error;
@@ -60,7 +63,16 @@ export default function ResetPasswordScreen() {
   }
 
   return (
-    <KeyboardAvoidingView className="flex-1 bg-white" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView
+      className="flex-1 bg-white"
+      behavior={
+        Platform.OS === "ios"
+          ? "padding"
+          : isKeyboardOpen
+            ? "height"
+            : undefined
+      }
+    >
       <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 80 }} keyboardShouldPersistTaps="handled">
         <Text className="text-3xl font-bold text-gray-900 mb-1">Set new password</Text>
         <Text className="text-base text-gray-500 mb-8">Choose a strong password for your account.</Text>

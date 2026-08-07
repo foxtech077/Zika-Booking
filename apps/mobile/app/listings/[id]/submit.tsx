@@ -2,7 +2,9 @@ import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Sty
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Feather } from "@expo/vector-icons";
 import { listingApi } from "../../../lib/listing-api";
+import { K } from "../../../constants/theme";
 
 export default function SubmitListingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -28,27 +30,11 @@ export default function SubmitListingScreen() {
       await listingApi.post(endpoint);
     },
     onSuccess: () => {
-      if (isAutoActivate) {
-        const titleMsg = isCar ? "Your vehicle is live!" : "You're live!";
-        const bodyMsg = isCar
-          ? "Your car rental is now visible to guests on ZikaBooking."
-          : "Your apartment is now visible to guests on ZikaBooking.";
-        Alert.alert(
-          titleMsg,
-          bodyMsg,
-          [{ text: "View my listings", onPress: () => router.replace("/listings") }]
-        );
-      } else {
-        Alert.alert(
-          "Submitted!",
-          "Your listing has been submitted for review. We'll notify you within 48 hours.",
-          [{ text: "OK", onPress: () => router.replace("/listings") }]
-        );
-      }
+      router.replace(`/listings/${id}/success` as any);
     },
     onError: (err: unknown) => {
       const errData = (err as any)?.response?.data?.error;
-      const msg = errData?.message ?? (isAutoActivate ? "Activation failed." : "Submission failed.");
+      const msg = errData?.message ?? (isAutoActivate ? "Activation failed. Please check all required fields." : "Submission failed. Please try again.");
       const failures: string[] = errData?.details?.failures ?? [];
       Alert.alert(
         isAutoActivate ? "Cannot activate" : "Submission failed",
@@ -58,16 +44,22 @@ export default function SubmitListingScreen() {
   });
 
   if (isLoading) {
-    return <View style={styles.center}><ActivityIndicator size="large" color="#1a73e8" /></View>;
+    return (
+      <View style={s.center}>
+        <ActivityIndicator size="large" color={K.colors.accent} />
+      </View>
+    );
   }
   if (!listing) return null;
 
   const photoCount = (listing.photos ?? []).length;
   const docTypes = (listing.documents ?? []).map((d: any) => d.documentType);
 
+  // Location is stored as plain text (address + town + country). No geocoding.
   const apartmentChecklist = [
-    { label: "Property name", ok: !!listing.name },
-    { label: "Address (geocoded)", ok: !!listing.address && !!listing.lat && !!listing.lng },
+    { label: "Apartment name", ok: !!listing.name },
+    { label: "Address & town", ok: !!listing.address && !!listing.town },
+    { label: "Country", ok: !!listing.country },
     { label: "Price & currency", ok: !!listing.pricePerNight && !!listing.currency },
     { label: "Cancellation policy", ok: !!listing.cancellationPolicy },
     { label: "Max guests (≥ 1)", ok: !!listing.maxGuests && listing.maxGuests >= 1 },
@@ -75,11 +67,12 @@ export default function SubmitListingScreen() {
   ];
 
   const hotelChecklist = [
-    { label: "Property name", ok: !!listing.name },
+    { label: "Hotel name", ok: !!listing.name },
     { label: "Room type", ok: !!listing.roomType },
-    { label: "Number of units", ok: !!listing.unitCount },
+    { label: "Number of units (≥ 1)", ok: !!listing.unitCount && listing.unitCount >= 1 },
     { label: "Price & currency", ok: !!listing.pricePerNight && !!listing.currency },
-    { label: "Address (geocoded)", ok: !!listing.address && !!listing.lat && !!listing.lng },
+    { label: "Address & town", ok: !!listing.address && !!listing.town },
+    { label: "Country", ok: !!listing.country },
     { label: "Cancellation policy", ok: !!listing.cancellationPolicy },
     { label: "At least 1 photo", ok: photoCount > 0 },
     { label: "Business licence", ok: docTypes.includes("business_licence") },
@@ -88,22 +81,33 @@ export default function SubmitListingScreen() {
   ];
 
   const carChecklist = [
+    { label: "Listing title", ok: !!listing.name },
     { label: "Car make and model", ok: !!listing.carMake && !!listing.carModel },
     { label: "Year of manufacture", ok: !!listing.carYear },
-    { label: "Daily rate & currency", ok: !!listing.pricePerNight && !!listing.currency },
-    { label: "Minimum driver age", ok: !!listing.minDriverAge },
-    { label: "Address (geocoded)", ok: !!listing.address && !!listing.lat && !!listing.lng },
+    { label: "Vehicle category", ok: !!listing.carCategory },
+    { label: "Daily rate & currency", ok: !!listing.pricePerDay && !!listing.currency },
+    { label: "Minimum driver age", ok: !!listing.minimumDriverAge },
+    { label: "Insurance type", ok: !!listing.insuranceType },
+    { label: "Address & town", ok: !!listing.address && !!listing.town },
+    { label: "Country", ok: !!listing.country },
     { label: "Cancellation policy", ok: !!listing.cancellationPolicy },
+    {
+      label: "Extra km rate (required for limited mileage)",
+      ok: listing.mileagePolicy !== "limited" || !!listing.extraKmRate,
+    },
+    { label: "Vehicle registration doc", ok: docTypes.includes("vehicle_registration") },
+    { label: "Insurance certificate", ok: docTypes.includes("insurance_certificate") },
     { label: "At least 1 photo", ok: photoCount > 0 },
   ];
 
   const checklist = isCar ? carChecklist : isApartment ? apartmentChecklist : hotelChecklist;
-
   const allOk = checklist.every((c) => c.ok);
 
   const submitLabel = isAutoActivate
     ? "Submit & Go Live"
-    : (listing.status === "rejected" ? "Resubmit for Review" : "Submit for Review");
+    : listing.status === "rejected"
+    ? "Resubmit for Review"
+    : "Submit for Review";
 
   const confirmTitle = isAutoActivate ? "Go live?" : "Submit for Review?";
   const confirmMsg = isCar
@@ -113,23 +117,21 @@ export default function SubmitListingScreen() {
     : "Once submitted, you won't be able to edit this listing until the review is complete. Submit now?";
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+    <SafeAreaView style={s.container}>
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
 
-        <Text style={styles.title}>
-          {isCar ? "Review & Go Live" : isApartment ? "Review & Go Live" : "Review & Submit"}
+        <Text style={s.title}>
+          {isCar || isApartment ? "Review & Go Live" : "Review & Submit"}
         </Text>
-        <Text style={styles.subtitle}>
-          {isCar
-            ? "Your vehicle will activate instantly once all requirements are met."
-            : isApartment
-            ? "Your apartment will activate instantly once all requirements are met."
+        <Text style={s.subtitle}>
+          {isCar || isApartment
+            ? "Your listing will activate instantly once all requirements are met."
             : "Check all requirements before submitting for admin review."}
         </Text>
 
         {/* Listing summary */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Listing summary</Text>
+        <View style={s.card}>
+          <Text style={s.sectionTitle}>Listing summary</Text>
           <Row label="Name" value={listing.name ?? "—"} />
           <Row label="Category" value={listing.category} />
           {isCar ? (
@@ -139,7 +141,7 @@ export default function SubmitListingScreen() {
               <Row label="Body type" value={listing.bodyType ?? "—"} />
               <Row label="Transmission" value={listing.transmission ?? "—"} />
               <Row label="Seats" value={listing.seats?.toString() ?? "—"} />
-              <Row label="Min driver age" value={listing.minDriverAge ? `${listing.minDriverAge} years` : "—"} />
+              <Row label="Min driver age" value={listing.minimumDriverAge ? `${listing.minimumDriverAge} years` : "—"} />
             </>
           ) : isApartment ? (
             <>
@@ -149,7 +151,7 @@ export default function SubmitListingScreen() {
               {listing.longStayEnabled && (
                 <Row
                   label="Long-stay discount"
-                  value={`${listing.longStayDiscountValue}${listing.longStayDiscountType === "percentage" ? "%" : ""} on ${listing.longStayMinNights}+ nights`}
+                  value={`${listing.longStayDiscountValue}${listing.longStayDiscountType === "percentage" ? "%" : ""} on ${listing.longStayMinNights ?? "?"}+ nights`}
                 />
               )}
             </>
@@ -168,37 +170,50 @@ export default function SubmitListingScreen() {
         </View>
 
         {/* Requirements checklist */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>
+        <View style={s.card}>
+          <Text style={s.sectionTitle}>
             {isAutoActivate ? "Activation requirements" : "Submission requirements"}
           </Text>
           {checklist.map((item) => (
-            <View key={item.label} style={styles.checkRow}>
-              <Text style={item.ok ? styles.checkOk : styles.checkFail}>{item.ok ? "✓" : "✗"}</Text>
-              <Text style={[styles.checkLabel, !item.ok && styles.checkLabelFail]}>{item.label}</Text>
+            <View key={item.label} style={s.checkRow}>
+              <Feather
+                name={item.ok ? "check-circle" : "x-circle"}
+                size={16}
+                color={item.ok ? K.colors.accent : K.colors.error}
+              />
+              <Text style={[s.checkLabel, !item.ok && s.checkLabelFail]}>{item.label}</Text>
             </View>
           ))}
         </View>
 
         {/* Hotel rejection history */}
-        {!isAutoActivate && listing.status === "rejected" && (listing.rejectionReasons?.length > 0 || listing.rejectionNote) && (
-          <View style={styles.rejectionCard}>
-            <Text style={styles.rejectionTitle}>Previous rejection feedback</Text>
-            {listing.rejectionReasons?.length > 0 && (
-              <Text style={styles.rejectionReasons}>{(listing.rejectionReasons ?? []).join(", ")}</Text>
-            )}
-            {listing.rejectionNote && <Text style={styles.rejectionNote}>{listing.rejectionNote}</Text>}
+        {!isAutoActivate &&
+          listing.status === "rejected" &&
+          (listing.rejectionReasons?.length > 0 || listing.rejectionNote) && (
+            <View style={s.rejectionCard}>
+              <Feather name="alert-triangle" size={16} color={K.colors.error} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.rejectionTitle}>Previous rejection feedback</Text>
+                {listing.rejectionReasons?.length > 0 && (
+                  <Text style={s.rejectionBody}>{(listing.rejectionReasons ?? []).join(", ")}</Text>
+                )}
+                {listing.rejectionNote && <Text style={s.rejectionBody}>{listing.rejectionNote}</Text>}
+              </View>
+            </View>
+          )}
+
+        {!allOk && (
+          <View style={s.warningBanner}>
+            <Feather name="alert-circle" size={15} color="#92400E" />
+            <Text style={s.warningText}>
+              Complete all requirements above before {isAutoActivate ? "activating" : "submitting"}.
+              Tap "Edit Listing" below to fill in any missing details.
+            </Text>
           </View>
         )}
 
-        {!allOk && (
-          <Text style={styles.warningNote}>
-            Complete all requirements above before {isAutoActivate ? "activating" : "submitting"}. Tap "Edit Listing" to fill in missing details.
-          </Text>
-        )}
-
         <TouchableOpacity
-          style={[styles.submitBtn, (!allOk || actionMutation.isPending) && styles.submitBtnDisabled]}
+          style={[s.submitBtn, (!allOk || actionMutation.isPending) && s.submitBtnDisabled]}
           onPress={() => {
             if (!allOk) return;
             Alert.alert(confirmTitle, confirmMsg, [
@@ -207,15 +222,23 @@ export default function SubmitListingScreen() {
             ]);
           }}
           disabled={!allOk || actionMutation.isPending}
+          activeOpacity={0.85}
         >
-          {actionMutation.isPending
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <Text style={styles.submitBtnText}>{submitLabel}</Text>}
+          {actionMutation.isPending ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <View style={s.submitBtnInner}>
+              <Text style={s.submitBtnText}>{submitLabel}</Text>
+              <Feather name={isAutoActivate ? "zap" : "send"} size={17} color="#fff" />
+            </View>
+          )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.editBtn} onPress={() => router.back()}>
-          <Text style={styles.editBtnText}>← Edit Listing</Text>
+        <TouchableOpacity style={s.editBtn} onPress={() => router.back()} activeOpacity={0.8}>
+          <Feather name="edit-2" size={15} color={K.colors.accent} />
+          <Text style={s.editBtnText}>Edit Listing</Text>
         </TouchableOpacity>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -223,37 +246,79 @@ export default function SubmitListingScreen() {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue}>{value}</Text>
+    <View style={s.row}>
+      <Text style={s.rowLabel}>{label}</Text>
+      <Text style={s.rowValue}>{value}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f9fafb" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  scroll: { padding: 16, paddingBottom: 40 },
-  title: { fontSize: 22, fontWeight: "700", color: "#111827", marginBottom: 6 },
-  subtitle: { fontSize: 14, color: "#6b7280", marginBottom: 20, lineHeight: 20 },
-  card: { backgroundColor: "#fff", borderRadius: 12, padding: 16, borderWidth: 1, borderColor: "#e5e7eb", marginBottom: 16 },
-  sectionTitle: { fontSize: 15, fontWeight: "600", color: "#111827", marginBottom: 12 },
-  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: "#f3f4f6" },
-  rowLabel: { fontSize: 14, color: "#6b7280", flex: 1 },
-  rowValue: { fontSize: 14, color: "#111827", fontWeight: "500", flex: 1, textAlign: "right" },
-  checkRow: { flexDirection: "row", alignItems: "center", paddingVertical: 6 },
-  checkOk: { fontSize: 15, color: "#16a34a", width: 24, fontWeight: "700" },
-  checkFail: { fontSize: 15, color: "#dc2626", width: 24, fontWeight: "700" },
-  checkLabel: { fontSize: 14, color: "#374151" },
-  checkLabelFail: { color: "#dc2626" },
-  rejectionCard: { backgroundColor: "#fef2f2", borderRadius: 12, padding: 16, borderWidth: 1, borderColor: "#fca5a5", marginBottom: 16 },
-  rejectionTitle: { fontSize: 14, fontWeight: "600", color: "#991b1b", marginBottom: 6 },
-  rejectionReasons: { fontSize: 13, color: "#7f1d1d", marginBottom: 4 },
-  rejectionNote: { fontSize: 13, color: "#7f1d1d" },
-  warningNote: { fontSize: 13, color: "#d97706", marginBottom: 16, lineHeight: 18 },
-  submitBtn: { backgroundColor: "#1a73e8", borderRadius: 12, paddingVertical: 16, alignItems: "center", marginBottom: 12 },
-  submitBtnDisabled: { backgroundColor: "#93c5fd" },
-  submitBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-  editBtn: { alignItems: "center", paddingVertical: 12 },
-  editBtnText: { color: "#1a73e8", fontWeight: "500", fontSize: 15 },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: K.colors.bgLight },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: K.colors.bgLight },
+  scroll: { padding: 20, paddingBottom: 40 },
+
+  title: { fontSize: K.font.xxl, fontWeight: "800", color: K.colors.textDark, marginBottom: 6, letterSpacing: -0.3 },
+  subtitle: { fontSize: K.font.sm, color: K.colors.textMuted, marginBottom: 22, lineHeight: 20 },
+
+  card: {
+    backgroundColor: K.colors.bgCard,
+    borderRadius: K.radius.xl,
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: K.colors.border,
+    marginBottom: 16,
+    ...K.shadow.sm,
+  },
+  sectionTitle: { fontSize: 10, fontWeight: "800", color: K.colors.textMuted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 },
+
+  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: K.colors.border },
+  rowLabel: { fontSize: K.font.sm, color: K.colors.textMuted, flex: 1 },
+  rowValue: { fontSize: K.font.sm, color: K.colors.textDark, fontWeight: "600", flex: 1, textAlign: "right" },
+
+  checkRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: K.colors.border },
+  checkLabel: { fontSize: K.font.sm, color: K.colors.textMid, flex: 1, fontWeight: "500" },
+  checkLabelFail: { color: K.colors.error },
+
+  rejectionCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    backgroundColor: "#FEF2F2",
+    borderRadius: K.radius.lg,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    marginBottom: 16,
+  },
+  rejectionTitle: { fontSize: K.font.sm, fontWeight: "700", color: K.colors.error, marginBottom: 4 },
+  rejectionBody: { fontSize: K.font.xs, color: "#7f1d1d", lineHeight: 18 },
+
+  warningBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "#FFFBEB",
+    borderRadius: K.radius.md,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    marginBottom: 18,
+  },
+  warningText: { flex: 1, fontSize: K.font.xs, color: "#92400E", fontWeight: "600", lineHeight: 18 },
+
+  submitBtn: {
+    backgroundColor: K.colors.darkGreen,
+    borderRadius: K.radius.lg,
+    paddingVertical: 16,
+    alignItems: "center",
+    marginBottom: 12,
+    ...K.shadow.md,
+  },
+  submitBtnDisabled: { opacity: 0.45 },
+  submitBtnInner: { flexDirection: "row", alignItems: "center", gap: 8 },
+  submitBtnText: { color: "#fff", fontWeight: "700", fontSize: K.font.base },
+
+  editBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 12 },
+  editBtnText: { color: K.colors.accent, fontWeight: "600", fontSize: K.font.sm },
 });

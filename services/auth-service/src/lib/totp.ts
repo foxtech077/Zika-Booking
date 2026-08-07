@@ -1,9 +1,9 @@
-import { authenticator } from "otplib";
+﻿import { authenticator } from "otplib";
 import { encryptAes256, decryptAes256, hashToken, generateCode } from "./crypto";
 import QRCode from "qrcode";
 
 authenticator.options = {
-  window: 1, // allow ±1 time step for clock drift (BR-1.10 / UC-1.10 E1)
+  window: Number(process.env["TOTP_WINDOW"] ?? 2), // allow ±2 time steps for clock drift to handle minor local sync issues
 };
 
 /** Generate a new TOTP secret, returning the base32 string. */
@@ -28,7 +28,7 @@ export function decryptTotpSecret(encrypted: string): string {
 
 /** Generate the otpauth URI for QR code rendering. */
 export function buildOtpAuthUri(email: string, secret: string): string {
-  return authenticator.keyuri(email, "ZikaBooking", secret);
+  return authenticator.keyuri(email, "Kainook", secret);
 }
 
 /** Render the otpauth URI as a base64-encoded PNG QR code. */

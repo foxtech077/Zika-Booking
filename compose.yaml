@@ -1,24 +1,74 @@
 services:
-  db:
-    container_name: zika-db
-    image: docker.io/postgres:18-alpine
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ultrasonicboom
-      POSTGRES_DB: zika_db_local
-    ports:
-      - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql
+  # redis:
+  #   image: docker.io/redis:7-alpine
+  #   container_name: zika-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - zika-redis-data:/data
 
-  redis:
-    image: redis:7-alpine
-    container_name: zika-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - zika-redis-data:/data
+  # db:
+  #   container_name: zika-booking
+  #   image: docker.io/postgis/postgis:18-3.6-alpine
+  #   environment:
+  #     POSTGRES_USER: zikauser
+  #     POSTGRES_PASSWORD: zikapassword
+  #     POSTGRES_DB: zikadb_local
+  #   ports:
+  #     - "5434:5432"
+  #   volumes:
+  #     - db_data:/var/lib/postgresql
 
-volumes:
-  db_data:
-  zika-redis-data:
+  auth-service:
+    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/auth-service:latest
+    container_name: zika-auth
+    restart: always
+    ports:
+      - "3001:3001"
+    env_file:
+      - services/auth-service/.env
+    network_mode: host
+
+  listing-service:
+    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/listing-service:latest
+    container_name: zika-listing
+    restart: always
+    ports:
+      - "3003:3003"
+    env_file:
+      - services/listing-service/.env
+    network_mode: host
+
+  payment-service:
+    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/payment-service:latest
+    container_name: zika-payment
+    restart: always
+    ports:
+      - "3004:3004"
+    env_file:
+      - services/payment-service/.env
+    network_mode: host
+
+  web:
+    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/web:latest
+    container_name: zika-web
+    restart: always
+    ports:
+      - "3000:3000"
+    env_file:
+      - apps/web/.env
+    network_mode: host
+
+  admin:
+    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/admin:latest
+    container_name: zika-admin
+    restart: always
+    ports:
+      - "3002:3002"
+    env_file:
+      - apps/admin/.env
+    network_mode: host
+
+# volumes:
+  # zika-redis-data:
+  # db_data:

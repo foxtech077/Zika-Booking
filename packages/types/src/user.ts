@@ -1,5 +1,7 @@
+import type { AdminRole } from "./admin-auth";
+
 export type UserStatus = "pending_verification" | "active" | "suspended" | "banned";
-export type UserType = "guest" | "provider";
+export type UserType = "user";
 export type OAuthProvider = "google" | "apple";
 export type LoyaltyTier = "bronze" | "silver" | "gold" | "diamond";
 
@@ -32,15 +34,12 @@ export interface PublicUser {
   emailVerified: boolean;
   currentTier: LoyaltyTier;
   loyaltyPoints: number;
+  photoUrl?: string | null;
+  requiresTermsAcceptance?: boolean;
+  requiresPrivacyAcceptance?: boolean;
+  termsAcceptedAt?: string | Date | null;
+  privacyAcceptedAt?: string | Date | null;
 }
-
-export type AdminRole =
-  | "super_admin"
-  | "admin"
-  | "country_manager"
-  | "sales"
-  | "support"
-  | "finance";
 
 export interface AdminUser {
   id: string;

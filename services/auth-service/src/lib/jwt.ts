@@ -8,12 +8,29 @@ function getSecret(key: string): Uint8Array {
   return encoder.encode(process.env[key] ?? "");
 }
 
-// ── Guest / Provider tokens ───────────────────────────────────────────────────
+// ── User / Anonymous tokens ──────────────────────────────────────────────────
 
 export async function signAccessToken(
   payload: Omit<JwtPayload, "iat" | "exp" | "jti">,
 ): Promise<string> {
   const ttl = Number(process.env["JWT_ACCESS_TTL_SECONDS"] ?? 900);
+  return new SignJWT({ ...payload, jti: generateCode(8) })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(`${ttl}s`)
+    .sign(getSecret("JWT_SECRET"));
+}
+
+/**
+ * Stateless anonymous token for anonymous checkouts (see anonymous_booking).
+ * Same signing key/algorithm as a regular access token so listing and payment
+ * services validate it with no changes, but minted with its own TTL that must
+ * span the whole lock → payment flow (anonymous users have no refresh token).
+ */
+export async function signAnonymousToken(
+  payload: Omit<JwtPayload, "iat" | "exp" | "jti">,
+): Promise<string> {
+  const ttl = Number(process.env["JWT_ANONYMOUS_ACCESS_TTL_SECONDS"] ?? 1800);
   return new SignJWT({ ...payload, jti: generateCode(8) })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -33,11 +50,10 @@ export function generateRefreshToken(): string {
 }
 
 // ── Admin intermediate token (between password and TOTP/FIDO2 steps) ─────────
-
 export async function signIntermediateToken(
   payload: Omit<AdminIntermediatePayload, "iat" | "exp">,
 ): Promise<string> {
-  const ttl = Number(process.env["ADMIN_INTERMEDIATE_TTL_SECONDS"] ?? 300);
+  const ttl = Number(process.env["ADMIN_INTERMEDIATE_TTL_SECONDS"] ?? 3600);
   return new SignJWT(payload as Record<string, unknown>)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()

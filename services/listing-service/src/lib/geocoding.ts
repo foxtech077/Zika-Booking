@@ -1,4 +1,4 @@
-const GOOGLE_MAPS_API_KEY = process.env["GOOGLE_MAPS_API_KEY"] ?? "";
+﻿const GOOGLE_MAPS_API_KEY = process.env["GOOGLE_MAPS_API_KEY"] ?? "";
 const GOOGLE_CONFIGURED = GOOGLE_MAPS_API_KEY && GOOGLE_MAPS_API_KEY !== "placeholder";
 
 export interface GeocodingResult {
@@ -6,6 +6,7 @@ export interface GeocodingResult {
   lng: number;
   formattedAddress: string;
   town: string;
+  neighborhood: string;
   country: string;
 }
 
@@ -23,6 +24,8 @@ interface NominatimResult {
     state?: string;
     country_code?: string;
     country?: string;
+    neighbourhood?: string;
+    suburb?: string;
   };
 }
 
@@ -34,7 +37,7 @@ async function geocodeViaNominatim(query: string): Promise<GeocodingResult | nul
   url.searchParams.set("addressdetails", "1");
 
   const res = await fetch(url.toString(), {
-    headers: { "User-Agent": "ZikaBooking/1.0 (dev)" },
+    headers: { "User-Agent": "Kainook/1.0 (dev)" },
     signal: AbortSignal.timeout(8_000),
   });
   if (!res.ok) return null;
@@ -45,6 +48,7 @@ async function geocodeViaNominatim(query: string): Promise<GeocodingResult | nul
 
   const addr = r.address ?? {};
   const town = addr.city ?? addr.town ?? addr.village ?? addr.county ?? addr.state ?? "";
+  const neighborhood = addr.neighbourhood ?? addr.suburb ?? "";
   const country = (addr.country_code ?? "").toUpperCase();
 
   return {
@@ -52,6 +56,7 @@ async function geocodeViaNominatim(query: string): Promise<GeocodingResult | nul
     lng: parseFloat(r.lon),
     formattedAddress: r.display_name,
     town,
+    neighborhood,
     country,
   };
 }
@@ -117,6 +122,10 @@ function parseGeoResult(result: GoogleGeoResult): GeocodingResult {
     components.find((c) => c.types.includes("locality"))?.long_name ??
     components.find((c) => c.types.includes("administrative_area_level_2"))?.long_name ??
     "";
+  const neighborhood =
+    components.find((c) => c.types.includes("neighborhood"))?.long_name ??
+    components.find((c) => c.types.includes("sublocality"))?.long_name ??
+    "";
   const country =
     components.find((c) => c.types.includes("country"))?.short_name ?? "";
 
@@ -125,6 +134,7 @@ function parseGeoResult(result: GoogleGeoResult): GeocodingResult {
     lng: result.geometry.location.lng,
     formattedAddress: result.formatted_address,
     town,
+    neighborhood,
     country,
   };
 }

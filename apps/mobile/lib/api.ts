@@ -1,19 +1,10 @@
 import axios from "axios";
-import Constants from "expo-constants";
 import { useAuthStore } from "../store/auth";
 
 const getBaseUrl = () => {
-  // Always prefer the Expo dev server host so that any phone scanning the QR
-  // code automatically reaches the correct machine — no hardcoded IPs needed.
-  const host = Constants.expoConfig?.hostUri?.split(":")[0];
-  const isIP = host && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
-  if (isIP && host !== "localhost" && host !== "127.0.0.1") {
-    return `http://${host}:3001`;
-  }
-  // Fallback to the env var (useful for tunnel mode / production / standalone builds)
   const envUrl = process.env["EXPO_PUBLIC_API_URL"];
-  if (envUrl) return envUrl;
-  return "http://localhost:3001";
+  const base = envUrl ?? "https://api.kainook.com/auth";
+  return base.endsWith("/") ? base : `${base}/`;
 };
 
 const BASE_URL = getBaseUrl();
@@ -28,21 +19,50 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken;
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  const fullUrl = `${config.baseURL ?? BASE_URL}${config.url ?? ""}`;
+  console.log(`[AUTH-API] ▶ ${(config.method ?? "GET").toUpperCase()} ${fullUrl}`);
+  if (config.data) console.log("[AUTH-API] Request body:", JSON.stringify(config.data, null, 2));
   return config;
 });
 
-// On 401, try to refresh, then retry once
+const ACCOUNT_CODES = ["ACCOUNT_BANNED", "ACCOUNT_SUSPENDED", "ACCOUNT_INACTIVE", "INVALID_SESSION", "SESSION_EXPIRED"];
+
+function isAccountRevoked(error: unknown): boolean {
+  const res = (error as any)?.response;
+  if (!res) return false;
+  const code: string = res.data?.error?.code ?? "";
+  return res.status === 403 && ACCOUNT_CODES.includes(code);
+}
+
+// On 401, try to refresh then retry once.
+// On 403 with account-revocation codes, clear auth immediately.
 let refreshing: Promise<void> | null = null;
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    const fullUrl = `${res.config.baseURL ?? BASE_URL}${res.config.url ?? ""}`;
+    console.log(`[AUTH-API] ✅ ${res.status} ${fullUrl}`);
+    return res;
+  },
   async (error) => {
+    const config = error.config ?? {};
+    const fullUrl = `${config.baseURL ?? BASE_URL}${config.url ?? ""}`;
+    console.log(`[AUTH-API] ❌ ERROR on ${(config.method ?? "GET").toUpperCase()} ${fullUrl}`);
+    console.log("[AUTH-API] HTTP status:", error?.response?.status);
+    console.log("[AUTH-API] Response body:", JSON.stringify(error?.response?.data, null, 2));
+    console.log("[AUTH-API] Error message:", error?.message);
+
+    if (isAccountRevoked(error)) {
+      await useAuthStore.getState().clearAuth();
+      return Promise.reject(error);
+    }
+
     const original = error.config as (typeof error.config) & { _retry?: boolean };
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
       if (!refreshing) {
         refreshing = (async () => {
           try {
-            const res = await axios.post(`${BASE_URL}/auth/refresh`, {}, { withCredentials: true });
+            const res = await axios.post(`${BASE_URL}auth/refresh`, {}, { withCredentials: true });
             const token = (res.data as { data: { tokens: { accessToken: string } } }).data.tokens.accessToken;
             const { user } = useAuthStore.getState();
             if (user) await useAuthStore.getState().setAuth(user, token);

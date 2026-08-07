@@ -1,17 +1,42 @@
 import { useState } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, Alert,
+  View,
+  Text,
+  Image,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  StyleSheet,
+  Dimensions,
+  Modal,
+  FlatList,
+  ImageBackground,
 } from "react-native";
-import { Link, router } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Link, router, useLocalSearchParams } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
 import { registerSchema } from "@zika/validators";
 import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
-import { FormField } from "../../components/ui/FormField";
-import { Button } from "../../components/ui/Button";
+import { handleRoleAndStatusRedirect, GoogleSignInButton } from "./login";
 import type { ApiResponse, PublicUser } from "@zika/types";
+import { useKeyboard } from "../../hooks/useKeyboard";
+import { ALL_COUNTRIES, POPULAR_COUNTRIES, type CountryData } from "../../constants/countries";
 
-type UserType = "guest" | "provider";
+const { height: SCREEN_H } = Dimensions.get("window");
+
+const GREEN = "#024622";
+const ACCENT = "#1D8D2B";
+const TEAL = "#0D7377";      // provider accent tint
+const TEXT = "#111827";
+const MUTED = "#6B7280";
+const BORDER = "#E5E7EB";
+const INPUT_BG = "#F3F4F6";
+const ERR = "#EF4444";
 
 interface FieldErrors {
   firstName?: string;
@@ -21,74 +46,128 @@ interface FieldErrors {
   confirmPassword?: string;
   businessName?: string;
   country?: string;
+  phone?: string;
   general?: string;
 }
 
 export default function RegisterScreen() {
   const setAuth = useAuthStore((s) => s.setAuth);
-  const [userType, setUserType] = useState<UserType>("guest");
+  const setLocalCurrency = useAuthStore((s) => s.setLocalCurrency);
+  const isKeyboardOpen = useKeyboard();
+
+  const params = useLocalSearchParams<{ userType?: string }>();
+  const [userType, setUserType] = useState<"guest" | "provider">(
+    params.userType === "provider" ? "provider" : "guest"
+  );
   const [form, setForm] = useState({
-    firstName: "", lastName: "", email: "",
-    password: "", confirmPassword: "",
-    businessName: "", country: "",
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    businessName: "",
+    country: "",
+    phone: "",
   });
   const [errors, setErrors] = useState<FieldErrors>({});
-  const [submitted, setSubmitted] = useState(false);
+  // Privacy Policy is accepted at registration; the Terms & Conditions are
+  // accepted later, at payment. A passive "by signing up you agree" notice is
+  // not an auditable acceptance, so this is an explicit tick and the value is
+  // sent to the API to be recorded, not merely enforced in the UI.
+  const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
+  const [showPass, setShowPass] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [countryModalVisible, setCountryModalVisible] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
+  const [selectedCountry, setSelectedCountry] = useState<CountryData | null>(null);
 
-  const set = (key: keyof typeof form) => (val: string) =>
-    setForm((prev) => ({ ...prev, [key]: val }));
-  const clearError = (key: keyof FieldErrors) =>
+  const set = (key: keyof typeof form) => (v: string) =>
+    setForm((prev) => ({ ...prev, [key]: v }));
+
+  const clearErr = (key: keyof FieldErrors) =>
     setErrors((prev) => ({ ...prev, [key]: undefined }));
 
+  // ── Mutation ────────────────────────────────────────────────────────────────
   const registerMutation = useMutation({
     mutationFn: async () => {
       const payload = {
-        ...form,
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        email: form.email.trim(),
+        password: form.password,
+        confirmPassword: form.confirmPassword,
         userType,
-        businessName: userType === "provider" ? (form.businessName || undefined) : undefined,
-        country: userType === "provider" ? (form.country || undefined) : undefined,
+        businessName: userType === "provider" ? form.businessName.trim() || undefined : undefined,
+        country: form.country || undefined,
+        phone: userType === "provider" ? form.phone.trim() || undefined : undefined,
+        acceptedPrivacy: agreedToPrivacy,
       };
-      const res = await api.post<ApiResponse<{ message?: string; user?: PublicUser; tokens?: { accessToken: string } }>>("/auth/register", payload);
+      const res = await api.post<ApiResponse<{
+        message?: string;
+        user?: PublicUser;
+        tokens?: { accessToken: string };
+      }>>("auth/register", payload);
       return res.data;
     },
     onSuccess: async (data) => {
       if (data.success && data.data?.user && data.data?.tokens) {
         await setAuth(data.data.user, data.data.tokens.accessToken);
-        router.replace("/(tabs)");
+        handleRoleAndStatusRedirect(data.data.user);
       } else {
-        setSubmitted(true);
+        router.push({ pathname: "/(auth)/verify-pending", params: { email: form.email } });
       }
     },
     onError: (err: unknown) => {
-      const axiosErr = err as { message?: string; code?: string; config?: { url?: string; baseURL?: string }; response?: { data?: ApiResponse<unknown> } };
-      const data = axiosErr.response?.data;
-      if (data && !data.success) {
-        const fields = data.error.fields ?? {};
-        setErrors({ ...fields, general: data.error.fields ? undefined : data.error.message });
+      const data = (err as any)?.response?.data;
+      if (data && !data.success && data.error && typeof data.error === "object") {
+        const e = data.error as { code?: string; message?: string; fields?: Record<string, string> };
+        const fields = e.fields ?? {};
+        const hasF = Object.keys(fields).length > 0;
+        setErrors({ ...fields, general: hasF ? undefined : (e.message ?? "Something went wrong.") });
       } else {
-        const details = __DEV__
-          ? `\n\n[Dev Details]\nURL: ${axiosErr.config?.baseURL ?? api.defaults.baseURL}${axiosErr.config?.url ?? ""}\nError: ${axiosErr.message ?? "Unknown Network Error"}\nCode: ${axiosErr.code ?? "Unknown Code"}`
-          : "";
-        setErrors({ general: `Something went wrong. Please check your connection and try again.${details}` });
+        setErrors({ general: "Something went wrong. Please check your connection and try again." });
       }
     },
   });
 
+  // ── Country ──────────────────────────────────────────────────────────────────
+  const handleSelectCountry = (c: CountryData) => {
+    setSelectedCountry(c);
+    set("country")(c.code);
+    clearErr("country");
+    void setLocalCurrency(c.currency);
+    setCountryModalVisible(false);
+    setCountrySearch("");
+  };
+
+  const filteredCountries = ALL_COUNTRIES.filter(
+    (c) =>
+      c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+      c.code.toLowerCase().includes(countrySearch.toLowerCase()),
+  );
+
+  // ── Validation ───────────────────────────────────────────────────────────────
   function validate(): boolean {
-    const dataToValidate = {
-      ...form,
+    const payload = {
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      email: form.email.trim(),
+      password: form.password,
+      confirmPassword: form.confirmPassword,
       userType,
-      businessName: userType === "provider" ? (form.businessName || undefined) : undefined,
-      country: userType === "provider" ? (form.country || undefined) : undefined,
+      businessName: userType === "provider" ? form.businessName.trim() || undefined : undefined,
+      country: form.country || undefined,
+      phone: userType === "provider" ? form.phone.trim() || undefined : undefined,
     };
-    const result = registerSchema.safeParse(dataToValidate);
+    const result = registerSchema.safeParse(payload);
     if (!result.success) {
-      const fieldErrors: FieldErrors = {};
+      const fe: FieldErrors = {};
       for (const issue of result.error.issues) {
-        const key = issue.path[0] as keyof FieldErrors;
-        if (key && !fieldErrors[key]) fieldErrors[key] = issue.message;
+        const k = issue.path[0] as keyof FieldErrors;
+        if (k && !fe[k]) fe[k] = issue.message;
       }
-      setErrors(fieldErrors);
+      fe.general = "Please fix the errors above and try again.";
+      setErrors(fe);
       return false;
     }
     setErrors({});
@@ -96,186 +175,618 @@ export default function RegisterScreen() {
   }
 
   function handleSubmit() {
-    if (validate()) registerMutation.mutate();
+    try {
+      if (validate()) registerMutation.mutate();
+    } catch {
+      setErrors({ general: "An unexpected error occurred. Please try again." });
+    }
   }
 
-  if (submitted) {
-    return (
-      <View className="flex-1 bg-white items-center justify-center px-6">
-        <Text className="text-3xl mb-4">✉️</Text>
-        <Text className="text-2xl font-bold text-gray-900 text-center mb-2">Check your email</Text>
-        <Text className="text-base text-gray-500 text-center mb-6">
-          We've sent a verification link to{"\n"}
-          <Text className="font-semibold text-gray-800">{form.email}</Text>
-        </Text>
-        <Button
-          title="Resend email"
-          variant="ghost"
-          onPress={() => router.push({ pathname: "/(auth)/resend-verification" as any, params: { email: form.email } })}
-        />
-        <Link href="/(auth)/login" className="mt-4 text-primary font-semibold text-base text-center">
-          Back to Sign In
-        </Link>
-      </View>
-    );
-  }
+  // ── Hero colours change by account type ─────────────────────────────────────
+  const isProvider = userType === "provider";
+  const heroBg = isProvider ? "#011F2E" : GREEN;
+  const heroAccent = isProvider ? TEAL : ACCENT;
+  const btnColor = isProvider ? "#0D7377" : GREEN;
+  const heroTagline = isProvider ? "List your property, grow your business" : "Discover & book premium stays";
+  const heroTitle = isProvider ? "Partner Host" : "Traveller";
 
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-white"
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    <SafeAreaView
+      style={ss.root}
+      edges={Platform.OS === "android" ? ["top", "bottom"] : ["top"]}
     >
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 24, paddingTop: 60 }} keyboardShouldPersistTaps="handled">
-        {/* Header */}
-        <Text className="text-3xl font-bold text-gray-900 mb-1">Create account</Text>
-        <Text className="text-base text-gray-500 mb-6">Join ZikaBooking and start exploring.</Text>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : isKeyboardOpen
+              ? "height"
+              : undefined
+        }
+      >
+        {/* Back button (fixed / floating) */}
+        <TouchableOpacity style={ss.backBtn} onPress={() => router.back()}>
+          <Ionicons name="chevron-back" size={24} color="#fff" />
+        </TouchableOpacity>
 
-        {/* Account type selector */}
-        <View className="flex-row mb-6 rounded-xl overflow-hidden border border-gray-200">
-          {(["guest", "provider"] as UserType[]).map((type) => (
+        <ScrollView
+          style={{
+            flex: 1,
+            backgroundColor: "#fff",
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+          }}
+          contentContainerStyle={ss.formContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── Hero section ── */}
+          <ImageBackground
+            source={require("../../assets/splash.png")}
+            style={[ss.hero, { height: Math.round(SCREEN_H * 0.43) }]}
+            resizeMode="contain"
+          >
+            <View style={ss.heroOverlay} />
+          </ImageBackground>
+
+          <View style={{ paddingHorizontal: 24, marginTop: -30 }}>
+            <Text style={ss.cardTitle}>Create Account</Text>
+            {/* ── Account type tabs ── */}
+            <View style={ss.tabRow}>
+              <TouchableOpacity
+                style={[ss.tab, userType === "guest" && ss.tabActive]}
+                onPress={() => { setUserType("guest"); setErrors({}); }}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name="airplane-outline"
+                  size={15}
+                  color={userType === "guest" ? GREEN : MUTED}
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={[ss.tabTxt, userType === "guest" && ss.tabTxtActive]}>Traveller</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[ss.tab, userType === "provider" && [ss.tabActive, ss.tabActiveProvider]]}
+                onPress={() => { setUserType("provider"); setErrors({}); }}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name="home-outline"
+                  size={15}
+                  color={userType === "provider" ? TEAL : MUTED}
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={[ss.tabTxt, userType === "provider" && [ss.tabTxtActive, { color: TEAL }]]}>
+                  Partner Host
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* ── Section header ── */}
+            <Text style={ss.sectionTitle}>
+              {isProvider ? "Provider Details" : "Personal Details"}
+            </Text>
+
+            {/* ── First Name ── */}
+            <View style={ss.field}>
+              <Text style={ss.label}>First Name</Text>
+              <View style={[ss.inputBox, errors.firstName ? ss.inputErr : null]}>
+                <TextInput
+                  style={ss.input}
+                  value={form.firstName}
+                  onChangeText={(v) => { set("firstName")(v); clearErr("firstName"); }}
+                  placeholder="Ada"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              {errors.firstName ? <Text style={ss.fieldErr}>{errors.firstName}</Text> : null}
+            </View>
+
+            {/* ── Last Name ── */}
+            <View style={ss.field}>
+              <Text style={ss.label}>Last Name</Text>
+              <View style={[ss.inputBox, errors.lastName ? ss.inputErr : null]}>
+                <TextInput
+                  style={ss.input}
+                  value={form.lastName}
+                  onChangeText={(v) => { set("lastName")(v); clearErr("lastName"); }}
+                  placeholder="Okafor"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              {errors.lastName ? <Text style={ss.fieldErr}>{errors.lastName}</Text> : null}
+            </View>
+
+            {/* ── Email ── */}
+            <View style={ss.field}>
+              <Text style={ss.label}>Email Address</Text>
+              <View style={[ss.inputRow, errors.email ? ss.inputErr : null]}>
+                <Ionicons name="mail-outline" size={17} color={MUTED} style={ss.inputIcon} />
+                <TextInput
+                  style={ss.input}
+                  value={form.email}
+                  onChangeText={(v) => { set("email")(v); clearErr("email"); }}
+                  placeholder="you@example.com"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                />
+              </View>
+              {errors.email ? <Text style={ss.fieldErr}>{errors.email}</Text> : null}
+            </View>
+
+            {/* ── Provider fields ── */}
+            {isProvider && (
+              <>
+                <Text style={[ss.sectionTitle, { marginTop: 4 }]}>Business Details</Text>
+
+                <View style={ss.field}>
+                  <Text style={ss.label}>Business Name</Text>
+                  <View style={[ss.inputRow, errors.businessName ? ss.inputErr : null]}>
+                    <Ionicons name="business-outline" size={17} color={MUTED} style={ss.inputIcon} />
+                    <TextInput
+                      style={ss.input}
+                      value={form.businessName}
+                      onChangeText={(v) => { set("businessName")(v); clearErr("businessName"); }}
+                      placeholder="Serena Hotels Ltd."
+                      placeholderTextColor="#9CA3AF"
+                    />
+                  </View>
+                  {errors.businessName ? <Text style={ss.fieldErr}>{errors.businessName}</Text> : null}
+                </View>
+
+                <View style={ss.field}>
+                  <Text style={ss.label}>Country</Text>
+                  <TouchableOpacity
+                    style={[ss.inputRow, errors.country ? ss.inputErr : null]}
+                    onPress={() => setCountryModalVisible(true)}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="globe-outline" size={17} color={MUTED} style={ss.inputIcon} />
+                    <Text style={[ss.input, { paddingVertical: 13, color: selectedCountry ? TEXT : "#9CA3AF" }]}>
+                      {selectedCountry ? `${selectedCountry.flag}  ${selectedCountry.name}` : "Select your country"}
+                    </Text>
+                    <Ionicons name="chevron-down" size={14} color={MUTED} style={{ marginLeft: 4 }} />
+                  </TouchableOpacity>
+                  {errors.country ? <Text style={ss.fieldErr}>{errors.country}</Text> : null}
+                </View>
+
+                <View style={ss.field}>
+                  <Text style={ss.label}>Phone number</Text>
+                  <View style={[ss.inputRow, errors.phone ? ss.inputErr : null]}>
+                    <Ionicons name="call-outline" size={17} color={MUTED} style={ss.inputIcon} />
+                    <TextInput
+                      style={ss.input}
+                      value={form.phone}
+                      onChangeText={(v) => {
+                        const cleaned = v.replace(/[^+\d\s-]/g, "");
+                        set("phone")(cleaned);
+                        clearErr("phone");
+                      }}
+                      placeholder="+254 712 345 678"
+                      placeholderTextColor="#9CA3AF"
+                      keyboardType="phone-pad"
+                    />
+                  </View>
+                  {errors.phone ? <Text style={ss.fieldErr}>{errors.phone}</Text> : null}
+                </View>
+              </>
+            )}
+
+            {/* ── Security section ── */}
+            <Text style={[ss.sectionTitle, { marginTop: 4 }]}>Security</Text>
+
+            {/* Password */}
+            <View style={ss.field}>
+              <Text style={ss.label}>Password</Text>
+              <View style={[ss.inputRow, errors.password ? ss.inputErr : null]}>
+                <Ionicons name="lock-closed-outline" size={17} color={MUTED} style={ss.inputIcon} />
+                <TextInput
+                  style={ss.input}
+                  value={form.password}
+                  onChangeText={(v) => { set("password")(v); clearErr("password"); }}
+                  placeholder="Min. 8 chars, uppercase, number, symbol"
+                  placeholderTextColor="#9CA3AF"
+                  secureTextEntry={!showPass}
+                />
+                <TouchableOpacity onPress={() => setShowPass((p) => !p)} style={ss.eye}>
+                  <Ionicons name={showPass ? "eye-off-outline" : "eye-outline"} size={17} color={MUTED} />
+                </TouchableOpacity>
+              </View>
+              {errors.password ? <Text style={ss.fieldErr}>{errors.password}</Text> : null}
+            </View>
+
+            {/* Confirm Password */}
+            <View style={ss.field}>
+              <Text style={ss.label}>Confirm Password</Text>
+              <View style={[ss.inputRow, errors.confirmPassword ? ss.inputErr : null]}>
+                <Ionicons name="lock-closed-outline" size={17} color={MUTED} style={ss.inputIcon} />
+                <TextInput
+                  style={ss.input}
+                  value={form.confirmPassword}
+                  onChangeText={(v) => { set("confirmPassword")(v); clearErr("confirmPassword"); }}
+                  placeholder="Repeat your password"
+                  placeholderTextColor="#9CA3AF"
+                  secureTextEntry={!showConfirm}
+                  returnKeyType="done"
+                  onSubmitEditing={handleSubmit}
+                />
+                <TouchableOpacity onPress={() => setShowConfirm((p) => !p)} style={ss.eye}>
+                  <Ionicons name={showConfirm ? "eye-off-outline" : "eye-outline"} size={17} color={MUTED} />
+                </TouchableOpacity>
+              </View>
+              {errors.confirmPassword ? <Text style={ss.fieldErr}>{errors.confirmPassword}</Text> : null}
+            </View>
+
+            {/* General error */}
+            {errors.general ? (
+              <View style={ss.errBox}>
+                <Ionicons name="alert-circle-outline" size={15} color={ERR} />
+                <Text style={ss.errTxt}>{errors.general}</Text>
+              </View>
+            ) : null}
+
+            {/* Privacy Policy acceptance — recorded against the account.
+                Terms & Conditions are collected at payment, per the spec. */}
+            <View style={ss.legalBlock}>
+              <TouchableOpacity
+                style={ss.termsRow}
+                onPress={() => setAgreedToPrivacy((p) => !p)}
+                activeOpacity={0.8}
+              >
+                <View style={[ss.checkbox, agreedToPrivacy && { backgroundColor: btnColor, borderColor: btnColor }]}>
+                  {agreedToPrivacy && <Ionicons name="checkmark" size={13} color="#fff" />}
+                </View>
+                <Text style={ss.termsText}>
+                  I have read and agree to the{" "}
+                  <Text
+                    style={[ss.legalLink, { color: btnColor }]}
+                    onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "privacy" } } as any)}
+                  >
+                    Privacy Policy
+                  </Text>
+                  .
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Submit button */}
             <TouchableOpacity
-              key={type}
-              className={`flex-1 py-3 items-center ${userType === type ? "bg-primary" : "bg-white"}`}
-              onPress={() => { setUserType(type); setErrors({}); }}
+              style={[
+                ss.btn,
+                { backgroundColor: btnColor },
+                (registerMutation.isPending || !agreedToPrivacy) && ss.btnDim,
+              ]}
+              onPress={handleSubmit}
+              disabled={registerMutation.isPending || !agreedToPrivacy}
+              activeOpacity={0.85}
             >
-              <Text className={`font-semibold ${userType === type ? "text-white" : "text-gray-600"}`}>
-                {type === "guest" ? "Traveller" : "Provider / Host"}
-              </Text>
+              {registerMutation.isPending ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Text style={ss.btnTxt}>
+                    {isProvider ? "Register as Partner Host" : "Create Traveller Account"}
+                  </Text>
+                  <Ionicons name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 8 }} />
+                </>
+              )}
             </TouchableOpacity>
-          ))}
-        </View>
 
-        {/* Fields */}
-        <View className="flex-row gap-3">
-          <View className="flex-1">
-            <FormField label="First name" value={form.firstName} onChangeText={(v) => { set("firstName")(v); clearError("firstName"); }}
-              error={errors.firstName} placeholder="Ada" />
+            {/* Google sign-in (travellers only) */}
+            {!isProvider && (
+              <>
+                <View style={ss.divRow}>
+                  <View style={ss.divLine} />
+                  <Text style={ss.divTxt}>or</Text>
+                  <View style={ss.divLine} />
+                </View>
+                <GoogleSignInButton
+                  onError={(msg) => setErrors({ general: msg })}
+                />
+              </>
+            )}
+
+            {/* Sign in link */}
+            <View style={ss.linkRow}>
+              <Text style={ss.linkTxt}>Already have an account? </Text>
+              <Link href="/(auth)/login" asChild>
+                <TouchableOpacity>
+                  <Text style={ss.link}>Sign In</Text>
+                </TouchableOpacity>
+              </Link>
+            </View>
           </View>
-          <View className="flex-1">
-            <FormField label="Last name" value={form.lastName} onChangeText={(v) => { set("lastName")(v); clearError("lastName"); }}
-              error={errors.lastName} placeholder="Okafor" />
+        </ScrollView>
+
+        {/* ── Country picker modal ── */}
+        <Modal
+          animationType="slide"
+          transparent
+          visible={countryModalVisible}
+          onRequestClose={() => setCountryModalVisible(false)}
+        >
+          <View style={ss.modalBack}>
+            <View style={ss.modalSheet}>
+              {/* Handle */}
+              <View style={ss.modalHandle} />
+
+              <View style={ss.modalHeader}>
+                <Text style={ss.modalTitle}>Select Country</Text>
+                <TouchableOpacity onPress={() => setCountryModalVisible(false)} style={ss.modalClose}>
+                  <Ionicons name="close" size={20} color={TEXT} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={ss.searchBox}>
+                <Ionicons name="search-outline" size={16} color={MUTED} />
+                <TextInput
+                  style={ss.searchInput}
+                  value={countrySearch}
+                  onChangeText={setCountrySearch}
+                  placeholder="Search country name or code…"
+                  placeholderTextColor="#9CA3AF"
+                  autoCapitalize="none"
+                  autoFocus
+                />
+              </View>
+
+              {!countrySearch && (
+                <View style={ss.popularSection}>
+                  <Text style={ss.popularTitle}>Popular</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 8, paddingRight: 24 }}
+                  >
+                    {POPULAR_COUNTRIES.map((c) => (
+                      <TouchableOpacity
+                        key={c.code}
+                        style={ss.popularChip}
+                        onPress={() => handleSelectCountry(c)}
+                      >
+                        <Text style={ss.popularChipTxt}>{c.flag}  {c.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              <Text style={ss.listLabel}>
+                {countrySearch ? "Results" : "All Countries"}
+              </Text>
+
+              <FlatList
+                data={filteredCountries}
+                keyExtractor={(c) => c.code}
+                keyboardShouldPersistTaps="handled"
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[ss.countryRow, selectedCountry?.code === item.code && ss.countryRowActive]}
+                    onPress={() => handleSelectCountry(item)}
+                  >
+                    <Text style={ss.countryFlag}>{item.flag}</Text>
+                    <Text style={ss.countryName}>{item.name}</Text>
+                    <Text style={ss.countryCode}>{item.code}</Text>
+                    {selectedCountry?.code === item.code && (
+                      <Ionicons name="checkmark-circle" size={18} color={TEAL} style={{ marginLeft: "auto" }} />
+                    )}
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={{ alignItems: "center", paddingVertical: 40 }}>
+                    <Text style={{ color: MUTED }}>No countries found</Text>
+                  </View>
+                }
+              />
+            </View>
           </View>
-        </View>
-
-        <FormField label="Email address" value={form.email} onChangeText={(v) => { set("email")(v); clearError("email"); }}
-          error={errors.email} placeholder="you@example.com" keyboardType="email-address" autoComplete="email" />
-
-        {userType === "provider" && (
-          <>
-            <FormField label="Business name" value={form.businessName} onChangeText={(v) => { set("businessName")(v); clearError("businessName"); }}
-              error={errors.businessName} placeholder="Serena Hotels Ltd." />
-            <FormField label="Country (ISO code, e.g. KE)" value={form.country} onChangeText={(v) => { set("country")(v.toUpperCase()); clearError("country"); }}
-              error={errors.country} placeholder="KE" maxLength={2} autoCapitalize="characters" />
-          </>
-        )}
-
-        <FormField label="Password" value={form.password} onChangeText={(v) => { set("password")(v); clearError("password"); }}
-          error={errors.password} placeholder="Min. 8 characters" secureTextEntry />
-
-        <FormField label="Confirm password" value={form.confirmPassword}
-          onChangeText={(v) => { set("confirmPassword")(v); clearError("confirmPassword"); }}
-          error={errors.confirmPassword} placeholder="Repeat password" secureTextEntry />
-
-        {errors.general ? (
-          <View className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4">
-            <Text className="text-red-600 text-sm">{errors.general}</Text>
-          </View>
-        ) : null}
-
-        <Button title="Create Account" onPress={handleSubmit} loading={registerMutation.isPending} />
-
-        {/* Divider + OAuth */}
-        <View className="flex-row items-center my-6">
-          <View className="flex-1 h-px bg-gray-200" />
-          <Text className="mx-4 text-gray-400 text-sm">or continue with</Text>
-          <View className="flex-1 h-px bg-gray-200" />
-        </View>
-
-        <OAuthButtons />
-
-        <View className="flex-row justify-center mt-6 mb-8">
-          <Text className="text-gray-500">Already have an account? </Text>
-          <Link href="/(auth)/login" className="text-primary font-semibold">Sign In</Link>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </Modal>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
-function OAuthButtons() {
-  return (
-    <View className="gap-3">
-      <GoogleSignInButton />
-      {Platform.OS === "ios" && <AppleSignInButton />}
-    </View>
-  );
-}
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const ss = StyleSheet.create({
+  root: { flex: 1, backgroundColor: GREEN },
 
-let _GoogleSignin: typeof import("@react-native-google-signin/google-signin")["GoogleSignin"] | null = null;
-try { _GoogleSignin = require("@react-native-google-signin/google-signin").GoogleSignin; } catch { /* not available in Expo Go */ }
+  // Hero
+  hero: {
+    width: "100%",
+    justifyContent: "flex-end",
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    marginBottom: 16,
+    overflow: "hidden",
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  backBtn: {
+    position: "absolute",
+    top: 48,
+    left: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+  },
 
-function GoogleSignInButton() {
-  const { useAuthStore } = require("../../store/auth") as typeof import("../../store/auth");
-  const setAuth = useAuthStore((s) => s.setAuth);
-  const GoogleSignin = _GoogleSignin;
+  // Form
+  formScroll: { flex: 1, backgroundColor: "#fff", borderTopLeftRadius: 28, borderTopRightRadius: 28 },
+  formContent: { paddingTop: 24, paddingBottom: 40 },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: TEXT,
+    marginBottom: 14,
+    letterSpacing: -0.3,
+  },
 
-  const mutation = useMutation({
-    mutationFn: async () => {
-      if (!GoogleSignin) throw new Error("Google Sign-In not available.");
-      await GoogleSignin.hasPlayServices();
-      const signInResult = await GoogleSignin.signIn();
-      const idToken = (signInResult as any).data?.idToken ?? (signInResult as any).idToken;
-      if (!idToken) throw new Error("No ID token");
-      const res = await api.post("/auth/oauth/google", { idToken });
-      return (res.data as { data: { user: Parameters<typeof setAuth>[0]; tokens: { accessToken: string } } }).data;
-    },
-    onSuccess: async (data) => {
-      await setAuth(data.user, data.tokens.accessToken);
-      router.replace("/(tabs)");
-    },
-    onError: () => Alert.alert("Error", "Sign in with Google failed. Please try again."),
-  });
+  // Tab row
+  tabRow: {
+    flexDirection: "row", gap: 10, marginBottom: 22,
+    backgroundColor: INPUT_BG, borderRadius: 12, padding: 4,
+  },
+  tab: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    paddingVertical: 10, borderRadius: 10,
+  },
+  tabActive: { backgroundColor: "#fff", shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  tabActiveProvider: {},
+  tabTxt: { fontSize: 13, fontWeight: "600", color: MUTED },
+  tabTxtActive: { color: GREEN },
 
-  if (!GoogleSignin) return null;
-  return (
-    <Button title="Continue with Google" variant="secondary"
-      onPress={() => mutation.mutate()} loading={mutation.isPending} />
-  );
-}
+  // Section header
+  sectionTitle: {
+    fontSize: 11, fontWeight: "700", color: MUTED,
+    textTransform: "uppercase", letterSpacing: 1.2,
+    marginBottom: 12,
+  },
 
-function AppleSignInButton() {
-  const AppleAuthentication = require("expo-apple-authentication") as typeof import("expo-apple-authentication");
-  const { useAuthStore } = require("../../store/auth") as typeof import("../../store/auth");
-  const setAuth = useAuthStore((s) => s.setAuth);
+  // Name row
+  nameRow: { flexDirection: "row", gap: 10 },
 
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const cred = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
-      });
-      const res = await api.post("/auth/oauth/apple", {
-        authorizationCode: cred.authorizationCode,
-        identityToken: cred.identityToken,
-      });
-      return (res.data as { data: { user: Parameters<typeof setAuth>[0]; tokens: { accessToken: string } } }).data;
-    },
-    onSuccess: async (data) => {
-      await setAuth(data.user, data.tokens.accessToken);
-      router.replace("/(tabs)");
-    },
-    onError: () => Alert.alert("Error", "Sign in with Apple failed. Please try again."),
-  });
+  // Fields
+  field: { marginBottom: 14 },
+  label: { fontSize: 13, fontWeight: "600", color: TEXT, marginBottom: 7 },
+  inputBox: {
+    backgroundColor: INPUT_BG, borderRadius: 12,
+    borderWidth: 1.5, borderColor: BORDER,
+    paddingHorizontal: 14,
+  },
+  inputRow: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: INPUT_BG, borderRadius: 12,
+    borderWidth: 1.5, borderColor: BORDER,
+    paddingHorizontal: 14,
+  },
+  inputErr: { borderColor: ERR },
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, paddingVertical: 13, fontSize: 15, color: TEXT },
+  eye: { paddingVertical: 13, paddingLeft: 8 },
+  fieldErr: { fontSize: 12, color: ERR, marginTop: 5 },
 
-  return (
-    <AppleAuthentication.AppleAuthenticationButton
-      buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-      cornerRadius={10}
-      style={{ height: 52 }}
-      onPress={() => mutation.mutate()}
-    />
-  );
-}
+  // Error banner
+  errBox: {
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    backgroundColor: "#FEF2F2", borderRadius: 10,
+    borderWidth: 1.5, borderColor: "#FECACA",
+    paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16,
+  },
+  errTxt: { flex: 1, color: "#DC2626", fontSize: 13, lineHeight: 18 },
+
+  // Legal notice
+  legalNotice: {
+    textAlign: "center",
+    fontSize: 12,
+    color: MUTED,
+    lineHeight: 18,
+    marginTop: 18,
+    marginBottom: 6,
+    paddingHorizontal: 8,
+  },
+  legalLink: {
+    fontWeight: "700",
+    textDecorationLine: "underline",
+  },
+  legalBlock: { marginTop: 18, marginBottom: 18, gap: 12 },
+  termsRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  termsText: { flex: 1, fontSize: 13, color: MUTED, lineHeight: 19 },
+
+  // Button
+  btn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    borderRadius: 14, height: 52,
+  },
+  btnDim: { opacity: 0.6 },
+  btnTxt: { color: "#fff", fontSize: 16, fontWeight: "700" },
+
+  // Divider
+  divRow: { flexDirection: "row", alignItems: "center", marginVertical: 20 },
+  divLine: { flex: 1, height: 1, backgroundColor: BORDER },
+  divTxt: { marginHorizontal: 12, color: MUTED, fontSize: 12 },
+
+  // Link row
+  linkRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 22 },
+  linkTxt: { color: MUTED, fontSize: 14 },
+  link: { color: ACCENT, fontSize: 14, fontWeight: "700" },
+
+  // Country modal
+  modalBack: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  modalSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    height: SCREEN_H * 0.78,
+    paddingTop: 12,
+  },
+  modalHandle: {
+    width: 36, height: 4, backgroundColor: BORDER,
+    borderRadius: 2, alignSelf: "center", marginBottom: 16,
+  },
+  modalHeader: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    paddingHorizontal: 20, marginBottom: 16,
+  },
+  modalTitle: { fontSize: 18, fontWeight: "800", color: TEXT },
+  modalClose: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: INPUT_BG, alignItems: "center", justifyContent: "center",
+  },
+
+  searchBox: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    marginHorizontal: 20, backgroundColor: INPUT_BG,
+    borderRadius: 12, borderWidth: 1.5, borderColor: BORDER,
+    paddingHorizontal: 14, paddingVertical: 11, marginBottom: 16,
+  },
+  searchInput: { flex: 1, fontSize: 15, color: TEXT },
+
+  popularSection: { paddingLeft: 20, marginBottom: 14 },
+  popularTitle: { fontSize: 11, fontWeight: "700", color: MUTED, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 },
+  popularChip: {
+    backgroundColor: INPUT_BG, borderRadius: 20,
+    borderWidth: 1.5, borderColor: BORDER,
+    paddingHorizontal: 14, paddingVertical: 8,
+  },
+  popularChipTxt: { fontSize: 13, fontWeight: "600", color: TEXT },
+
+  listLabel: {
+    fontSize: 11, fontWeight: "700", color: MUTED,
+    textTransform: "uppercase", letterSpacing: 1,
+    paddingHorizontal: 20, marginBottom: 6,
+  },
+
+  countryRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 20, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    gap: 12,
+  },
+  countryRowActive: { backgroundColor: "#F0FDF4" },
+  countryFlag: { fontSize: 22 },
+  countryName: { flex: 1, fontSize: 15, color: TEXT, fontWeight: "500" },
+  countryCode: { fontSize: 12, color: MUTED, fontWeight: "600" },
+});

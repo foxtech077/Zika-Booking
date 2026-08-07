@@ -1,412 +1,706 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
-  View,
-  Text,
-  ScrollView,
-  Image,
-  TouchableOpacity,
-  FlatList,
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-  Dimensions,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
+  View, Text, ScrollView, TouchableOpacity, FlatList, TextInput,
+  ActivityIndicator, Alert, StyleSheet, Dimensions,
+  NativeSyntheticEvent, NativeScrollEvent, Modal, Platform, Linking, Share,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
+import { ListingImage } from "../../components/ListingImage";
+import { ActivePromotion, applyPromotion } from "../../lib/promotions";
+import { RoomTypeSelector } from "../../components/listing/RoomTypeSelector";
+import type { RoomType } from "../../components/listing/RoomTypeCard";
+import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
+import { WEB_BASE_URL } from "../../constants/legalContent";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const PHOTO_HEIGHT = 260;
+let MapView: any = null;
+let Marker: any = null;
+try {
+  const Maps = require("react-native-maps");
+  MapView = Maps.default || Maps;
+  Marker = Maps.Marker;
+} catch { /* not available in bare Expo Go */ }
+
+const { width: W, height: H } = Dimensions.get("window");
+const PHOTO_H = Math.round(H * 0.42);
+const GREEN = "#15803D";
+const GREEN_LIGHT = "#F0FDF4";
+const TEXT = "#111827";
+const MUTED = "#6B7280";
+const BORDER = "#E5E7EB";
+const BG = "#FAFAFA";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-interface Amenity {
-  amenityKey: string;
-  category: string;
+interface Photo { id: string; cdnUrl: string; position: number; }
+interface Amenity { amenityKey: string; category: string; }
+interface CustomAmenity { label: string; }
+interface Promotion {
+  title: string; description: string;
+  bannerUrl?: string | null; ctaRoute?: string;
+  discountPercent?: number; expiresAt?: string;
 }
-
-interface CustomAmenity {
-  label: string;
+interface Review {
+  id: string; rating: number; title?: string | null;
+  body?: string | null; createdAt: string; providerReply?: string | null;
 }
-
-interface Photo {
-  id: string;
-  cdnUrl: string;
-  position: number;
+interface ReviewsData { reviews: Review[]; total: number; averageRating: number; }
+interface PromoBadge {
+  labelText: string;
+  labelColour?: string;
 }
 
 interface PublicListing {
-  id: string;
-  name: string | null;
-  category: "hotel" | "apartment" | "car";
-  status: string;
-  description: string | null;
-  address: string | null;
-  town: string | null;
-  country: string | null;
-  lat: number | null;
-  lng: number | null;
-  pricePerNight: number | null;
-  currency: string | null;
-  cancellationPolicy: string | null;
-  minStayNights: number | null;
-  checkinTime: string | null;
-  checkoutTime: string | null;
-  smokingAllowed: boolean | null;
-  petsAllowed: boolean | null;
-  // hotel
-  starRating: number | null;
-  roomType: string | null;
-  unitCount: number | null;
-  // apartment
-  bedrooms: number | null;
-  bathrooms: number | null;
-  maxGuests: number | null;
-  longStayEnabled: boolean | null;
-  longStayMinNights: number | null;
-  longStayDiscountType: string | null;
-  longStayDiscountValue: number | null;
-  // car
-  carMake: string | null;
-  carModel: string | null;
-  carYear: number | null;
-  bodyType: string | null;
-  transmission: string | null;
-  fuelType: string | null;
-  seats: number | null;
-  mileagePolicy: string | null;
-  mileageLimitKm: number | null;
-  minDriverAge: number | null;
-  deliveryAvailable: boolean | null;
-  deliveryFee: number | null;
-  deliveryRadiusKm: number | null;
-  amenities: Amenity[];
-  customAmenities: CustomAmenity[];
-  photos: Photo[];
+  id: string; name: string | null; title?: string | null; category: "hotel" | "apartment" | "car"; providerId: string | null;
+  status: string; description: string | null; address: string | null;
+  town: string | null; country: string | null; lat: number | null; lng: number | null;
+  pricePerNight: number | null; pricePerDay: number | null; currency: string | null;
+  nightlyRate?: number | null; dailyRate?: number | null;
+  cancellationPolicy: string | null; minStayNights: number | null;
+  /** Service-fee rate for this listing's country, as a decimal fraction (0.05 = 5%).
+   *  Served by GET /listings/:id/public — the same value the booking flow charges. */
+  commissionRate?: number | null;
+  checkinTime: string | null; checkoutTime: string | null;
+  smokingAllowed: boolean | null; petsAllowed: boolean | null;
+  starRating: number | null; roomType: string | null; unitCount: number | null;
+  bedrooms: number | null; bathrooms: number | null; maxGuests: number | null;
+  longStayEnabled: boolean | null; longStayMinNights: number | null;
+  longStayDiscountType: string | null; longStayDiscountValue: number | null;
+  carMake: string | null; carModel: string | null; carYear: number | null;
+  bodyType: string | null; transmission: string | null; fuelType: string | null;
+  seats: number | null; mileagePolicy: string | null; mileageLimitKm: number | null;
+  minDriverAge: number | null; securityDeposit: number | null; deliveryAvailable: boolean | null;
+  /** Provider supplies a driver — backend waives the deposit when true. */
+  driverProvided?: boolean | null;
+  deliveryFee: number | null; deliveryRadiusKm: number | null;
+  amenities: Amenity[]; customAmenities: CustomAmenity[]; photos: Photo[];
   isFavourited: boolean | undefined;
-}
-
-// ── Review types ──────────────────────────────────────────────────────────────
-
-interface Review {
-  id: string;
-  rating: number;
-  title?: string | null;
-  body?: string | null;
-  createdAt: string;
-  providerReply?: string | null;
-}
-
-interface ReviewsData {
-  reviews: Review[];
-  total: number;
-  averageRating: number;
+  isAccredited?: boolean;
+  promoBadge?: PromoBadge | null;
+  mrpPrice?: number | null;
+  roomTypes?: RoomType[];
+  hotelRoomTypes?: RoomType[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
+const AMENITY_ICONS: Record<string, string> = {
+  wifi: "wifi", pool: "water", gym: "barbell", spa: "flower", parking: "car",
+  kitchen: "restaurant", breakfast: "cafe", air_conditioning: "snow",
+  reception_24h: "time", restaurant: "restaurant", bar: "beer",
+  housekeeping: "sparkles", airport_shuttle: "airplane",
+  security_24h: "shield-checkmark", elevator: "arrow-up",
+};
 const AMENITY_LABELS: Record<string, string> = {
-  wifi: "WiFi",
-  smart_tv: "Smart TV",
-  work_desk: "Work desk",
-  kitchen: "Kitchen",
-  breakfast: "Breakfast",
-  restaurant: "Restaurant",
-  minibar: "Minibar",
-  pool: "Swimming pool",
-  gym: "Fitness centre",
-  spa: "Spa",
-  air_conditioning: "Air conditioning",
-  parking: "Parking",
-  elevator: "Elevator",
-  accessible: "Accessible",
-  reception_24h: "24h reception",
-  housekeeping: "Housekeeping",
-  airport_shuttle: "Airport shuttle",
-  security_24h: "24h security",
+  wifi: "WiFi", pool: "Swimming Pool", gym: "Fitness Centre", spa: "Spa",
+  parking: "Free Parking", kitchen: "Kitchen", breakfast: "Breakfast Included",
+  air_conditioning: "Air Conditioning", reception_24h: "24h Reception",
+  restaurant: "Restaurant", bar: "Bar", housekeeping: "Housekeeping",
+  airport_shuttle: "Airport Shuttle", security_24h: "24h Security", elevator: "Elevator",
+  smart_tv: "Smart TV", work_desk: "Work Desk", minibar: "Minibar", accessible: "Accessible",
 };
 
-function formatDate(dateStr: string | undefined): string {
-  if (!dateStr) return "";
+function fmt(d: string | undefined): string {
+  if (!d) return "";
+  try { return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" }); }
+  catch { return d; }
+}
+function fmtDT(d: string | undefined): string {
+  if (!d) return "";
   try {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-  } catch {
-    return dateStr;
+    const dt = new Date(d);
+    return `${dt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} ${dt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+  } catch { return d; }
+}
+function nights(a: string, b: string) { return Math.max(1, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000)); }
+function days(a: string, b: string) { return Math.max(1, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000)); }
+
+function cancelColor(p: string | null) {
+  if (p === "flexible" || p === "free") return "#16a34a";
+  if (p === "moderate") return "#D97706";
+  return "#DC2626";
+}
+
+
+
+function openLocationInMaps(lat: number, lng: number, label: string) {
+  const latLng = `${lat},${lng}`;
+  const url = Platform.select({
+    ios: `maps:0,0?q=${encodeURIComponent(label)}@${latLng}`,
+    android: `geo:0,0?q=${latLng}(${encodeURIComponent(label)})`,
+  });
+  if (url) {
+    Linking.openURL(url).catch(() => {
+      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latLng}`);
+    });
+  }
+}
+function cancelText(p: string | null) {
+  switch (p) {
+    case "flexible": case "free": return "Free cancellation up to 48 hours before check-in.";
+    case "moderate": return "Full refund 7+ days before. 50% refund 48h–7 days. No refund within 48h.";
+    case "strict": return "50% refund 14+ days before. No refund within 14 days.";
+    default: return p ?? "Contact host for details.";
   }
 }
 
-function formatDateWithTime(dateStr: string | undefined): string {
-  if (!dateStr) return "";
-  try {
-    const d = new Date(dateStr);
-    const datePart = d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-    const timePart = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-    return `${datePart} ${timePart}`;
-  } catch {
-    return dateStr;
-  }
-}
+// ── Sub-components ────────────────────────────────────────────────────────────
 
-function nightsBetween(checkIn: string, checkOut: string): number {
-  try {
-    const diff = new Date(checkOut).getTime() - new Date(checkIn).getTime();
-    return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
-  } catch {
-    return 1;
-  }
-}
-
-function daysBetween(pickup: string, returnD: string): number {
-  try {
-    const diff = new Date(returnD).getTime() - new Date(pickup).getTime();
-    return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
-  } catch {
-    return 1;
-  }
-}
-
-function cancellationText(policy: string | null): string {
-  switch (policy) {
-    case "free":
-    case "flexible":
-      return "Free cancellation if cancelled 48+ hours before check-in.";
-    case "moderate":
-      return "Full refund if cancelled 7+ days before. 50% refund 48h–7 days. No refund within 48h.";
-    case "strict":
-      return "50% refund if cancelled 14+ days before. No refund within 14 days.";
-    case "non_refundable":
-      return "Non-refundable — no refunds on cancellation.";
-    default:
-      return policy ?? "Contact host for cancellation details.";
-  }
-}
-
-function cancellationBadgeColor(policy: string | null): string {
-  switch (policy) {
-    case "free":
-    case "flexible":
-      return "#16a34a";
-    case "moderate":
-      return "#d97706";
-    case "strict":
-      return "#dc2626";
-    case "non_refundable":
-      return "#7c3aed";
-    default:
-      return "#6b7280";
-  }
-}
-
-// ── Skeleton ──────────────────────────────────────────────────────────────────
-
-function SkeletonBlock({ height, style }: { height: number; style?: object }) {
-  return <View style={[{ height, backgroundColor: "#e5e7eb", borderRadius: 8, marginBottom: 12 }, style]} />;
-}
-
-function LoadingSkeleton() {
+function Stars({ n, size = 13 }: { n: number; size?: number }) {
   return (
-    <SafeAreaView style={styles.container}>
-      <SkeletonBlock height={PHOTO_HEIGHT} style={{ borderRadius: 0, marginBottom: 0 }} />
-      <View style={styles.content}>
-        <SkeletonBlock height={28} style={{ width: "70%", marginTop: 16 }} />
-        <SkeletonBlock height={18} style={{ width: "50%" }} />
-        <SkeletonBlock height={36} style={{ width: "40%" }} />
-        <SkeletonBlock height={1} />
-        <SkeletonBlock height={16} />
-        <SkeletonBlock height={16} style={{ width: "85%" }} />
-        <SkeletonBlock height={16} style={{ width: "60%" }} />
-        <SkeletonBlock height={1} />
-        <SkeletonBlock height={80} />
-        <SkeletonBlock height={200} />
-      </View>
-    </SafeAreaView>
-  );
-}
-
-// ── Reviews Section ───────────────────────────────────────────────────────────
-
-function StarRow({ rating }: { rating: number }) {
-  return (
-    <View style={{ flexDirection: "row", marginBottom: 4 }}>
-      {[1, 2, 3, 4, 5].map((s) => (
-        <Text key={s} style={{ fontSize: 13, color: s <= rating ? "#fbbf24" : "#d1d5db" }}>
-          {s <= rating ? "★" : "☆"}
-        </Text>
+    <View style={{ flexDirection: "row", gap: 1 }}>
+      {[1, 2, 3, 4, 5].map(i => (
+        <Text key={i} style={{ fontSize: size, color: i <= n ? "#F59E0B" : "#E5E7EB" }}>★</Text>
       ))}
     </View>
   );
 }
 
-function ReviewCard({ review }: { review: Review }) {
-  const date = (() => {
-    try {
-      return new Date(review.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-    } catch {
-      return "";
-    }
-  })();
-
+function Chip({ icon, label, accent }: { icon: string; label: string; accent?: boolean }) {
   return (
-    <View style={reviewStyles.card}>
-      <StarRow rating={review.rating} />
-      {review.title ? (
-        <Text style={reviewStyles.reviewTitle}>{review.title}</Text>
-      ) : null}
-      {review.body ? (
-        <Text style={reviewStyles.reviewBody} numberOfLines={3}>{review.body}</Text>
-      ) : null}
-      <View style={reviewStyles.reviewMeta}>
-        <Text style={reviewStyles.reviewerName}>Guest</Text>
-        <Text style={reviewStyles.reviewDate}>{date}</Text>
-      </View>
+    <View style={[chip.wrap, accent && chip.wrapAccent]}>
+      <Text style={chip.icon}>{icon}</Text>
+      <Text style={[chip.label, accent && chip.labelAccent]}>{label}</Text>
     </View>
   );
 }
+const chip = StyleSheet.create({
+  wrap: { flexDirection: "row", alignItems: "center", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: "#F3F4F6", gap: 5, marginRight: 8 },
+  wrapAccent: { backgroundColor: GREEN_LIGHT, borderWidth: 1, borderColor: "#BBF7D0" },
+  icon: { fontSize: 13 },
+  label: { fontSize: 12, fontWeight: "600", color: MUTED },
+  labelAccent: { color: GREEN },
+});
 
-function ReviewsSection({ listingId }: { listingId: string }) {
-  const { data, isLoading } = useQuery<ReviewsData>({
-    queryKey: ["listing-reviews", listingId],
-    queryFn: async () => {
-      const res = await listingApi.get<{ data: ReviewsData }>(
-        `/listings/${listingId}/reviews?page=1&limit=5`
-      );
-      return res.data.data;
-    },
-    enabled: !!listingId,
-  });
-
-  const reviews = data?.reviews ?? [];
-  const total = data?.total ?? 0;
-  const avg = data?.averageRating;
-
-  const headerLabel = avg != null && total > 0
-    ? `★ ${avg.toFixed(1)} · ${total} ${total === 1 ? "review" : "reviews"}`
-    : total > 0
-    ? `${total} ${total === 1 ? "review" : "reviews"}`
-    : "";
-
+function InfoCard({ items }: { items: { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string; value: string }[] }) {
   return (
-    <View style={reviewStyles.sectionWrapper}>
-      <View style={reviewStyles.sectionHeader}>
-        <Text style={styles.sectionLabel}>Guest Reviews</Text>
-        {headerLabel ? (
-          <Text style={reviewStyles.avgLabel}>{headerLabel}</Text>
-        ) : null}
-      </View>
-
-      {isLoading ? (
-        <View style={reviewStyles.loadingBox}>
-          <ActivityIndicator size="small" color="#1a73e8" />
+    <View style={ic.wrap}>
+      {items.map((item, i) => (
+        <View key={i} style={[ic.row, i < items.length - 1 && ic.rowBorder]}>
+          <View style={ic.iconWrap}>
+            <Ionicons name={item.icon} size={18} color={GREEN} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={ic.label}>{item.label}</Text>
+            <Text style={ic.value}>{item.value}</Text>
+          </View>
         </View>
-      ) : reviews.length === 0 ? (
-        <Text style={reviewStyles.emptyText}>No reviews yet.</Text>
-      ) : (
-        <>
-          {reviews.map((r) => (
-            <ReviewCard key={r.id} review={r} />
-          ))}
-          {total > 5 && (
-            <Text style={reviewStyles.viewAllText}>View all {total} reviews</Text>
-          )}
-        </>
+      ))}
+    </View>
+  );
+}
+const ic = StyleSheet.create({
+  wrap: { backgroundColor: "#fff", borderRadius: 16, borderWidth: 1, borderColor: BORDER, overflow: "hidden" },
+  row: { flexDirection: "row", alignItems: "center", paddingVertical: 14, paddingHorizontal: 16, gap: 14 },
+  rowBorder: { borderBottomWidth: 1, borderBottomColor: BORDER },
+  iconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: GREEN_LIGHT, alignItems: "center", justifyContent: "center" },
+  label: { fontSize: 11, color: MUTED, fontWeight: "500", marginBottom: 2 },
+  value: { fontSize: 14, color: TEXT, fontWeight: "600" },
+});
+
+function AmenityPill({ amenityKey, label }: { amenityKey: string; label: string }) {
+  const icon = AMENITY_ICONS[amenityKey];
+  return (
+    <View style={ap.wrap}>
+      <View style={ap.iconWrap}>
+        {icon ? (
+          <Ionicons name={icon as any} size={18} color={GREEN} />
+        ) : (
+          <Ionicons name="checkmark" size={16} color={GREEN} />
+        )}
+      </View>
+      <Text style={ap.label}>{label}</Text>
+    </View>
+  );
+}
+const ap = StyleSheet.create({
+  wrap: { width: "48%", flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: BORDER, marginBottom: 8 },
+  iconWrap: { width: 32, height: 32, borderRadius: 8, backgroundColor: GREEN_LIGHT, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  label: { fontSize: 12, fontWeight: "600", color: TEXT, flex: 1 },
+});
+
+function ReviewCard({ review }: { review: Review }) {
+  const d = (() => { try { return new Date(review.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); } catch { return ""; } })();
+  return (
+    <View style={rv.card}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+        <Stars n={review.rating} />
+        <Text style={rv.date}>{d}</Text>
+      </View>
+      {review.title ? <Text style={rv.title}>{review.title}</Text> : null}
+      {review.body ? <Text style={rv.body} numberOfLines={4}>{review.body}</Text> : null}
+      <Text style={rv.guest}>Guest Traveller</Text>
+      {review.providerReply && (
+        <View style={rv.reply}>
+          <Text style={rv.replyLabel}>🏨 Host response</Text>
+          <Text style={rv.replyBody}>{review.providerReply}</Text>
+        </View>
       )}
     </View>
   );
 }
-
-const reviewStyles = StyleSheet.create({
-  sectionWrapper: { marginBottom: 4 },
-  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
-  avgLabel: { fontSize: 14, color: "#374151", fontWeight: "600" },
-  card: {
-    backgroundColor: "#f9fafb",
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    marginBottom: 10,
-  },
-  reviewTitle: { fontSize: 14, fontWeight: "700", color: "#111827", marginBottom: 4 },
-  reviewBody: { fontSize: 13, color: "#374151", lineHeight: 19, marginBottom: 8 },
-  reviewMeta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  reviewerName: { fontSize: 12, fontWeight: "600", color: "#6b7280" },
-  reviewDate: { fontSize: 12, color: "#9ca3af" },
-  loadingBox: { paddingVertical: 20, alignItems: "center" },
-  emptyText: { fontSize: 14, color: "#9ca3af", fontStyle: "italic" },
-  viewAllText: { fontSize: 14, color: "#1a73e8", fontWeight: "600", marginTop: 4 },
+const rv = StyleSheet.create({
+  card: { backgroundColor: "#fff", borderRadius: 16, borderWidth: 1, borderColor: BORDER, padding: 16, marginBottom: 10 },
+  date: { fontSize: 11, color: MUTED },
+  title: { fontSize: 14, fontWeight: "700", color: TEXT, marginBottom: 4 },
+  body: { fontSize: 13, color: "#374151", lineHeight: 20, marginBottom: 8 },
+  guest: { fontSize: 12, fontWeight: "600", color: MUTED },
+  reply: { marginTop: 10, backgroundColor: GREEN_LIGHT, borderRadius: 10, padding: 10 },
+  replyLabel: { fontSize: 12, fontWeight: "700", color: GREEN, marginBottom: 4 },
+  replyBody: { fontSize: 12, color: "#374151", lineHeight: 17 },
 });
 
-// ── Main Component ─────────────────────────────────────────────────────────────
+// ── GalleryModal ─────────────────────────────────────────────────────────────
+interface GalleryModalProps {
+  photos: Photo[];
+  photoIdx: number;
+  setPhotoIdx: (idx: number) => void;
+  onClose: () => void;
+}
+function GalleryModal({ photos, photoIdx, setPhotoIdx, onClose }: GalleryModalProps) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={{ flex: 1, backgroundColor: "#000" }}>
+      <FlatList
+        data={photos}
+        keyExtractor={p => p.id}
+        horizontal pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        initialScrollIndex={photoIdx}
+        getItemLayout={(_, index) => ({ length: W, offset: W * index, index })}
+        onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => setPhotoIdx(Math.round(e.nativeEvent.contentOffset.x / W))}
+        scrollEventThrottle={16}
+        renderItem={({ item }) => (
+          <View style={{ width: W, flex: 1, justifyContent: "center", alignItems: "center" }}>
+            <ListingImage uri={item.cdnUrl} style={{ width: W, height: H * 0.7 }} resizeMode="contain" />
+          </View>
+        )}
+      />
+      {/* Counter */}
+      <View style={{ alignItems: "center", paddingBottom: Math.max(insets.bottom + 16, 40) }}>
+        <View style={{ backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 6 }}>
+          <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>{photoIdx + 1} / {photos.length}</Text>
+        </View>
+      </View>
+      {/* Close button */}
+      <TouchableOpacity
+        onPress={onClose}
+        activeOpacity={0.8}
+        style={{
+          position: "absolute",
+          top: insets.top + 12,
+          right: 16,
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          backgroundColor: "rgba(0,0,0,0.55)",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 10,
+        }}
+      >
+        <Ionicons name="close" size={24} color="#fff" />
+      </TouchableOpacity>
+    </View>
+  );
+}
 
-export default function PublicListingDetailScreen() {
+// ── Skeleton ──────────────────────────────────────────────────────────────────
+function Skeleton() {
+  return (
+    <View style={{ flex: 1, backgroundColor: "#fff" }}>
+      <View style={{ height: PHOTO_H, backgroundColor: "#E5E7EB" }} />
+      <View style={{ padding: 20, gap: 12 }}>
+        <View style={{ height: 28, width: "75%", backgroundColor: "#E5E7EB", borderRadius: 8 }} />
+        <View style={{ height: 18, width: "50%", backgroundColor: "#E5E7EB", borderRadius: 6 }} />
+        <View style={{ height: 36, width: "40%", backgroundColor: "#E5E7EB", borderRadius: 8 }} />
+        <View style={{ height: 1, backgroundColor: "#E5E7EB" }} />
+        <View style={{ height: 80, backgroundColor: "#E5E7EB", borderRadius: 12 }} />
+        <View style={{ height: 120, backgroundColor: "#E5E7EB", borderRadius: 12 }} />
+      </View>
+    </View>
+  );
+}
+
+// ── Calendar Date Picker ──────────────────────────────────────────────────────
+const CAL_WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const CAL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function calToStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function isBeforeToday(d: Date): boolean {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return d.getTime() < today.getTime();
+}
+
+function isInUnavailable(ds: string, ranges: { start: string; end: string }[]): boolean {
+  return ranges.some(r => {
+    const s = r.start.split("T")[0]!;
+    const e = r.end.split("T")[0]!;
+    return ds >= s && ds <= e;
+  });
+}
+
+function buildMonthGrid(year: number, month: number): (Date | null)[] {
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const arr: (Date | null)[] = Array(firstWeekday).fill(null);
+  for (let d = 1; d <= daysInMonth; d++) arr.push(new Date(year, month, d));
+  return arr;
+}
+
+interface CalPickerProps {
+  visible: boolean;
+  onClose: () => void;
+  onConfirm: (start: string, end: string) => void;
+  isCar: boolean;
+  unavailableRanges: { start: string; end: string }[];
+}
+
+function CalendarPicker({ visible, onClose, onConfirm, isCar, unavailableRanges }: CalPickerProps) {
+  const now = new Date();
+  const [viewYear, setViewYear] = useState(now.getFullYear());
+  const [viewMonth, setViewMonth] = useState(now.getMonth());
+  const [selStart, setSelStart] = useState<string | null>(null);
+  const [selEnd, setSelEnd] = useState<string | null>(null);
+  const [pickupHr, setPickupHr] = useState("10");
+  const [pickupMin, setPickupMin] = useState("00");
+  const [returnHr, setReturnHr] = useState("10");
+  const [returnMin, setReturnMin] = useState("00");
+
+  function resetPicker() {
+    setSelStart(null); setSelEnd(null);
+    setPickupHr("10"); setPickupMin("00");
+    setReturnHr("10"); setReturnMin("00");
+  }
+
+  const monthDays = buildMonthGrid(viewYear, viewMonth);
+  const DAY_SIZE = (W - 32) / 7;
+
+  function prevMonth() {
+    if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
+    else setViewMonth(m => m - 1);
+  }
+  function nextMonth() {
+    if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
+    else setViewMonth(m => m + 1);
+  }
+
+  function handleDayPress(d: Date) {
+    const ds = calToStr(d);
+    if (!selStart || (selStart && selEnd)) {
+      setSelStart(ds); setSelEnd(null);
+    } else {
+      if (ds <= selStart) { setSelStart(ds); setSelEnd(null); }
+      else setSelEnd(ds);
+    }
+  }
+
+  type DayState = "start" | "end" | "range" | "normal" | "disabled";
+  function getDayState(d: Date): DayState {
+    const ds = calToStr(d);
+    if (isBeforeToday(d) || isInUnavailable(ds, unavailableRanges)) return "disabled";
+    if (ds === selStart) return "start";
+    if (ds === selEnd) return "end";
+    if (selStart && selEnd && ds > selStart && ds < selEnd) return "range";
+    return "normal";
+  }
+
+  function handleConfirm() {
+    if (!selStart || !selEnd) return;
+    if (isCar) {
+      const pu = new Date(`${selStart}T${pickupHr.padStart(2, "0")}:${pickupMin.padStart(2, "0")}:00`).toISOString();
+      const rt = new Date(`${selEnd}T${returnHr.padStart(2, "0")}:${returnMin.padStart(2, "0")}:00`).toISOString();
+      onConfirm(pu, rt);
+    } else {
+      onConfirm(selStart, selEnd);
+    }
+    resetPicker();
+    onClose();
+  }
+
+  const canConfirm = !!(selStart && selEnd);
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { resetPicker(); onClose(); }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
+        {/* Header */}
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: BORDER }}>
+          <Text style={{ fontSize: 18, fontWeight: "800", color: TEXT }}>{isCar ? "Select Rental Period" : "Select Dates"}</Text>
+          <TouchableOpacity onPress={() => { resetPicker(); onClose(); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close" size={24} color={TEXT} />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+          {/* Month navigation */}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 14 }}>
+            <TouchableOpacity onPress={prevMonth} style={{ padding: 8, borderRadius: 10, backgroundColor: GREEN_LIGHT }}>
+              <Ionicons name="chevron-back" size={20} color={GREEN} />
+            </TouchableOpacity>
+            <Text style={{ fontSize: 16, fontWeight: "700", color: TEXT }}>{CAL_MONTHS[viewMonth]} {viewYear}</Text>
+            <TouchableOpacity onPress={nextMonth} style={{ padding: 8, borderRadius: 10, backgroundColor: GREEN_LIGHT }}>
+              <Ionicons name="chevron-forward" size={20} color={GREEN} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Weekday labels */}
+          <View style={{ flexDirection: "row", paddingHorizontal: 16 }}>
+            {CAL_WEEKDAYS.map(w => (
+              <Text key={w} style={{ width: DAY_SIZE, textAlign: "center", fontSize: 12, fontWeight: "600", color: MUTED, paddingBottom: 6 }}>{w}</Text>
+            ))}
+          </View>
+
+          {/* Day grid */}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 16 }}>
+            {monthDays.map((d, i) => {
+              if (!d) return <View key={`e${i}`} style={{ width: DAY_SIZE, height: 44 }} />;
+              const st = getDayState(d);
+              const isStart = st === "start";
+              const isEnd = st === "end";
+              const isRange = st === "range";
+              const isDisabled = st === "disabled";
+              return (
+                <View key={i} style={{ width: DAY_SIZE, height: 44, alignItems: "center", justifyContent: "center" }}>
+                  {isRange && <View style={{ position: "absolute", left: 0, right: 0, top: 7, bottom: 7, backgroundColor: GREEN_LIGHT }} />}
+                  {isEnd && selStart && <View style={{ position: "absolute", left: 0, right: "50%", top: 7, bottom: 7, backgroundColor: GREEN_LIGHT }} />}
+                  {isStart && selEnd && <View style={{ position: "absolute", left: "50%", right: 0, top: 7, bottom: 7, backgroundColor: GREEN_LIGHT }} />}
+                  <TouchableOpacity
+                    onPress={() => !isDisabled && handleDayPress(d)}
+                    disabled={isDisabled}
+                    style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: (isStart || isEnd) ? GREEN : "transparent", alignItems: "center", justifyContent: "center" }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: (isStart || isEnd) ? "700" : "400", color: isDisabled ? "#D1D5DB" : (isStart || isEnd) ? "#fff" : TEXT }}>
+                      {d.getDate()}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Status hint */}
+          <View style={{ paddingHorizontal: 20, paddingTop: 14 }}>
+            {!selStart && (
+              <Text style={{ fontSize: 13, color: MUTED, textAlign: "center" }}>
+                Tap to select your {isCar ? "pickup" : "check-in"} date
+              </Text>
+            )}
+            {selStart && !selEnd && (
+              <Text style={{ fontSize: 13, color: MUTED, textAlign: "center" }}>
+                Now tap your {isCar ? "return" : "check-out"} date
+              </Text>
+            )}
+            {selStart && selEnd && (
+              <Text style={{ fontSize: 13, fontWeight: "600", color: GREEN, textAlign: "center" }}>
+                {fmt(selStart)} → {fmt(selEnd)}
+                {!isCar ? ` · ${nights(selStart, selEnd)} night${nights(selStart, selEnd) !== 1 ? "s" : ""}` : ""}
+              </Text>
+            )}
+          </View>
+
+          {/* Time inputs for car rentals */}
+          {isCar && selStart && selEnd && (
+            <View style={{ paddingHorizontal: 20, paddingTop: 20, gap: 12 }}>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: TEXT }}>Set Times</Text>
+              <View style={{ flexDirection: "row", gap: 12 }}>
+                <View style={{ flex: 1, backgroundColor: BG, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: BORDER }}>
+                  <Text style={{ fontSize: 12, color: MUTED, fontWeight: "600", marginBottom: 8 }}>Pickup time</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <TextInput
+                      value={pickupHr}
+                      onChangeText={v => setPickupHr(v.replace(/\D/g, "").slice(0, 2))}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                      style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 8, width: 44, textAlign: "center", paddingVertical: 8, fontSize: 16, fontWeight: "700", color: TEXT }}
+                    />
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: TEXT }}>:</Text>
+                    <TextInput
+                      value={pickupMin}
+                      onChangeText={v => setPickupMin(v.replace(/\D/g, "").slice(0, 2))}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                      style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 8, width: 44, textAlign: "center", paddingVertical: 8, fontSize: 16, fontWeight: "700", color: TEXT }}
+                    />
+                  </View>
+                </View>
+                <View style={{ flex: 1, backgroundColor: BG, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: BORDER }}>
+                  <Text style={{ fontSize: 12, color: MUTED, fontWeight: "600", marginBottom: 8 }}>Return time</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <TextInput
+                      value={returnHr}
+                      onChangeText={v => setReturnHr(v.replace(/\D/g, "").slice(0, 2))}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                      style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 8, width: 44, textAlign: "center", paddingVertical: 8, fontSize: 16, fontWeight: "700", color: TEXT }}
+                    />
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: TEXT }}>:</Text>
+                    <TextInput
+                      value={returnMin}
+                      onChangeText={v => setReturnMin(v.replace(/\D/g, "").slice(0, 2))}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                      style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 8, width: 44, textAlign: "center", paddingVertical: 8, fontSize: 16, fontWeight: "700", color: TEXT }}
+                    />
+                  </View>
+                </View>
+              </View>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Confirm button */}
+        <View style={{ paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: BORDER }}>
+          <TouchableOpacity
+            style={{ backgroundColor: canConfirm ? GREEN : "#D1D5DB", borderRadius: 14, paddingVertical: 16, alignItems: "center" }}
+            onPress={handleConfirm}
+            disabled={!canConfirm}
+          >
+            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Confirm Dates</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+// ── Main Screen ───────────────────────────────────────────────────────────────
+export default function ListingDetailScreen() {
   const { id, checkIn, checkOut, guests, pickupDatetime, returnDatetime } = useLocalSearchParams<{
-    id: string;
-    checkIn?: string;
-    checkOut?: string;
-    guests?: string;
-    pickupDatetime?: string;
-    returnDatetime?: string;
+    id: string; checkIn?: string; checkOut?: string; guests?: string;
+    pickupDatetime?: string; returnDatetime?: string;
   }>();
 
   const router = useRouter();
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const localCurrency = useAuthStore((s) => s.localCurrency);
+  const insets = useSafeAreaInsets();
 
-  const [photoIndex, setPhotoIndex] = useState(0);
+  const [photoIdx, setPhotoIdx] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
-  const [amenitiesExpanded, setAmenitiesExpanded] = useState(false);
+  const [amenExpanded, setAmenExpanded] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [localStart, setLocalStart] = useState<string | null>(null);
+  const [localEnd, setLocalEnd] = useState<string | null>(null);
+  const [showMsgModal, setShowMsgModal] = useState(false);
+  const [msgDraft, setMsgDraft] = useState("");
+  const [msgSending, setMsgSending] = useState(false);
 
-  // ── Fetch listing ──────────────────────────────────────────────────────────
+  // Room type selection state
+  const [selectedRoomTypeId, setSelectedRoomTypeId] = useState<string | null>(null);
 
-  const { data: listing, isLoading, isError } = useQuery<PublicListing>({
-    queryKey: ["public-listing", id],
+  // ── Data ──
+  const { data: listing, isLoading, isError, refetch: refetchListing } = useQuery<PublicListing>({
+    // Prices are localized per currency by the API, so the currency is part of
+    // the cache identity — without it a currency change serves cached amounts
+    // still labelled with the previous currency.
+    queryKey: ["listing-full", id, localCurrency],
     queryFn: async () => {
       const res = await listingApi.get<{ data: PublicListing }>(`/listings/${id}/public`);
+      return res.data.data;
+    },
+    enabled: !!id, staleTime: 0, gcTime: 5 * 60_000,
+  });
+
+  const { data: availability, refetch: refetchAvailability } = useQuery({
+    queryKey: ["availability", id],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: { unavailableRanges: { start: string; end: string }[] } }>(`/listings/${id}/availability`);
       return res.data.data;
     },
     enabled: !!id,
   });
 
-  // ── Favourite toggle ───────────────────────────────────────────────────────
-
-  const favMutation = useMutation({
-    mutationFn: async ({ isFav }: { isFav: boolean }) => {
-      if (isFav) {
-        await listingApi.delete(`/guests/me/favourites/${id}`);
-      } else {
-        await listingApi.post("/guests/me/favourites", { listingId: id });
-      }
+  const { data: reviewsData, refetch: refetchReviews } = useQuery<ReviewsData>({
+    queryKey: ["reviews", "listing", id, 3],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: ReviewsData }>(`/listings/${id}/reviews?page=1&limit=3`);
+      return res.data.data;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["public-listing", id] });
-      qc.invalidateQueries({ queryKey: ["favourites"] });
-    },
-    onError: () => {
-      Alert.alert("Error", "Could not update saved status. Please try again.");
-    },
+    enabled: !!id,
   });
 
-  // ── Derived values ─────────────────────────────────────────────────────────
+  useRefreshOnFocus(useCallback(() => {
+    void refetchListing();
+    void refetchAvailability();
+    void refetchReviews();
+  }, [refetchListing, refetchAvailability, refetchReviews]));
 
-  if (isLoading) return <LoadingSkeleton />;
+  // Active promotions filtered by this listing's category (hotel / apartment / car)
+  const { data: activePromotions } = useQuery<Promotion[]>({
+    queryKey: ["promotions-listing", listing?.category],
+    queryFn: async () => {
+      try {
+        const res = await listingApi.get<{ data: { promotions: Promotion[] } }>(
+          `/promotions/active?activity=${listing!.category}`
+        );
+        return res.data.data.promotions ?? [];
+      } catch { return []; }
+    },
+    enabled: !!listing,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
 
+  // Room types collection
+  const roomTypes = listing?.roomTypes ?? listing?.hotelRoomTypes ?? [];
+
+  // Auto select first room type when data loads
+  useEffect(() => {
+    if (roomTypes.length > 0 && !selectedRoomTypeId) {
+      setSelectedRoomTypeId(roomTypes[0].id);
+    }
+  }, [roomTypes, selectedRoomTypeId]);
+
+  useEffect(() => {
+    if (!listing) return;
+    if (user) {
+      void listingApi.post("/guests/me/recently-viewed", { listingId: listing.id }).catch(() => { });
+    } else {
+      void (async () => {
+        try {
+          const SecureStore = await import("expo-secure-store");
+          const raw = await SecureStore.getItemAsync("zika:anon_views");
+          const ids: string[] = raw ? JSON.parse(raw) : [];
+          if (!ids.includes(listing.id)) {
+            const updated = [listing.id, ...ids].slice(0, 20);
+            await SecureStore.setItemAsync("zika:anon_views", JSON.stringify(updated));
+          }
+        } catch { }
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listing?.id]);
+
+  const favMut = useMutation({
+    mutationFn: async ({ isFav }: { isFav: boolean }) => {
+      if (isFav) { await listingApi.delete(`/guests/me/favourites/${id}`); }
+      else { await listingApi.post("/guests/me/favourites", { listingId: id }); }
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["listing-full", id] }); },
+    onError: () => Alert.alert("Error", "Could not update saved status."),
+  });
+
+  // ── States ──
+  if (isLoading) return <Skeleton />;
   if (isError || !listing) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle-outline" size={60} color="#dc2626" />
-          <Text style={styles.errorTitle}>Listing not found</Text>
-          <Text style={styles.errorSubtitle}>This listing is no longer available.</Text>
-          <TouchableOpacity style={styles.errorBtn} onPress={() => router.back()}>
-            <Text style={styles.errorBtnText}>Back to search</Text>
-          </TouchableOpacity>
-        </View>
+      <SafeAreaView style={{ flex: 1, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", padding: 32 }}>
+        <Ionicons name="alert-circle-outline" size={56} color="#DC2626" />
+        <Text style={{ fontSize: 20, fontWeight: "700", color: TEXT, marginTop: 16, marginBottom: 8 }}>Listing not found</Text>
+        <Text style={{ fontSize: 14, color: MUTED, textAlign: "center", marginBottom: 24 }}>This listing is no longer available.</Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: GREEN, borderRadius: 12, paddingHorizontal: 28, paddingVertical: 13 }}>
+          <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>Go back</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
@@ -414,379 +708,879 @@ export default function PublicListingDetailScreen() {
   const isCar = listing.category === "car";
   const isHotel = listing.category === "hotel";
   const isApartment = listing.category === "apartment";
+  const isProvider = user?.userType === "provider";
 
   const photos = [...(listing.photos ?? [])].sort((a, b) => a.position - b.position);
-  const totalPhotos = photos.length;
 
-  const priceLabel = isCar
-    ? `${listing.currency ?? ""} ${(listing.pricePerNight ?? 0).toLocaleString()} / day`
-    : `${listing.currency ?? ""} ${(listing.pricePerNight ?? 0).toLocaleString()} / night`;
+  // Selected room type object if hotel has room types
+  const selectedRoomType = roomTypes.find((r) => r.id === selectedRoomTypeId) ?? roomTypes[0];
 
-  const isProvider = user?.userType === "provider";
-  const isOwner = isProvider && (user as any)?.id && listing && (listing as any).providerId === (user as any)?.id;
+  // Derive base rate per night/day before discount
+  const baseRate = isCar
+    ? Number(listing.dailyRate ?? listing.pricePerDay ?? 0)
+    : selectedRoomType
+      ? Number(selectedRoomType.pricePerNight || 0)
+      : Number(listing.nightlyRate ?? listing.pricePerNight ?? 0);
 
-  // Dates
-  const hasDates = isCar
-    ? !!(pickupDatetime && returnDatetime)
-    : !!(checkIn && checkOut);
-
-  const datesLabel = (() => {
-    if (isCar && pickupDatetime && returnDatetime) {
-      const days = daysBetween(pickupDatetime, returnDatetime);
-      return `${formatDateWithTime(pickupDatetime)} → ${formatDateWithTime(returnDatetime)} (${days} day${days !== 1 ? "s" : ""})`;
+  const rateLabel = isCar ? "per day" : "per night";
+  // Shares the web listing URL. `/?listing=<id>` is the canonical
+  // public link — the web app emits Open Graph tags for exactly that shape,
+  // so the shared link previews with the listing photo and title.
+  async function handleShare() {
+    const url = `${WEB_BASE_URL}/?listing=${id}`;
+    const title = listing?.name ?? "this listing";
+    try {
+      await Share.share(
+        Platform.OS === "ios"
+          ? { url, message: `Take a look at ${title} on Kainook` }
+          : { message: `Take a look at ${title} on Kainook\n${url}` },
+      );
+    } catch {
+      // User dismissed the sheet — nothing to report.
     }
-    if (!isCar && checkIn && checkOut) {
-      const nights = nightsBetween(checkIn, checkOut);
-      return `${formatDate(checkIn)} → ${formatDate(checkOut)} (${nights} night${nights !== 1 ? "s" : ""})`;
-    }
-    return null;
-  })();
-
-  // Amenities
-  const standardAmenities = listing.amenities ?? [];
-  const customAmenities = listing.customAmenities ?? [];
-  const allAmenities: { label: string; isCustom: boolean }[] = [
-    ...standardAmenities.map((a) => ({ label: AMENITY_LABELS[a.amenityKey] ?? a.amenityKey, isCustom: false })),
-    ...customAmenities.map((a) => ({ label: a.label, isCustom: true })),
-  ];
-  const MAX_AMENITIES = 10;
-  const visibleAmenities = amenitiesExpanded ? allAmenities : allAmenities.slice(0, MAX_AMENITIES);
-
-  // Category display label
-  const categoryLabel =
-    listing.category.charAt(0).toUpperCase() + listing.category.slice(1);
-
-  // Location string
-  const locationParts = [listing.town, listing.country].filter(Boolean);
-  const locationStr = locationParts.join(", ");
-
-  // Sub-title line (hotel / apartment / car)
-  const subTitle = (() => {
-    if (isHotel && listing.starRating) {
-      return "★".repeat(listing.starRating) + "☆".repeat(5 - listing.starRating);
-    }
-    if (isApartment) {
-      const beds = listing.bedrooms ?? 0;
-      const baths = listing.bathrooms ?? 0;
-      const guests2 = listing.maxGuests ?? 0;
-      return `${beds} bed · ${baths} bath · up to ${guests2} guests`;
-    }
-    if (isCar) {
-      const make = listing.carMake ?? "";
-      const model = listing.carModel ?? "";
-      const year = listing.carYear ?? "";
-      const trans = listing.transmission
-        ? listing.transmission.charAt(0).toUpperCase() + listing.transmission.slice(1)
-        : "";
-      const seatsCount = listing.seats ?? 0;
-      return `${make} ${model} ${year} · ${trans} · ${seatsCount} seats`.trim();
-    }
-    return null;
-  })();
-
-  function handleBookNow() {
-    if (!hasDates) return;
-    if (isCar) {
-      router.push({
-        pathname: "/book/[listingId]",
-        params: { listingId: id, pickupDatetime, returnDatetime },
-      });
-    } else {
-      router.push({
-        pathname: "/book/[listingId]",
-        params: { listingId: id, checkIn, checkOut, guests },
-      });
-    }
-  }
-
-  function handlePhotoScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-    setPhotoIndex(index);
   }
 
   const isFav = listing.isFavourited ?? false;
 
-  return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+  // Derive effective promotion from listing.promoBadge or activePromotions
+  const customPromoBadge = listing.promoBadge;
+  const promoPercentFromBadge = customPromoBadge?.labelText
+    ? parseFloat(customPromoBadge.labelText.replace(/[^0-9.]/g, ""))
+    : 0;
 
-        {/* ── Photo area ──────────────────────────────────────────────────── */}
-        <View style={styles.photoContainer}>
-          {totalPhotos > 0 ? (
+  const effectivePromo: ActivePromotion | null = customPromoBadge && promoPercentFromBadge > 0
+    ? {
+      activity: listing.category,
+      discountType: "percentage",
+      discountValue: String(promoPercentFromBadge),
+      labelText: customPromoBadge.labelText,
+      bannerTitle: customPromoBadge.labelText,
+      status: "active",
+      applyToBooking: true,
+    }
+    : (activePromotions?.[0] as unknown as ActivePromotion | null) ?? null;
+
+  const promoted = applyPromotion(baseRate || null, effectivePromo);
+  const activePromo = effectivePromo;
+
+  // Final rate (discounted rate if promotion applies, otherwise baseRate)
+  const rate = promoted.hasPromotion && promoted.discountedPrice != null
+    ? promoted.discountedPrice
+    : baseRate;
+
+  // Strikethrough MRP price (baseRate if promo applies, or listing.mrpPrice if higher than baseRate)
+  const mrpPrice = promoted.hasPromotion && promoted.originalPrice != null && promoted.originalPrice > rate
+    ? promoted.originalPrice
+    : (listing.mrpPrice && listing.mrpPrice > baseRate)
+      ? listing.mrpPrice
+      : null;
+
+  const discountPercent = promoted.hasPromotion && promoted.originalPrice && promoted.discountedPrice
+    ? Math.round(((promoted.originalPrice - promoted.discountedPrice) / promoted.originalPrice) * 100)
+    : null;
+
+  // Locally selected dates take priority over URL params
+  const effectivePU = localStart ?? pickupDatetime;
+  const effectiveRT = localEnd ?? returnDatetime;
+  const effectiveCI = localStart ?? checkIn;
+  const effectiveCO = localEnd ?? checkOut;
+
+  const hasDates = isCar ? !!(effectivePU && effectiveRT) : !!(effectiveCI && effectiveCO);
+
+  const datesStr = (() => {
+    if (isCar && effectivePU && effectiveRT) {
+      const d = days(effectivePU, effectiveRT);
+      return `${fmtDT(effectivePU)} → ${fmtDT(effectiveRT)} · ${d} day${d !== 1 ? "s" : ""}`;
+    }
+    if (!isCar && effectiveCI && effectiveCO) {
+      const n = nights(effectiveCI, effectiveCO);
+      return `${fmt(effectiveCI)} → ${fmt(effectiveCO)} · ${n} night${n !== 1 ? "s" : ""}`;
+    }
+    return null;
+  })();
+
+  // Pricing
+  const pricingBreakout = (() => {
+    if (!hasDates || !baseRate) return null;
+    const count = isCar && effectivePU && effectiveRT ? days(effectivePU, effectiveRT)
+      : !isCar && effectiveCI && effectiveCO ? nights(effectiveCI, effectiveCO) : 1;
+    const originalSubtotal = baseRate * count;
+
+    // Promo discount per night/day
+    const promoDiscount = promoted.hasPromotion && promoted.savings != null && promoted.savings > 0
+      ? Math.round(promoted.savings) * count
+      : 0;
+
+    let longStayDiscount = 0;
+    if (!isCar && listing.longStayEnabled && listing.longStayMinNights && count >= listing.longStayMinNights) {
+      const v = Number(listing.longStayDiscountValue ?? 0);
+      const subAfterPromo = Math.max(0, originalSubtotal - promoDiscount);
+      longStayDiscount = listing.longStayDiscountType === "percentage" ? subAfterPromo * (v / 100) : v * count;
+    }
+
+    const totalDiscount = promoDiscount + longStayDiscount;
+    const discountedSubtotal = Math.max(0, originalSubtotal - totalDiscount);
+
+    // Service fee — rate comes from the API (country-specific commission), so the
+    // figure quoted here matches what /bookings/initiate will actually charge.
+    // Previously hardcoded to 10% while checkout used the real rate, so the
+    // listing page and the payment screen could disagree.
+    const commissionRate = listing.commissionRate ?? 0;
+    const serviceFeePercent = Math.round(commissionRate * 1000) / 10;
+    const serviceFee = Math.ceil(discountedSubtotal * commissionRate * 100) / 100;
+    const delivery = isCar && listing.deliveryAvailable && listing.deliveryFee ? Number(listing.deliveryFee) : 0;
+    const total = discountedSubtotal + serviceFee + delivery;
+
+    return {
+      baseRate,
+      rate,
+      count,
+      originalSubtotal,
+      promoDiscount,
+      longStayDiscount,
+      discountedSubtotal,
+      serviceFeePercent,
+      serviceFee,
+      delivery,
+      total,
+    };
+  })();
+
+  // Amenities
+  const amenityKeys: string[] = (() => {
+    if (!listing.amenities) return [];
+    if (Array.isArray(listing.amenities)) {
+      return listing.amenities.map((a: any) => {
+        const k = a?.amenityKey ?? a;
+        if (typeof k === "string") return k.includes(":") ? k.split(":")[1]! : k;
+        return null;
+      }).filter(Boolean) as string[];
+    }
+    if (typeof listing.amenities === "object") {
+      return Object.values(listing.amenities as Record<string, any[]>).flat().map((a: any) => {
+        const k = a?.amenityKey ?? a;
+        if (typeof k === "string") return k.includes(":") ? k.split(":")[1]! : k;
+        return null;
+      }).filter(Boolean) as string[];
+    }
+    return [];
+  })();
+
+  const customAmenities: string[] = Array.isArray(listing.customAmenities)
+    ? listing.customAmenities.map((a: any) => a?.label ?? a).filter(Boolean) as string[]
+    : [];
+
+  const allAmenities: { key: string; label: string }[] = [
+    ...amenityKeys.map(k => ({ key: k, label: AMENITY_LABELS[k] ?? k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) })),
+    ...customAmenities.map(l => ({ key: l, label: l })),
+  ];
+  const visAmenities = amenExpanded ? allAmenities : allAmenities.slice(0, 8);
+
+  // Category chips
+  const categoryChips = (() => {
+    if (isHotel) {
+      const chips: { icon: string; label: string; accent?: boolean }[] = [
+        { icon: "🏨", label: "Hotel", accent: true },
+      ];
+      if (listing.starRating) chips.push({ icon: "⭐", label: `${listing.starRating} Stars` });
+      if (selectedRoomType?.name || listing.roomType) {
+        chips.push({ icon: "🛏️", label: (selectedRoomType?.name ?? listing.roomType ?? "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) });
+      }
+      if (listing.unitCount) chips.push({ icon: "🏢", label: `${listing.unitCount} Units` });
+      return chips;
+    }
+    if (isApartment) {
+      return [
+        { icon: "🏠", label: "Home", accent: true },
+        ...(listing.bedrooms ? [{ icon: "🛏️", label: `${listing.bedrooms} Bed` }] : []),
+        ...(listing.bathrooms ? [{ icon: "🚿", label: `${listing.bathrooms} Bath` }] : []),
+        ...(listing.maxGuests ? [{ icon: "👥", label: `${listing.maxGuests} Guests` }] : []),
+      ];
+    }
+    return [
+      { icon: "🚗", label: "Car", accent: true },
+      ...(listing.transmission ? [{ icon: "⚙️", label: listing.transmission.charAt(0).toUpperCase() + listing.transmission.slice(1) }] : []),
+      ...(listing.seats ? [{ icon: "💺", label: `${listing.seats} Seats` }] : []),
+      ...(listing.fuelType ? [{ icon: "⛽", label: listing.fuelType.charAt(0).toUpperCase() + listing.fuelType.slice(1) }] : []),
+    ];
+  })();
+
+  // Detail card rows
+  const detailRows = (() => {
+    if (isHotel || isApartment) {
+      const rows: { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string; value: string }[] = [];
+      if (listing.checkinTime) rows.push({ icon: "log-in-outline", label: "Check-in from", value: listing.checkinTime });
+      if (listing.checkoutTime) rows.push({ icon: "log-out-outline", label: "Check-out by", value: listing.checkoutTime });
+      rows.push({ icon: "flame-outline", label: "Smoking", value: listing.smokingAllowed ? "Allowed" : "Not allowed" });
+      rows.push({ icon: "paw-outline", label: "Pets", value: listing.petsAllowed ? "Allowed" : "Not allowed" });
+      // Applies to hotels as well as homes — a hotel minimum was previously
+      // invisible in the app while the web listing card and detail page both
+      // showed it. Only surfaced above 1 night, matching web.
+      if (listing.minStayNights && listing.minStayNights > 1) rows.push({ icon: "moon-outline", label: "Min stay", value: `${listing.minStayNights} night${listing.minStayNights !== 1 ? "s" : ""}` });
+      if (isApartment && listing.longStayEnabled && listing.longStayMinNights && listing.longStayDiscountValue) {
+        rows.push({ icon: "pricetag-outline", label: "Long-stay discount", value: `${listing.longStayDiscountType === "percentage" ? `${listing.longStayDiscountValue}% off` : `${listing.currency} ${listing.longStayDiscountValue} off`} for ${listing.longStayMinNights}+ nights` });
+      }
+      return rows;
+    }
+    const rows: { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string; value: string }[] = [];
+    if (listing.minDriverAge) rows.push({ icon: "person-outline", label: "Min driver age", value: `${listing.minDriverAge} years` });
+    rows.push({ icon: "speedometer-outline", label: "Mileage", value: listing.mileagePolicy === "unlimited" ? "Unlimited" : listing.mileageLimitKm ? `${listing.mileageLimitKm} km/day` : "See host" });
+    if (listing.fuelType) rows.push({ icon: "car-outline", label: "Fuel type", value: listing.fuelType.charAt(0).toUpperCase() + listing.fuelType.slice(1) });
+    // A supplied driver waives the deposit server-side, so never quote one here.
+    if (listing.driverProvided) {
+      rows.push({ icon: "person-circle-outline", label: "Driver", value: "Included — no deposit" });
+    } else if (listing.securityDeposit && listing.securityDeposit > 0) {
+      rows.push({ icon: "lock-closed-outline", label: "Security deposit", value: `${listing.currency ?? ""} ${listing.securityDeposit}` });
+    }
+    rows.push({ icon: "navigate-outline", label: "Delivery", value: listing.deliveryAvailable ? `Yes · within ${listing.deliveryRadiusKm ?? "?"}km` : "Not available" });
+    return rows;
+  })();
+
+  const reviews = reviewsData?.reviews ?? [];
+  const totalReviews = reviewsData?.total ?? 0;
+  const avgRating = reviewsData?.averageRating;
+  const locationStr = [listing.town, listing.country].filter(Boolean).join(", ");
+
+  function handleBook() {
+    if (!listing) return;
+    if (!user) {
+      Alert.alert("Sign in required", "You need to be signed in to book.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign In", onPress: () => router.push("/(auth)/login" as any) },
+      ]);
+      return;
+    }
+    if (isCar) {
+      router.push({
+        pathname: "/book/[listingId]",
+        params: {
+          listingId: id,
+          pickupDatetime: effectivePU,
+          returnDatetime: effectiveRT,
+          listingCategory: listing.category,
+          listingTitle: listing.title ?? listing.name ?? "",
+          listingCountry: listing.country ?? "",
+        },
+      });
+    } else {
+      router.push({
+        pathname: "/book/[listingId]",
+        params: {
+          listingId: id,
+          checkIn: effectiveCI,
+          checkOut: effectiveCO,
+          guests,
+          listingCategory: listing.category,
+          listingTitle: listing.title ?? listing.name ?? "",
+          listingCountry: listing.country ?? "",
+          ...(selectedRoomType?.id ? { roomTypeId: selectedRoomType.id } : {}),
+        },
+      });
+    }
+  }
+
+  async function handleMessageHost() {
+    if (!msgDraft.trim() || !id) return;
+    setMsgSending(true);
+    try {
+      const r1 = await listingApi.post<{ data: { conversationId: string; isNew: boolean } }>(
+        "/conversations",
+        { listingId: id }
+      );
+      const convId = r1.data.data.conversationId;
+      await listingApi.post(`/conversations/${convId}/messages`, { body: msgDraft.trim() });
+      setShowMsgModal(false);
+      setMsgDraft("");
+      router.push(`/conversation/${convId}` as any);
+    } catch (e: any) {
+      const msg = e?.response?.data?.error?.message ?? "Could not send message. Please try again.";
+      Alert.alert("Error", msg);
+    } finally {
+      setMsgSending(false);
+    }
+  }
+
+  const curr = listing.currency ?? "XAF";
+
+  return (
+    <View style={{ flex: 1, backgroundColor: "#fff" }}>
+
+      {/* ══ OVERLAY BUTTONS ══ */}
+      <View style={[s.overlayTop, { paddingTop: insets.top > 0 ? insets.top + 12 : 12 }]} pointerEvents="box-none">
+        <TouchableOpacity style={s.circleBtn} onPress={() => router.back()} activeOpacity={0.85}>
+          <Ionicons name="arrow-back" size={20} color={TEXT} />
+        </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          {/* Share is available to everyone, signed in or not — a shareable
+              listing link should not require an account. */}
+          <TouchableOpacity
+            style={s.circleBtn}
+            onPress={() => void handleShare()}
+            activeOpacity={0.85}
+            accessibilityLabel="Share this listing"
+          >
+            <Ionicons name="share-outline" size={20} color={TEXT} />
+          </TouchableOpacity>
+          {user && !isProvider && (
+            <TouchableOpacity
+              style={s.circleBtn}
+              onPress={() => favMut.mutate({ isFav })}
+              disabled={favMut.isPending}
+              activeOpacity={0.85}
+            >
+              {favMut.isPending ? (
+                <ActivityIndicator size="small" color="#DC2626" />
+              ) : (
+                <Ionicons name={isFav ? "heart" : "heart-outline"} size={20} color={isFav ? "#DC2626" : TEXT} />
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* ══ CONTENT ══ */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
+
+        {/* ── Hero Photos ── */}
+        <View style={{ height: PHOTO_H, backgroundColor: "#E5E7EB" }}>
+          {photos.length > 0 ? (
             <>
               <FlatList
                 data={photos}
-                keyExtractor={(p) => p.id}
-                horizontal
-                pagingEnabled
+                keyExtractor={p => p.id}
+                horizontal pagingEnabled
                 showsHorizontalScrollIndicator={false}
-                onScroll={handlePhotoScroll}
                 scrollEventThrottle={16}
+                onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
+                  setPhotoIdx(Math.round(e.nativeEvent.contentOffset.x / W));
+                }}
                 renderItem={({ item }) => (
-                  <Image
-                    source={{ uri: item.cdnUrl }}
-                    style={styles.photo}
-                    resizeMode="cover"
-                  />
+                  <TouchableOpacity activeOpacity={0.95} onPress={() => setGalleryOpen(true)}>
+                    <ListingImage uri={item.cdnUrl} style={{ width: W, height: PHOTO_H }} resizeMode="cover" />
+                  </TouchableOpacity>
                 )}
               />
-              {/* Photo counter */}
-              <View style={styles.photoCounter}>
-                <Text style={styles.photoCounterText}>{photoIndex + 1}/{totalPhotos}</Text>
+              {/* Photo counter pill */}
+              <View style={s.photoPill}>
+                <Ionicons name="images-outline" size={11} color="#fff" />
+                <Text style={s.photoPillText}>{photoIdx + 1} / {photos.length}</Text>
               </View>
             </>
           ) : (
-            <View style={styles.photoPlaceholder}>
-              <Ionicons name="image-outline" size={48} color="#9ca3af" />
-              <Text style={styles.photoPlaceholderText}>No photos</Text>
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+              <Ionicons name="image-outline" size={48} color={MUTED} />
+              <Text style={{ color: MUTED, fontSize: 13, marginTop: 8 }}>No photos available</Text>
             </View>
           )}
+        </View>
 
-          {/* Back button overlaid on photos */}
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color="#fff" />
-          </TouchableOpacity>
+        {/* ── Title card ── */}
+        <View style={s.titleCard}>
+          {/* Category + rating row */}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <View style={[s.catBadge, isCar && { backgroundColor: "#FFF7ED", borderColor: "#FED7AA" }, isApartment && { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0" }]}>
+                <Text style={[s.catBadgeText, isCar && { color: "#C2410C" }, isApartment && { color: GREEN }]}>
+                  {isCar ? "🚗 Car" : isApartment ? "🏠 Home" : "🏨 Hotel"}
+                </Text>
+              </View>
+              {listing.isAccredited && (
+                <View style={s.accreditedBadge}>
+                  <Ionicons name="checkmark-circle" size={12} color={GREEN} />
+                  <Text style={s.accreditedText}>Accredited</Text>
+                </View>
+              )}
+            </View>
+            {avgRating != null && totalReviews > 0 && (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                <Ionicons name="star" size={14} color="#F59E0B" />
+                <Text style={{ fontSize: 13, fontWeight: "700", color: TEXT }}>{avgRating.toFixed(1)}</Text>
+                <Text style={{ fontSize: 12, color: MUTED }}>({totalReviews})</Text>
+              </View>
+            )}
+          </View>
 
-          {/* Favourite button overlaid on photos */}
-          {user && !isProvider && (
-            <TouchableOpacity
-              style={styles.favButton}
-              onPress={() => favMutation.mutate({ isFav })}
-              disabled={favMutation.isPending}
-            >
-              <Ionicons
-                name={isFav ? "heart" : "heart-outline"}
-                size={24}
-                color={isFav ? "#dc2626" : "#fff"}
-              />
+          <Text style={s.title}>{listing.title ?? listing.name ?? "Untitled listing"}</Text>
+
+          {locationStr ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6, marginBottom: 14 }}>
+              <Ionicons name="location" size={14} color={GREEN} />
+              <Text style={{ fontSize: 13, color: MUTED, fontWeight: "500" }}>{locationStr}</Text>
+            </View>
+          ) : null}
+
+          {/* Spec chips */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+            {categoryChips.map((c, i) => (
+              <Chip key={i} icon={c.icon} label={c.label} accent={c.accent} />
+            ))}
+          </ScrollView>
+
+          {/* MRP & Discounted Price Display */}
+          <View style={s.priceRow}>
+            <View style={{ flex: 1 }}>
+              {mrpPrice != null && mrpPrice > rate ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                  <Text style={s.priceOriginal}>{curr} {Math.round(mrpPrice).toLocaleString()}</Text>
+                </View>
+              ) : null}
+
+              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
+                <Text style={s.priceAmount}>{curr} {Math.round(rate).toLocaleString()}</Text>
+                <Text style={s.priceUnit}>{rateLabel}</Text>
+              </View>
+            </View>
+
+            {/* Promo Badges */}
+            {customPromoBadge ? (
+              <View style={[s.promoDealBadge, { backgroundColor: customPromoBadge.labelColour ?? "#C84B2F" }]}>
+                <Text style={s.promoDealText}>{customPromoBadge.labelText}</Text>
+              </View>
+            ) : promoted.hasPromotion ? (
+              <View style={s.promoDealBadge}>
+                <Text style={s.promoDealText}>🔥 {promoted.labelText}</Text>
+              </View>
+            ) : (
+              <View style={s.bestDeal}>
+                <Ionicons name="pricetag" size={11} color={GREEN} />
+                <Text style={s.bestDealText}>Best Rate</Text>
+              </View>
+            )}
+          </View>
+
+          {isCar && listing.deliveryAvailable && listing.deliveryFee ? (
+            <Text style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>
+              + {curr} {listing.deliveryFee} delivery available
+            </Text>
+          ) : null}
+        </View>
+
+        {/* ── Room Types Feature (for Hotels) ── */}
+        {isHotel && roomTypes.length > 0 && (
+          <View style={s.section}>
+            <RoomTypeSelector
+              roomTypes={roomTypes}
+              selectedRoomTypeId={selectedRoomTypeId}
+              onSelectRoomType={(rtId) => setSelectedRoomTypeId(rtId)}
+              currency={curr}
+              discountPercent={discountPercent}
+            />
+          </View>
+        )}
+
+        {/* ── Long-stay promo ── */}
+        {listing.longStayEnabled && (
+          <View style={s.promoBanner}>
+            <View style={s.promoIcon}>
+              <Ionicons name="gift" size={18} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.promoTitle}>Long-Stay Discount 🎉</Text>
+              <Text style={s.promoSub}>Book {listing.longStayMinNights ?? 7}+ nights and save {listing.longStayDiscountValue ?? 0}{listing.longStayDiscountType === "percentage" ? "%" : ` ${curr}`} automatically.</Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── Active Promotions ── */}
+        {activePromo && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Best Offer Available</Text>
+            <View style={pr.card}>
+              <View style={pr.iconWrap}>
+                <Ionicons name="pricetag" size={18} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={pr.title}>{activePromo.bannerTitle}</Text>
+                {promoted.savings != null && promoted.savings > 0 && (
+                  <Text style={pr.savings}>You Save {curr} {Math.round(promoted.savings).toLocaleString()}</Text>
+                )}
+                {promoted.originalPrice != null && promoted.discountedPrice != null && (
+                  <Text style={pr.origPrice}>
+                    {curr} {Math.round(promoted.originalPrice).toLocaleString()} → {curr} {Math.round(promoted.discountedPrice).toLocaleString()}
+                  </Text>
+                )}
+              </View>
+              <View style={pr.discBadge}>
+                <Text style={pr.discText}>{activePromo.labelText}</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* ── Dates ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Your {isCar ? "Rental Period" : "Stay"}</Text>
+          {datesStr ? (
+            <View style={s.datesPill}>
+              <Ionicons name="calendar-outline" size={16} color={GREEN} />
+              <Text style={s.datesText}>{datesStr}</Text>
+            </View>
+          ) : (
+            <TouchableOpacity style={s.selectDatesCard} onPress={() => setShowDatePicker(true)}>
+              <Ionicons name="calendar-outline" size={20} color={GREEN} />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: "700", color: TEXT }}>Select {isCar ? "pickup & return" : "check-in & check-out"}</Text>
+                <Text style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>Tap to choose your dates</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={MUTED} />
             </TouchableOpacity>
           )}
         </View>
 
-        {/* ── Content ─────────────────────────────────────────────────────── */}
-        <View style={styles.content}>
-
-          {/* Title */}
-          <Text style={styles.listingName}>{listing.name ?? "Untitled listing"}</Text>
-
-          {/* Category badge + location */}
-          <View style={styles.categoryRow}>
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryBadgeText}>{categoryLabel}</Text>
-            </View>
-            {locationStr ? (
-              <Text style={styles.locationText}> · {locationStr}</Text>
-            ) : null}
-          </View>
-
-          {/* Sub-title: stars / beds / car spec */}
-          {subTitle ? (
-            <Text style={styles.subTitle}>{subTitle}</Text>
-          ) : null}
-
-          {/* Price */}
-          <Text style={styles.price}>{priceLabel}</Text>
-          {isCar && listing.deliveryAvailable && listing.deliveryFee != null && (
-            <Text style={styles.deliveryFee}>
-              + {listing.currency ?? ""} {listing.deliveryFee.toLocaleString()} delivery
-            </Text>
-          )}
-
-          {/* Dates section */}
-          <View style={styles.datesSection}>
-            <Text style={styles.sectionLabel}>Your dates</Text>
-            {datesLabel ? (
-              <View style={styles.datePill}>
-                <Ionicons name="calendar-outline" size={15} color="#1a73e8" style={{ marginRight: 6 }} />
-                <Text style={styles.datePillText}>{datesLabel}</Text>
+        {/* ── Pricing breakdown ── */}
+        {pricingBreakout && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Price Breakdown</Text>
+            <View style={s.breakCard}>
+              <View style={s.breakRow}>
+                <Text style={s.breakLabel}>
+                  {curr} {Math.round(pricingBreakout.baseRate).toLocaleString()} × {pricingBreakout.count} {isCar ? "day" : "night"}{pricingBreakout.count !== 1 ? "s" : ""}
+                </Text>
+                <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.originalSubtotal).toLocaleString()}</Text>
               </View>
-            ) : (
-              <View style={styles.noDatesBox}>
-                <Ionicons name="calendar-outline" size={16} color="#6b7280" style={{ marginRight: 6 }} />
-                <Text style={styles.noDatesText}>Return to search to select dates.</Text>
+              {pricingBreakout.promoDiscount > 0 && (
+                <View style={s.breakRow}>
+                  <Text style={[s.breakLabel, { color: "#16a34a", fontWeight: "600" }]}>Promotion discount</Text>
+                  <Text style={[s.breakVal, { color: "#16a34a", fontWeight: "700" }]}>−{curr} {Math.round(pricingBreakout.promoDiscount).toLocaleString()}</Text>
+                </View>
+              )}
+              {pricingBreakout.longStayDiscount > 0 && (
+                <View style={s.breakRow}>
+                  <Text style={[s.breakLabel, { color: "#16a34a", fontWeight: "600" }]}>Long-stay discount</Text>
+                  <Text style={[s.breakVal, { color: "#16a34a", fontWeight: "700" }]}>−{curr} {Math.round(pricingBreakout.longStayDiscount).toLocaleString()}</Text>
+                </View>
+              )}
+              {pricingBreakout.delivery > 0 && (
+                <View style={s.breakRow}>
+                  <Text style={s.breakLabel}>Delivery fee</Text>
+                  <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.delivery).toLocaleString()}</Text>
+                </View>
+              )}
+              {pricingBreakout.serviceFeePercent > 0 && (
+                <View style={s.breakRow}>
+                  <Text style={s.breakLabel}>Service fee ({pricingBreakout.serviceFeePercent}%)</Text>
+                  <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.serviceFee).toLocaleString()}</Text>
+                </View>
+              )}
+              <View style={[s.breakRow, { borderTopWidth: 1, borderTopColor: BORDER, marginTop: 4, paddingTop: 12 }]}>
+                <Text style={s.breakTotal}>Total</Text>
+                <Text style={s.breakTotalVal}>{curr} {Math.round(pricingBreakout.total).toLocaleString()}</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* ── Description ── */}
+        {listing.description ? (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>About this {listing.category}</Text>
+            <Text style={s.descText} numberOfLines={descExpanded ? undefined : 4}>{listing.description}</Text>
+            <TouchableOpacity onPress={() => setDescExpanded(v => !v)} style={s.readMore}>
+              <Text style={s.readMoreText}>{descExpanded ? "Show less ↑" : "Read more ↓"}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {/* ── Amenities ── */}
+        {allAmenities.length > 0 && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>What's included</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" }}>
+              {visAmenities.map((a, i) => <AmenityPill key={i} amenityKey={a.key} label={a.label} />)}
+            </View>
+            {allAmenities.length > 8 && (
+              <TouchableOpacity onPress={() => setAmenExpanded(v => !v)} style={[s.readMore, { marginTop: 4 }]}>
+                <Text style={s.readMoreText}>
+                  {amenExpanded ? "Show less ↑" : `Show all ${allAmenities.length} amenities ↓`}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* ── Property details ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>{isCar ? "Car Details" : "Property Details"}</Text>
+          <InfoCard items={detailRows} />
+        </View>
+
+        {/* ── Host card ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Your Host</Text>
+          <View style={s.hostCard}>
+            <View style={s.hostAvatar}>
+              <Ionicons name="person" size={24} color={GREEN} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.hostName}>Verified Property Partner</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                  <Ionicons name="star" size={12} color="#F59E0B" />
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: TEXT }}>4.9</Text>
+                </View>
+                <Text style={{ fontSize: 12, color: MUTED }}>· Response within 1h</Text>
+              </View>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
+                <View style={s.verifiedBadge}>
+                  <Ionicons name="shield-checkmark" size={10} color={GREEN} />
+                  <Text style={s.verifiedText}>Verified</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+          {!isProvider && listing.providerId && (
+            <TouchableOpacity
+              style={s.msgHostBtn}
+              onPress={() => {
+                if (!user) {
+                  Alert.alert(
+                    "Sign in required",
+                    "Please sign in to message the host.",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Sign In", onPress: () => router.push("/(auth)/login" as any) },
+                    ]
+                  );
+                  return;
+                }
+                setShowMsgModal(true);
+              }}
+              activeOpacity={0.82}
+            >
+              <Ionicons name="chatbubble-ellipses-outline" size={18} color={GREEN} />
+              <Text style={s.msgHostBtnText}>Message Host</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* ── Cancellation ── */}
+        {listing.cancellationPolicy && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Cancellation Policy</Text>
+            <View style={[s.cancelCard, { borderLeftColor: cancelColor(listing.cancellationPolicy) }]}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <View style={[s.cancelDot, { backgroundColor: cancelColor(listing.cancellationPolicy) }]} />
+                <Text style={[s.cancelPolicyName, { color: cancelColor(listing.cancellationPolicy) }]}>
+                  {listing.cancellationPolicy.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                </Text>
+              </View>
+              <Text style={s.cancelDesc}>{cancelText(listing.cancellationPolicy)}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── Reviews ── */}
+        <View style={s.section}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+            <Text style={s.sectionTitle}>Guest Reviews</Text>
+            {avgRating != null && totalReviews > 0 && (
+              <View style={{ alignItems: "center" }}>
+                <Text style={{ fontSize: 24, fontWeight: "900", color: TEXT }}>{avgRating.toFixed(1)}</Text>
+                <Stars n={Math.round(avgRating)} size={12} />
+                <Text style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{totalReviews} review{totalReviews !== 1 ? "s" : ""}</Text>
               </View>
             )}
           </View>
+          {reviews.length === 0 ? (
+            <View style={{ alignItems: "center", paddingVertical: 24, backgroundColor: BG, borderRadius: 16 }}>
+              <Ionicons name="chatbubble-outline" size={32} color={MUTED} />
+              <Text style={{ fontSize: 14, color: MUTED, marginTop: 8 }}>No reviews yet</Text>
+            </View>
+          ) : (
+            <>
+              {reviews.map(r => <ReviewCard key={r.id} review={r} />)}
+              {totalReviews > reviews.length && (
+                <TouchableOpacity
+                  style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 14 }}
+                  onPress={() => router.push(`/listing-reviews/${id}` as any)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: GREEN }}>View All {totalReviews} Reviews</Text>
+                  <Ionicons name="arrow-forward" size={16} color={GREEN} />
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </View>
 
-          <View style={styles.divider} />
+        {/* ── Location ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Location</Text>
+          {listing.address ? (
+            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 12, padding: 14, backgroundColor: BG, borderRadius: 14, borderWidth: 1, borderColor: BORDER }}>
+              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: GREEN_LIGHT, alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Ionicons name="location" size={18} color={GREEN} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: "700", color: TEXT }}>{listing.address}</Text>
+                {locationStr ? <Text style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>{locationStr}</Text> : null}
+              </View>
+            </View>
+          ) : null}
 
-          {/* Description */}
-          {listing.description ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Description</Text>
-              <Text
-                style={styles.descriptionText}
-                numberOfLines={descExpanded ? undefined : 4}
+          {listing.lat != null && listing.lng != null && !isNaN(Number(listing.lat)) && !isNaN(Number(listing.lng)) ? (
+            <View style={{ borderRadius: 18, overflow: "hidden", height: 210, borderWidth: 1, borderColor: BORDER, position: "relative" }}>
+              {MapView && Marker ? (
+                <MapView
+                  style={{ flex: 1 }}
+                  mapType="standard"
+                  userInterfaceStyle="light"
+                  initialRegion={{
+                    latitude: Number(listing.lat),
+                    longitude: Number(listing.lng),
+                    latitudeDelta: 0.012,
+                    longitudeDelta: 0.012,
+                  }}
+                  scrollEnabled={false}
+                  zoomEnabled={false}
+                >
+                  <Marker
+                    coordinate={{ latitude: Number(listing.lat), longitude: Number(listing.lng) }}
+                    title={listing.name ?? listing.title ?? "Location"}
+                  >
+                    <View style={s.customMapPin}>
+                      <Ionicons name="location" size={18} color="#ffffff" />
+                    </View>
+                  </Marker>
+                </MapView>
+              ) : (
+                <View style={{ flex: 1, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name="map-outline" size={36} color={MUTED} />
+                  <Text style={{ fontSize: 13, color: MUTED, marginTop: 6, fontWeight: "500" }}>Location Map</Text>
+                </View>
+              )}
+
+              {/* Get Directions overlay button */}
+              <TouchableOpacity
+                style={s.mapDirectionsBtn}
+                onPress={() => openLocationInMaps(Number(listing.lat), Number(listing.lng), listing.name ?? listing.address ?? "Property")}
+                activeOpacity={0.88}
               >
-                {listing.description}
-              </Text>
-              <TouchableOpacity onPress={() => setDescExpanded((v) => !v)}>
-                <Text style={styles.readMoreText}>{descExpanded ? "Show less" : "Read more"}</Text>
+                <Ionicons name="navigate-outline" size={14} color={GREEN} />
+                <Text style={s.mapDirectionsText}>Get Directions</Text>
               </TouchableOpacity>
             </View>
           ) : null}
-
-          <View style={styles.divider} />
-
-          {/* Amenities */}
-          {allAmenities.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>What's included</Text>
-              <View style={styles.amenityGrid}>
-                {visibleAmenities.map((a, i) => (
-                  <View key={i} style={styles.amenityChip}>
-                    <Ionicons name="checkmark-circle-outline" size={14} color="#1a73e8" style={{ marginRight: 4 }} />
-                    <Text style={styles.amenityChipText}>{a.label}</Text>
-                  </View>
-                ))}
-              </View>
-              {allAmenities.length > MAX_AMENITIES && (
-                <TouchableOpacity onPress={() => setAmenitiesExpanded((v) => !v)}>
-                  <Text style={styles.readMoreText}>
-                    {amenitiesExpanded
-                      ? "Show less"
-                      : `Show all ${allAmenities.length} amenities`}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-
-          <View style={styles.divider} />
-
-          {/* Property details */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Property details</Text>
-            {(isHotel || isApartment) && (
-              <>
-                {listing.checkinTime ? (
-                  <DetailRow icon="log-in-outline" label="Check-in from" value={listing.checkinTime} />
-                ) : null}
-                {listing.checkoutTime ? (
-                  <DetailRow icon="log-out-outline" label="Check-out by" value={listing.checkoutTime} />
-                ) : null}
-                <DetailRow
-                  icon="flame-outline"
-                  label="Smoking"
-                  value={listing.smokingAllowed ? "Allowed" : "Not allowed"}
-                />
-                <DetailRow
-                  icon="paw-outline"
-                  label="Pets"
-                  value={listing.petsAllowed ? "Allowed" : "Not allowed"}
-                />
-                {isApartment && listing.minStayNights ? (
-                  <DetailRow
-                    icon="moon-outline"
-                    label="Minimum stay"
-                    value={`${listing.minStayNights} night${listing.minStayNights !== 1 ? "s" : ""}`}
-                  />
-                ) : null}
-                {isApartment && listing.longStayEnabled && listing.longStayMinNights != null && listing.longStayDiscountValue != null && (
-                  <DetailRow
-                    icon="pricetag-outline"
-                    label="Long-stay discount"
-                    value={
-                      listing.longStayDiscountType === "percentage"
-                        ? `${listing.longStayDiscountValue}% off for ${listing.longStayMinNights}+ nights`
-                        : `${listing.currency ?? ""} ${listing.longStayDiscountValue} off for ${listing.longStayMinNights}+ nights`
-                    }
-                  />
-                )}
-              </>
-            )}
-            {isCar && (
-              <>
-                {listing.minDriverAge != null && (
-                  <DetailRow icon="person-outline" label="Minimum driver age" value={`${listing.minDriverAge} years`} />
-                )}
-                <DetailRow
-                  icon="speedometer-outline"
-                  label="Mileage"
-                  value={
-                    listing.mileagePolicy === "unlimited"
-                      ? "Unlimited"
-                      : listing.mileageLimitKm != null
-                      ? `${listing.mileageLimitKm} km/day`
-                      : "See host"
-                  }
-                />
-                {listing.fuelType ? (
-                  <DetailRow
-                    icon="car-outline"
-                    label="Fuel"
-                    value={listing.fuelType.charAt(0).toUpperCase() + listing.fuelType.slice(1)}
-                  />
-                ) : null}
-                <DetailRow
-                  icon="navigate-outline"
-                  label="Delivery"
-                  value={
-                    listing.deliveryAvailable
-                      ? `Available within ${listing.deliveryRadiusKm ?? "?"}km for ${listing.currency ?? ""} ${listing.deliveryFee ?? "?"}`
-                      : "Not available"
-                  }
-                />
-              </>
-            )}
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* Cancellation policy */}
-          {listing.cancellationPolicy && (
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Cancellation policy</Text>
-              <View style={[styles.cancelBadge, { backgroundColor: `${cancellationBadgeColor(listing.cancellationPolicy)}18` }]}>
-                <Text style={[styles.cancelBadgeText, { color: cancellationBadgeColor(listing.cancellationPolicy) }]}>
-                  {listing.cancellationPolicy.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                </Text>
-              </View>
-              <Text style={styles.cancelDescription}>{cancellationText(listing.cancellationPolicy)}</Text>
-            </View>
-          )}
-
-          <View style={styles.divider} />
-
-          {/* Guest Reviews */}
-          <View style={styles.section}>
-            <ReviewsSection listingId={id} />
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* Map placeholder */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Location</Text>
-            <View style={styles.mapPlaceholder}>
-              <Text style={styles.mapPlaceholderText}>
-                {[listing.town, listing.country].filter(Boolean).join(", ") || "Location not specified"}
-              </Text>
-            </View>
-          </View>
-
-          {/* Bottom padding so sticky bar doesn't hide content */}
-          <View style={{ height: 100 }} />
         </View>
       </ScrollView>
 
-      {/* ── Sticky bottom bar ─────────────────────────────────────────────── */}
-      <View style={styles.stickyBar}>
-        <View style={styles.stickyPrice}>
-          <Text style={styles.stickyPriceLabel}>{priceLabel}</Text>
+      {/* ══ MESSAGE HOST MODAL ══ */}
+      <Modal
+        visible={showMsgModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setShowMsgModal(false); setMsgDraft(""); }}
+      >
+        <View style={s.msgBackdrop}>
+          <View style={s.msgCard}>
+            <View style={s.msgCardHeader}>
+              <Text style={s.msgCardTitle}>Message Host</Text>
+              <TouchableOpacity
+                onPress={() => { setShowMsgModal(false); setMsgDraft(""); }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="close" size={22} color={TEXT} />
+              </TouchableOpacity>
+            </View>
+            <Text style={s.msgCardSub} numberOfLines={1}>
+              About: {listing.title ?? listing.name ?? "this listing"}
+            </Text>
+            <TextInput
+              style={s.msgCardInput}
+              value={msgDraft}
+              onChangeText={setMsgDraft}
+              placeholder="Hi! I'm interested in your listing…"
+              placeholderTextColor={MUTED}
+              multiline
+              maxLength={500}
+              autoFocus
+              textAlignVertical="top"
+            />
+            <TouchableOpacity
+              style={[
+                s.msgSendBtn,
+                (!msgDraft.trim() || msgSending) && s.msgSendBtnOff,
+              ]}
+              onPress={handleMessageHost}
+              disabled={!msgDraft.trim() || msgSending}
+              activeOpacity={0.88}
+            >
+              {msgSending ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="send" size={16} color="#fff" />
+                  <Text style={s.msgSendText}>Send Message</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ══ FULLSCREEN GALLERY MODAL ══ */}
+      <Modal visible={galleryOpen} transparent={false} animationType="fade" onRequestClose={() => setGalleryOpen(false)}>
+        <GalleryModal
+          photos={photos}
+          photoIdx={photoIdx}
+          setPhotoIdx={setPhotoIdx}
+          onClose={() => setGalleryOpen(false)}
+        />
+      </Modal>
+
+      {/* ══ DATE PICKER MODAL ══ */}
+      <CalendarPicker
+        visible={showDatePicker}
+        onClose={() => setShowDatePicker(false)}
+        onConfirm={(start, end) => { setLocalStart(start); setLocalEnd(end); }}
+        isCar={isCar}
+        unavailableRanges={availability?.unavailableRanges ?? []}
+      />
+
+      {/* ══ STICKY BOTTOM BAR ══ */}
+      <View style={[s.stickyBar, { paddingBottom: Math.max(insets.bottom + 10, 18) }]}>
+        <View style={{ flex: 1, paddingRight: 12 }}>
+          {hasDates && pricingBreakout ? (
+            <>
+              <Text style={s.stickyRate}>{curr} {Math.round(pricingBreakout.total).toLocaleString()}</Text>
+              <Text style={s.stickyUnit} numberOfLines={1}>
+                total for {pricingBreakout.count} {isCar ? `day${pricingBreakout.count !== 1 ? "s" : ""}` : `night${pricingBreakout.count !== 1 ? "s" : ""}`}
+                {selectedRoomType ? ` · ${selectedRoomType.name}` : ""}
+              </Text>
+            </>
+          ) : (
+            <>
+              {mrpPrice != null && mrpPrice > rate ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Text style={s.stickyOriginal}>{curr} {Math.round(mrpPrice).toLocaleString()}</Text>
+                  {customPromoBadge ? (
+                    <Text style={{ fontSize: 10, fontWeight: "800", color: customPromoBadge.labelColour ?? "#C84B2F" }}>
+                      {customPromoBadge.labelText}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+              <Text style={s.stickyRate}>{curr} {Math.round(rate).toLocaleString()}</Text>
+              <Text style={s.stickyUnit} numberOfLines={1}>
+                {rateLabel}
+                {selectedRoomType ? ` · ${selectedRoomType.name}` : ""}
+              </Text>
+            </>
+          )}
         </View>
 
         {isProvider ? (
-          <View style={styles.bookBtnDisabled}>
-            <Text style={styles.bookBtnDisabledText}>Provider account</Text>
+          <View style={s.providerBtn}>
+            <Text style={s.providerBtnText}>Provider view</Text>
           </View>
         ) : !hasDates ? (
-          <TouchableOpacity style={styles.selectDatesBtn} onPress={() => router.back()}>
-            <Text style={styles.selectDatesBtnText}>Select dates</Text>
+          <TouchableOpacity style={s.selectDatesBtn} onPress={() => setShowDatePicker(true)}>
+            <Text style={s.selectDatesBtnText}>Select dates</Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={styles.bookBtn} onPress={handleBookNow}>
-            <Text style={styles.bookBtnText}>Book Now</Text>
+          <TouchableOpacity style={s.bookBtn} onPress={handleBook} activeOpacity={0.88}>
+            <Text style={s.bookBtnText}>Continue</Text>
+            <Ionicons name="arrow-forward" size={16} color="#fff" style={{ marginLeft: 6 }} />
           </TouchableOpacity>
         )}
       </View>
@@ -794,204 +1588,186 @@ export default function PublicListingDetailScreen() {
   );
 }
 
-// ── Detail row sub-component ──────────────────────────────────────────────────
-
-function DetailRow({ icon, label, value }: { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string; value: string }) {
-  return (
-    <View style={styles.detailRow}>
-      <Ionicons name={icon} size={16} color="#6b7280" style={styles.detailIcon} />
-      <Text style={styles.detailLabel}>{label}:</Text>
-      <Text style={styles.detailValue}>{value}</Text>
-    </View>
-  );
-}
-
 // ── Styles ────────────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  scrollContent: { flexGrow: 1 },
-
-  // Photos
-  photoContainer: { width: SCREEN_WIDTH, height: PHOTO_HEIGHT, position: "relative", backgroundColor: "#e5e7eb" },
-  photo: { width: SCREEN_WIDTH, height: PHOTO_HEIGHT },
-  photoPlaceholder: {
-    width: SCREEN_WIDTH,
-    height: PHOTO_HEIGHT,
-    backgroundColor: "#e5e7eb",
-    alignItems: "center",
-    justifyContent: "center",
+const s = StyleSheet.create({
+  overlayTop: {
+    position: "absolute", top: 0, left: 0, right: 0,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingTop: Platform.OS === "ios" ? 56 : 42,
+    zIndex: 999, elevation: 999,
   },
-  photoPlaceholderText: { color: "#9ca3af", fontSize: 14, marginTop: 8 },
-  photoCounter: {
+  circleBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: "#fff",
+    alignItems: "center", justifyContent: "center",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, shadowRadius: 4, elevation: 4,
+  },
+
+  photoPill: {
+    position: "absolute", bottom: 14, right: 14,
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 14,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  photoPillText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+
+  titleCard: {
+    backgroundColor: "#fff", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8,
+  },
+  title: { fontSize: 24, fontWeight: "800", color: TEXT, lineHeight: 30 },
+  catBadge: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#EFF6FF", borderWidth: 1, borderColor: "#BFDBFE",
+    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5,
+    alignSelf: "flex-start",
+  },
+  catBadgeText: { fontSize: 12, fontWeight: "700", color: "#1D4ED8" },
+  accreditedBadge: {
+    flexDirection: "row", alignItems: "center", gap: 3,
+    backgroundColor: GREEN_LIGHT, borderWidth: 1, borderColor: "#BBF7D0",
+    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
+  },
+  accreditedText: { fontSize: 11, fontWeight: "700", color: GREEN },
+
+  priceRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8 },
+  priceOriginal: { fontSize: 15, fontWeight: "600", color: MUTED, textDecorationLine: "line-through" },
+  mrpLabel: { fontSize: 11, fontWeight: "700", color: MUTED },
+  priceAmount: { fontSize: 28, fontWeight: "900", color: GREEN },
+  priceUnit: { fontSize: 13, color: MUTED, fontWeight: "500" },
+  bestDeal: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: GREEN_LIGHT, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: "#BBF7D0" },
+  bestDealText: { fontSize: 11, fontWeight: "700", color: GREEN },
+  promoDealBadge: { backgroundColor: "#C84B2F", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, alignSelf: "center" },
+  promoDealText: { fontSize: 12, fontWeight: "800", color: "#FFFFFF" },
+
+  promoBanner: { flexDirection: "row", alignItems: "center", gap: 12, marginHorizontal: 20, marginVertical: 12, backgroundColor: "#FEF2F2", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#FECACA" },
+  promoIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#DC2626", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  promoTitle: { fontSize: 14, fontWeight: "800", color: "#DC2626", marginBottom: 2 },
+  promoSub: { fontSize: 12, color: "#991B1B", lineHeight: 17 },
+
+  section: { paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: BORDER },
+  sectionTitle: { fontSize: 18, fontWeight: "800", color: TEXT, marginBottom: 14, letterSpacing: -0.3 },
+
+  datesPill: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: GREEN_LIGHT, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#BBF7D0" },
+  datesText: { fontSize: 13, fontWeight: "600", color: GREEN, flex: 1 },
+  selectDatesCard: { flexDirection: "row", alignItems: "center", backgroundColor: BG, borderRadius: 14, padding: 16, borderWidth: 1.5, borderColor: GREEN, borderStyle: "dashed" },
+
+  breakCard: { backgroundColor: BG, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: BORDER },
+  breakRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  breakLabel: { fontSize: 13, color: "#4B5563", fontWeight: "500" },
+  breakVal: { fontSize: 13, color: TEXT, fontWeight: "600" },
+  breakTotal: { fontSize: 15, fontWeight: "800", color: TEXT },
+  breakTotalVal: { fontSize: 16, fontWeight: "900", color: GREEN },
+
+  descText: { fontSize: 14, color: "#374151", lineHeight: 22 },
+  readMore: { marginTop: 10 },
+  readMoreText: { fontSize: 14, color: GREEN, fontWeight: "700" },
+
+  hostCard: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: BG, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: BORDER },
+  hostAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: GREEN_LIGHT, alignItems: "center", justifyContent: "center" },
+  hostName: { fontSize: 15, fontWeight: "700", color: TEXT },
+  verifiedBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: GREEN_LIGHT, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  verifiedText: { fontSize: 11, fontWeight: "700", color: GREEN },
+
+  cancelCard: { backgroundColor: BG, borderRadius: 14, padding: 16, borderLeftWidth: 4, borderWidth: 1, borderColor: BORDER },
+  cancelDot: { width: 10, height: 10, borderRadius: 5 },
+  cancelPolicyName: { fontSize: 14, fontWeight: "700" },
+  cancelDesc: { fontSize: 13, color: "#374151", lineHeight: 20 },
+
+  stickyBar: {
+    position: "absolute", bottom: 0, left: 0, right: 0,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: BORDER,
+    paddingHorizontal: 20, paddingTop: 14, paddingBottom: 18,
+    shadowColor: "#000", shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 8,
+  },
+  stickyOriginal: { fontSize: 12, color: MUTED, textDecorationLine: "line-through" },
+  stickyRate: { fontSize: 20, fontWeight: "900", color: GREEN },
+  stickyUnit: { fontSize: 11, color: MUTED, fontWeight: "500" },
+  bookBtn: { flexDirection: "row", alignItems: "center", backgroundColor: GREEN, borderRadius: 16, paddingHorizontal: 24, paddingVertical: 14 },
+  bookBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  selectDatesBtn: { borderWidth: 2, borderColor: GREEN, borderRadius: 16, paddingHorizontal: 20, paddingVertical: 13 },
+  selectDatesBtnText: { color: GREEN, fontWeight: "700", fontSize: 14 },
+  providerBtn: { backgroundColor: BG, borderRadius: 16, paddingHorizontal: 18, paddingVertical: 13, borderWidth: 1, borderColor: BORDER },
+  providerBtnText: { color: MUTED, fontWeight: "600", fontSize: 13 },
+
+  customMapPin: {
+    backgroundColor: GREEN,
+    padding: 8,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  mapDirectionsBtn: {
     position: "absolute",
     bottom: 12,
-    right: 14,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
-  photoCounterText: { color: "#fff", fontSize: 12, fontWeight: "600" },
-  backButton: {
-    position: "absolute",
-    top: 14,
-    left: 14,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  favButton: {
-    position: "absolute",
-    top: 14,
-    right: 14,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  // Content
-  content: { paddingHorizontal: 18, paddingTop: 18, backgroundColor: "#fff" },
-  listingName: { fontSize: 22, fontWeight: "700", color: "#111827", marginBottom: 8, lineHeight: 28 },
-
-  categoryRow: { flexDirection: "row", alignItems: "center", marginBottom: 8, flexWrap: "wrap" },
-  categoryBadge: {
-    backgroundColor: "#eff6ff",
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-  },
-  categoryBadgeText: { fontSize: 12, fontWeight: "600", color: "#1a73e8" },
-  locationText: { fontSize: 14, color: "#6b7280", flexShrink: 1 },
-
-  subTitle: { fontSize: 14, color: "#374151", marginBottom: 12 },
-
-  price: { fontSize: 24, fontWeight: "800", color: "#111827", marginBottom: 4 },
-  deliveryFee: { fontSize: 13, color: "#6b7280", marginBottom: 8 },
-
-  // Dates
-  datesSection: { marginTop: 12, marginBottom: 4 },
-  datePill: {
+    right: 12,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#eff6ff",
-    borderRadius: 20,
+    gap: 6,
+    backgroundColor: "#FFFFFF",
     paddingHorizontal: 14,
     paddingVertical: 8,
-    alignSelf: "flex-start",
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-  },
-  datePillText: { fontSize: 14, color: "#1a73e8", fontWeight: "500" },
-  noDatesBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f9fafb",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  noDatesText: { fontSize: 13, color: "#6b7280" },
-
-  divider: { height: 1, backgroundColor: "#e5e7eb", marginVertical: 20 },
-
-  section: { marginBottom: 4 },
-  sectionLabel: { fontSize: 16, fontWeight: "700", color: "#111827", marginBottom: 12 },
-
-  descriptionText: { fontSize: 14, color: "#374151", lineHeight: 22 },
-  readMoreText: { fontSize: 14, color: "#1a73e8", fontWeight: "600", marginTop: 8 },
-
-  // Amenities
-  amenityGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
-  amenityChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f9fafb",
     borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    width: "47%",
+    borderColor: BORDER,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  amenityChipText: { fontSize: 13, color: "#374151", flexShrink: 1 },
-
-  // Property details
-  detailRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#f3f4f6" },
-  detailIcon: { marginRight: 8 },
-  detailLabel: { fontSize: 13, color: "#6b7280", width: 150 },
-  detailValue: { fontSize: 13, color: "#111827", fontWeight: "500", flex: 1 },
-
-  // Cancellation
-  cancelBadge: { alignSelf: "flex-start", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4, marginBottom: 10 },
-  cancelBadgeText: { fontSize: 13, fontWeight: "600" },
-  cancelDescription: { fontSize: 13, color: "#374151", lineHeight: 20 },
-
-  // Map placeholder
-  mapPlaceholder: {
-    height: 200,
-    backgroundColor: "#f3f4f6",
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+  mapDirectionsText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: GREEN,
   },
-  mapPlaceholderText: { fontSize: 15, color: "#6b7280", fontWeight: "500" },
 
-  // Error
-  errorContainer: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
-  errorTitle: { fontSize: 20, fontWeight: "700", color: "#111827", marginTop: 16, marginBottom: 8 },
-  errorSubtitle: { fontSize: 14, color: "#6b7280", textAlign: "center", marginBottom: 24 },
-  errorBtn: { backgroundColor: "#1a73e8", borderRadius: 12, paddingHorizontal: 28, paddingVertical: 12 },
-  errorBtnText: { color: "#fff", fontWeight: "600", fontSize: 15 },
+  msgHostBtn: {
+    flexDirection: "row", alignItems: "center", gap: 8, marginTop: 14,
+    backgroundColor: GREEN_LIGHT, borderRadius: 14, paddingHorizontal: 18, paddingVertical: 12,
+    borderWidth: 1, borderColor: "#BBF7D0", alignSelf: "flex-start",
+  },
+  msgHostBtnText: { fontSize: 14, fontWeight: "700", color: GREEN },
 
-  // Sticky bar
-  stickyBar: {
-    flexDirection: "row",
-    alignItems: "center",
+  msgBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.52)", justifyContent: "flex-end" },
+  msgCard: {
     backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    paddingBottom: 24,
-    gap: 12,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: Platform.OS === "ios" ? 40 : 24,
   },
-  stickyPrice: { flex: 1 },
-  stickyPriceLabel: { fontSize: 16, fontWeight: "700", color: "#111827" },
-  bookBtn: {
-    backgroundColor: "#1a73e8",
-    borderRadius: 12,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
+  msgCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
+  msgCardTitle: { fontSize: 18, fontWeight: "800", color: TEXT },
+  msgCardSub: { fontSize: 13, color: MUTED, marginBottom: 16 },
+  msgCardInput: {
+    backgroundColor: BG, borderRadius: 14, borderWidth: 1, borderColor: BORDER,
+    paddingHorizontal: 16, paddingVertical: 14,
+    fontSize: 14, color: TEXT,
+    minHeight: 100, maxHeight: 180,
+    marginBottom: 16,
   },
-  bookBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
-  bookBtnDisabled: {
-    backgroundColor: "#f3f4f6",
-    borderRadius: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+  msgSendBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: GREEN, borderRadius: 14, paddingVertical: 15,
   },
-  bookBtnDisabledText: { color: "#9ca3af", fontWeight: "600", fontSize: 14 },
-  selectDatesBtn: {
-    borderWidth: 2,
-    borderColor: "#1a73e8",
-    borderRadius: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
-  selectDatesBtnText: { color: "#1a73e8", fontWeight: "700", fontSize: 15 },
+  msgSendBtnOff: { backgroundColor: "#D1D5DB" },
+  msgSendText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+});
+
+const pr = StyleSheet.create({
+  card: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#F0FDF4", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#BBF7D0", marginBottom: 10 },
+  iconWrap: { width: 38, height: 38, borderRadius: 10, backgroundColor: GREEN, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  title: { fontSize: 14, fontWeight: "800", color: "#065F46", marginBottom: 3 },
+  desc: { fontSize: 12, color: "#047857", lineHeight: 17, marginBottom: 4 },
+  expiry: { fontSize: 11, color: MUTED },
+  savings: { fontSize: 13, fontWeight: "700", color: "#DC2626", marginBottom: 3 },
+  origPrice: { fontSize: 12, color: "#047857" },
+  discBadge: { minWidth: 52, borderRadius: 10, backgroundColor: "#DC2626", alignItems: "center", justifyContent: "center", flexShrink: 0, paddingHorizontal: 8, paddingVertical: 8 },
+  discText: { fontSize: 11, fontWeight: "800", color: "#fff", textAlign: "center", lineHeight: 15 },
 });

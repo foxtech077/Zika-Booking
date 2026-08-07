@@ -1,4 +1,4 @@
-import {
+﻿import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
   generateAuthenticationOptions,
@@ -9,9 +9,9 @@ import {
 import { isoBase64URL, isoUint8Array } from "@simplewebauthn/server/helpers";
 import { getAndDeleteChallenge, setChallenge } from "./redis";
 
-const RP_ID = process.env["WEBAUTHN_RP_ID"] ?? "admin.zikabooking.com";
-const RP_NAME = process.env["WEBAUTHN_RP_NAME"] ?? "ZikaBooking Admin";
-const ORIGIN = process.env["WEBAUTHN_ORIGIN"] ?? "https://admin.zikabooking.com";
+const RP_ID = process.env["WEBAUTHN_RP_ID"] ?? "admin.Kainook.com";
+const RP_NAME = process.env["WEBAUTHN_RP_NAME"] ?? "Kainook Admin";
+const ORIGIN = process.env["WEBAUTHN_ORIGIN"] ?? "https://admin.Kainook.com";
 
 // ── Registration ──────────────────────────────────────────────────────────────
 
@@ -19,7 +19,7 @@ export async function startRegistration(adminId: string, email: string) {
   const options = await generateRegistrationOptions({
     rpName: RP_NAME,
     rpID: RP_ID,
-    userID: new TextEncoder().encode(adminId),
+    userID: isoUint8Array.fromUTF8String(adminId),
     userName: email,
     userDisplayName: email,
     attestationType: "none",

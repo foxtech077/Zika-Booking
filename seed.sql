@@ -2,6 +2,18 @@
 -- Provider: testprovider99@zika.com  (cmos7y8zp0009j9kc5o4ed3c0)
 -- Guest:    guest1@test.com          (cmosebuyd000ej9kcyqnm3ha3)
 
+-- Accent-insensitive search support (unaccent + pg_trgm for partial matching).
+-- Installed into public (where postgis lives) because the search service
+-- references them as public.f_unaccent / public.gin_trgm_ops.
+CREATE EXTENSION IF NOT EXISTS unaccent SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public;
+
+-- unaccent(text) is not IMMUTABLE on every server, but index expressions must
+-- be immutable, so the search service uses this stable wrapper.
+CREATE OR REPLACE FUNCTION public.f_unaccent(text) RETURNS text
+LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+AS 'SELECT public.unaccent($1)';
+
 -- Commission rate for Kenya
 INSERT INTO commission_rates (id, country, rate, set_by, created_at, updated_at)
 VALUES (gen_random_uuid(), 'KE', 0.10, 'system', NOW(), NOW())
@@ -12,7 +24,7 @@ ON CONFLICT (country) DO UPDATE SET rate = 0.10, updated_at = NOW();
 INSERT INTO listings (
   id, provider_id, category, name, room_type, unit_count, description,
   price_per_night, currency, min_stay_nights, checkin_time, checkout_time,
-  cancellation_policy, address, lat, lng, town, country,
+  cancellation_policy, address, lat, lng, town, neighborhood, country,
   claimed_star_rating, star_rating, status, submission_count,
   submitted_at, approved_at, approved_by, activated_at, updated_at, created_at,
   pets_allowed, smoking_allowed
@@ -23,7 +35,7 @@ INSERT INTO listings (
   'deluxe', 120, 'Experience unmatched luxury at Nairobi''s most prestigious address. Set in manicured gardens in the heart of the city, Serena offers world-class facilities including a full spa, outdoor pool, and six gourmet restaurants.',
   15000, 'KES', 1, '14:00', '11:00', 'moderate',
   'Processional Way, Central Business District, Nairobi, Kenya',
-  -1.2881, 36.8167, 'Nairobi', 'KE',
+  -1.2881, 36.8167, 'Nairobi', NULL, 'KE',
   5, 5, 'approved', 1, NOW() - INTERVAL '60 days', NOW() - INTERVAL '50 days',
   'admin', NOW() - INTERVAL '50 days', NOW(), NOW() - INTERVAL '60 days', false, false
 ),
@@ -33,7 +45,7 @@ INSERT INTO listings (
   'superior', 200, 'Nairobi''s premier luxury hotel, Villa Rosa Kempinski combines timeless European elegance with authentic African warmth. Enjoy the rooftop infinity pool, award-winning La Terrasse restaurant, and seamless city views.',
   22000, 'KES', 1, '15:00', '12:00', 'strict',
   'Chiromo Road, Westlands, Nairobi, Kenya',
-  -1.2714, 36.8025, 'Nairobi', 'KE',
+  -1.2714, 36.8025, 'Nairobi', NULL, 'KE',
   5, 5, 'approved', 1, NOW() - INTERVAL '55 days', NOW() - INTERVAL '45 days',
   'admin', NOW() - INTERVAL '45 days', NOW(), NOW() - INTERVAL '55 days', false, false
 ),
@@ -43,7 +55,7 @@ INSERT INTO listings (
   'standard', 80, 'A boutique lifestyle hotel with an eclectic design inspired by the rich cultural tapestry of Africa. Tribe sits in the leafy suburb of Gigiri, close to UN HQ and the Village Market. Features live music, a rooftop terrace, and artisan dining.',
   9500, 'KES', 1, '14:00', '12:00', 'flexible',
   'Limuru Road, Gigiri, Nairobi, Kenya',
-  -1.2355, 36.8059, 'Nairobi', 'KE',
+  -1.2355, 36.8059, 'Nairobi', NULL, 'KE',
   4, 4, 'approved', 1, NOW() - INTERVAL '90 days', NOW() - INTERVAL '80 days',
   'admin', NOW() - INTERVAL '80 days', NOW(), NOW() - INTERVAL '90 days', false, false
 ),
@@ -53,7 +65,7 @@ INSERT INTO listings (
   'standard', 65, 'Uniquely positioned on the edge of Nairobi National Park, Ole Sereni lets you watch lions and giraffes from your bedroom window. The rooftop pool, Africana restaurant, and personalised safari concierge make it unforgettable.',
   8000, 'KES', 1, '14:00', '11:00', 'moderate',
   'Langata Road, Nairobi, Kenya',
-  -1.3220, 36.8200, 'Nairobi', 'KE',
+  -1.3220, 36.8200, 'Nairobi', NULL, 'KE',
   4, 4, 'approved', 1, NOW() - INTERVAL '70 days', NOW() - INTERVAL '60 days',
   'admin', NOW() - INTERVAL '60 days', NOW(), NOW() - INTERVAL '70 days', true, false
 ),
@@ -63,7 +75,7 @@ INSERT INTO listings (
   'deluxe', 150, 'A stunning beach resort on the pristine shores of Shanzu Beach. Enjoy direct ocean access, three swimming pools, a water park, live entertainment and a wide selection of watersports. All-inclusive packages available.',
   12000, 'KES', 2, '15:00', '10:00', 'moderate',
   'Shanzu Beach, Mombasa, Kenya',
-  -3.9120, 39.7240, 'Mombasa', 'KE',
+  -3.9120, 39.7240, 'Mombasa', NULL, 'KE',
   4, 4, 'approved', 1, NOW() - INTERVAL '100 days', NOW() - INTERVAL '90 days',
   'admin', NOW() - INTERVAL '90 days', NOW(), NOW() - INTERVAL '100 days', false, false
 ),
@@ -73,7 +85,7 @@ INSERT INTO listings (
   'standard', 90, 'A classic beach resort set in lush tropical gardens, steps from the white-sand beaches of Mombasa''s North Coast. Voyager features all-inclusive dining, a pool, beach volleyball, and evening shows for the whole family.',
   7500, 'KES', 2, '14:00', '10:00', 'flexible',
   'Bamburi Beach, Mombasa, Kenya',
-  -3.9820, 39.7260, 'Mombasa', 'KE',
+  -3.9820, 39.7260, 'Mombasa', NULL, 'KE',
   3, 3, 'approved', 1, NOW() - INTERVAL '80 days', NOW() - INTERVAL '70 days',
   'admin', NOW() - INTERVAL '70 days', NOW(), NOW() - INTERVAL '80 days', false, false
 );
@@ -94,7 +106,7 @@ INSERT INTO listings (
   2, 2, 5, 'Stylish 2-bedroom apartment in the heart of Nairobi CBD. Floor-to-ceiling windows with panoramic city views, fully equipped kitchen, high-speed Wi-Fi, and 24/7 security. Walking distance to top restaurants, UN Avenue, and Uhuru Park.',
   5500, 'KES', 2, '15:00', '11:00', 'flexible',
   'Upper Hill, Nairobi, Kenya',
-  -1.2962, 36.8192, 'Nairobi', 'KE',
+  -1.2962, 36.8192, 'Nairobi', NULL, 'KE',
   'active', 1, NOW() - INTERVAL '40 days', NOW() - INTERVAL '35 days',
   'admin', NOW() - INTERVAL '35 days', NOW(), NOW() - INTERVAL '40 days', false, false,
   true, 7, 'percentage', 15
@@ -105,7 +117,7 @@ INSERT INTO listings (
   1, 1, 2, 'A chic, self-contained studio in Westlands, Nairobi''s most vibrant neighbourhood. Minutes from Junction Mall, top restaurants, and the Sarit Centre. Includes a kitchenette, workspace, smart TV and secure parking.',
   3200, 'KES', 1, '14:00', '11:00', 'moderate',
   'Westlands Road, Westlands, Nairobi, Kenya',
-  -1.2660, 36.8120, 'Nairobi', 'KE',
+  -1.2660, 36.8120, 'Nairobi', NULL, 'KE',
   'active', 1, NOW() - INTERVAL '50 days', NOW() - INTERVAL '45 days',
   'admin', NOW() - INTERVAL '45 days', NOW(), NOW() - INTERVAL '50 days', true, false,
   false, NULL, NULL, NULL
@@ -116,7 +128,7 @@ INSERT INTO listings (
   3, 2, 7, 'A beautifully furnished 3-bedroom family apartment in the quiet, leafy suburb of Lavington. Features a full kitchen, private garden, children''s play area, and a home office. Ideal for extended stays and family relocations.',
   8500, 'KES', 3, '15:00', '11:00', 'strict',
   'James Gichuru Road, Lavington, Nairobi, Kenya',
-  -1.2840, 36.7730, 'Nairobi', 'KE',
+  -1.2840, 36.7730, 'Nairobi', NULL, 'KE',
   'active', 1, NOW() - INTERVAL '30 days', NOW() - INTERVAL '25 days',
   'admin', NOW() - INTERVAL '25 days', NOW(), NOW() - INTERVAL '30 days', true, false,
   true, 14, 'percentage', 20
@@ -140,7 +152,7 @@ INSERT INTO listings (
   'Well-maintained 2022 Toyota Land Cruiser Prado in pristine condition. Ideal for both city driving and off-road safaris. Comes with GPS navigation, bull bar, snorkel, rooftop carrier, and full insurance. Perfect for upcountry trips.',
   9500, 'KES', '08:00', '08:00', 'moderate',
   'Westlands, Nairobi, Kenya',
-  -1.2680, 36.8050, 'Nairobi', 'KE',
+  -1.2680, 36.8050, 'Nairobi', NULL, 'KE',
   'active', 1, NOW() - INTERVAL '45 days', NOW() - INTERVAL '40 days',
   'admin', NOW() - INTERVAL '40 days', NOW(), NOW() - INTERVAL '45 days', 1
 ),
@@ -152,7 +164,7 @@ INSERT INTO listings (
   'Reliable and fuel-efficient 2021 Toyota Fielder, perfect for city errands and short upcountry trips. Clean interior, well-serviced, and comes with free delivery within Nairobi. Unlimited mileage with no hidden charges.',
   4500, 'KES', '08:00', '08:00', 'flexible',
   'CBD, Nairobi, Kenya',
-  -1.2921, 36.8219, 'Nairobi', 'KE',
+  -1.2921, 36.8219, 'Nairobi', NULL, 'KE',
   'active', 1, NOW() - INTERVAL '35 days', NOW() - INTERVAL '30 days',
   'admin', NOW() - INTERVAL '30 days', NOW(), NOW() - INTERVAL '35 days', 1
 ),
@@ -164,7 +176,7 @@ INSERT INTO listings (
   'Brand new 2023 Hyundai Tucson SUV with premium interior finishes. Bluetooth audio, lane assist, reversing camera, and leather seats. Ideal for business travel or weekend getaways. Fuel efficient and comfortable.',
   7000, 'KES', '08:00', '08:00', 'moderate',
   'Kilimani, Nairobi, Kenya',
-  -1.2896, 36.7870, 'Nairobi', 'KE',
+  -1.2896, 36.7870, 'Nairobi', NULL, 'KE',
   'active', 1, NOW() - INTERVAL '20 days', NOW() - INTERVAL '15 days',
   'admin', NOW() - INTERVAL '15 days', NOW(), NOW() - INTERVAL '20 days', 1
 );

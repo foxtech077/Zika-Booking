@@ -1,0 +1,866 @@
+import { useState, useMemo, useEffect, useCallback, memo } from "react";
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  RefreshControl,
+  StyleSheet,
+  ActivityIndicator,
+  TextInput,
+  Alert,
+  ScrollView,
+} from "react-native";
+import { Image as ExpoImage } from "expo-image";
+import { router } from "expo-router";
+import { AppLayout } from "../../components/layout/AppLayout";
+import { ListingImage } from "../../components/ListingImage";
+import { Feather } from "@expo/vector-icons";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { listingApi } from "../../lib/listing-api";
+import { K } from "../../constants/theme";
+import { useAuthStore } from "../../store/auth";
+import { formatCurrency, getCurrencyForCountry } from "../../lib/currency";
+import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface ListingItem {
+  id: string;
+  name: string | null;
+  category: "hotel" | "apartment" | "car";
+  status: string;
+  town: string | null;
+  country: string | null;
+  pricePerNight: number | null;
+  currency: string | null;
+  claimedStarRating: number | null;
+  rejectionNote: string | null;
+  photos: Array<{ cdnUrl: string }>;
+  temporaryActivation?: boolean;
+  geoVerificationDueAt?: string | null;
+}
+
+interface SummaryItem {
+  id: string;
+  bookingCount: number;
+  totalRevenue: number;
+  averageRating: number | null;
+  reviewCount: number;
+}
+
+interface DashboardStats {
+  thisMonthEarnings: number;
+  activeListingsCount: number;
+}
+
+// ── Config ────────────────────────────────────────────────────────────────────
+
+const CAT_TABS = [
+  { key: "",          label: "All" },
+  { key: "hotel",     label: "Hotels" },
+  { key: "apartment", label: "Homes" },
+  { key: "car",       label: "Car Rentals" },
+];
+
+const STATUS_TABS = [
+  { key: "",                label: "All Statuses" },
+  { key: "active",          label: "Active" },
+  { key: "draft",           label: "Draft" },
+  { key: "pending_review",  label: "Under Review" },
+  { key: "suspended",       label: "Suspended" },
+];
+
+const CAT_LABEL: Record<string, string> = { hotel: "Hotel", apartment: "Home", car: "Car Rental" };
+
+const STATUS_CFG: Record<string, { label: string; bg: string; text: string }> = {
+  active:         { label: "Active",     bg: "#00A86B", text: "#fff" },
+  approved:       { label: "Active",     bg: "#00A86B", text: "#fff" },
+  draft:          { label: "Draft",      bg: "#1E293B", text: "#fff" },
+  pending_review: { label: "Pending",    bg: "#F59E0B", text: "#fff" },
+  rejected:       { label: "Rejected",   bg: "#EF4444", text: "#fff" },
+  deactivated:    { label: "Offline",    bg: "#64748B", text: "#fff" },
+  suspended:      { label: "Suspended",  bg: "#EF4444", text: "#fff" },
+  auto_suspended: { label: "Suspended",  bg: "#EF4444", text: "#fff" },
+};
+
+// Deadline the provider must verify geolocation by, else the listing is
+// auto-suspended by the backend's 180-day expirer job.
+function fmtDueDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  } catch { return iso; }
+}
+
+function fmtMoney(n: number, currency = "USD") {
+  return formatCurrency(n, currency);
+}
+
+// ── ListingCard ───────────────────────────────────────────────────────────────
+
+interface CardProps {
+  item: ListingItem;
+  summary?: SummaryItem;
+  maxBookings: number;
+  onEdit: () => void;
+  onMore: () => void;
+}
+
+const ListingCard = memo(function ListingCard({ item, summary, maxBookings, onEdit, onMore }: CardProps) {
+  const cfg = STATUS_CFG[item.status] ?? { label: item.status, bg: "#64748B", text: "#fff" };
+  const coverUrl = item.photos[0]?.cdnUrl ?? null;
+  const bookings  = summary?.bookingCount ?? 0;
+  const barPct    = maxBookings > 0 ? Math.min(100, Math.round((bookings / maxBookings) * 100)) : 0;
+  const barColor  = barPct >= 70 ? K.colors.accent : barPct >= 30 ? "#F59E0B" : "#E5E7EB";
+
+  const priceLabel = item.pricePerNight != null
+    ? formatCurrency(item.pricePerNight, item.currency ?? "USD")
+    : "—";
+
+  const rating = summary?.averageRating;
+
+  return (
+    <View style={s.card}>
+      {/* Photo */}
+      <View style={s.photoWrap}>
+        {coverUrl ? (
+          <ListingImage uri={coverUrl} style={s.photo} resizeMode="cover" />
+        ) : (
+          <View style={s.photoPlaceholder}>
+            <Feather
+              name={item.category === "car" ? "truck" : "home"}
+              size={40}
+              color="#C7D9D1"
+            />
+          </View>
+        )}
+
+        {/* Status badge — top left */}
+        <View style={[s.statusBadge, { backgroundColor: cfg.bg }]}>
+          <Text style={[s.statusBadgeText, { color: cfg.text }]}>{cfg.label}</Text>
+        </View>
+
+        {/* Rating badge — top right */}
+        {rating != null && (
+          <View style={s.ratingBadge}>
+            <Feather name="star" size={11} color="#F59E0B" />
+            <Text style={s.ratingBadgeText}>{rating.toFixed(1)}</Text>
+          </View>
+        )}
+
+        {/* Category badge — bottom left */}
+        <View style={s.catBadge}>
+          <Text style={s.catBadgeText}>
+            {CAT_LABEL[item.category] ?? item.category}
+          </Text>
+        </View>
+      </View>
+
+      {/* Body */}
+      <View style={s.body}>
+        {/* Name row */}
+        <View style={s.nameRow}>
+          <Text style={s.name} numberOfLines={1}>{item.name ?? "Untitled Listing"}</Text>
+          <TouchableOpacity onPress={onMore} hitSlop={10} style={s.moreBtn}>
+            <Feather name="more-vertical" size={18} color="#94A3B8" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Location */}
+        {(item.town || item.country) && (
+          <View style={s.locationRow}>
+            <Feather name="map-pin" size={12} color={K.colors.textMuted} />
+            <Text style={s.locationText} numberOfLines={1}>
+              {[item.town, item.country].filter(Boolean).join(", ")}
+            </Text>
+          </View>
+        )}
+
+        {/* Occupancy / bookings bar */}
+        <View style={s.occRow}>
+          <View style={s.occLabelRow}>
+            <Text style={s.occLabel}>
+              {summary ? "Total Bookings" : "No bookings yet"}
+            </Text>
+            <Text style={[s.occPct, { color: barColor }]}>
+              {bookings > 0 ? `${bookings}` : "0"}
+            </Text>
+          </View>
+          <View style={s.barTrack}>
+            <View style={[s.barFill, { width: `${barPct}%` as any, backgroundColor: barColor }]} />
+          </View>
+        </View>
+
+        {/* Rejection note */}
+        {item.status === "rejected" && item.rejectionNote && (
+          <View style={s.rejectionBox}>
+            <Feather name="alert-triangle" size={13} color="#DC2626" style={{ marginTop: 1 }} />
+            <Text style={[s.rejectionText, { flex: 1 }]} numberOfLines={2}>{item.rejectionNote}</Text>
+          </View>
+        )}
+
+        {/* Geolocation verification warning — mirrors the web provider dashboard.
+            The listing is live on a 180-day temporary activation and will be
+            auto-suspended if the location is not verified before the due date. */}
+        {item.category === "apartment" && item.temporaryActivation && item.geoVerificationDueAt && (
+          <View style={s.geoWarnBox}>
+            <Feather name="alert-triangle" size={13} color="#B45309" style={{ marginTop: 1 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.geoWarnTitle}>Temporary activation — geolocation pending</Text>
+              <Text style={s.geoWarnText}>
+                Your home is live but its location is not yet verified. Verification is due by{" "}
+                <Text style={s.geoWarnDate}>{fmtDueDate(item.geoVerificationDueAt)}</Text>.
+                If it is not verified, the listing will be auto-suspended. Update your address or contact support.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Price */}
+        <View style={s.priceBlockRow}>
+          <Text style={s.price}>{priceLabel}</Text>
+          <Text style={s.priceUnit}>/ {item.category === "car" ? "day" : "night"}</Text>
+        </View>
+
+        {/* Actions */}
+        <View style={s.actionsRow}>
+          {item.status !== "pending_review" && (
+            <TouchableOpacity style={s.actionBtnOutline} onPress={onEdit} activeOpacity={0.8}>
+              <Feather name="edit-2" size={14} color={K.colors.darkGreen} />
+              <Text style={s.actionBtnOutlineText}>Edit</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={s.actionBtnOutline}
+            onPress={() => router.push(`/listings/${item.id}/view` as any)}
+            activeOpacity={0.8}
+          >
+            <Feather name="eye" size={14} color={K.colors.darkGreen} />
+            <Text style={s.actionBtnOutlineText}>View</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.actionBtnFill} onPress={onMore} activeOpacity={0.85}>
+            <Feather name="sliders" size={14} color="#fff" />
+            <Text style={s.actionBtnFillText}>Manage</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+});
+
+// ── Screen ────────────────────────────────────────────────────────────────────
+
+export default function ListingsScreen() {
+  const qc = useQueryClient();
+  const { user } = useAuthStore();
+  const [search,    setSearch]    = useState("");
+  const [catFilter, setCatFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+
+  // Main listings (with photos)
+  const listingsQ = useQuery<{ listings: ListingItem[]; total: number }>({
+    queryKey: ["myListings"],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: { listings: ListingItem[]; total: number } }>("/listings", {
+        params: { limit: "50" },
+      });
+      return res.data.data;
+    },
+    enabled: !!user,
+  });
+
+  // Summary data (booking counts per listing)
+  const summaryQ = useQuery<{ listings: SummaryItem[] }>({
+    queryKey: ["myListingsSummary"],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: { listings: SummaryItem[] } }>("/provider/listings/summary");
+      return res.data.data;
+    },
+    enabled: !!user && listingsQ.isSuccess,
+  });
+
+  // Dashboard stats (for the stats strip)
+  const dashQ = useQuery<DashboardStats>({
+    queryKey: ["providerDashboard"],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: DashboardStats }>("/provider/dashboard");
+      return res.data.data;
+    },
+    enabled: !!user,
+  });
+
+  useRefreshOnFocus(useCallback(() => {
+    void listingsQ.refetch();
+    void summaryQ.refetch();
+    void dashQ.refetch();
+  }, [listingsQ, summaryQ, dashQ]));
+
+  // Mutations
+  const deactivateMut = useMutation({
+    mutationFn: (id: string) => listingApi.post(`/listings/${id}/deactivate`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["myListings"] });
+      qc.invalidateQueries({ queryKey: ["myListingsSummary"] });
+    },
+    onError: () => Alert.alert("Error", "Could not pause this listing."),
+  });
+
+  const reactivateMut = useMutation({
+    mutationFn: (id: string) => listingApi.post(`/listings/${id}/reactivate`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["myListings"] });
+    },
+    onError: (e: any) => {
+      const msg = e?.response?.data?.error?.message ?? "Could not resume listing.";
+      Alert.alert("Cannot Resume", msg);
+    },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => listingApi.delete(`/listings/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["myListings"] }),
+    onError: () => Alert.alert("Error", "Only draft listings can be deleted."),
+  });
+
+  // Derived data
+  const summaryMap = useMemo(() => {
+    const m: Record<string, SummaryItem> = {};
+    for (const s of summaryQ.data?.listings ?? []) m[s.id] = s;
+    return m;
+  }, [summaryQ.data]);
+
+  const allListings = listingsQ.data?.listings ?? [];
+
+  const filtered = useMemo(() => {
+    return allListings.filter((l) => {
+      if (catFilter && l.category !== catFilter) return false;
+      if (statusFilter) {
+        if (statusFilter === "active") {
+          if (l.status !== "active" && l.status !== "approved") return false;
+        } else if (statusFilter === "suspended") {
+          if (!["suspended", "auto_suspended", "permanently_banned"].includes(l.status)) return false;
+        } else {
+          if (l.status !== statusFilter) return false;
+        }
+      }
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        return (l.name ?? "").toLowerCase().includes(q) ||
+               (l.town ?? "").toLowerCase().includes(q);
+      }
+      return true;
+    });
+  }, [allListings, catFilter, statusFilter, search]);
+
+  const countByCategory = useMemo(() => {
+    const map: Record<string, number> = { "": allListings.length };
+    for (const l of allListings) map[l.category] = (map[l.category] ?? 0) + 1;
+    return map;
+  }, [allListings]);
+
+  const maxBookings = useMemo(() => {
+    return Math.max(...(summaryQ.data?.listings ?? []).map((s) => s.bookingCount), 1);
+  }, [summaryQ.data]);
+
+  const stats = dashQ.data;
+  const totalRevMTD = stats?.thisMonthEarnings ?? 0;
+  const activeCount = stats?.activeListingsCount ?? 0;
+
+  // Prefetch every loaded cover photo so cards that are about to scroll into
+  // view (or get revisited) are already in expo-image's memory/disk cache.
+  useEffect(() => {
+    const urls = (listingsQ.data?.listings ?? [])
+      .map((l) => l.photos[0]?.cdnUrl)
+      .filter((u): u is string => !!u);
+    if (urls.length) ExpoImage.prefetch(urls, "memory-disk");
+  }, [listingsQ.data]);
+
+  function openMoreMenu(item: ListingItem) {
+    const isLive   = item.status === "active" || item.status === "approved";
+    const isPaused = item.status === "deactivated";
+    const isDraft  = item.status === "draft";
+
+    const options: Array<{ label: string; action: () => void; destructive?: boolean }> = [];
+
+    if (item.status !== "pending_review") {
+      options.push({ label: "Edit Listing", action: () => router.push(editRoute(item)) });
+    }
+    if (isLive) {
+      options.push({
+        label: "Pause Listing",
+        action: () => deactivateMut.mutate(item.id),
+      });
+    }
+    if (isPaused) {
+      options.push({
+        label: "Resume Listing",
+        action: () => reactivateMut.mutate(item.id),
+      });
+    }
+    if (isDraft) {
+      options.push({
+        label: "Delete Draft",
+        action: () =>
+          Alert.alert(
+            "Delete Draft",
+            `Delete "${item.name ?? "Untitled"}"? This cannot be undone.`,
+            [
+              { text: "Cancel", style: "cancel" },
+              { text: "Delete", style: "destructive", onPress: () => deleteMut.mutate(item.id) },
+            ]
+          ),
+        destructive: true,
+      });
+    }
+
+    Alert.alert(
+      item.name ?? "Listing",
+      undefined,
+      [
+        ...options.map((o) => ({
+          text: o.label,
+          onPress: o.action,
+          style: (o.destructive ? "destructive" : "default") as "destructive" | "default",
+        })),
+        { text: "Cancel", style: "cancel" as const },
+      ]
+    );
+  }
+
+  function editRoute(l: ListingItem) {
+    return `/listings/${l.id}` as any;
+  }
+
+  const isLoading = listingsQ.isLoading;
+  const isError   = listingsQ.isError;
+  const refetch   = () => {
+    listingsQ.refetch();
+    summaryQ.refetch();
+    dashQ.refetch();
+  };
+  const isRefreshing = listingsQ.isRefetching;
+
+  const renderItem = useCallback(
+    ({ item }: { item: ListingItem }) => (
+      <ListingCard
+        item={item}
+        summary={summaryMap[item.id]}
+        maxBookings={maxBookings}
+        onEdit={() => router.push(editRoute(item))}
+        onMore={() => openMoreMenu(item)}
+      />
+    ),
+    [summaryMap, maxBookings]
+  );
+
+  return (
+    <AppLayout>
+      <View style={s.container}>
+      {/* ── Scrollable body ─────────────────────────────────── */}
+      <FlatList
+        data={isLoading ? [] : filtered}
+        keyExtractor={(l) => l.id}
+        contentContainerStyle={s.scroll}
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews
+        windowSize={7}
+        maxToRenderPerBatch={6}
+        initialNumToRender={6}
+        updateCellsBatchingPeriod={50}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={refetch} tintColor={K.colors.accent} />
+        }
+        ListHeaderComponent={
+          <View>
+            {/* Search */}
+            <View style={s.searchWrap}>
+              <Feather name="search" size={15} color="#9CA3AF" />
+              <TextInput
+                style={s.searchInput}
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search listings..."
+                placeholderTextColor="#9CA3AF"
+              />
+              {search ? (
+                <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
+                  <Text style={{ color: "#9CA3AF", fontSize: 14 }}>✕</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            {/* Category tabs */}
+            <View style={s.tabRow}>
+              {CAT_TABS.map((t) => {
+                const cnt = countByCategory[t.key] ?? 0;
+                const active = catFilter === t.key;
+                return (
+                  <TouchableOpacity
+                    key={t.key}
+                    style={[s.tab, active && s.tabActive]}
+                    onPress={() => setCatFilter(t.key)}
+                  >
+                    <Text style={[s.tabText, active && s.tabTextActive]}>
+                      {t.label}{active && cnt > 0 ? ` (${cnt})` : ""}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity style={s.filterIcon} onPress={() => setStatusFilter(statusFilter ? "" : "active")}>
+                <Feather name="sliders" size={16} color={K.colors.accent} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Status tabs */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.statusTabRow}>
+              {STATUS_TABS.map((t) => {
+                const active = statusFilter === t.key;
+                return (
+                  <TouchableOpacity
+                    key={t.key}
+                    style={[s.statusTab, active && s.statusTabActive]}
+                    onPress={() => setStatusFilter(t.key)}
+                  >
+                    <Text style={[s.statusTabText, active && s.statusTabTextActive]}>
+                      {t.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* Stats strip — two cards, matching the portfolio overview design */}
+            {!isLoading && (
+              <View style={s.statsRow}>
+                <View style={s.statCard}>
+                  <View style={s.statCardTop}>
+                    <View style={[s.statIconWrap, { backgroundColor: K.colors.bgTint }]}>
+                      <Feather name="grid" size={16} color={K.colors.darkGreen} />
+                    </View>
+                  </View>
+                  <Text style={s.statCardLabel}>Total Listings</Text>
+                  <Text style={s.statCardValue}>{allListings.length}</Text>
+                  <Text style={s.statCardSub}>{fmtMoney(totalRevMTD, getCurrencyForCountry(user?.country).code)} this month</Text>
+                </View>
+                <View style={s.statCard}>
+                  <View style={s.statCardTop}>
+                    <View style={[s.statIconWrap, { backgroundColor: "#DCFCE7" }]}>
+                      <Feather name="check-circle" size={16} color={K.colors.accent} />
+                    </View>
+                  </View>
+                  <Text style={s.statCardLabel}>Active Now</Text>
+                  <Text style={[s.statCardValue, { color: K.colors.accent }]}>{activeCount}</Text>
+                  <Text style={s.statCardSub}>
+                    {allListings.length > 0 ? `${Math.round((activeCount / allListings.length) * 100)}% of portfolio` : "No listings yet"}
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
+        }
+        ListEmptyComponent={
+          isLoading ? (
+            <View style={s.center}>
+              <ActivityIndicator color={K.colors.accent} size="large" />
+            </View>
+          ) : isError ? (
+            <View style={s.center}>
+              <Text style={s.errText}>Could not load listings</Text>
+              <TouchableOpacity style={s.retryBtn} onPress={refetch}>
+                <Text style={s.retryText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={s.empty}>
+              <View style={s.emptyIconWrap}>
+                <Feather name="home" size={34} color={K.colors.accent} />
+              </View>
+              <Text style={s.emptyTitle}>No listings yet</Text>
+              <Text style={s.emptySub}>
+                Tap <Text style={{ fontWeight: "700" }}>+</Text> to create your first listing
+              </Text>
+              <TouchableOpacity
+                style={s.emptyBtn}
+                onPress={() => router.push("/listings/new" as any)}
+              >
+                <Text style={s.emptyBtnText}>Create Listing</Text>
+              </TouchableOpacity>
+            </View>
+          )
+        }
+        renderItem={renderItem}
+        ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+        ListFooterComponent={() => <View style={{ height: 100 }} />}
+      />
+
+      {/* ── FAB ─────────────────────────────────────────────── */}
+      <TouchableOpacity
+        style={s.fab}
+        onPress={() => router.push("/listings/new" as any)}
+        activeOpacity={0.88}
+      >
+        <Feather name="plus" size={28} color="#fff" />
+      </TouchableOpacity>
+      </View>
+    </AppLayout>
+  );
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#F1F5F9" },
+
+  // Scroll
+  scroll: { padding: 16, paddingTop: 0 },
+
+  // Search
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: K.radius.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 10,
+    marginTop: 16,
+    marginBottom: 12,
+    ...K.shadow.sm,
+  },
+  searchIcon: { fontSize: 15, color: "#9CA3AF" },
+  searchInput: { flex: 1, fontSize: K.font.sm, color: K.colors.textDark },
+
+  // Category tabs
+  tabRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 10,
+  },
+  tab: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: K.radius.full,
+    backgroundColor: "#E2E8F0",
+  },
+  tabActive: { backgroundColor: K.colors.accent },
+  tabText: { fontSize: K.font.sm, fontWeight: "600", color: "#64748B" },
+  tabTextActive: { color: "#fff" },
+  filterIcon: {
+    marginLeft: "auto",
+    padding: 6,
+  },
+
+  // Status tabs ScrollView
+  statusTabRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 14,
+    paddingRight: 20,
+  },
+  statusTab: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: K.radius.md,
+    backgroundColor: "transparent",
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+  },
+  statusTabActive: {
+    backgroundColor: K.colors.darkGreenMid,
+    borderColor: K.colors.darkGreenMid,
+  },
+  statusTabText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748B",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  statusTabTextActive: {
+    color: "#fff",
+  },
+
+  // Stats strip — two side-by-side cards
+  statsRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
+  statCard: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderRadius: K.radius.xl,
+    padding: 14,
+    ...K.shadow.sm,
+  },
+  statCardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
+  statIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statCardLabel: { fontSize: K.font.xs, color: "#94A3B8", fontWeight: "700" },
+  statCardValue: { fontSize: K.font.xxl, fontWeight: "900", color: K.colors.textDark, marginTop: 2, letterSpacing: -0.5 },
+  statCardSub: { fontSize: 10, color: "#94A3B8", fontWeight: "600", marginTop: 4 },
+
+  // Card
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: K.radius.xl,
+    overflow: "hidden",
+    ...K.shadow.md,
+  },
+
+  // Photo
+  photoWrap: { height: 200, width: "100%", position: "relative" },
+  photo: { width: "100%", height: "100%" },
+  photoPlaceholder: {
+    flex: 1,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  photoEmoji: { fontSize: 48 },
+
+  // Badges on photo
+  statusBadge: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    borderRadius: K.radius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusBadgeText: { fontSize: 11, fontWeight: "700" },
+  ratingBadge: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#fff",
+    borderRadius: K.radius.full,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    ...K.shadow.xs,
+  },
+  ratingBadgeText: { fontSize: 11, fontWeight: "800", color: K.colors.textDark },
+  catBadge: {
+    position: "absolute",
+    bottom: 12,
+    left: 12,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: K.radius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  catBadgeText: { fontSize: 11, color: "#fff", fontWeight: "600" },
+
+  // Card body
+  body: { padding: 16 },
+
+  nameRow: { flexDirection: "row", alignItems: "center", marginBottom: 5 },
+  name: { flex: 1, fontSize: K.font.lg, fontWeight: "800", color: K.colors.textDark },
+  moreBtn: { padding: 4 },
+  moreDots: { fontSize: 20, color: "#94A3B8", fontWeight: "700" },
+
+  locationRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 10 },
+  locationIcon: { fontSize: 13 },
+  locationText: { fontSize: K.font.sm, color: "#64748B" },
+
+  // Occupancy / bookings bar
+  occRow: { marginBottom: 12 },
+  occLabelRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 5 },
+  occLabel: { fontSize: K.font.xs, color: "#94A3B8", fontWeight: "600" },
+  occPct: { fontSize: K.font.xs, fontWeight: "800" },
+  barTrack: {
+    height: 6,
+    backgroundColor: "#E2E8F0",
+    borderRadius: K.radius.full,
+    overflow: "hidden",
+  },
+  barFill: { height: 6, borderRadius: K.radius.full },
+
+  rejectionBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    backgroundColor: "#FEF2F2",
+    borderRadius: K.radius.sm,
+    padding: 8,
+    marginBottom: 10,
+  },
+  rejectionText: { fontSize: K.font.xs, color: "#DC2626", lineHeight: 16 },
+  geoWarnBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: K.radius.sm,
+    padding: 8,
+    marginBottom: 10,
+  },
+  geoWarnTitle: { fontSize: K.font.xs, fontWeight: "700", color: "#92400E", marginBottom: 2 },
+  geoWarnText: { fontSize: K.font.xs, color: "#B45309", lineHeight: 16 },
+  geoWarnDate: { fontWeight: "700", color: "#92400E" },
+
+  // Footer price + actions
+  priceBlockRow: { flexDirection: "row", alignItems: "baseline", gap: 4, marginBottom: 12 },
+  price: { fontSize: K.font.xl, fontWeight: "900", color: K.colors.textDark },
+  priceUnit: { fontSize: K.font.xs, color: "#94A3B8" },
+
+  actionsRow: { flexDirection: "row", gap: 8 },
+  actionBtnOutline: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    borderWidth: 1.5,
+    borderColor: K.colors.border,
+    borderRadius: K.radius.md,
+    paddingVertical: 9,
+  },
+  actionBtnOutlineText: { fontSize: 12, fontWeight: "700", color: K.colors.darkGreen },
+  actionBtnFill: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    backgroundColor: K.colors.darkGreen,
+    borderRadius: K.radius.md,
+    paddingVertical: 9,
+  },
+  actionBtnFillText: { fontSize: 12, fontWeight: "700", color: "#fff" },
+
+  // States
+  center: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 60, gap: 12 },
+  errText: { fontSize: K.font.base, color: K.colors.textMuted },
+  retryBtn: { backgroundColor: K.colors.accent, borderRadius: K.radius.md, paddingHorizontal: 24, paddingVertical: 10 },
+  retryText: { color: "#fff", fontWeight: "700" },
+
+  empty: { alignItems: "center", paddingTop: 48, paddingHorizontal: 32 },
+  emptyIconWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: K.colors.accentDim, alignItems: "center", justifyContent: "center", marginBottom: 16 },
+  emptyTitle: { fontSize: K.font.xl, fontWeight: "800", color: K.colors.textDark, marginBottom: 8 },
+  emptySub: { fontSize: K.font.sm, color: K.colors.textMuted, textAlign: "center", lineHeight: 22, marginBottom: 24 },
+  emptyBtn: { backgroundColor: K.colors.accent, borderRadius: K.radius.md, paddingVertical: 13, paddingHorizontal: 28 },
+  emptyBtnText: { color: "#fff", fontWeight: "700" },
+
+  // FAB
+  fab: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: K.colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    ...K.shadow.lg,
+  },
+});

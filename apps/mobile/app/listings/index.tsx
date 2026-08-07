@@ -18,6 +18,21 @@ interface Listing {
   photos: { cdnUrl: string }[];
 }
 
+function normalizeListingsResponse(responseData: any): Listing[] {
+  const candidates = [
+    responseData,
+    responseData?.data,
+    responseData?.data?.listings,
+    responseData?.listings,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate;
+  }
+
+  return [];
+}
+
 const STATUS_COLOR: Record<string, string> = {
   draft: "#6b7280",
   pending_review: "#d97706",
@@ -41,6 +56,32 @@ export default function MyListingsScreen() {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
 
+  // All hooks must be called unconditionally before any early return
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["myListings"],
+    queryFn: async () => {
+      const res = await listingApi.get("/listings");
+      return normalizeListingsResponse(res.data);
+    },
+    enabled: user?.userType === "provider",
+  });
+
+  const listings = Array.isArray(data) ? data : [];
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await listingApi.delete(`/listings/${id}`);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["myListings"] }),
+  });
+
+  const deactivateMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await listingApi.post(`/listings/${id}/deactivate`);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["myListings"] }),
+  });
+
   if (user?.userType !== "provider") {
     return (
       <SafeAreaView style={styles.center}>
@@ -49,28 +90,6 @@ export default function MyListingsScreen() {
       </SafeAreaView>
     );
   }
-
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ["my-listings"],
-    queryFn: async () => {
-      const res = await listingApi.get<{ data: { listings: Listing[] } }>("/listings");
-      return res.data.data.listings;
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await listingApi.delete(`/listings/${id}`);
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["my-listings"] }),
-  });
-
-  const deactivateMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await listingApi.post(`/listings/${id}/deactivate`);
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["my-listings"] }),
-  });
 
   function handleDelete(id: string) {
     Alert.alert("Delete Draft", "Delete this draft? This cannot be undone.", [
@@ -96,14 +115,14 @@ export default function MyListingsScreen() {
           <Text style={styles.addButtonText}>+ Add new listing</Text>
         </TouchableOpacity>
 
-        {(!data || data.length === 0) && !isLoading && (
+        {listings.length === 0 && !isLoading && (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No listings yet</Text>
-            <Text style={styles.emptySubtitle}>Add your first hotel, apartment, or car rental listing.</Text>
+            <Text style={styles.emptySubtitle}>Add your first hotel, home, or car rental listing.</Text>
           </View>
         )}
 
-        {data?.map((listing) => (
+        {listings.map((listing) => (
           <View key={listing.id} style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
@@ -161,7 +180,7 @@ const styles = StyleSheet.create({
   scroll: { padding: 16 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   addButton: {
-    backgroundColor: "#1a73e8",
+    backgroundColor: "#16a34a",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",

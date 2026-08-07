@@ -1,241 +1,492 @@
 "use client";
-import { useState } from "react";
+
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Percent, Plus, Trash2, Globe } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
+import { Card, SectionHeader, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { FormField } from "@/components/ui/FormField";
+import { Input, Select, Textarea, CustomDropdown } from "@/components/ui/Input";
+import { Badge } from "@/components/ui/Badge";
+import { ConfirmModal, ActionModal } from "@/components/modals/Modals";
+import { DataTable, type Column } from "@/components/tables/DataTable";
+import { formatDate } from "@/lib/utils";
+import { canAccess } from "@/permissions/rbac";
+import type { CommissionRate, CommissionRatesResponse, AdminRole } from "@/types/admin";
+import { useAuthStore } from "@/stores/auth";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+import { SYSTEM_COUNTRIES } from "@/lib/countries";
 
-interface CommissionRate {
-  id: string;
-  country: string;
-  rate: number;
-  setBy: string;
-  createdAt: string;
-  updatedAt: string;
-}
+const fetchRates = () =>
+  listingApi.get("/admin/commission-rates").then((r) => r.data.data ?? r.data);
 
-interface CommissionRatesResponse {
-  defaultRate: number;
-  rates: CommissionRate[];
-}
-
-// ── Page ──────────────────────────────────────────────────────────────────────
+const COUNTRY_OPTIONS = SYSTEM_COUNTRIES.map((c) => ({
+  value: c.code,
+  label: `${c.flag} ${c.name} (${c.code})`,
+}));
 
 export default function CommissionPage() {
   const qc = useQueryClient();
+  const { user } = useAuthStore();
+  const role = user?.role;
+  const canManageCommission = role === "super_admin";
 
-  const [form, setForm] = useState({ country: "", rate: "" });
-  const [formError, setFormError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [deletingCountry, setDeletingCountry] = useState<string | null>(null);
+  const [addModal, setAddModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<CommissionRate | null>(null);
+  const [newCountry, setNewCountry] = useState("");
+  const [newRate, setNewRate] = useState("");
+  const [newEffectiveFrom, setNewEffectiveFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [newNotifyProviders, setNewNotifyProviders] = useState(false);
+  const [newReason, setNewReason] = useState("");
 
-  const { data, isLoading, error } = useQuery<CommissionRatesResponse>({
-    queryKey: ["commission-rates"],
-    queryFn: async () => {
-      const res = await listingApi.get<{ data: CommissionRatesResponse }>("/admin/commission-rates");
-      return res.data.data;
-    },
+  // Global rate edit states
+  const [globalModal, setGlobalModal] = useState(false);
+  const [globalRateInput, setGlobalRateInput] = useState("");
+  const [globalEffectiveFrom, setGlobalEffectiveFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [globalReason, setGlobalReason] = useState("");
+  const [globalNotifyProviders, setGlobalNotifyProviders] = useState(false);
+  const [globalApplyToAll, setGlobalApplyToAll] = useState(false);
+  const [globalConfirmText, setGlobalConfirmText] = useState("");
+
+  const { data, isLoading } = useQuery<CommissionRatesResponse>({
+    queryKey: ["admin-commission-rates"],
+    queryFn: fetchRates,
   });
 
-  const upsertMutation = useMutation({
-    mutationFn: async () => {
-      const rateNum = parseFloat(form.rate);
-      if (!form.country.trim() || form.country.trim().length !== 2) {
-        throw new Error("Country code must be exactly 2 characters (e.g. KE, NG, ZA).");
-      }
-      if (isNaN(rateNum) || rateNum < 0 || rateNum > 30) {
-        throw new Error("Rate must be a number between 0 and 30 (percent).");
-      }
-      await listingApi.post("/admin/commission-rates", {
-        country: form.country.trim().toUpperCase(),
-        rate: rateNum / 100, // API expects a decimal (0.05 = 5%)
-      });
-    },
+  const rates: CommissionRate[] = data?.rates ?? [];
+  const defaultRate: number = (data as any)?.globalRate != null ? (data as any).globalRate * 100 : (data?.defaultRate ?? 5);
+
+  const filteredRates = useMemo(() => {
+    if (role === "super_admin" || role === "admin" || role === "finance" || role === "support") {
+      return rates;
+    }
+    if (role === "country_manager" || role === "sales") {
+      return rates.filter((r) => user?.countryScope?.includes(r.country));
+    }
+    return [];
+  }, [rates, role, user?.countryScope]);
+
+  const upsertMut = useMutation({
+    mutationFn: ({
+      country,
+      rate,
+      effectiveFrom,
+      notifyProviders,
+      reason,
+    }: {
+      country: string;
+      rate: number;
+      effectiveFrom: string;
+      notifyProviders: boolean;
+      reason: string;
+    }) =>
+      listingApi.post("/admin/commission-rates", {
+        country,
+        rate: rate / 100, // Backend expects decimal representation (e.g. 0.125 for 12.5%)
+        effectiveFrom,
+        notifyProviders,
+        reason,
+      }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["commission-rates"] });
-      setForm({ country: "", rate: "" });
-      setFormError(null);
-      setSuccessMsg("Commission rate saved successfully.");
-      setTimeout(() => setSuccessMsg(null), 3000);
-    },
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message;
-      setFormError(msg ?? (err as Error).message ?? "Failed to save rate.");
+      qc.invalidateQueries({ queryKey: ["admin-commission-rates"] });
+      setAddModal(false);
+      setNewCountry("");
+      setNewRate("");
+      setNewEffectiveFrom(new Date().toISOString().slice(0, 10));
+      setNewNotifyProviders(false);
+      setNewReason("");
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (country: string) => {
-      await listingApi.delete(`/admin/commission-rates/${country}`);
-    },
+  const updateGlobalMut = useMutation({
+    mutationFn: (body: {
+      rate: number;
+      effectiveFrom: string;
+      reason: string;
+      applyToAll: boolean;
+      notifyProviders: boolean;
+    }) =>
+      listingApi.post("/admin/commission-rates/global", {
+        rate: body.rate / 100, // backend expects decimal
+        effectiveFrom: body.effectiveFrom,
+        reason: body.reason,
+        applyToAll: body.applyToAll,
+        notifyProviders: body.notifyProviders,
+      }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["commission-rates"] });
-      setDeletingCountry(null);
-    },
-    onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message;
-      setFormError(msg ?? "Failed to delete rate.");
-      setDeletingCountry(null);
+      qc.invalidateQueries({ queryKey: ["admin-commission-rates"] });
+      setGlobalModal(false);
+      setGlobalRateInput("");
+      setGlobalEffectiveFrom(new Date().toISOString().slice(0, 10));
+      setGlobalReason("");
+      setGlobalNotifyProviders(false);
+      setGlobalApplyToAll(false);
+      setGlobalConfirmText("");
     },
   });
 
-  const defaultRatePct = data ? (data.defaultRate * 100).toFixed(1) : "5.0";
+
+
+  const deleteMut = useMutation({
+    mutationFn: (country: string) => listingApi.delete(`/admin/commission-rates/${country}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-commission-rates"] });
+      setDeleteConfirm(null);
+    },
+  });
+
+  const columns: Column<CommissionRate>[] = [
+    {
+      key: "country",
+      label: "Country",
+      render: (r) => {
+        const found = SYSTEM_COUNTRIES.find((sc) => sc.code.toUpperCase() === r.country.toUpperCase());
+        return (
+          <div className="flex items-center gap-2">
+            <span className="text-base">{found?.flag ?? "🌐"}</span>
+            <span className="font-medium text-slate-900">
+              {found ? `${found.name} (${r.country})` : r.country}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      key: "rate",
+      label: "Commission Rate",
+      render: (r) => (
+        <div className="flex items-center gap-1.5">
+          <span className="text-2xl font-bold text-primary tabular">{r.rate}%</span>
+          {r.rate < defaultRate && (
+            <Badge label="Below Default" />
+          )}
+          {r.rate > defaultRate && (
+            <Badge label="Above Default" status="suspended" />
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "setBy",
+      label: "Set By",
+      render: (r) => <span className="text-sm text-slate-600">{r.setBy}</span>,
+    },
+    {
+      key: "updated",
+      label: "Last Updated",
+      render: (r) => <span className="text-xs text-slate-500">{formatDate(r.updatedAt)}</span>,
+    },
+    {
+      key: "actions",
+      label: "",
+      align: "right",
+      render: (r) => (
+        canManageCommission ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); setDeleteConfirm(r); }}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors"
+            title="Remove override"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        ) : null
+      ),
+    },
+  ];
 
   return (
-    <div className="p-8 max-w-3xl">
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Commission Rates</h1>
-      <p className="text-sm text-gray-500 mb-8">
-        Manage country-specific commission rates. Countries without a specific rate use the global default.
-      </p>
-
-      {/* Default rate banner */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 mb-6">
-        <p className="text-sm font-medium text-blue-900">
-          Global default rate: <span className="font-bold text-lg">{defaultRatePct}%</span>
-        </p>
-        <p className="text-xs text-blue-700 mt-0.5">
-          Applied to all countries not listed below.
-        </p>
-      </div>
-
-      {/* Add / edit form */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-        <h2 className="font-semibold text-gray-900 mb-4 text-sm">Add or Update Country Rate</h2>
-        <div className="flex gap-3 items-end">
-          <div className="w-32">
-            <FormField
-              label="Country code"
-              value={form.country}
-              onChange={(e) => {
-                setForm((p) => ({ ...p, country: e.target.value.toUpperCase().slice(0, 2) }));
-                setFormError(null);
-              }}
-              placeholder="e.g. KE"
-              maxLength={2}
-            />
-          </div>
-          <div className="w-40">
-            <FormField
-              label="Rate (%)"
-              type="number"
-              value={form.rate}
-              onChange={(e) => {
-                setForm((p) => ({ ...p, rate: e.target.value }));
-                setFormError(null);
-              }}
-              placeholder="e.g. 8"
-              min="0"
-              max="30"
-              step="0.1"
-            />
-          </div>
-          <div className="mb-4">
+    <div className="space-y-5 max-w-3xl">
+      <SectionHeader
+        title="Commission Rates"
+        description="Configure platform commission per country"
+        action={
+          canManageCommission && (
             <Button
-              onClick={() => { setFormError(null); upsertMutation.mutate(); }}
-              loading={upsertMutation.isPending}
-              disabled={!form.country || !form.rate}
+              variant="primary"
+              size="sm"
+              onClick={() => setAddModal(true)}
+              leftIcon={<Plus className="h-4 w-4" />}
+            >
+              Add Override
+            </Button>
+          )
+        }
+      />
+
+      {/* Default rate card */}
+      <Card className="flex items-center justify-between gap-4 bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 flex-shrink-0">
+            <Percent className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-600">Global Default Rate</p>
+            <p className="text-3xl font-bold text-primary">{defaultRate}%</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Applied to all countries without a custom override · {filteredRates.length} override{filteredRates.length !== 1 ? "s" : ""} configured
+            </p>
+          </div>
+        </div>
+        {canManageCommission && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setGlobalRateInput(String(defaultRate));
+              setGlobalModal(true);
+            }}
+          >
+            Edit Global Rate
+          </Button>
+        )}
+      </Card>
+
+      {/* Country overrides table */}
+      <Card padding="none">
+        <div className="p-5 border-b border-border">
+          <CardHeader
+            title="Country Overrides"
+            description="These rates take precedence over the global default"
+          />
+        </div>
+        <DataTable
+          columns={columns}
+          data={filteredRates}
+          loading={isLoading}
+          emptyTitle="No overrides configured"
+          emptyDescription="All countries use the global default rate."
+          emptyIcon={<Globe className="h-10 w-10" />}
+        />
+      </Card>
+
+      {/* Add override modal */}
+      <ActionModal
+        open={addModal}
+        onClose={() => {
+          setAddModal(false);
+          setNewCountry("");
+          setNewRate("");
+          setNewEffectiveFrom(new Date().toISOString().slice(0, 10));
+          setNewNotifyProviders(false);
+          setNewReason("");
+        }}
+        title="Add/Update Country Override"
+        description="Set a custom commission rate for a specific country."
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setAddModal(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={upsertMut.isPending}
+              onClick={() =>
+                upsertMut.mutate({
+                  country: newCountry,
+                  rate: parseFloat(newRate),
+                  effectiveFrom: newEffectiveFrom,
+                  notifyProviders: newNotifyProviders,
+                  reason: newReason,
+                })
+              }
+              disabled={!newCountry || !newRate || isNaN(parseFloat(newRate)) || !newEffectiveFrom || !newReason.trim()}
             >
               Save Rate
             </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <CustomDropdown
+            id="country"
+            label="Country"
+            value={newCountry}
+            onChange={(val: any) => setNewCountry(val)}
+            options={COUNTRY_OPTIONS}
+            placeholder="Select country…"
+            required
+          />
+          <Input
+            id="rate"
+            label="Commission Rate (%)"
+            type="number"
+            min="0"
+            max="50"
+            step="0.01"
+            value={newRate}
+            onChange={(e) => setNewRate(e.target.value)}
+            placeholder="e.g. 12.5"
+            hint={`Default is ${defaultRate}%. Enter the override value (max 50%).`}
+            required
+          />
+          <Input
+            id="effectiveFrom"
+            label="Effective From"
+            type="date"
+            required
+            value={newEffectiveFrom}
+            onChange={(e) => setNewEffectiveFrom(e.target.value)}
+            min={new Date().toISOString().slice(0, 10)}
+          />
+          <div className="flex items-center gap-2 py-1">
+            <input
+              id="notifyProviders"
+              type="checkbox"
+              checked={newNotifyProviders}
+              onChange={(e) => setNewNotifyProviders(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/25"
+            />
+            <label htmlFor="notifyProviders" className="text-sm font-medium text-slate-700 select-none">
+              Notify Providers in this country
+            </label>
+          </div>
+          <Textarea
+            id="reason"
+            label="Change Reason"
+            required
+            value={newReason}
+            onChange={(e) => setNewReason(e.target.value)}
+            placeholder="Explain the business reason for this rate change..."
+            rows={2}
+          />
+        </div>
+      </ActionModal>
+
+      {/* Edit Global Commission Modal */} 
+      <ActionModal
+        open={globalModal}
+        onClose={() => {
+          setGlobalModal(false);
+          setGlobalRateInput("");
+          setGlobalEffectiveFrom(new Date().toISOString().slice(0, 10));
+          setGlobalReason("");
+          setGlobalNotifyProviders(false);
+          setGlobalApplyToAll(false);
+          setGlobalConfirmText("");
+        }}
+        title="Edit Global Default Commission Rate"
+        description="Set or schedule a new platform-wide default commission rate. This will apply to all countries without custom overrides."
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setGlobalModal(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={updateGlobalMut.isPending}
+              onClick={() =>
+                updateGlobalMut.mutate({
+                  rate: parseFloat(globalRateInput),
+                  effectiveFrom: globalEffectiveFrom,
+                  reason: globalReason,
+                  applyToAll: globalApplyToAll,
+                  notifyProviders: globalNotifyProviders,
+                })
+              }
+              disabled={
+                !globalRateInput ||
+                isNaN(parseFloat(globalRateInput)) ||
+                parseFloat(globalRateInput) < 0 ||
+                parseFloat(globalRateInput) > 50 ||
+                !globalEffectiveFrom ||
+                !globalReason.trim() ||
+                globalConfirmText !== "CONFIRM"
+              }
+            >
+              Update Global Rate
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            id="globalRate"
+            label="New Global Rate (%)"
+            type="number"
+            min="0"
+            max="50"
+            step="0.01"
+            value={globalRateInput}
+            onChange={(e) => setGlobalRateInput(e.target.value)}
+            placeholder="e.g. 5.0"
+            hint={`Current default is ${defaultRate}%. (Max 50.0%)`}
+            required
+          />
+          <Input
+            id="globalEffectiveFrom"
+            label="Effective From"
+            type="date"
+            required
+            value={globalEffectiveFrom}
+            onChange={(e) => setGlobalEffectiveFrom(e.target.value)}
+            min={new Date().toISOString().slice(0, 10)}
+          />
+          
+          <div className="flex items-center gap-2 py-1">
+            <input
+              id="globalApplyToAll"
+              type="checkbox"
+              checked={globalApplyToAll}
+              onChange={(e) => setGlobalApplyToAll(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/25"
+            />
+            <label htmlFor="globalApplyToAll" className="text-sm font-medium text-slate-700 select-none">
+              Apply to All Countries (Replace existing overrides)
+            </label>
+          </div>
+
+          <div className="flex items-center gap-2 py-1">
+            <input
+              id="globalNotifyProviders"
+              type="checkbox"
+              checked={globalNotifyProviders}
+              onChange={(e) => setGlobalNotifyProviders(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/25"
+            />
+            <label htmlFor="globalNotifyProviders" className="text-sm font-medium text-slate-700 select-none">
+              Notify all active Providers via Email
+            </label>
+          </div>
+
+          <Textarea
+            id="globalReason"
+            label="Change Reason"
+            required
+            value={globalReason}
+            onChange={(e) => setGlobalReason(e.target.value)}
+            placeholder="Explain the business reason for adjusting the default rate..."
+            hint="Logged to audit trail."
+            rows={2}
+          />
+
+          <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-2">
+            <p className="text-xs font-semibold text-amber-800">Verification Required</p>
+            <p className="text-xs text-amber-700">
+              This action affects the platform-wide commission rate. Please type <strong>CONFIRM</strong> in uppercase to enable saving.
+            </p>
+            <Input
+              id="globalConfirm"
+              type="text"
+              placeholder="CONFIRM"
+              value={globalConfirmText}
+              onChange={(e) => setGlobalConfirmText(e.target.value)}
+              className="bg-white border-amber-300 focus:border-amber-500 focus:ring-amber-500/25"
+            />
           </div>
         </div>
-        {formError && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{formError}</p>
-        )}
-        {successMsg && (
-          <p className="text-sm text-green-600 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{successMsg}</p>
-        )}
-        <p className="text-xs text-gray-400 mt-2">
-          Enter a percentage value (0–30). For example, enter <code>8</code> for 8%.
-        </p>
-      </div>
+      </ActionModal>
 
-      {/* Rates table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Country</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Rate</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Set by</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Last updated</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <tr>
-                <td colSpan={5} className="text-center py-12 text-gray-400">Loading…</td>
-              </tr>
-            ) : error ? (
-              <tr>
-                <td colSpan={5} className="text-center py-12 text-red-400">Failed to load commission rates.</td>
-              </tr>
-            ) : !data?.rates.length ? (
-              <tr>
-                <td colSpan={5} className="text-center py-12 text-gray-400">
-                  No country-specific rates set. All countries use the {defaultRatePct}% global default.
-                </td>
-              </tr>
-            ) : data.rates.map((r) => (
-              <tr key={r.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition">
-                <td className="px-4 py-3">
-                  <span className="font-mono font-semibold text-gray-900">{r.country}</span>
-                </td>
-                <td className="px-4 py-3">
-                  <span className="font-medium text-gray-900">{(r.rate * 100).toFixed(1)}%</span>
-                  {r.rate * 100 > parseFloat(defaultRatePct) ? (
-                    <span className="ml-2 text-xs text-orange-600">(above default)</span>
-                  ) : r.rate * 100 < parseFloat(defaultRatePct) ? (
-                    <span className="ml-2 text-xs text-green-600">(below default)</span>
-                  ) : null}
-                </td>
-                <td className="px-4 py-3 text-gray-500 capitalize">{r.setBy}</td>
-                <td className="px-4 py-3 text-gray-500">
-                  {new Date(r.updatedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                </td>
-                <td className="px-4 py-3">
-                  {deletingCountry === r.country ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-600">Sure?</span>
-                      <button
-                        onClick={() => deleteMutation.mutate(r.country)}
-                        disabled={deleteMutation.isPending}
-                        className="text-xs text-red-600 font-medium hover:underline disabled:opacity-50"
-                      >
-                        {deleteMutation.isPending ? "Deleting…" : "Yes, delete"}
-                      </button>
-                      <button
-                        onClick={() => setDeletingCountry(null)}
-                        className="text-xs text-gray-500 hover:underline"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => setForm({ country: r.country, rate: (r.rate * 100).toFixed(1) })}
-                        className="text-xs font-medium text-primary hover:underline"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setDeletingCountry(r.country)}
-                        className="text-xs font-medium text-red-600 hover:underline"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* Delete confirm */}
+      <ConfirmModal
+        open={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={() => deleteConfirm && deleteMut.mutate(deleteConfirm.country)}
+        loading={deleteMut.isPending}
+        title="Remove commission override"
+        description={`Remove the custom rate for ${deleteConfirm?.country}? It will revert to the global default of ${defaultRate}%.`}
+        variant="warning"
+        confirmLabel="Remove Override"
+      />
     </div>
   );
 }
