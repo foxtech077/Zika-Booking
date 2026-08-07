@@ -157,7 +157,9 @@ export async function voucherRoutes(app: FastifyInstance) {
       if (voucher.usageLimit !== null && voucher.usageCount >= voucher.usageLimit)
         return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher usage limit has been reached.", voucher: null });
         
-      const guestUsageCount = await prisma.voucherRedemption.count({ where: { voucherId: voucher.id, guestId: body.guestId } });
+      const guestUsageCount = await prisma.voucherRedemption.count({
+        where: { voucherId: voucher.id, guestId: body.guestId, bookingId: { not: { startsWith: "wallet-" } } },
+      });
       if (guestUsageCount >= ((voucher as any).usageLimitPerGuest || 1)) 
         return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Your per-guest usage limit has been reached.", voucher: null });
 
@@ -297,7 +299,13 @@ export async function voucherRoutes(app: FastifyInstance) {
       const redemptionCounts = voucherIds.length > 0
         ? await prisma.voucherRedemption.groupBy({
             by: ["voucherId"],
-            where: { voucherId: { in: voucherIds }, guestId },
+            where: {
+              voucherId: { in: voucherIds },
+              guestId,
+              // Wallet placeholder rows (auto-assigned vouchers) must not count
+              // toward the per-guest usage limit.
+              bookingId: { not: { startsWith: "wallet-" } },
+            },
             _count: { voucherId: true },
           })
         : [];

@@ -1583,7 +1583,9 @@ export async function bookingRoutes(app: FastifyInstance) {
             return sendError(reply, 400, "INVALID_VOUCHER", "Voucher not found");
           }
 
-          if (!voucher.isActive) {
+          // Full validation chain — mirrors POST /vouchers/validate.
+          const status = (voucher as any).status ?? (voucher.isActive ? "active" : "inactive");
+          if (!voucher.isActive || status === "paused" || status === "expired" || status === "exhausted") {
             return sendError(reply, 400, "INVALID_VOUCHER", "Voucher is not active.");
           }
 
@@ -1596,12 +1598,61 @@ export async function bookingRoutes(app: FastifyInstance) {
             );
           }
 
+          // Activity scope (hotels / apartments / cars / hotels_apartments / universal)
+          const scope = (voucher as any).activityScope ?? "universal";
+          if (scope !== "universal") {
+            const allowed = scope === "hotels_apartments"
+              ? ["hotel", "apartment"]
+              : [scope];
+            if (!allowed.includes(listing.category)) {
+              return sendError(reply, 400, "INVALID_VOUCHER", "Voucher is not applicable for this activity.");
+            }
+          }
+
+          // Country scope (null = worldwide)
+          if ((voucher as any).countryScope && (voucher as any).countryScope !== listing.country) {
+            return sendError(reply, 400, "INVALID_VOUCHER", "Voucher is not applicable in your country.");
+          }
+
+          // Loyalty tier
+          const tiers: string[] = ((voucher as any).applicableTiers || []).map((t: string) => t.toLowerCase());
+          if (tiers.length > 0) {
+            const guest = await prisma.$queryRawUnsafe<{ currentTier: string }[]>(
+              `SELECT "currentTier" FROM auth."User" WHERE id = $1`, guestId,
+            ).catch(() => [] as { currentTier: string }[]);
+            const tier = guest[0]?.currentTier?.toLowerCase();
+            if (!tier || !tiers.includes(tier)) {
+              return sendError(reply, 400, "INVALID_VOUCHER", "Voucher is not applicable for your loyalty tier.");
+            }
+          }
+
+          // Usage limits
+          if ((voucher as any).usageLimit != null && Number(voucher.usageCount) >= Number((voucher as any).usageLimit)) {
+            return sendError(reply, 400, "INVALID_VOUCHER", "Voucher usage limit has been reached.");
+          }
+          const guestUsageCount = await prisma.voucherRedemption.count({
+            where: { voucherId: voucher.id, guestId, bookingId: { not: { startsWith: "wallet-" } } },
+          });
+          if (guestUsageCount >= Number((voucher as any).usageLimitPerGuest || 1)) {
+            return sendError(reply, 400, "INVALID_VOUCHER", "Your per-guest usage limit has been reached.");
+          }
+
+          // Minimum order value
+          if ((voucher as any).minOrderValue != null && baseBilling.subtotal < Number((voucher as any).minOrderValue)) {
+            return sendError(reply, 400, "INVALID_VOUCHER", "Booking total does not meet the voucher minimum.");
+          }
+
           if (voucher.discountType === "percentage") {
             voucherDiscount =
               baseBilling.subtotal *
               (Number(voucher.discountValue) / 100);
           } else {
             voucherDiscount = Number(voucher.discountValue);
+          }
+
+          // Maximum discount cap
+          if ((voucher as any).maxDiscount != null && voucherDiscount > Number((voucher as any).maxDiscount)) {
+            voucherDiscount = Number((voucher as any).maxDiscount);
           }
 
           appliedVoucher = {
@@ -1825,22 +1876,10 @@ export async function bookingRoutes(app: FastifyInstance) {
         // Consume the lock token — prevent reuse for duplicate bookings
         await redis.del(`rlk:ctx:${body.lockToken}`).catch(() => {});
 
-        if (appliedVoucher) {
-          await Promise.all([
-            prisma.voucher.update({
-              where: { id: appliedVoucher.id },
-              data: { usageCount: { increment: 1 } },
-            }),
-            prisma.voucherRedemption.create({
-              data: {
-                voucherId: appliedVoucher.id,
-                bookingId: booking.id,
-                guestId,
-                discount: voucherDiscount,
-              },
-            }),
-          ]);
-        }
+        // NOTE: The voucher is NOT consumed here. usageCount + VoucherRedemption
+        // are only committed inside the confirm transaction (payment success) so
+        // abandoned / failed bookings never burn voucher usage. Reversals on
+        // cancellation mirror the loyalty-points pattern via releaseVoucher().
 
         // Immediately deduct redeemed points from the user's balance to prevent double-spending
         if (redeemPoints > 0) {
@@ -2021,6 +2060,30 @@ export async function bookingRoutes(app: FastifyInstance) {
                   actorType: "system",
                 },
               });
+
+              // Consume the voucher ONLY on confirmation (payment success), inside
+              // the same transaction so the booking and the usage are atomic.
+              // Abandoned / failed bookings never burn voucher usage.
+              if ((booking as any).voucherCode) {
+                const voucher = await tx.voucher.findUnique({
+                  where: { code: (booking as any).voucherCode },
+                });
+                if (!voucher || voucher.status === "paused" || voucher.status === "expired" || voucher.status === "exhausted" || !voucher.isActive) {
+                  throw Object.assign(new Error("Voucher invalid at confirmation"), { code: "VOUCHER_INVALID" });
+                }
+                await tx.voucher.update({
+                  where: { id: voucher.id },
+                  data: { usageCount: { increment: 1 } },
+                });
+                await tx.voucherRedemption.create({
+                  data: {
+                    voucherId: voucher.id,
+                    bookingId: booking.id,
+                    guestId: booking.guestId,
+                    discount: Number((booking as any).voucherDiscount ?? 0),
+                  },
+                });
+              }
             },
             {
               maxWait: 20000, // Allow up to 20s to acquire the connection and lock
@@ -2107,6 +2170,45 @@ export async function bookingRoutes(app: FastifyInstance) {
               error: {
                 code: "GRACE_EXPIRED",
                 message: "The reservation grace period has passed. Your payment will be refunded.",
+              },
+            });
+          }
+
+          if (txErr.code === "VOUCHER_INVALID") {
+            // The voucher became invalid between booking creation and payment
+            // confirmation — auto-cancel, refund points and let the payment
+            // service refund the captured amount.
+            await prisma.booking.update({
+              where: { id },
+              data: {
+                status: "cancelled_by_system",
+                cancellationReason: "Voucher invalid at payment confirmation.",
+                cancelledAt: new Date(),
+                cancelledBy: "system",
+              },
+            }).catch(() => { });
+            await prisma.bookingStatusLog.create({
+              data: {
+                bookingId: id,
+                fromStatus: "pending_payment",
+                toStatus: "cancelled_by_system",
+                actorType: "system",
+                reason: "Voucher invalid at payment confirmation.",
+              },
+            }).catch(() => { });
+            const redeemedPoints = Number((booking as any).redeemPoints ?? 0);
+            if (redeemedPoints > 0) {
+              await prisma.$executeRawUnsafe(`
+                UPDATE auth."User"
+                SET "loyaltyPoints" = "loyaltyPoints" + $1, "updatedAt" = NOW()
+                WHERE id = $2
+              `, redeemedPoints, booking.guestId).catch(() => { });
+            }
+            return reply.status(409).send({
+              success: false,
+              error: {
+                code: "VOUCHER_INVALID",
+                message: "The voucher is no longer valid. Your payment will be refunded.",
               },
             });
           }
@@ -2368,6 +2470,32 @@ export async function bookingRoutes(app: FastifyInstance) {
   // route so refund / payout / audit / loyalty / email behavior stays identical.
   // The magic link token is intentionally NOT cleared here — the guest may
   // revisit the link to see the cancelled state until checkout + 24h.
+
+  /**
+   * Reverse a voucher consumption for a booking that will not result in a
+   * confirmed stay (cancel, payment failure, stale-payment sweep, dates taken,
+   * grace expired, invalid voucher). Decrements usageCount (never below 0) and
+   * removes the redemption row. Idempotent and best-effort, mirroring the
+   * loyalty-points reversal pattern.
+   */
+  async function releaseVoucher(booking: any): Promise<void> {
+    const code = (booking as any).voucherCode;
+    if (!code) return;
+    try {
+      const voucher = await prisma.voucher.findUnique({ where: { code } });
+      if (voucher) {
+        await prisma.voucher.updateMany({
+          where: { id: voucher.id, usageCount: { gt: 0 } },
+          data: { usageCount: { decrement: 1 } },
+        });
+      }
+      await prisma.voucherRedemption.deleteMany({
+        where: { bookingId: booking.id },
+      });
+    } catch (err) {
+      app.log?.error?.({ err }, "[releaseVoucher] Failed to release voucher");
+    }
+  }
   async function performGuestCancellation(
     booking: any,
     actorId: string,
@@ -2390,6 +2518,11 @@ export async function bookingRoutes(app: FastifyInstance) {
         cancellationReason: reason,
         refundAmount,
       },
+    });
+
+    // Release the voucher (was consumed at confirmation) so usage is not burned
+    releaseVoucher(booking).catch((err) => {
+      app.log.error({ err }, "Background voucher release failed");
     });
 
     // Trigger payout cancellation on payment-service
@@ -2850,6 +2983,11 @@ export async function bookingRoutes(app: FastifyInstance) {
         // Trigger payout cancellation on payment-service
         notifyPayoutCancellation(id).catch((err) => {
           app.log.error({ err }, "Background payout cancellation notification failed");
+        });
+
+        // Release the voucher consumed at confirmation
+        releaseVoucher(booking).catch((err) => {
+          app.log.error({ err }, "Background voucher release failed");
         });
 
         const refundAmount = Number(booking.totalAmount);
