@@ -57,8 +57,10 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           push: true
-          tags: ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
-          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:dev-latest
+            ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:dev-${{ github.sha }}
+          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ matrix.image }}:dev-latest
           cache-to: type=inline
           build-args: ${{ matrix.build_args }}
   deploy:
