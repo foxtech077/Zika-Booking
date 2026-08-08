@@ -50,7 +50,7 @@ const worker = new Worker(
         break;
       case ListingJob.ExchangeRateRefresher:
         await refreshExchangeRates();
-        await scheduleExchangeRateRefresh();
+        await scheduleExchangeRateRefresh(job.id);
         break;
     }
   },
@@ -93,10 +93,12 @@ export async function enqueueExchangeRateRefresh(): Promise<void> {
  * Otherwise, schedule a one-time job for expiresAt + 1 minute.
  * Deduplicates by removing any previously scheduled refresh job.
  */
-async function scheduleExchangeRateRefresh() {
-  // Remove any existing scheduled refresh to avoid duplicates
+async function scheduleExchangeRateRefresh(skipJobId?: string) {
+  // Remove any existing scheduled refresh to avoid duplicates, unless it is the
+  // job currently being processed (an active job is locked by this worker and
+  // cannot be removed).
   const existing = await queue.getJob(FX_REFRESH_JOB_ID);
-  if (existing) {
+  if (existing && existing.id !== skipJobId) {
     await existing.remove();
   }
 
