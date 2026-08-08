@@ -13,5 +13,6 @@ RUN pnpm --filter @zika/types build
 RUN pnpm --filter @zika/validators build
 RUN pnpm --filter @zika/listing-service db:generate
 RUN pnpm --filter @zika/listing-service build
+WORKDIR /app/services/listing-service
 EXPOSE 3003
 CMD ["pnpm","--filter","@zika/listing-service","start"]
