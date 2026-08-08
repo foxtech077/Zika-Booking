@@ -12,7 +12,6 @@ COPY services/listing-service/ ./services/listing-service/
 RUN pnpm --filter @zika/types build
 RUN pnpm --filter @zika/validators build
 RUN pnpm --filter @zika/listing-service db:generate
-RUN pnpm --filter @zika/listing-service db:migrate:deploy
 RUN pnpm --filter @zika/listing-service build
 EXPOSE 3003
 CMD ["pnpm","--filter","@zika/listing-service","start"]
