@@ -7,31 +7,40 @@ const BASE_CURRENCY = "USD";
 const FETCH_TIMEOUT_MS = 10_000;
 const FX_USER_AGENT = "Kainook-FX/1.0";
 
-const RATE_SOURCES = [
-  {
-    name: "exchange-api-jsdelivr",
-    url: "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json",
-    kind: "fawazahmed" as const,
-  },
-  {
-    name: "exchange-api-pages",
-    url: "https://latest.currency-api.pages.dev/v1/currencies/usd.min.json",
-    kind: "fawazahmed" as const,
-  },
-  {
-    name: "open-er-api",
-    url: "https://open.er-api.com/v6/latest/USD",
-    kind: "open" as const,
-  },
-];
+interface RateSource {
+  name: string;
+  url: string;
+  kind: "fawazahmed" | "open";
+}
 
 function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function fetchSource(
-  source: (typeof RATE_SOURCES)[number]
-): Promise<{ date: string; rates: Record<string, number> } | null> {
+function rateSources(): RateSource[] {
+  return [
+    {
+      name: "exchange-api-jsdelivr",
+      // Pin to today's date instead of @latest so we don't depend on the
+      // CDN's latest-tag cache lag. If today's package isn't published yet,
+      // this 404s and we fall through to the next source.
+      url: `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${todayUtc()}/v1/currencies/usd.min.json`,
+      kind: "fawazahmed",
+    },
+    {
+      name: "exchange-api-pages",
+      url: "https://latest.currency-api.pages.dev/v1/currencies/usd.min.json",
+      kind: "fawazahmed",
+    },
+    {
+      name: "open-er-api",
+      url: "https://open.er-api.com/v6/latest/USD",
+      kind: "open",
+    },
+  ];
+}
+
+async function fetchSource(source: RateSource): Promise<{ date: string; rates: Record<string, number> } | null> {
   let data: any;
   try {
     const res = await fetch(source.url, {
@@ -93,7 +102,7 @@ async function fetchSource(
  * 3. open.er-api — last resort, accepted regardless of how fresh its data is.
  */
 export async function fetchRatesWithFallback(): Promise<{ source: string; date: string; rates: Record<string, number> }> {
-  for (const source of RATE_SOURCES) {
+  for (const source of rateSources()) {
     const result = await fetchSource(source);
     if (result) {
       console.log(`[ExchangeRate] Fetched rates from ${source.name} (${result.date})`);
