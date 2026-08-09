@@ -100,6 +100,15 @@ export async function startJobs() {
   // every 2h). Repeatable jobs are re-scheduled by the queue manager, so the
   // next run happens regardless of whether the previous run succeeded.
   await queue.add(ListingJob.ExchangeRateRefresher, {}, { repeat: { every: 2 * 60 * 60 * 1000 } });
+
+  // Refresh rates at least once at boot so the table is populated before the
+  // service serves traffic. Failure is logged, not fatal — the repeatable job
+  // still covers the cadence.
+  try {
+    await refreshExchangeRates();
+  } catch (err) {
+    console.error("[ExchangeRate] Initial refresh failed on startup:", err instanceof Error ? err.message : err);
+  }
 }
 
 export async function stopJobs() {
