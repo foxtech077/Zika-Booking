@@ -3,6 +3,42 @@ import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireUser, type AuthRequest } from "../middleware/auth.js";
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const FEED_FETCH_TIMEOUT_MS = 15_000;
+const ICAL_USER_AGENT = "Kainook-CalendarSync/1.0";
+
+function normalizeFeedUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  const candidate = /^webcal:/i.test(trimmed) ? trimmed.replace(/^webcal:/i, "https:") : trimmed;
+  let url: URL;
+  try {
+    url = new URL(candidate);
+  } catch {
+    return null;
+  }
+  if (url.protocol === "http:" || url.protocol === "https:") {
+    return url.toString();
+  }
+  return null;
+}
+
+function describeFetchError(err: unknown): string {
+  if (!(err instanceof Error)) return "Fetch failed";
+  if (err.name === "AbortError" || err.name === "TimeoutError") {
+    return `Request timed out after ${FEED_FETCH_TIMEOUT_MS / 1000}s`;
+  }
+  let msg = err.message || "Fetch failed";
+  let cause = (err as { cause?: unknown }).cause;
+  const parts: string[] = [];
+  while (cause instanceof Error && !parts.includes(cause.message)) {
+    parts.push(cause.message);
+    cause = (cause as { cause?: unknown }).cause;
+  }
+  if (parts.length > 0) msg += ` (cause: ${parts.join(" → ")})`;
+  return msg;
+}
+
 // ── Minimal iCal parser ───────────────────────────────────────────────────────
 
 interface IcalEvent {
@@ -118,13 +154,33 @@ export async function syncFeed(feedId: string): Promise<{ synced: number; error?
   const feed = await prisma.icalFeed.findUnique({ where: { id: feedId } });
   if (!feed || !feed.isActive) return { synced: 0 };
 
+  const normalizedUrl = normalizeFeedUrl(feed.feedUrl);
+  if (!normalizedUrl) {
+    const msg = `Invalid feed URL (unsupported scheme): ${feed.feedUrl}`;
+    const failures = feed.consecutiveFailures + 1;
+    const backoffMs = failures === 1 ? 60_000 : failures === 2 ? 5 * 60_000 : 15 * 60_000;
+    const nextRetryAt = new Date(Date.now() + backoffMs);
+    await prisma.icalFeed.update({
+      where: { id: feedId },
+      data: { lastError: msg, consecutiveFailures: failures, nextRetryAt, updatedAt: new Date() },
+    });
+    if (failures >= 3) {
+      await sendSyncAlert(feedId, feed.platform, failures, msg);
+    }
+    return { synced: 0, error: msg };
+  }
+
   let text: string;
   try {
-    const res = await fetch(feed.feedUrl, { signal: AbortSignal.timeout(15_000) });
+    const res = await fetch(normalizedUrl, {
+      headers: { "User-Agent": ICAL_USER_AGENT, Accept: "text/calendar,text/plain;q=0.9,*/*;q=0.5" },
+      signal: AbortSignal.timeout(FEED_FETCH_TIMEOUT_MS),
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     text = await res.text();
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Fetch failed";
+    const msg = describeFetchError(err);
+    console.error(`[iCal Poller] Fetch failed for feed ${feedId}:`, err);
     const failures = feed.consecutiveFailures + 1;
 
     const backoffMs = failures === 1 ? 60_000 : failures === 2 ? 5 * 60_000 : 15 * 60_000;
@@ -330,17 +386,16 @@ export async function icalRoutes(app: FastifyInstance) {
       return sendError(reply, 400, "VALIDATION_ERROR", "platform and feedUrl are required.");
     }
 
-    try {
-      new URL(body.feedUrl);
-    } catch {
-      return sendError(reply, 400, "VALIDATION_ERROR", "feedUrl must be a valid URL.");
+    const normalizedUrl = normalizeFeedUrl(body.feedUrl);
+    if (!normalizedUrl) {
+      return sendError(reply, 400, "VALIDATION_ERROR", "feedUrl must be a valid http, https, or webcal URL.");
     }
 
     try {
       const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
-      const existing = await prisma.icalFeed.findFirst({ where: { listingId: id, feedUrl: body.feedUrl } });
+      const existing = await prisma.icalFeed.findFirst({ where: { listingId: id, feedUrl: normalizedUrl } });
       if (existing) {
         return sendError(reply, 409, "CONFLICT", "This feed URL is already connected to this listing.");
       }
@@ -349,7 +404,7 @@ export async function icalRoutes(app: FastifyInstance) {
         data: {
           listingId: id,
           platform: body.platform,
-          feedUrl: body.feedUrl,
+          feedUrl: normalizedUrl,
         },
       });
 
