@@ -73,6 +73,8 @@ async function fetchSource(
     if (!/^[A-Z]{3}$/.test(upper)) continue;
     const n = typeof value === "number" ? value : Number(value);
     if (!Number.isFinite(n) || n <= 0) continue;
+    // Skip values that would overflow the numeric rate column (max < 1e10).
+    if (Math.abs(n) >= 1e10) continue;
     normalized[upper] = n;
   }
 
