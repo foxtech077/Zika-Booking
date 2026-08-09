@@ -15,4 +15,4 @@ RUN cd services/payment-service && npx prisma generate
 RUN pnpm --filter @zika/payment-service build
 WORKDIR /app/services/payment-service
 EXPOSE 3004
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "pnpm db:migrate:deploy && node dist/index.js"]

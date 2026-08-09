@@ -7,7 +7,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["listing", "auth"]
+  schemas  = ["auth","listing"]
 }
 
 enum ListingCategory {

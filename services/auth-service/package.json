@@ -10,7 +10,8 @@
 		"typecheck": "tsc --noEmit",
 		"db:generate": "prisma generate",
 		"db:migrate": "prisma migrate dev",
-		"db:migrate:deploy": "prisma migrate deploy",
+		"db:migrate:deploy": "prisma migrate deploy && prisma db execute --schema prisma/schema.prisma --file prisma/bootstrap.sql",
+		"db:bootstrap": "prisma db execute --schema prisma/schema.prisma --file prisma/bootstrap.sql",
 		"db:studio": "prisma studio",
 		"db:seed": "prisma db seed",
 		"db:seed:all": "tsx prisma/seed-all.ts"
