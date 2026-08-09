@@ -35,46 +35,23 @@ async function refresh(): Promise<void> {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + STALENESS_THRESHOLD_MS);
 
-  let inserted = 0;
-  let updated = 0;
+  const entries = Object.entries(rates)
+    .filter(([currency]) => currency !== BASE_CURRENCY)
+    .map(([currency, rate]) => ({
+      fromCurrency: BASE_CURRENCY,
+      toCurrency: currency,
+      rate,
+      fetchedAt: now,
+      expiresAt,
+    }));
 
-  await prisma.$transaction(async (tx) => {
-    for (const [currency, rate] of Object.entries(rates)) {
-      if (currency === BASE_CURRENCY) continue;
-
-      const existing = await tx.exchangeRate.findUnique({
-        where: {
-          fromCurrency_toCurrency: {
-            fromCurrency: BASE_CURRENCY,
-            toCurrency: currency,
-          },
-        },
-        select: { id: true },
-      });
-
-      if (existing) {
-        await tx.exchangeRate.update({
-          where: { id: existing.id },
-          data: { rate, fetchedAt: now, expiresAt },
-        });
-        updated++;
-      } else {
-        await tx.exchangeRate.create({
-          data: {
-            fromCurrency: BASE_CURRENCY,
-            toCurrency: currency,
-            rate,
-            fetchedAt: now,
-            expiresAt,
-          },
-        });
-        inserted++;
-      }
-    }
-  });
+  const [, created] = await prisma.$transaction([
+    prisma.exchangeRate.deleteMany({ where: { fromCurrency: BASE_CURRENCY } }),
+    prisma.exchangeRate.createMany({ data: entries }),
+  ]);
 
   console.log(
-    `[ExchangeRate] Done (source=${source}, date=${date}): ${inserted} inserted, ${updated} updated (${Object.keys(rates).length} total currencies)`
+    `[ExchangeRate] Done (source=${source}, date=${date}): ${created.count} inserted (drop-and-insert)`
   );
 }
 
