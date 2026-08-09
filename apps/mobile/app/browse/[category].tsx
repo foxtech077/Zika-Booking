@@ -13,6 +13,7 @@ import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
 import { useActivePromotion, ActivePromotion, applyPromotion } from "../../lib/promotions";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
+import { approxPrefix } from "../../lib/currency";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const GREEN = "#1B5E20";
@@ -106,6 +107,7 @@ function ListingCard({ item, apiCategory, onPress, signedPhotoUrl, promotion }: 
     ? (item.localizedDailyRate ?? item.dailyRate)
     : (item.localizedNightlyRate ?? item.nightlyRate);
   const priceCurrency = item.localizedCurrency ?? item.currency;
+  const pricePrefix = approxPrefix(item.localizedCurrency);
   const unit = isCar ? "/day" : "/night";
 
   const promoPercentFromBadge = item.promoBadge?.labelText
@@ -183,11 +185,11 @@ function ListingCard({ item, apiCategory, onPress, signedPhotoUrl, promotion }: 
             promoted.hasPromotion && promoted.discountedPrice != null ? (
               <View>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                  <Text style={card.originalPrice}>{priceCurrency} {price.toLocaleString()}</Text>
+                  <Text style={card.originalPrice}>{pricePrefix}{priceCurrency} {price.toLocaleString()}</Text>
                   <Text style={card.promoBadge}>🔥 {promoted.labelText}</Text>
                 </View>
                 <Text style={card.price}>
-                  <Text style={card.currency}>{priceCurrency} </Text>
+                  <Text style={card.currency}>{pricePrefix}{priceCurrency} </Text>
                   {Math.round(promoted.discountedPrice).toLocaleString()}
                   <Text style={card.unit}>{unit}</Text>
                 </Text>
@@ -197,7 +199,7 @@ function ListingCard({ item, apiCategory, onPress, signedPhotoUrl, promotion }: 
                 {item.roomTypes && item.roomTypes.length > 1 ? (
                   <Text style={{ fontSize: 11, color: MUTED, fontWeight: "500" }}>From </Text>
                 ) : null}
-                <Text style={card.currency}>{priceCurrency} </Text>
+                <Text style={card.currency}>{pricePrefix}{priceCurrency} </Text>
                 {price.toLocaleString()}
                 <Text style={card.unit}>{unit}</Text>
               </Text>

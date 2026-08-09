@@ -50,6 +50,11 @@ interface PricingPreview {
   platformCurrency?: string | null;
   platformAmount?: number | null;
   platformRate?: number | null;
+  // Aggregate reference total in the guest's display currency (never
+  // converted client-side) — line items above never convert individually,
+  // since independent per-line conversions would not sum back to this total.
+  localizedCurrency?: string | null;
+  localizedTotal?: number | null;
 }
 
 interface LockState {
@@ -309,7 +314,13 @@ export default function BookingFlowScreen() {
   async function handleTryRebook() {
     setReBookingLoading(true);
     try {
-      const body: Record<string, unknown> = { listingId, deliveryRequested };
+      const body: Record<string, unknown> = {
+        listingId,
+        deliveryRequested,
+        // Reference-only snapshot (never used for charging) so the backend can
+        // return a localized* breakdown alongside the exact listing-currency one.
+        currency: useAuthStore.getState().localCurrency,
+      };
       if (roomTypeId) body.roomTypeId = roomTypeId;
       if (checkIn) body.checkIn = checkIn;
       if (checkOut) body.checkOut = checkOut;
@@ -338,6 +349,8 @@ export default function BookingFlowScreen() {
         deliveryFee: raw.deliveryFee ?? undefined,
         total: raw.totalAmount ?? 0,
         currency: raw.currency ?? "",
+        localizedCurrency: raw.localizedCurrency ?? null,
+        localizedTotal: raw.localCurrencyAmount ?? null,
       };
 
       const lockStateObj = {
@@ -475,6 +488,7 @@ export default function BookingFlowScreen() {
         const body: Record<string, unknown> = {
           listingId,
           deliveryRequested,
+          currency: useAuthStore.getState().localCurrency,
         };
         if (roomTypeId) body.roomTypeId = roomTypeId;
         if (checkIn) body.checkIn = checkIn;
@@ -509,6 +523,8 @@ export default function BookingFlowScreen() {
           platformRate: raw.platformRate ?? null,
           total: raw.totalAmount ?? 0,
           currency: raw.currency ?? "",
+          localizedCurrency: raw.localizedCurrency ?? null,
+          localizedTotal: raw.localCurrencyAmount ?? null,
         };
 
         const lockStateObj = {
@@ -578,7 +594,11 @@ export default function BookingFlowScreen() {
 
     (async () => {
       try {
-        const body: Record<string, unknown> = { listingId, deliveryRequested };
+        const body: Record<string, unknown> = {
+          listingId,
+          deliveryRequested,
+          currency: useAuthStore.getState().localCurrency,
+        };
         if (roomTypeId) body.roomTypeId = roomTypeId;
         if (checkIn) body.checkIn = checkIn;
         if (checkOut) body.checkOut = checkOut;
@@ -613,6 +633,8 @@ export default function BookingFlowScreen() {
                 platformRate: raw.platformRate ?? null,
                 total: raw.totalAmount ?? 0,
                 currency: raw.currency ?? "",
+                localizedCurrency: raw.localizedCurrency ?? null,
+                localizedTotal: raw.localCurrencyAmount ?? null,
               },
             }
             : prev,
@@ -1367,6 +1389,18 @@ export default function BookingFlowScreen() {
                           {formatCurrency(displayTotal, pricing.currency)}
                         </Text>
                       </View>
+                      {/* Approx. reference in the guest's display currency — only
+                          shown when no voucher is applied, since the backend's
+                          localizedTotal (like its exact totalAmount) never
+                          accounts for a voucher discount. */}
+                      {voucherAmt === 0 && pricing.localizedCurrency && pricing.localizedTotal != null && (
+                        <View style={styles.priceRow}>
+                          <Text style={styles.priceLabel}>Approx.</Text>
+                          <Text style={styles.priceValue}>
+                            ~{formatCurrency(pricing.localizedTotal, pricing.localizedCurrency)}
+                          </Text>
+                        </View>
+                      )}
                       {isConverted(platform) && (
                         <View style={styles.priceRow}>
                           <Text style={styles.priceLabel}>You will be charged</Text>

@@ -36,6 +36,7 @@ import { ListingImage } from "../components/ListingImage";
 import { ActivePromotion, applyPromotion } from "../lib/promotions";
 import { useLocationStore } from "../store/location";
 import { useRefreshOnFocus } from "../hooks/useRefreshOnFocus";
+import { approxPrefix } from "../lib/currency";
 
 // Deterministic coordinates calculator from search center + distance
 function getListingCoordinates(
@@ -370,6 +371,7 @@ const ResultCard = memo(function ResultCard({
     ? (item.localizedDailyRate ?? item.dailyRate)
     : (item.localizedNightlyRate ?? item.nightlyRate);
   const priceCurrency = item.localizedCurrency ?? item.currency;
+  const pricePrefix = approxPrefix(item.localizedCurrency);
   const priceLabel = isCar ? "/day" : "/night";
 
   // Derive promotion: item.promoBadge takes priority over global active promotion
@@ -613,14 +615,14 @@ const ResultCard = memo(function ResultCard({
                   }}
                 >
                   <Text style={cardStyles.originalPrice}>
-                    {priceCurrency} {price.toLocaleString()}
+                    {pricePrefix}{priceCurrency} {price.toLocaleString()}
                   </Text>
                   <Text style={cardStyles.promoBadge}>
                     🔥 {promoted.labelText}
                   </Text>
                 </View>
                 <Text style={cardStyles.price}>
-                  <Text style={cardStyles.priceCurrency}>{priceCurrency} </Text>
+                  <Text style={cardStyles.priceCurrency}>{pricePrefix}{priceCurrency} </Text>
                   {Math.round(promoted.discountedPrice).toLocaleString()}
                   <Text style={cardStyles.priceUnit}>{priceLabel}</Text>
                 </Text>
@@ -630,7 +632,7 @@ const ResultCard = memo(function ResultCard({
                 {item.roomTypes && item.roomTypes.length > 1 ? (
                   <Text style={{ fontSize: 11, color: MUTED, fontWeight: "500" }}>From </Text>
                 ) : null}
-                <Text style={cardStyles.priceCurrency}>{priceCurrency} </Text>
+                <Text style={cardStyles.priceCurrency}>{pricePrefix}{priceCurrency} </Text>
                 {price.toLocaleString()}
                 <Text style={cardStyles.priceUnit}>{priceLabel}</Text>
               </Text>

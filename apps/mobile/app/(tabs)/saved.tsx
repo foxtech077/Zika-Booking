@@ -20,6 +20,7 @@ import { K } from "../../constants/theme";
 import { SignInRequired } from "../../components/SignInRequired";
 import { useActivePromotion, ActivePromotion, applyPromotion } from "../../lib/promotions";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
+import { approxPrefix } from "../../lib/currency";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -62,7 +63,7 @@ function priceLabel(listing: FavouriteListing): string {
   const rate = listing.localizedNightlyRate ?? listing.nightlyRate;
   if (rate == null) return "Price on request";
   const unit = listing.category === "car" ? "day" : "night";
-  return `${listing.localizedCurrency ?? listing.currency ?? ""} ${rate.toLocaleString()} / ${unit}`;
+  return `${approxPrefix(listing.localizedCurrency)}${listing.localizedCurrency ?? listing.currency ?? ""} ${rate.toLocaleString()} / ${unit}`;
 }
 
 function categoryLabel(cat: string): string {
@@ -101,6 +102,7 @@ function SavedCard({ item, onRemove, removePending, signedPhotoUrl, promotion }:
   const unit = listing.category === "car" ? "day" : "night";
   const rate = listing.localizedNightlyRate ?? listing.nightlyRate;
   const rateCurrency = listing.localizedCurrency ?? listing.currency;
+  const pricePrefix = approxPrefix(listing.localizedCurrency);
   const promoted = applyPromotion(rate, promotion ?? null);
 
   return (
@@ -144,10 +146,10 @@ function SavedCard({ item, onRemove, removePending, signedPhotoUrl, promotion }:
         {promoted.hasPromotion && promoted.discountedPrice != null ? (
           <View>
             <Text style={styles.cardPriceStrike}>
-              {rateCurrency ?? ""} {rate?.toLocaleString()} / {unit}
+              {pricePrefix}{rateCurrency ?? ""} {rate?.toLocaleString()} / {unit}
             </Text>
             <Text style={styles.cardPrice}>
-              {rateCurrency ?? ""} {Math.round(promoted.discountedPrice).toLocaleString()} / {unit}
+              {pricePrefix}{rateCurrency ?? ""} {Math.round(promoted.discountedPrice).toLocaleString()} / {unit}
             </Text>
             <Text style={styles.promoLabel}>🔥 {promoted.labelText}</Text>
           </View>

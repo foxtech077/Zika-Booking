@@ -21,3 +21,14 @@ export const ALL_CURRENCIES: { code: string; symbol: string }[] = (() => {
     .sort((a, b) => a.code.localeCompare(b.code));
   return [...pinned, ...remaining];
 })();
+
+/**
+ * "~" prefix for a converted/localized amount, per the BE-agreed convention:
+ * a price shown in the listing's own currency is exact; a price converted
+ * into the guest's chosen display currency is always an approximation.
+ * Pass the `localizedCurrency` field the backend returns alongside a
+ * conversion (null/undefined when no conversion was requested or available).
+ */
+export function approxPrefix(localizedCurrency: string | null | undefined): string {
+  return localizedCurrency ? "~" : "";
+}
