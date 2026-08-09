@@ -16,6 +16,7 @@ import { useAuthStore } from "@/stores/auth";
 import { capitalize } from "@/lib/utils";
 import { derivePlatform, fmtMoney } from "@/lib/platform-currency";
 import { useCurrencyStore } from "@/stores/currency";
+import { approxPrefix } from "@/lib/currency";
 import { useFavourites } from "@/hooks/useFavourites";
 import ListingCard from "./components/ListingCard";
 import { ActivityPromoBanner, PersonalVoucherBanner } from "./components/PromoBanner";
@@ -1525,6 +1526,9 @@ export default function TravellerDashboard() {
           returnDatetime: isCar ? toIsoDatetime(detailReturnDate) || undefined : undefined,
           deliveryRequested: isCar ? wantDelivery : undefined,
           guests: searchAdults + searchChildren,
+          // Backend returns a full localized* breakdown alongside the exact
+          // listing-currency figures when this is set — never computed here.
+          currency: useCurrencyStore.getState().currency,
         })
       : Promise.resolve(null);
 
@@ -1644,7 +1648,10 @@ export default function TravellerDashboard() {
 
     const body: Record<string, any> = {
       listingId: detailListing.id,
-      guests: searchGuests
+      guests: searchGuests,
+      // Reference-only snapshot (never used for charging) so the lock
+      // confirmation can show the same localized figures as the estimate.
+      currency: useCurrencyStore.getState().currency,
     };
 
     if (detailListing.category === "hotel") {
@@ -2469,11 +2476,11 @@ export default function TravellerDashboard() {
                           <div>
                             <div className="flex items-baseline gap-2 flex-wrap">
                               <span className="text-2xl font-extrabold text-slate-900">
-                                {priceCurrency} {displayPrice.toLocaleString()}
+                                {approxPrefix(detailListing.localizedCurrency)}{priceCurrency} {displayPrice.toLocaleString()}
                               </span>
                               {basePrice > displayPrice && (
                                 <span className="text-sm font-semibold line-through text-slate-400">
-                                  {priceCurrency} {basePrice.toLocaleString()}
+                                  {approxPrefix(detailListing.localizedCurrency)}{priceCurrency} {basePrice.toLocaleString()}
                                 </span>
                               )}
                             </div>
@@ -2649,9 +2656,10 @@ export default function TravellerDashboard() {
                                     }
 
                                     const rtCurrency = detailListing.localizedCurrency ?? detailListing.currency;
+                                    const rtPrefix = approxPrefix(detailListing.localizedCurrency);
                                     return (
                                       <option key={rt.id} value={rt.id}>
-                                        {rt.name} — {rtCurrency} {displayRtPrice.toLocaleString()}/night{baseRtPrice > displayRtPrice ? ` (was ${rtCurrency} ${baseRtPrice.toLocaleString()})` : ""}
+                                        {rt.name} — {rtPrefix}{rtCurrency} {displayRtPrice.toLocaleString()}/night{baseRtPrice > displayRtPrice ? ` (was ${rtPrefix}${rtCurrency} ${baseRtPrice.toLocaleString()})` : ""}
                                       </option>
                                     );
                                   })}
@@ -2780,6 +2788,15 @@ export default function TravellerDashboard() {
                                   <span>Total</span>
                                   <span>{detailListing.currency} {estimatedPricing.totalAmount.toLocaleString()}</span>
                                 </div>
+                                {/* Reference only — line items above never convert (would not
+                                    sum correctly across independent per-line conversions). Only
+                                    the total gets an approx figure in the guest's display currency. */}
+                                {estimatedPricing.localizedCurrency && estimatedPricing.localCurrencyAmount != null && (
+                                  <div className="flex justify-between text-slate-400 text-xs">
+                                    <span>Approx.</span>
+                                    <span>~{estimatedPricing.localizedCurrency} {estimatedPricing.localCurrencyAmount.toLocaleString()}</span>
+                                  </div>
+                                )}
                               </div>
                             ) : null
                           )}
@@ -3052,6 +3069,9 @@ export default function TravellerDashboard() {
                                     <div>{fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
                                     {platform.platformCurrency !== detailListing.currency && (
                                       <div className="text-[10px] font-normal text-slate-400">Billed as approx. {listingValue(grandTotal)}</div>
+                                    )}
+                                    {pricingPreview.localizedCurrency && pricingPreview.localCurrencyAmount != null && (
+                                      <div className="text-[10px] font-normal text-slate-400">~{pricingPreview.localizedCurrency} {pricingPreview.localCurrencyAmount.toLocaleString()}</div>
                                     )}
                                   </span>
                                 </div>
@@ -3729,7 +3749,7 @@ export default function TravellerDashboard() {
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-[#1D8D2B] uppercase tracking-wider">{item.category}</p>
                         <p className="text-sm font-bold text-slate-900 line-clamp-1 group-hover:text-[#1D8D2B] transition">{item.name}</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">{item.localizedCurrency ?? item.currency} {(item.localizedPricePerNight ?? item.pricePerNight).toLocaleString()} / {item.category === "car" ? "day" : "night"}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{approxPrefix(item.localizedCurrency)}{item.localizedCurrency ?? item.currency} {(item.localizedPricePerNight ?? item.pricePerNight).toLocaleString()} / {item.category === "car" ? "day" : "night"}</p>
                       </div>
                     </button>
                   ))}

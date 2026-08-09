@@ -16,6 +16,7 @@ import { RoomTypeSelector } from "../../components/listing/RoomTypeSelector";
 import type { RoomType } from "../../components/listing/RoomTypeCard";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 import { WEB_BASE_URL } from "../../constants/legalContent";
+import { approxPrefix } from "../../lib/currency";
 
 let MapView: any = null;
 let Marker: any = null;
@@ -1032,6 +1033,7 @@ export default function ListingDetailScreen() {
   }
 
   const curr = listing.localizedCurrency ?? listing.currency ?? "XAF";
+  const pricePrefix = approxPrefix(listing.localizedCurrency);
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
@@ -1152,12 +1154,12 @@ export default function ListingDetailScreen() {
             <View style={{ flex: 1 }}>
               {mrpPrice != null && mrpPrice > rate ? (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
-                  <Text style={s.priceOriginal}>{curr} {Math.round(mrpPrice).toLocaleString()}</Text>
+                  <Text style={s.priceOriginal}>{pricePrefix}{curr} {Math.round(mrpPrice).toLocaleString()}</Text>
                 </View>
               ) : null}
 
               <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
-                <Text style={s.priceAmount}>{curr} {Math.round(rate).toLocaleString()}</Text>
+                <Text style={s.priceAmount}>{pricePrefix}{curr} {Math.round(rate).toLocaleString()}</Text>
                 <Text style={s.priceUnit}>{rateLabel}</Text>
               </View>
             </View>
@@ -1181,7 +1183,7 @@ export default function ListingDetailScreen() {
 
           {isCar && listing.deliveryAvailable && listing.deliveryFee ? (
             <Text style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>
-              + {curr} {listing.deliveryFee} delivery available
+              + {pricePrefix}{curr} {listing.deliveryFee} delivery available
             </Text>
           ) : null}
         </View>
@@ -1207,7 +1209,7 @@ export default function ListingDetailScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.promoTitle}>Long-Stay Discount 🎉</Text>
-              <Text style={s.promoSub}>Book {listing.longStayMinNights ?? 7}+ nights and save {listing.longStayDiscountValue ?? 0}{listing.longStayDiscountType === "percentage" ? "%" : ` ${curr}`} automatically.</Text>
+              <Text style={s.promoSub}>Book {listing.longStayMinNights ?? 7}+ nights and save {listing.longStayDiscountValue ?? 0}{listing.longStayDiscountType === "percentage" ? "%" : ` ${listing.currency}`} automatically.</Text>
             </View>
           </View>
         )}
@@ -1223,11 +1225,11 @@ export default function ListingDetailScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={pr.title}>{activePromo.bannerTitle}</Text>
                 {promoted.savings != null && promoted.savings > 0 && (
-                  <Text style={pr.savings}>You Save {curr} {Math.round(promoted.savings).toLocaleString()}</Text>
+                  <Text style={pr.savings}>You Save {pricePrefix}{curr} {Math.round(promoted.savings).toLocaleString()}</Text>
                 )}
                 {promoted.originalPrice != null && promoted.discountedPrice != null && (
                   <Text style={pr.origPrice}>
-                    {curr} {Math.round(promoted.originalPrice).toLocaleString()} → {curr} {Math.round(promoted.discountedPrice).toLocaleString()}
+                    {pricePrefix}{curr} {Math.round(promoted.originalPrice).toLocaleString()} → {pricePrefix}{curr} {Math.round(promoted.discountedPrice).toLocaleString()}
                   </Text>
                 )}
               </View>
@@ -1265,37 +1267,37 @@ export default function ListingDetailScreen() {
             <View style={s.breakCard}>
               <View style={s.breakRow}>
                 <Text style={s.breakLabel}>
-                  {curr} {Math.round(pricingBreakout.baseRate).toLocaleString()} × {pricingBreakout.count} {isCar ? "day" : "night"}{pricingBreakout.count !== 1 ? "s" : ""}
+                  {pricePrefix}{curr} {Math.round(pricingBreakout.baseRate).toLocaleString()} × {pricingBreakout.count} {isCar ? "day" : "night"}{pricingBreakout.count !== 1 ? "s" : ""}
                 </Text>
-                <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.originalSubtotal).toLocaleString()}</Text>
+                <Text style={s.breakVal}>{pricePrefix}{curr} {Math.round(pricingBreakout.originalSubtotal).toLocaleString()}</Text>
               </View>
               {pricingBreakout.promoDiscount > 0 && (
                 <View style={s.breakRow}>
                   <Text style={[s.breakLabel, { color: "#16a34a", fontWeight: "600" }]}>Promotion discount</Text>
-                  <Text style={[s.breakVal, { color: "#16a34a", fontWeight: "700" }]}>−{curr} {Math.round(pricingBreakout.promoDiscount).toLocaleString()}</Text>
+                  <Text style={[s.breakVal, { color: "#16a34a", fontWeight: "700" }]}>−{pricePrefix}{curr} {Math.round(pricingBreakout.promoDiscount).toLocaleString()}</Text>
                 </View>
               )}
               {pricingBreakout.longStayDiscount > 0 && (
                 <View style={s.breakRow}>
                   <Text style={[s.breakLabel, { color: "#16a34a", fontWeight: "600" }]}>Long-stay discount</Text>
-                  <Text style={[s.breakVal, { color: "#16a34a", fontWeight: "700" }]}>−{curr} {Math.round(pricingBreakout.longStayDiscount).toLocaleString()}</Text>
+                  <Text style={[s.breakVal, { color: "#16a34a", fontWeight: "700" }]}>−{pricePrefix}{curr} {Math.round(pricingBreakout.longStayDiscount).toLocaleString()}</Text>
                 </View>
               )}
               {pricingBreakout.delivery > 0 && (
                 <View style={s.breakRow}>
                   <Text style={s.breakLabel}>Delivery fee</Text>
-                  <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.delivery).toLocaleString()}</Text>
+                  <Text style={s.breakVal}>{pricePrefix}{curr} {Math.round(pricingBreakout.delivery).toLocaleString()}</Text>
                 </View>
               )}
               {pricingBreakout.serviceFeePercent > 0 && (
                 <View style={s.breakRow}>
                   <Text style={s.breakLabel}>Service fee ({pricingBreakout.serviceFeePercent}%)</Text>
-                  <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.serviceFee).toLocaleString()}</Text>
+                  <Text style={s.breakVal}>{pricePrefix}{curr} {Math.round(pricingBreakout.serviceFee).toLocaleString()}</Text>
                 </View>
               )}
               <View style={[s.breakRow, { borderTopWidth: 1, borderTopColor: BORDER, marginTop: 4, paddingTop: 12 }]}>
                 <Text style={s.breakTotal}>Total</Text>
-                <Text style={s.breakTotalVal}>{curr} {Math.round(pricingBreakout.total).toLocaleString()}</Text>
+                <Text style={s.breakTotalVal}>{pricePrefix}{curr} {Math.round(pricingBreakout.total).toLocaleString()}</Text>
               </View>
             </View>
           </View>
@@ -1573,7 +1575,7 @@ export default function ListingDetailScreen() {
         <View style={{ flex: 1, paddingRight: 12 }}>
           {hasDates && pricingBreakout ? (
             <>
-              <Text style={s.stickyRate}>{curr} {Math.round(pricingBreakout.total).toLocaleString()}</Text>
+              <Text style={s.stickyRate}>{pricePrefix}{curr} {Math.round(pricingBreakout.total).toLocaleString()}</Text>
               <Text style={s.stickyUnit} numberOfLines={1}>
                 total for {pricingBreakout.count} {isCar ? `day${pricingBreakout.count !== 1 ? "s" : ""}` : `night${pricingBreakout.count !== 1 ? "s" : ""}`}
                 {selectedRoomType ? ` · ${selectedRoomType.name}` : ""}
@@ -1583,7 +1585,7 @@ export default function ListingDetailScreen() {
             <>
               {mrpPrice != null && mrpPrice > rate ? (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                  <Text style={s.stickyOriginal}>{curr} {Math.round(mrpPrice).toLocaleString()}</Text>
+                  <Text style={s.stickyOriginal}>{pricePrefix}{curr} {Math.round(mrpPrice).toLocaleString()}</Text>
                   {customPromoBadge ? (
                     <Text style={{ fontSize: 10, fontWeight: "800", color: customPromoBadge.labelColour ?? "#C84B2F" }}>
                       {customPromoBadge.labelText}
@@ -1591,7 +1593,7 @@ export default function ListingDetailScreen() {
                   ) : null}
                 </View>
               ) : null}
-              <Text style={s.stickyRate}>{curr} {Math.round(rate).toLocaleString()}</Text>
+              <Text style={s.stickyRate}>{pricePrefix}{curr} {Math.round(rate).toLocaleString()}</Text>
               <Text style={s.stickyUnit} numberOfLines={1}>
                 {rateLabel}
                 {selectedRoomType ? ` · ${selectedRoomType.name}` : ""}

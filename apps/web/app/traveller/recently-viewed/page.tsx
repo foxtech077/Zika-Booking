@@ -7,6 +7,7 @@ import { useAuthStore } from "@/stores/auth";
 import { fetchRecentlyViewed } from "@/services/traveller";
 import type { RecentlyViewedItem } from "@/services/traveller";
 import ListingImage from "../components/ListingImage";
+import { approxPrefix } from "@/lib/currency";
 
 const CAT_LABEL: Record<string, string> = {
   hotel: "Hotel",
@@ -134,7 +135,7 @@ export default function RecentlyViewedPage() {
                       <div>
                         <p className="text-[9px] uppercase font-bold text-slate-400 tracking-widest">Per {isCar ? "day" : "night"}</p>
                         <p className="text-base font-bold text-[#024622]">
-                          {l.localizedCurrency ?? l.currency ?? "KES"} {rate != null ? rate.toLocaleString() : "—"}
+                          {approxPrefix(l.localizedCurrency)}{l.localizedCurrency ?? l.currency ?? "KES"} {rate != null ? rate.toLocaleString() : "—"}
                         </p>
                       </div>
                       {/* Address the listing in the URL. This used to stash the
