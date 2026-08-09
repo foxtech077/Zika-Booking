@@ -20,7 +20,7 @@ services:
   #     - db_data:/var/lib/postgresql
 
   auth-service:
-    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/auth-service:latest
+    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/auth-service:dev-latest
     container_name: zika-auth
     restart: always
     ports:
@@ -30,7 +30,7 @@ services:
     network_mode: host
 
   listing-service:
-    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/listing-service:latest
+    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/listing-service:dev-latest
     container_name: zika-listing
     restart: always
     ports:
@@ -40,7 +40,7 @@ services:
     network_mode: host
 
   payment-service:
-    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/payment-service:latest
+    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/payment-service:dev-latest
     container_name: zika-payment
     restart: always
     ports:
@@ -50,7 +50,7 @@ services:
     network_mode: host
 
   web:
-    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/web:latest
+    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/web:dev-latest
     container_name: zika-web
     restart: always
     ports:
@@ -60,7 +60,7 @@ services:
     network_mode: host
 
   admin:
-    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/admin:latest
+    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/admin:dev-latest
     container_name: zika-admin
     restart: always
     ports:

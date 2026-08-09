@@ -2,10 +2,9 @@
 
 import type { ReactNode } from "react";
 import { useEffect } from "react";
-import { AlertTriangle, Info, CheckCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
-import { Spinner } from "@/components/ui/Skeleton";
 
 // ── Confirm Modal ─────────────────────────────────────────────────────────────
 
@@ -52,12 +51,12 @@ export function ConfirmModal({
         role="dialog"
         aria-modal="true"
         className={cn(
-          "fixed inset-0 z-50 flex items-center justify-center p-4",
+          "fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4",
           "pointer-events-none"
         )}
       >
-        <div className="pointer-events-auto w-full max-w-md bg-white rounded-2xl shadow-card-lg animate-slide-in-up overflow-hidden">
-          <div className="p-6">
+        <div className="pointer-events-auto w-full max-w-md flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] bg-white rounded-2xl shadow-card-lg animate-slide-in-up overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 scrollbar-thin">
             <div className="flex gap-4">
               <div className={cn("flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-full", iconColor)}>
                 <ICON className="h-5 w-5" />
@@ -69,7 +68,7 @@ export function ConfirmModal({
               </div>
             </div>
           </div>
-          <div className="flex justify-end gap-3 px-6 py-4 border-t border-border bg-surface-subtle">
+          <div className="flex-shrink-0 flex flex-wrap items-center justify-end gap-2 sm:gap-3 px-4 py-3 sm:px-6 sm:py-4 border-t border-border bg-surface-subtle">
             <Button variant="secondary" onClick={onClose} disabled={loading}>
               {cancelLabel}
             </Button>
@@ -116,12 +115,12 @@ export function ActionModal({
   return (
     <>
       <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-        <div className={cn("pointer-events-auto w-full bg-white rounded-2xl shadow-card-lg animate-slide-in-up overflow-hidden", MAX_W[size])}>
-          <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-border">
-            <div>
-              <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-              {description && <p className="mt-0.5 text-sm text-slate-500">{description}</p>}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 pointer-events-none">
+        <div className={cn("pointer-events-auto w-full flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] bg-white rounded-2xl shadow-card-lg animate-slide-in-up overflow-hidden", MAX_W[size])}>
+          <div className="flex-shrink-0 flex items-start justify-between gap-4 px-4 py-4 sm:px-6 sm:py-5 border-b border-border">
+            <div className="min-w-0 flex-1">
+              <h3 className="text-base font-semibold text-slate-900 leading-snug">{title}</h3>
+              {description && <p className="mt-0.5 text-xs sm:text-sm text-slate-500 leading-normal">{description}</p>}
             </div>
             <button
               onClick={onClose}
@@ -132,9 +131,9 @@ export function ActionModal({
               </svg>
             </button>
           </div>
-          <div className="p-6 max-h-[70vh] overflow-y-auto scrollbar-thin">{children}</div>
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 scrollbar-thin">{children}</div>
           {footer && (
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-border bg-surface-subtle">
+            <div className="flex-shrink-0 flex flex-wrap items-center justify-end gap-2 sm:gap-3 px-4 py-3 sm:px-6 sm:py-4 border-t border-border bg-surface-subtle">
               {footer}
             </div>
           )}

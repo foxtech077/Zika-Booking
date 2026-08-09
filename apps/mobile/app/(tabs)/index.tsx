@@ -19,6 +19,7 @@ import { useLocation } from "../../hooks/useLocation";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 import { useCallback } from "react";
 import DateRangePickerModal from "../../components/ui/DateRangePickerModal";
+import { approxPrefix } from "../../lib/currency";
 
 
 const { width: W } = Dimensions.get("window");
@@ -55,9 +56,9 @@ interface RecentBooking { id: string; listingId: string; listingTitle?: string; 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmtPrice(n: number | null, currency: string): string {
+function fmtPrice(n: number | null, currency: string, prefix = ""): string {
   if (!n) return "";
-  return `${currency} ${n.toLocaleString()}`;
+  return `${prefix}${currency} ${n.toLocaleString()}`;
 }
 function fmtDate(d: Date | null): string {
   if (!d) return "Select date";
@@ -235,6 +236,7 @@ const ListingCard = memo(function ListingCard({ item, onPress, width = 240, badg
     ? (item.localizedDailyRate ?? item.dailyRate)
     : (item.localizedNightlyRate ?? item.nightlyRate);
   const rateCurrency = item.localizedCurrency ?? item.currency;
+  const pricePrefix = approxPrefix(item.localizedCurrency);
   const unit = isCar ? "day" : "night";
   const [imgErr, setImgErr] = useState(false);
   const displayPhoto = photoUrl ?? null;
@@ -288,11 +290,11 @@ const ListingCard = memo(function ListingCard({ item, onPress, width = 240, badg
         {promoted.hasPromotion && promoted.discountedPrice != null ? (
           <View>
             <View style={lc.priceRow}>
-              <Text style={lc.originalPrice}>{fmtPrice(rate, rateCurrency)}</Text>
+              <Text style={lc.originalPrice}>{fmtPrice(rate, rateCurrency, pricePrefix)}</Text>
               <Text style={lc.promoBadgeText}>🔥 {promoted.labelText}</Text>
             </View>
             <View style={lc.priceRow}>
-              <Text style={lc.price}>{fmtPrice(Math.round(promoted.discountedPrice), rateCurrency)}</Text>
+              <Text style={lc.price}>{fmtPrice(Math.round(promoted.discountedPrice), rateCurrency, pricePrefix)}</Text>
               <Text style={lc.priceUnit}>/{unit}</Text>
             </View>
           </View>
@@ -301,7 +303,7 @@ const ListingCard = memo(function ListingCard({ item, onPress, width = 240, badg
             {item.roomTypes && item.roomTypes.length > 1 ? (
               <Text style={{ fontSize: 10, color: K.colors.textMuted, fontWeight: "500" }}>From </Text>
             ) : null}
-            <Text style={lc.price}>{fmtPrice(rate, rateCurrency)}</Text>
+            <Text style={lc.price}>{fmtPrice(rate, rateCurrency, pricePrefix)}</Text>
             {rate ? <Text style={lc.priceUnit}>/{unit}</Text> : null}
           </View>
         )}
@@ -341,6 +343,7 @@ const EliteCard = memo(function EliteCard({ item, onPress, badgeLabel, badgeColo
     ? (item.localizedDailyRate ?? item.dailyRate)
     : (item.localizedNightlyRate ?? item.nightlyRate);
   const rateCurrency = item.localizedCurrency ?? item.currency;
+  const pricePrefix = approxPrefix(item.localizedCurrency);
   const unit = isCar ? "day" : "night";
   const [imgErr, setImgErr] = useState(false);
   const fallbackEmoji = isCar ? "🚗" : isApt ? "🏠" : "🏨";
@@ -400,17 +403,17 @@ const EliteCard = memo(function EliteCard({ item, onPress, badgeLabel, badgeColo
         {promoted.hasPromotion && promoted.discountedPrice != null ? (
           <View>
             <View style={ec.priceRow}>
-              <Text style={ec.originalPrice}>{fmtPrice(rate, rateCurrency)}</Text>
+              <Text style={ec.originalPrice}>{fmtPrice(rate, rateCurrency, pricePrefix)}</Text>
               <Text style={ec.promoLabel}>🔥 {promoted.labelText}</Text>
             </View>
             <View style={ec.priceRow}>
-              <Text style={ec.price}>{fmtPrice(Math.round(promoted.discountedPrice), rateCurrency)}</Text>
+              <Text style={ec.price}>{fmtPrice(Math.round(promoted.discountedPrice), rateCurrency, pricePrefix)}</Text>
               <Text style={ec.unit}>/{unit}</Text>
             </View>
           </View>
         ) : (
           <View style={ec.priceRow}>
-            <Text style={ec.price}>{fmtPrice(rate, rateCurrency)}</Text>
+            <Text style={ec.price}>{fmtPrice(rate, rateCurrency, pricePrefix)}</Text>
             {rate ? <Text style={ec.unit}>/{unit}</Text> : null}
           </View>
         )}
@@ -474,6 +477,7 @@ const CompactCarCard = memo(function CompactCarCard({ item, onPress, photoUrl, p
     : item.title;
   const carRate = item.localizedDailyRate ?? item.dailyRate;
   const rateCurrency = item.localizedCurrency ?? item.currency;
+  const pricePrefix = approxPrefix(item.localizedCurrency);
   const promoted = applyPromotion(carRate, promotion ?? null);
   const pct = promotion?.discountType === "percentage"
     ? Number(promotion.discountValue)
@@ -515,11 +519,11 @@ const CompactCarCard = memo(function CompactCarCard({ item, onPress, photoUrl, p
         </View>
         {promoted.hasPromotion && promoted.discountedPrice != null ? (
           <View>
-            <Text style={cc.originalPrice}>{fmtPrice(carRate, rateCurrency)}</Text>
-            <Text style={cc.price}>{fmtPrice(Math.round(promoted.discountedPrice), rateCurrency)}<Text style={cc.unit}>/day</Text></Text>
+            <Text style={cc.originalPrice}>{fmtPrice(carRate, rateCurrency, pricePrefix)}</Text>
+            <Text style={cc.price}>{fmtPrice(Math.round(promoted.discountedPrice), rateCurrency, pricePrefix)}<Text style={cc.unit}>/day</Text></Text>
           </View>
         ) : (
-          <Text style={cc.price}>{fmtPrice(carRate, rateCurrency)}<Text style={cc.unit}>/day</Text></Text>
+          <Text style={cc.price}>{fmtPrice(carRate, rateCurrency, pricePrefix)}<Text style={cc.unit}>/day</Text></Text>
         )}
       </View>
       <Ionicons name="chevron-forward" size={18} color={K.colors.border} />

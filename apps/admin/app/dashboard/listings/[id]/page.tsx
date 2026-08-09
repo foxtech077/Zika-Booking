@@ -773,13 +773,15 @@ function Row({ label, value }: { label: string; value: string }) {
 
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
+        <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b border-gray-100">
           <h2 className="text-lg font-bold text-gray-900">{title}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
         </div>
-        {children}
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
+          {children}
+        </div>
       </div>
     </div>
   );

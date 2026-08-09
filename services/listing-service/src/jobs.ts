@@ -9,11 +9,7 @@ import { checkVoucherExpiryWarnings } from "./lib/voucherExpiryWarner.js";
 import { pollIcalFeeds } from "./routes/ical.js";
 import { promotePendingRates } from "./lib/commissionScheduler.js";
 import { expireStaleGeoVerifications } from "./lib/geoVerificationExpirer.js";
-import {
-  refreshExchangeRates,
-  isRatesStale,
-  getRefreshDelay,
-} from "./services/exchangeRate.services.js";
+import { refreshExchangeRates } from "./services/exchangeRate.services.js";
 import { QueueName, ListingJob } from "@zika/types";
 
 // Dedicated connection for BullMQ — must use maxRetriesPerRequest: null
@@ -49,8 +45,13 @@ const worker = new Worker(
         await expireStaleGeoVerifications();
         break;
       case ListingJob.ExchangeRateRefresher:
-        await refreshExchangeRates();
-        await scheduleExchangeRateRefresh();
+        try {
+          await refreshExchangeRates();
+        } catch (err) {
+          // Never fail the job — the repeatable schedule keeps the next run
+          // coming regardless, so a transient failure can't drop the cadence.
+          console.error("[ExchangeRate] Refresh failed:", err instanceof Error ? err.message : err);
+        }
         break;
     }
   },
@@ -87,28 +88,6 @@ export async function enqueueExchangeRateRefresh(): Promise<void> {
   await queue.add(ListingJob.ExchangeRateRefresher, {}, { jobId: FX_REFRESH_JOB_ID });
 }
 
-/**
- * Schedule the next exchange rate refresh based on expiresAt.
- * If rates are stale or missing, refresh immediately.
- * Otherwise, schedule a one-time job for expiresAt + 1 minute.
- * Deduplicates by removing any previously scheduled refresh job.
- */
-async function scheduleExchangeRateRefresh() {
-  // Remove any existing scheduled refresh to avoid duplicates
-  const existing = await queue.getJob(FX_REFRESH_JOB_ID);
-  if (existing) {
-    await existing.remove();
-  }
-
-  const stale = await isRatesStale();
-  if (stale) {
-    await refreshExchangeRates();
-  }
-  const delay = await getRefreshDelay();
-  await queue.add(ListingJob.ExchangeRateRefresher, {}, { delay, jobId: FX_REFRESH_JOB_ID });
-  console.log(`[ExchangeRate] Next refresh scheduled in ${Math.round(delay / 1000)}s`);
-}
-
 export async function startJobs() {
   await queue.add(ListingJob.PendingPaymentCanceller, {}, { repeat: { every: 60_000 } });
   await queue.add(ListingJob.BookingCompletion, {}, { repeat: { every: 300_000 } });
@@ -117,8 +96,19 @@ export async function startJobs() {
   await queue.add(ListingJob.CommissionScheduler, {}, { repeat: { every: 60 * 60 * 1000 } });
   await queue.add(ListingJob.GeoVerificationExpirer, {}, { repeat: { every: 2 * 60 * 60 * 1000 } });
 
-  // Exchange rates: refresh on startup if stale, then schedule precisely via expiresAt
-  await scheduleExchangeRateRefresh();
+  // Exchange rates: repeatable 2-hour job (runs immediately on startup, then
+  // every 2h). Repeatable jobs are re-scheduled by the queue manager, so the
+  // next run happens regardless of whether the previous run succeeded.
+  await queue.add(ListingJob.ExchangeRateRefresher, {}, { repeat: { every: 2 * 60 * 60 * 1000 } });
+
+  // Refresh rates at least once at boot so the table is populated before the
+  // service serves traffic. Failure is logged, not fatal — the repeatable job
+  // still covers the cadence.
+  try {
+    await refreshExchangeRates();
+  } catch (err) {
+    console.error("[ExchangeRate] Initial refresh failed on startup:", err instanceof Error ? err.message : err);
+  }
 }
 
 export async function stopJobs() {

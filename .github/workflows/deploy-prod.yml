@@ -1,94 +1,13 @@
-name: Deploy to EC2 / ECS
+name: Deploy to Prod ECS
 on:
   push:
     branches:
-      - dev
       - main
 env:
   AWS_REGION: af-south-1
   ECR_REGISTRY: 891924441446.dkr.ecr.af-south-1.amazonaws.com
 jobs:
-  build-and-push:
-    if: github.ref == 'refs/heads/dev'
-    name: Build & Push (${{ matrix.service }})
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - service: auth-service
-            dockerfile: services/auth-service/Dockerfile
-            image: zika/auth-service
-          - service: listing-service
-            dockerfile: services/listing-service/Dockerfile
-            image: zika/listing-service
-          - service: payment-service
-            dockerfile: services/payment-service/Dockerfile
-            image: zika/payment-service
-          - service: web
-            dockerfile: apps/web/Dockerfile
-            image: zika/web
-            build_args: |
-              NEXT_PUBLIC_API_URL=https://dev.api.kainook.com/auth
-              NEXT_PUBLIC_AUTH_API_URL=https://dev.api.kainook.com/auth
-              NEXT_PUBLIC_LISTING_API_URL=https://dev.api.kainook.com/listings
-              NEXT_PUBLIC_PAYMENT_API_URL=https://dev.api.kainook.com/payments
-          - service: admin
-            dockerfile: apps/admin/Dockerfile
-            image: zika/admin
-            build_args: |
-              NEXT_PUBLIC_API_URL=https://dev.api.kainook.com
-              NEXT_PUBLIC_AUTH_API_URL=https://dev.api.kainook.com/auth
-              NEXT_PUBLIC_LISTING_API_URL=https://dev.api.kainook.com/listings
-              NEXT_PUBLIC_PAYMENT_API_URL=https://dev.api.kainook.com/payments
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          aws-access-key-id: ${{ secrets.ZIKA__AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.ZIKA__AWS_SECRET_ACCESS_KEY }}
-          aws-region: af-south-1
-      - name: Login to ECR
-        uses: aws-actions/amazon-ecr-login@v2
-      - name: Build and push ${{ matrix.service }}
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ${{ matrix.dockerfile }}
-          push: true
-          tags: ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
-          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
-          cache-to: type=inline
-          build-args: ${{ matrix.build_args }}
-  deploy:
-    if: github.ref == 'refs/heads/dev'
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to EC2 via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.ZIKA__EC2_HOST }}
-          username: ${{ secrets.ZIKA__USER }}
-          key: ${{ secrets.ZIKA__SSH_KEY }}
-          timeout: 60s
-          proxy_timeout: 60s
-          script: |
-            set -euo pipefail
-            cd /home/ubuntu/Zika-Booking
-            git fetch origin dev
-            git switch dev
-            git reset --hard origin/dev
-            aws ecr get-login-password --region af-south-1 | docker login --username AWS --password-stdin 891924441446.dkr.ecr.af-south-1.amazonaws.com
-            docker compose pull
-            docker compose run --rm auth-service pnpm exec prisma migrate deploy
-            docker compose run --rm listing-service pnpm exec prisma migrate deploy
-            docker compose run --rm payment-service pnpm exec prisma migrate deploy
-            docker compose up -d --remove-orphans
-            docker image prune -f
   build-and-push-prod:
-    if: github.ref == 'refs/heads/main'
     name: Build & Push Prod (${{ matrix.service }})
     runs-on: ubuntu-latest
     permissions:
@@ -145,7 +64,6 @@ jobs:
           cache-to: type=inline
           build-args: ${{ matrix.build_args }}
   deploy-prod:
-    if: github.ref == 'refs/heads/main'
     needs: build-and-push-prod
     runs-on: ubuntu-latest
     permissions:
