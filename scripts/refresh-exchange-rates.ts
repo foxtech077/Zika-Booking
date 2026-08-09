@@ -7,15 +7,10 @@
  */
 
 import { PrismaClient } from "../services/listing-service/src/generated/index.js";
+import { fetchRatesWithFallback } from "../services/listing-service/src/services/exchangeRate.services.js";
 
-const STALENESS_THRESHOLD_MS = 6 * 60 * 60 * 1000; // 6 hours
+const STALENESS_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
 const BASE_CURRENCY = "USD";
-
-interface ApiRateResponse {
-  result: string;
-  base_code: string;
-  rates: Record<string, number>;
-}
 
 const prisma = new PrismaClient({
   datasources: {
@@ -33,18 +28,9 @@ async function isRatesStale(): Promise<boolean> {
 }
 
 async function refresh(): Promise<void> {
-  console.log("[ExchangeRate] Fetching rates from API...");
+  console.log("[ExchangeRate] Fetching rates via fallback chain...");
 
-  const response = await fetch(`https://open.er-api.com/v6/latest/${BASE_CURRENCY}`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch FX rates: ${response.statusText}`);
-  }
-
-  const data = (await response.json()) as ApiRateResponse;
-  const rates = data.rates;
-  if (!rates) {
-    throw new Error("No rates returned from API");
-  }
+  const { source, date, rates } = await fetchRatesWithFallback();
 
   const now = new Date();
   const expiresAt = new Date(now.getTime() + STALENESS_THRESHOLD_MS);
@@ -52,39 +38,44 @@ async function refresh(): Promise<void> {
   let inserted = 0;
   let updated = 0;
 
-  for (const [currency, rate] of Object.entries(rates)) {
-    if (currency === BASE_CURRENCY) continue;
+  await prisma.$transaction(async (tx) => {
+    for (const [currency, rate] of Object.entries(rates)) {
+      if (currency === BASE_CURRENCY) continue;
 
-    const existing = await prisma.exchangeRate.findUnique({
-      where: {
-        fromCurrency_toCurrency: {
-          fromCurrency: BASE_CURRENCY,
-          toCurrency: currency,
+      const existing = await tx.exchangeRate.findUnique({
+        where: {
+          fromCurrency_toCurrency: {
+            fromCurrency: BASE_CURRENCY,
+            toCurrency: currency,
+          },
         },
-      },
-    });
+        select: { id: true },
+      });
 
-    if (existing) {
-      await prisma.exchangeRate.update({
-        where: { id: existing.id },
-        data: { rate, fetchedAt: now, expiresAt },
-      });
-      updated++;
-    } else {
-      await prisma.exchangeRate.create({
-        data: {
-          fromCurrency: BASE_CURRENCY,
-          toCurrency: currency,
-          rate,
-          fetchedAt: now,
-          expiresAt,
-        },
-      });
-      inserted++;
+      if (existing) {
+        await tx.exchangeRate.update({
+          where: { id: existing.id },
+          data: { rate, fetchedAt: now, expiresAt },
+        });
+        updated++;
+      } else {
+        await tx.exchangeRate.create({
+          data: {
+            fromCurrency: BASE_CURRENCY,
+            toCurrency: currency,
+            rate,
+            fetchedAt: now,
+            expiresAt,
+          },
+        });
+        inserted++;
+      }
     }
-  }
+  });
 
-  console.log(`[ExchangeRate] Done: ${inserted} inserted, ${updated} updated (${Object.keys(rates).length} total currencies)`);
+  console.log(
+    `[ExchangeRate] Done (source=${source}, date=${date}): ${inserted} inserted, ${updated} updated (${Object.keys(rates).length} total currencies)`
+  );
 }
 
 async function main() {

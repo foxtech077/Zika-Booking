@@ -1,8 +1,105 @@
 import { prisma } from "../lib/prisma.js";
 import { EUR_CHARGE_BUFFER_MULTIPLIER, isTaraCountry } from "@zika/types";
 
-const STALENESS_THRESHOLD_MS = 6 * 60 * 60 * 1000; // 6 hours
+const STALENESS_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
 const BASE_CURRENCY = "USD";
+
+const FETCH_TIMEOUT_MS = 10_000;
+const FX_USER_AGENT = "Kainook-FX/1.0";
+
+const RATE_SOURCES = [
+  {
+    name: "exchange-api-jsdelivr",
+    url: "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json",
+    kind: "fawazahmed" as const,
+  },
+  {
+    name: "exchange-api-pages",
+    url: "https://latest.currency-api.pages.dev/v1/currencies/usd.min.json",
+    kind: "fawazahmed" as const,
+  },
+  {
+    name: "open-er-api",
+    url: "https://open.er-api.com/v6/latest/USD",
+    kind: "open" as const,
+  },
+];
+
+function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+async function fetchSource(
+  source: (typeof RATE_SOURCES)[number]
+): Promise<{ date: string; rates: Record<string, number> } | null> {
+  let data: any;
+  try {
+    const res = await fetch(source.url, {
+      headers: { "User-Agent": FX_USER_AGENT },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    data = await res.json();
+  } catch (err) {
+    console.warn(`[ExchangeRate] Source ${source.name} unreachable:`, err instanceof Error ? err.message : err);
+    return null;
+  }
+
+  const rates = source.kind === "fawazahmed"
+    ? data?.usd
+    : data?.rates;
+
+  if (!rates || typeof rates !== "object") {
+    console.warn(`[ExchangeRate] Source ${source.name} returned no rates.`);
+    return null;
+  }
+
+  if (source.kind === "fawazahmed") {
+    if (typeof data.date !== "string" || data.date !== todayUtc()) {
+      console.warn(`[ExchangeRate] Source ${source.name} date mismatch (got ${data.date}, expected ${todayUtc()}).`);
+      return null;
+    }
+  } else if (typeof data.time_last_update_utc === "string") {
+    const updateDate = data.time_last_update_utc.slice(0, 10);
+    if (updateDate < todayUtc()) {
+      console.warn(`[ExchangeRate] Source ${source.name} rates stale (last update ${updateDate}).`);
+    }
+  }
+
+  const normalized: Record<string, number> = {};
+  for (const [code, value] of Object.entries(rates) as [string, unknown][]) {
+    const upper = code.toUpperCase();
+    if (upper === BASE_CURRENCY) continue;
+    if (!/^[A-Z]{3}$/.test(upper)) continue;
+    const n = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    normalized[upper] = n;
+  }
+
+  if (Object.keys(normalized).length === 0) {
+    console.warn(`[ExchangeRate] Source ${source.name} returned no valid rates.`);
+    return null;
+  }
+
+  return { date: data.date ?? todayUtc(), rates: normalized };
+}
+
+/**
+ * Fetch the latest USD-based rates with a 3-tier fallback chain:
+ * 1. fawazahmed0 exchange-api on jsdelivr (accepted only if the response date is today).
+ * 2. fawazahmed0 exchange-api on Cloudflare pages (same validation).
+ * 3. open.er-api — last resort, accepted regardless of how fresh its data is.
+ */
+export async function fetchRatesWithFallback(): Promise<{ source: string; date: string; rates: Record<string, number> }> {
+  for (const source of RATE_SOURCES) {
+    const result = await fetchSource(source);
+    if (result) {
+      console.log(`[ExchangeRate] Fetched rates from ${source.name} (${result.date})`);
+      return { source: source.name, ...result };
+    }
+  }
+  throw new Error("All exchange-rate sources failed.");
+}
 
 // Currencies with 0 decimal places (no cents/subunits)
 const ZERO_DECIMAL_CURRENCIES = new Set([
@@ -23,96 +120,70 @@ export function ceilingForCurrency(amount: number, currency: string): number {
   return Math.ceil(amount * 100) / 100;
 }
 
-interface ApiRateResponse {
-  result: string;
-  base_code: string;
-  time_last_update_utc: string;
-  rates: Record<string, number>;
+let refreshInFlight: Promise<{ inserted: number; updated: number }> | null = null;
+
+/**
+ * Refresh the exchange-rate table from the fallback chain.
+ * Serializes concurrent callers (repeatable job + on-demand refresh) into a
+ * single run, and writes every rate atomically via a transaction.
+ */
+export function refreshExchangeRates(): Promise<{ inserted: number; updated: number }> {
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
 }
 
-export async function refreshExchangeRates(): Promise<{ inserted: number; updated: number }> {
-  const response = await fetch(`https://open.er-api.com/v6/latest/${BASE_CURRENCY}`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch FX rates: ${response.statusText}`);
-  }
-
-  const data = (await response.json()) as ApiRateResponse;
-  const rates = data.rates;
-  if (!rates) {
-    throw new Error("No rates returned from API");
-  }
-
+async function doRefresh(): Promise<{ inserted: number; updated: number }> {
+  const { source, date, rates } = await fetchRatesWithFallback();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + STALENESS_THRESHOLD_MS);
 
   let inserted = 0;
   let updated = 0;
 
-  const entries = Object.entries(rates);
+  await prisma.$transaction(async (tx) => {
+    for (const [currency, rate] of Object.entries(rates)) {
+      if (currency === BASE_CURRENCY) continue;
 
-  for (const [currency, rate] of entries) {
-    if (currency === BASE_CURRENCY) continue;
-
-    const existing = await prisma.exchangeRate.findUnique({
-      where: {
-        fromCurrency_toCurrency: {
-          fromCurrency: BASE_CURRENCY,
-          toCurrency: currency,
+      const existing = await tx.exchangeRate.findUnique({
+        where: {
+          fromCurrency_toCurrency: {
+            fromCurrency: BASE_CURRENCY,
+            toCurrency: currency,
+          },
         },
-      },
-    });
+        select: { id: true },
+      });
 
-    if (existing) {
-      await prisma.exchangeRate.update({
-        where: { id: existing.id },
-        data: { rate, fetchedAt: now, expiresAt },
-      });
-      updated++;
-    } else {
-      await prisma.exchangeRate.create({
-        data: {
-          fromCurrency: BASE_CURRENCY,
-          toCurrency: currency,
-          rate,
-          fetchedAt: now,
-          expiresAt,
-        },
-      });
-      inserted++;
+      if (existing) {
+        await tx.exchangeRate.update({
+          where: { id: existing.id },
+          data: { rate, fetchedAt: now, expiresAt },
+        });
+        updated++;
+      } else {
+        await tx.exchangeRate.create({
+          data: {
+            fromCurrency: BASE_CURRENCY,
+            toCurrency: currency,
+            rate,
+            fetchedAt: now,
+            expiresAt,
+          },
+        });
+        inserted++;
+      }
     }
-  }
+  });
 
   console.log(
-    `[ExchangeRate] Refreshed rates: ${inserted} inserted, ${updated} updated (${entries.length} total)`
+    `[ExchangeRate] Refreshed rates (source=${source}, date=${date}): ${inserted} inserted, ${updated} updated (${Object.keys(rates).length} total)`
   );
 
   return { inserted, updated };
-}
-
-export async function isRatesStale(): Promise<boolean> {
-  const oldestRate = await prisma.exchangeRate.findFirst({
-    orderBy: { expiresAt: "asc" },
-    select: { expiresAt: true },
-  });
-
-  if (!oldestRate) return true;
-  return oldestRate.expiresAt <= new Date();
-}
-
-/**
- * Returns ms until the oldest rate expires (+ 1 minute buffer).
- * Returns 0 if rates don't exist or are already stale.
- */
-export async function getRefreshDelay(): Promise<number> {
-  const oldestRate = await prisma.exchangeRate.findFirst({
-    orderBy: { expiresAt: "asc" },
-    select: { expiresAt: true },
-  });
-
-  if (!oldestRate) return 0;
-
-  const delay = oldestRate.expiresAt.getTime() - Date.now() + 60_000; // +1 min buffer
-  return Math.max(0, delay);
 }
 
 export async function getExchangeRate(from: string, to: string): Promise<number | null> {
