@@ -15,4 +15,4 @@ RUN pnpm --filter @zika/listing-service db:generate
 RUN pnpm --filter @zika/listing-service build
 WORKDIR /app/services/listing-service
 EXPOSE 3003
-CMD ["pnpm","--filter","@zika/listing-service","start"]
+CMD ["sh", "-c", "pnpm db:migrate:deploy && node dist/index.js"]
