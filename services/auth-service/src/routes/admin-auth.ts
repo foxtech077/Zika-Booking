@@ -292,18 +292,18 @@ export async function adminAuthRoutes(app: FastifyInstance) {
       if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid code format.");
       const { code } = parsed.data;
 
-      // Lockout check
-      const locked = await checkTotpAttempts(adminId);
-      if (locked) {
-        await writeAudit(adminId, role, "totp_locked", req);
-        return sendError(reply, 429, "TOTP_LOCKED", "Too many failed attempts. Please wait 15 minutes.");
-      }
-
       const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
       if (!admin.totpSecretEncrypted) return sendError(reply, 400, "TOTP_NOT_SETUP", "TOTP not configured.");
 
       const secret = decryptTotpSecret(admin.totpSecretEncrypted);
+      // Verify first — only count failed attempts toward the lockout so a valid
+      // code is never rejected because the attempt counter was already incremented.
       if (!verifyTotpCode(secret, code)) {
+        const locked = await checkTotpAttempts(adminId);
+        if (locked) {
+          await writeAudit(adminId, role, "totp_locked", req);
+          return sendError(reply, 429, "TOTP_LOCKED", "Too many failed attempts. Please wait 15 minutes.");
+        }
         return sendError(reply, 400, "INVALID_CODE", "Invalid verification code. Please try again.");
       }
 

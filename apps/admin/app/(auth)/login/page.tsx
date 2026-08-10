@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth";
+import type { AdminUser } from "@/types/admin";
 import { startAuthentication } from "@simplewebauthn/browser";
 
 type Step = "credentials" | "totp" | "totp-setup" | "recovery-codes";
@@ -53,22 +54,8 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
-     console.log("EMAIL RAW =", JSON.stringify(email));
-  console.log("PASSWORD RAW =", JSON.stringify(password));
-
-  console.log("ALL COOKIES =", document.cookie);
-  console.log("REQUEST URL SHOULD BE:");
-console.log(`${window.location.origin}/admin/api/admin/auth/login`);
     try {
-      console.log("LOGIN REQUEST", { email, password });
       const { data } = await api.post("/admin/auth/login", { email, password });
-      console.log("LOGIN PAYLOAD", {
-  email,
-  password,
-  emailLength: email.length,
-  passwordLength: password.length,
-});
-      console.log("LOGIN RESPONSE", data);
       const { totpRequired, setupRequired, intermediateToken: token } = data.data ?? data;
 
       if (totpRequired) {
@@ -161,8 +148,12 @@ console.log(`${window.location.origin}/admin/api/admin/auth/login`);
       setPendingSessionToken(sessionToken ?? "");
       setStep("recovery-codes");
     } catch (err: any) {
-      const msg = err?.response?.data?.error?.message ?? "Failed to verify setup code.";
-      setError(msg);
+      if (err?.response?.status === 401) {
+        setError("Your login session expired. Please sign in again.");
+      } else {
+        const msg = err?.response?.data?.error?.message ?? "Failed to verify setup code.";
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -187,16 +178,31 @@ console.log(`${window.location.origin}/admin/api/admin/auth/login`);
       );
       const { sessionToken } = data.data ?? data;
 
-      // Fetch profile
-      const meRes = await api.get("/admin/auth/me", {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
-      const user = meRes.data?.data?.user ?? meRes.data?.user;
+      // TOTP verification already succeeded — establishing the session must not
+      // depend on the follow-up profile fetch. If /me fails, set the token anyway
+      // and let the dashboard layout refetch the profile.
+      let user: AdminUser | null = null;
+      try {
+        const meRes = await api.get("/admin/auth/me", {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        });
+        user = meRes.data?.data?.user ?? meRes.data?.user ?? null;
+      } catch {
+        user = null;
+      }
       setSession(sessionToken, user);
       router.replace("/dashboard");
     } catch (err: any) {
-      const msg = err?.response?.data?.error?.message ?? "Verification failed.";
-      setError(msg);
+      const status = err?.response?.status;
+      const code = err?.response?.data?.error?.code;
+      if (status === 429 && code === "TOTP_LOCKED") {
+        setError("Too many failed attempts. Please wait 15 minutes before trying again.");
+      } else if (status === 401) {
+        setError("Your login session expired. Please sign in again.");
+      } else {
+        const msg = err?.response?.data?.error?.message ?? "Verification failed.";
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -206,10 +212,15 @@ console.log(`${window.location.origin}/admin/api/admin/auth/login`);
   const handleCompleteSetup = async () => {
     setLoading(true);
     try {
-      const meRes = await api.get("/admin/auth/me", {
-        headers: { Authorization: `Bearer ${pendingSessionToken}` },
-      });
-      const user = meRes.data?.data?.user ?? meRes.data?.user;
+      let user: AdminUser | null = null;
+      try {
+        const meRes = await api.get("/admin/auth/me", {
+          headers: { Authorization: `Bearer ${pendingSessionToken}` },
+        });
+        user = meRes.data?.data?.user ?? meRes.data?.user ?? null;
+      } catch {
+        user = null;
+      }
       setSession(pendingSessionToken, user);
       router.replace("/dashboard");
     } catch (err) {

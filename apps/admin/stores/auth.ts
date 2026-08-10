@@ -9,7 +9,7 @@ interface AuthState {
   user: AdminUser | null;
   isAuthenticated: boolean;
   _hasHydrated: boolean;
-  setSession: (token: string, user: AdminUser) => void;
+  setSession: (token: string, user?: AdminUser | null) => void;
   clearSession: () => void;
   updateUser: (updates: Partial<AdminUser>) => void;
   setHasHydrated: (val: boolean) => void;
@@ -30,7 +30,7 @@ export const useAuthStore = create<AuthState>()(
         if (typeof window !== "undefined") {
           sessionStorage.setItem("zika:admin_session", token);
         }
-        set({ token, user, isAuthenticated: true });
+        set({ token, user: user ?? null, isAuthenticated: true });
       },
 
       clearSession: () => {
