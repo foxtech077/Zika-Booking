@@ -25,13 +25,27 @@ export function currencySymbol(currency: string): string {
   return CURRENCY_SYMBOLS[code] ?? code;
 }
 
-/** Format a number with thousands separators and 0 fraction digits. */
-export function fmtMoney(n: number): string {
-  return Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const ZERO_DECIMAL_CURRENCIES = new Set([
+  "BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW",
+  "MGA", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF",
+]);
+
+/**
+ * Format a number with thousands separators and the currency's natural
+ * precision (2 decimals for most currencies, 0 for zero-decimal ones). A
+ * missing currency keeps the historical whole-number behaviour.
+ */
+export function fmtMoney(n: number, currency?: string): string {
+  const zeroDecimal = currency != null && ZERO_DECIMAL_CURRENCIES.has(currency.toUpperCase());
+  const fractionDigits = zeroDecimal ? 0 : 2;
+  return Number(n || 0).toLocaleString(undefined, {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  });
 }
 
-/** Render an amount as "ISO amount", e.g. "EUR 45" or "XAF 25,000". */
+/** Render an amount as "ISO amount", e.g. "EUR 45.00" or "XAF 25,000". */
 export function money(amount: number, currency: string): string {
   const code = (currency ?? "").toUpperCase() || "USD";
-  return `${code} ${fmtMoney(amount)}`;
+  return `${code} ${fmtMoney(amount, code)}`;
 }

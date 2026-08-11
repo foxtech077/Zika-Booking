@@ -67,7 +67,7 @@ export async function sendGuestEmail(
 
       <h3 style="color:#1e293b;font-size:14px;margin:20px 0 8px">Receipt</h3>
       <table style="width:100%;border-collapse:collapse;margin:8px 0">
-        <tr><td style="padding:6px 8px;color:#6b7280">${listingCurrency} ${fmt(nightlyRate)} × ${booking.nightsOrDays} ${unitLabel}${booking.nightsOrDays !== 1 ? "s" : ""}</td><td style="padding:6px 8px;text-align:right">${money(invoice.baseAmount, listingCurrency)}</td></tr>
+        <tr><td style="padding:6px 8px;color:#6b7280">${listingCurrency} ${fmt(nightlyRate, listingCurrency)} × ${booking.nightsOrDays} ${unitLabel}${booking.nightsOrDays !== 1 ? "s" : ""}</td><td style="padding:6px 8px;text-align:right">${money(invoice.baseAmount, listingCurrency)}</td></tr>
         ${Number(invoice.discount) > 0 ? `<tr><td style="padding:6px 8px;color:#15803d">Discount</td><td style="padding:6px 8px;text-align:right;color:#15803d">−${money(invoice.discount, listingCurrency)}</td></tr>` : ''}
         <tr><td style="padding:6px 8px;border-top:1px solid #e5e7eb;color:#6b7280">Subtotal</td><td style="padding:6px 8px;border-top:1px solid #e5e7eb;text-align:right">${money(invoice.subtotal, listingCurrency)}</td></tr>
         <tr><td style="padding:6px 8px;color:#6b7280">Service fee${serviceFeePct > 0 ? ` (${serviceFeePct}%)` : ''}</td><td style="padding:6px 8px;text-align:right">${money(invoice.serviceFee, listingCurrency)}</td></tr>
