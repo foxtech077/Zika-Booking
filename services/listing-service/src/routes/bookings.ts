@@ -1762,6 +1762,8 @@ export async function bookingRoutes(app: FastifyInstance) {
           nightlyRate: listing.category !== "car" ? commissionInclusiveRate(rate, commissionRate) : 0,
           dailyRate: listing.category === "car" ? commissionInclusiveRate(rate, commissionRate) : 0,
           units: finalBilling.units,
+          // Gross commission-inclusive base before discounts (rate × units).
+          baseAmount: finalBilling.baseAmount,
           subtotal,
           promotionDiscount,
           voucherDiscount: appliedVoucherDiscount,
