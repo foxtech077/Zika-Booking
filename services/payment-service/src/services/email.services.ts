@@ -40,7 +40,12 @@ export async function sendGuestEmail(
   const platformCurrency = invoice.platform?.currency ?? listingCurrency;
   const platformAmount = invoice.platform?.amount ?? invoice.total;
   const listingTotal = invoice.total;
-  const nightlyRate = Number(booking.nightlyRate ?? booking.dailyRate ?? 0);
+  // Use the commission-inclusive per-night rate from the booking's price
+  // snapshot so the receipt line reconciles with the subtotal. The stored
+  // nightlyRate/dailyRate columns hold the raw base rate, and the internal
+  // fetch does not select them anyway — falling back to the snapshot first.
+  const snapRate = booking.priceBreakdownJson?.breakdown?.nightlyRate ?? booking.priceBreakdownJson?.breakdown?.dailyRate;
+  const nightlyRate = Number(snapRate ?? booking.nightlyRate ?? booking.dailyRate ?? 0);
 
   await sgMail.send({
     to: booking.user.email ?? ["EMAIL_ADDRESS"],

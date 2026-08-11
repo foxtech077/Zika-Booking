@@ -699,6 +699,11 @@ export async function searchRoutes(app: FastifyInstance) {
         localizedNightlyRate,
         localizedDailyRate,
         localizedCurrency: ctx.currency,
+        // Override the raw `hotelRoomTypes` from the listing spread with the
+        // commission-inclusive prices — consumers prefer `hotelRoomTypes` over
+        // `roomTypes`, so leaving the raw row here would leak the un-inflated
+        // base price (and mislabel it when a display currency is set).
+        hotelRoomTypes: localizedRoomTypes,
         roomTypes: localizedRoomTypes,
         isAccredited: !!listing.approvedAt,
         longStayDiscountEnabled: listing.longStayEnabled,
