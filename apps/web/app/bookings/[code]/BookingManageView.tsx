@@ -36,6 +36,7 @@ interface ManageBooking {
   discountAmount: number;
   deliveryFee: number;
   serviceFee: number;
+  serviceFeeRate?: number;
   taxAmount: number;
   securityDeposit: number;
   voucherCode: string | null;
@@ -359,7 +360,7 @@ export default function BookingManageView() {
             )}
             {Number(booking.serviceFee) > 0 && (
               <div className="flex justify-between text-slate-600">
-                <span>Service fee</span>
+                <span>Service fee{booking.serviceFeeRate ? ` (${Math.round(Number(booking.serviceFeeRate) * 100)}%)` : ''}</span>
                 <span>{currency} {fmt(Number(booking.serviceFee))}</span>
               </div>
             )}

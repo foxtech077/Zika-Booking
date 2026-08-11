@@ -127,7 +127,7 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
     { label: "Base Amount", value: invoice.baseAmount, currency: listingCurrency },
     { label: "Discount", value: -invoice.discount, currency: listingCurrency, isDiscount: true },
     { label: "Subtotal", value: invoice.subtotal, currency: listingCurrency },
-    { label: "Service Fee", value: invoice.serviceFee, currency: listingCurrency },
+    { label: `Service Fee${booking.serviceFeeRate ? ` (${Math.round(Number(booking.serviceFeeRate) * 100)}%)` : ''}`, value: invoice.serviceFee, currency: listingCurrency },
     { label: "Tax", value: invoice.tax, currency: listingCurrency },
   ];
 

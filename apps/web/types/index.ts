@@ -53,6 +53,9 @@ export interface PublicListingDetail {
    *  (0.05 = 5%). Served by GET /listings/:id/public — the same value the
    *  booking flow charges. Never hardcode a rate alongside this. */
   commissionRate?: number | null;
+  /** Flat service fee rate charged to guests (0.04 = 4%). Served by the API
+   *  alongside pricing previews and listing details. */
+  serviceFeeRate?: number | null;
   checkinTime: string;
   checkoutTime: string;
   cancellationPolicy: "flexible" | "moderate" | "strict" | "non_refundable";

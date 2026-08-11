@@ -35,7 +35,7 @@ export async function sendGuestEmail(
   const dateLabel = isCar
     ? `Pick-up: ${booking.pickupDatetime ? new Date(booking.pickupDatetime).toLocaleString("en-GB") : "—"}<br>Return: ${booking.returnDatetime ? new Date(booking.returnDatetime).toLocaleString("en-GB") : "—"}`
     : `Check-in: ${booking.checkIn ? new Date(booking.checkIn).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—"}<br>Check-out: ${booking.checkOut ? new Date(booking.checkOut).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—"}`;
-  const commissionPct = booking.commissionRate ? Math.round(Number(booking.commissionRate) * 100) : 0;
+  const serviceFeePct = booking.serviceFeeRate ? Math.round(Number(booking.serviceFeeRate) * 100) : 0;
   const listingCurrency = invoice.listingCurrency ?? (booking.currency ?? "").toUpperCase();
   const platformCurrency = invoice.platform?.currency ?? listingCurrency;
   const platformAmount = invoice.platform?.amount ?? invoice.total;
@@ -65,7 +65,7 @@ export async function sendGuestEmail(
         <tr><td style="padding:6px 8px;color:#6b7280">${listingCurrency} ${fmt(nightlyRate)} × ${booking.nightsOrDays} ${unitLabel}${booking.nightsOrDays !== 1 ? "s" : ""}</td><td style="padding:6px 8px;text-align:right">${money(invoice.baseAmount, listingCurrency)}</td></tr>
         ${Number(invoice.discount) > 0 ? `<tr><td style="padding:6px 8px;color:#15803d">Discount</td><td style="padding:6px 8px;text-align:right;color:#15803d">−${money(invoice.discount, listingCurrency)}</td></tr>` : ''}
         <tr><td style="padding:6px 8px;border-top:1px solid #e5e7eb;color:#6b7280">Subtotal</td><td style="padding:6px 8px;border-top:1px solid #e5e7eb;text-align:right">${money(invoice.subtotal, listingCurrency)}</td></tr>
-        <tr><td style="padding:6px 8px;color:#6b7280">Service fee${commissionPct > 0 ? ` (${commissionPct}%)` : ''}</td><td style="padding:6px 8px;text-align:right">${money(invoice.serviceFee, listingCurrency)}</td></tr>
+        <tr><td style="padding:6px 8px;color:#6b7280">Service fee${serviceFeePct > 0 ? ` (${serviceFeePct}%)` : ''}</td><td style="padding:6px 8px;text-align:right">${money(invoice.serviceFee, listingCurrency)}</td></tr>
         ${Number(invoice.tax) > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Taxes</td><td style="padding:6px 8px;text-align:right">${money(invoice.tax, listingCurrency)}</td></tr>` : ''}
         ${isCar && Number(invoice.securityDeposit) > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Security deposit</td><td style="padding:6px 8px;text-align:right">${money(invoice.securityDeposit, listingCurrency)}</td></tr>` : ''}
         <tr>
