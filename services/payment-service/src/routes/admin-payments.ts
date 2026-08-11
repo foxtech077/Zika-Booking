@@ -171,9 +171,11 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
 
       const provider = payment?.paymentProvider ?? "unknown";
 
-      // Calculate total refunded amount to determine full or partial refund
+      // Calculate total refunded amount to determine full or partial refund.
+      // Refunds are stored in the platform charge currency, so compare against
+      // the charged amount, not the listing-currency payment.amount.
       const totalRefunded = await calculateAlreadyRefunded(refund.paymentId);
-      const isFullyRefunded = payment ? (totalRefunded >= Number(payment.amount)) : false;
+      const isFullyRefunded = payment ? (totalRefunded >= Number(payment.chargedAmount ?? payment.amount)) : false;
 
       // Update the payment status to refunded or partially_refunded
       await prisma.payment.update({
