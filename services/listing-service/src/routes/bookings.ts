@@ -2058,7 +2058,18 @@ export async function bookingRoutes(app: FastifyInstance) {
               const endDate = booking.checkOut ?? booking.returnDatetime;
               if (startDate && endDate) {
                 const listing = await tx.listing.findUnique({ where: { id: booking.listingId } });
-                const unitCount = Math.max(1, listing?.unitCount ?? 1);
+                const listingUnits = Math.max(1, listing?.unitCount ?? 1);
+                // Match the create-time check: when the booking is for a room
+                // type, the room type's unit count governs availability, not the
+                // listing's (which is usually null → 1). Otherwise the second
+                // overlapping booking on a multi-unit room type would pass
+                // creation but fail confirmation.
+                const unitCount = booking.roomTypeId
+                  ? (await tx.hotelRoomType.findUnique({
+                      where: { id: booking.roomTypeId },
+                      select: { unitCount: true },
+                    }))?.unitCount ?? listingUnits
+                  : listingUnits;
 
                 const conflicts = await tx.$queryRawUnsafe<{ id: string }[]>(`
                   SELECT id FROM listing.bookings
