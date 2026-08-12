@@ -45,6 +45,8 @@ export async function issueRefund(
     amount: unknown;
     currency: string;
     status: string;
+    chargedAmount?: unknown;
+    chargedCurrency?: string | null;
   },
   opts: IssueRefundOptions,
 ): Promise<{ id: string; status: string }> {
@@ -57,6 +59,12 @@ export async function issueRefund(
   if (!["captured", "partially_refunded"].includes(payment.status)) {
     throw new InvalidPaymentStatusError(payment.status);
   }
+
+  // Provider refunds are always in the platform charge currency (EUR for
+  // Stripe, XAF for Tara), never the listing currency. Fall back to the raw
+  // amount/currency only for payments without a recorded charge.
+  const chargeCurrency = (payment.chargedCurrency ?? payment.currency).toUpperCase();
+  const chargeAmount = Number(payment.chargedAmount ?? payment.amount);
 
   let refund: { id: string; status: string } | undefined;
   if (idempotencyKey) {
@@ -88,7 +96,7 @@ export async function issueRefund(
       });
       const alreadyRefunded = Number(refundSum._sum.amount ?? 0);
 
-      if (alreadyRefunded + amount > Number(payment.amount)) {
+      if (alreadyRefunded + amount > chargeAmount) {
         throw new RefundLimitExceededError();
       }
 
@@ -97,7 +105,7 @@ export async function issueRefund(
           paymentId: payment.id,
           bookingId: payment.bookingId,
           amount,
-          currency: payment.currency,
+          currency: chargeCurrency,
           reason: reason ?? null,
           status: "pending",
           idempotencyKey: idempotencyKey ?? null,
@@ -123,7 +131,7 @@ export async function issueRefund(
         const re = await stripe.refunds.create(
           {
             payment_intent: payment.providerPaymentId ?? undefined,
-            amount: toStripeAmount(amount, payment.currency),
+            amount: toStripeAmount(amount, chargeCurrency),
             reason: "requested_by_customer",
           },
           { idempotencyKey: `stripe-refund-${refund.id}` }
@@ -364,6 +372,8 @@ export interface ConfirmFailurePayment {
   amount: unknown;
   currency: string;
   status: string;
+  chargedAmount?: unknown;
+  chargedCurrency?: string | null;
 }
 
 /**
@@ -410,7 +420,11 @@ export async function handleConfirmFailure(
     }
   }
 
-  const amount = Number(payment.amount);
+  // Refund the amount actually charged (platform currency — EUR for Stripe,
+  // XAF for Tara). The booking service is notified with the listing-currency
+  // total (payment.amount), since booking refundAmount is tracked in the
+  // booking's own currency.
+  const amount = Number(payment.chargedAmount ?? payment.amount);
   try {
     const refund = await issueRefund(payment, {
       amount,
@@ -420,7 +434,7 @@ export async function handleConfirmFailure(
 
     await notifyBookingServiceOfRefund(payment.bookingId, {
       refundId: refund.id,
-      refundAmount: amount,
+      refundAmount: Number(payment.amount),
       provider: payment.paymentProvider,
       refundedAt: new Date(),
     });

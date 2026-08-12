@@ -9,7 +9,7 @@ import { fireNotification } from "../lib/notifications.js";
 import { ipDetect } from "../middleware/ipDetect.js";
 import { getPricing } from "../services/pricing.services.js";
 import { getPaymentProvider, triggerPaymentRefund, generateRefundIdempotencyKey } from "../services/payment.services.js";
-import { calculateBilling } from "../services/billing.service.js";
+import { calculateBilling, commissionInclusiveRate, SERVICE_FEE_RATE } from "../services/billing.service.js";
 import { getTaxRate } from "../services/getTaxRate.services.js";
 import { VoucherDiscountType } from "../generated/index.js";
 import { logLoyaltyTransaction } from "./loyalty.js";
@@ -68,6 +68,37 @@ export async function getCommissionRate(country: string | null): Promise<number>
     return Number(rate.pendingRate);
   }
   return Number(rate.rate);
+}
+
+/**
+ * Batch variant of getCommissionRate — one findMany across the given countries
+ * plus a single global-default read (avoids N+1 on search pages). Same
+ * resolution order: country row (with pending-rate rule), else global default.
+ */
+export async function getCommissionRateBatch(countries: (string | null)[]): Promise<Map<string | null, number>> {
+  const distinct = [...new Set(countries.filter(Boolean) as string[])];
+  const map = new Map<string | null, number>();
+  const global = await getGlobalCommissionRate();
+  if (countries.some((c) => !c)) map.set(null, global);
+
+  if (distinct.length > 0) {
+    const rows = await prisma.commissionRate.findMany({
+      where: { country: { in: distinct } },
+    });
+    const byCountry = new Map(rows.map((r) => [r.country, r]));
+    const now = new Date();
+    for (const c of distinct) {
+      const row = byCountry.get(c);
+      if (row && row.pendingRate != null && row.pendingEffectiveFrom && row.pendingEffectiveFrom <= now) {
+        map.set(c, Number(row.pendingRate));
+      } else if (row) {
+        map.set(c, Number(row.rate));
+      } else {
+        map.set(c, global);
+      }
+    }
+  }
+  return map;
 }
 
 // ── Availability checker ──────────────────────────────────────────────────────
@@ -390,6 +421,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           voucherDiscount: true,
           voucherCode: true,
           manageToken: true,
+          priceBreakdownJson: true,
           listing: {
             select: {
               name: true,
@@ -421,6 +453,7 @@ export async function bookingRoutes(app: FastifyInstance) {
 
       const bookingWithHostEmail = {
         ...booking,
+        serviceFeeRate: (booking as any).priceBreakdownJson?.breakdown?.serviceFeeRate ?? SERVICE_FEE_RATE,
         listing: booking.listing ? {
           ...booking.listing,
           hostEmail,
@@ -632,7 +665,11 @@ export async function bookingRoutes(app: FastifyInstance) {
     } else if (body.checkIn && body.checkOut) {
       units = Math.max(1, Math.ceil((new Date(body.checkOut).getTime() - new Date(body.checkIn).getTime()) / 86_400_000));
     }
-    const baseAmount = baseRate * units;
+    const commissionRate = await getCommissionRate(listing.country ?? null);
+    // Commission-inclusive base for percentage promos so the discount matches
+    // the inflated base the guest actually sees.
+    const baseAmount = Number((baseRate * units * (1 + commissionRate)).toFixed(2));
+    const displayedNightlyRate = commissionInclusiveRate(baseRate, commissionRate);
 
     const now = new Date();
     const activePromo = await (prisma as any).activityPromotion.findFirst({
@@ -653,8 +690,6 @@ export async function bookingRoutes(app: FastifyInstance) {
         : Number(activePromo.discountValue);
     }
     promotionDiscount = Number(promotionDiscount.toFixed(2));
-
-    const commissionRate = await getCommissionRate(listing.country ?? null);
 
     const billing = calculateBilling({
       listingCategory: listing.category,
@@ -682,7 +717,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       guestCurrency: body.currency,
       amounts: {
         baseAmount: billing.baseAmount,
-        nightlyRate: baseRate,
+        nightlyRate: displayedNightlyRate,
         promotionDiscount: billing.promotionDiscount,
         voucherDiscount: billing.voucherDiscount,
         serviceFee: billing.serviceFee,
@@ -696,7 +731,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     return {
       units: billing.units,
       baseAmount: billing.baseAmount,
-      nightlyRate: baseRate,
+      nightlyRate: displayedNightlyRate,
       promotionDiscount: billing.promotionDiscount,
       voucherDiscount: billing.voucherDiscount,
       serviceFee: billing.serviceFee,
@@ -706,6 +741,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       totalAmount: billing.totalAmount,
       currency: listing.currency,
       commissionRate,
+      serviceFeeRate: SERVICE_FEE_RATE,
       taxRate: getTaxRate(listing.country),
       // Generic platform-currency snapshot (charge currency + reference
       // guest-local amounts). The charge is always listing → platform.
@@ -721,7 +757,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         body.currency,
         {
           baseAmount: billing.baseAmount,
-          nightlyRate: baseRate,
+          nightlyRate: displayedNightlyRate,
           promotionDiscount: billing.promotionDiscount,
           voucherDiscount: billing.voucherDiscount,
           serviceFee: billing.serviceFee,
@@ -875,7 +911,10 @@ export async function bookingRoutes(app: FastifyInstance) {
         } else if (body.checkIn && body.checkOut) {
           units = Math.max(1, Math.ceil((new Date(body.checkOut).getTime() - new Date(body.checkIn).getTime()) / 86_400_000));
         }
-        const baseAmount = baseRate * units;
+        // Commission-inclusive base for percentage promos so the discount matches
+        // the inflated base the guest actually sees.
+        const commissionRateForPromo = await getCommissionRate(listing.country ?? null);
+        const baseAmount = Number((baseRate * units * (1 + commissionRateForPromo)).toFixed(2));
 
         const now = new Date();
         const activePromo = await (prisma as any).activityPromotion.findFirst({
@@ -1066,7 +1105,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         }, 240_000);
 
         // ── 9. BILLING (FIXED TYPES) ─────────────────
-        const commissionRate = await getCommissionRate(listing.country ?? null);
+        const commissionRate = commissionRateForPromo;
 
         const billing = calculateBilling({
           listingCategory: listing.category,
@@ -1111,7 +1150,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         const pricingPreview = {
           units: billing.units,
           baseAmount: billing.baseAmount,
-          nightlyRate: baseRate,
+          nightlyRate: commissionInclusiveRate(baseRate, commissionRate),
           promotionDiscount: billing.promotionDiscount,
           voucherDiscount: billing.voucherDiscount,
           serviceFee: billing.serviceFee,
@@ -1121,6 +1160,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           totalAmount: billing.totalAmount,
           currency: listing.currency,
           commissionRate,
+          serviceFeeRate: SERVICE_FEE_RATE,
           taxRate: getTaxRate(listing.country),
           // Generic platform-currency snapshot (charge currency + reference
           // guest-local amounts). The charge is always listing → platform.
@@ -1719,14 +1759,17 @@ export async function bookingRoutes(app: FastifyInstance) {
         // the actual platform-currency charge is captured on the payment at
         // charge time and recorded back here in `charged*` on confirmation).
         const breakdownBase: Record<string, number> = {
-          nightlyRate: listing.category !== "car" ? rate : 0,
-          dailyRate: listing.category === "car" ? rate : 0,
+          nightlyRate: listing.category !== "car" ? commissionInclusiveRate(rate, commissionRate) : 0,
+          dailyRate: listing.category === "car" ? commissionInclusiveRate(rate, commissionRate) : 0,
           units: finalBilling.units,
+          // Gross commission-inclusive base before discounts (rate × units).
+          baseAmount: finalBilling.baseAmount,
           subtotal,
           promotionDiscount,
           voucherDiscount: appliedVoucherDiscount,
           pointsDiscount,
           serviceFee: finalBilling.serviceFee,
+          serviceFeeRate: SERVICE_FEE_RATE,
           taxAmount: finalBilling.taxAmount,
           deliveryFee,
           securityDeposit,
@@ -2015,7 +2058,18 @@ export async function bookingRoutes(app: FastifyInstance) {
               const endDate = booking.checkOut ?? booking.returnDatetime;
               if (startDate && endDate) {
                 const listing = await tx.listing.findUnique({ where: { id: booking.listingId } });
-                const unitCount = Math.max(1, listing?.unitCount ?? 1);
+                const listingUnits = Math.max(1, listing?.unitCount ?? 1);
+                // Match the create-time check: when the booking is for a room
+                // type, the room type's unit count governs availability, not the
+                // listing's (which is usually null → 1). Otherwise the second
+                // overlapping booking on a multi-unit room type would pass
+                // creation but fail confirmation.
+                const unitCount = booking.roomTypeId
+                  ? (await tx.hotelRoomType.findUnique({
+                      where: { id: booking.roomTypeId },
+                      select: { unitCount: true },
+                    }))?.unitCount ?? listingUnits
+                  : listingUnits;
 
                 const conflicts = await tx.$queryRawUnsafe<{ id: string }[]>(`
                   SELECT id FROM listing.bookings
@@ -2617,6 +2671,7 @@ export async function bookingRoutes(app: FastifyInstance) {
   // guest-facing detail shape shared by the authed detail endpoint and the
   // anonymous magic-link manage endpoint.
   function buildBookingDetail(booking: any, canCancel: boolean): Record<string, unknown> {
+    const snapBreakdown = ((booking as any).priceBreakdownJson ?? {})?.breakdown as Record<string, unknown> | undefined;
     return {
       id: booking.id,
       reference: booking.reference,
@@ -2646,6 +2701,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       discountAmount: Number(booking.discountAmount),
       deliveryFee: Number(booking.deliveryFee),
       serviceFee: Number(booking.serviceFee),
+      serviceFeeRate: snapBreakdown?.serviceFeeRate != null ? Number(snapBreakdown.serviceFeeRate) : SERVICE_FEE_RATE,
       taxAmount: Number(booking.taxAmount),
       securityDeposit: Number(booking.securityDeposit ?? 0),
       voucherCode: booking.voucherCode ?? null,

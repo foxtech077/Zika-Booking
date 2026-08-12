@@ -27,6 +27,7 @@ interface PricingPreview {
   securityDeposit?: number;
   totalAmount: number;
   commissionRate?: number;
+  serviceFeeRate?: number;
   taxRate?: number;
   /** Platform (charge) currency — EUR for Stripe, XAF for Tara. */
   platformCurrency?: string;
@@ -101,6 +102,7 @@ interface ConfirmedBooking {
   securityDeposit?: number;
   deliveryFee?: number;
   commissionRate?: number;
+  serviceFeeRate?: number;
   taxRate?: number;
 }
 
@@ -426,6 +428,7 @@ export default function BookingReviewPage() {
     securityDeposit?: number,
     deliveryFee?: number,
     commissionRate?: number,
+    serviceFeeRate?: number,
     taxRate?: number,
   ) {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -462,7 +465,7 @@ export default function BookingReviewPage() {
             baseAmount: base, serviceFee: fee, taxes: tax, discount: disc,
             securityDeposit,
             deliveryFee,
-            commissionRate, taxRate,
+            commissionRate, serviceFeeRate, taxRate,
           });
           sessionStorage.removeItem("zika:checkout");
           setStep("confirmed");
@@ -578,7 +581,7 @@ export default function BookingReviewPage() {
         pmId = payRes.data.data.paymentId as string;
         setPaymentId(pmId);
         setStep("polling");
-        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money", ctx.pricingPreview?.securityDeposit, ctx.pricingPreview?.deliveryFee, ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.taxRate);
+        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money", ctx.pricingPreview?.securityDeposit, ctx.pricingPreview?.deliveryFee, ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.serviceFeeRate, ctx.pricingPreview?.taxRate);
       }
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message ?? err?.response?.data?.message ?? err?.message ?? "Something went wrong.";
@@ -600,7 +603,7 @@ export default function BookingReviewPage() {
         setPayError(result.error.message ?? "Card payment failed. Please check your details.");
       } else {
         setStep("polling");
-        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Card", ctx!.pricingPreview?.securityDeposit, ctx!.pricingPreview?.deliveryFee, ctx!.pricingPreview?.commissionRate, ctx!.pricingPreview?.taxRate);
+        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Card", ctx!.pricingPreview?.securityDeposit, ctx!.pricingPreview?.deliveryFee, ctx!.pricingPreview?.commissionRate, ctx!.pricingPreview?.serviceFeeRate, ctx!.pricingPreview?.taxRate);
       }
     } catch (err: any) {
       setPayError(err?.message ?? "Card payment failed.");
@@ -1261,7 +1264,7 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
             <span>{ctx.currency} {fmt(pricing.subtotal)}</span>
           </div>
           <div className="flex justify-between text-slate-600">
-            <span>Service fee{ctx.pricingPreview?.commissionRate ? ` (${Math.round(ctx.pricingPreview.commissionRate * 100)}%)` : ''}</span>
+            <span>Service fee{ctx.pricingPreview?.serviceFeeRate ? ` (${Math.round(ctx.pricingPreview.serviceFeeRate * 100)}%)` : ''}</span>
             <span>{ctx.currency} {fmt(pricing.serviceFee)}</span>
           </div>
           {pricing.taxes > 0 && (
@@ -1394,7 +1397,7 @@ function ConfirmedView({
             </div>
           )}
           <div className="flex justify-between text-slate-600">
-            <span>Service fee{confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}</span>
+            <span>Service fee{confirmed.serviceFeeRate ? ` (${Math.round(confirmed.serviceFeeRate * 100)}%)` : ''}</span>
             <span>{confirmed.currency} {fmt(confirmed.serviceFee)}</span>
           </div>
           {confirmed.taxes > 0 && (
@@ -1530,7 +1533,7 @@ function VoucherLayout({
       <VoucherSection title="Itemised Receipt">
         <VoucherRow label="Base amount" value={lv(confirmed.baseAmount)} />
         {confirmed.discount > 0 && <VoucherRow label="Discount" value={`−${lv(confirmed.discount)}`} />}
-        <VoucherRow label={`Service fee${confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}`} value={lv(confirmed.serviceFee)} />
+        <VoucherRow label={`Service fee${confirmed.serviceFeeRate ? ` (${Math.round(confirmed.serviceFeeRate * 100)}%)` : ''}`} value={lv(confirmed.serviceFee)} />
         {confirmed.taxes > 0 && <VoucherRow label={`Taxes${confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}`} value={lv(confirmed.taxes)} />}
         {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && <VoucherRow label="Security deposit" value={lv(confirmed.securityDeposit)} />}
         <VoucherRow label="Total Paid" value={totalDisplay} bold />

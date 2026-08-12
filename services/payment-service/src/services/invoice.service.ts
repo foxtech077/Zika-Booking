@@ -16,8 +16,21 @@ export interface InvoiceCharge {
  * with the listing amount muted — no conversion math is displayed per line.
  */
 export function buildInvoice(booking: any, charge?: InvoiceCharge | null) {
-  const baseAmount = Number(booking.subtotal || 0) + Number(booking.deliveryFee || 0);
-  const discount = Number(booking.discountAmount || 0) + Number(booking.voucherDiscount || 0);
+  const breakdown = ((booking.priceBreakdownJson ?? {})?.breakdown ?? {}) as Record<string, unknown>;
+  const deliveryFee = Number(booking.deliveryFee || 0);
+  // booking.subtotal is the post-discount subtotal. Read the gross
+  // commission-inclusive base and the full discount from the price snapshot
+  // (what was actually charged); fall back to reconstructing the gross from the
+  // booking columns for older bookings without a snapshot.
+  const discount =
+    breakdown.discountAmount != null
+      ? Number(breakdown.discountAmount)
+      : Number(booking.discountAmount || 0) + Number(booking.voucherDiscount || 0);
+  const grossBase =
+    breakdown.baseAmount != null
+      ? Number(breakdown.baseAmount)
+      : Number(booking.subtotal || 0) + discount;
+  const baseAmount = grossBase + deliveryFee;
   const serviceFee = Number(booking.serviceFee || 0);
   const tax = Number(booking.taxAmount || 0);
   const securityDeposit = Number(booking.securityDeposit || 0);

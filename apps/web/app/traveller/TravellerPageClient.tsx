@@ -1396,6 +1396,7 @@ export default function TravellerDashboard() {
           // runs before a pricing preview exists; without it that path silently
           // computed a 0% service fee.
           commissionRate: item.commissionRate ?? null,
+          serviceFeeRate: item.serviceFeeRate ?? null,
           deliveryAvailable: !!item.deliveryEnabled,
           deliveryFee: item.deliveryFee != null ? Number(item.deliveryFee) : null,
           deliveryRadiusKm: item.deliveryRadiusKm != null ? Number(item.deliveryRadiusKm) : null,
@@ -2144,6 +2145,7 @@ export default function TravellerDashboard() {
       // Carried through so checkout's no-preview fallback uses the same
       // country rate the listing page quoted, instead of a hardcoded guess.
       commissionRate: detailListing.commissionRate ?? undefined,
+      serviceFeeRate: detailListing.serviceFeeRate ?? undefined,
     };
     sessionStorage.setItem("zika:checkout", JSON.stringify(ctx));
     router.push("/booking/review");
@@ -2761,7 +2763,7 @@ export default function TravellerDashboard() {
                                   </div>
                                 )}
                                 <div className="flex justify-between">
-                                  <span>Service fee{estimatedPricing.commissionRate ? ` (${Math.round(estimatedPricing.commissionRate * 100)}%)` : ''}</span>
+                                  <span>Service fee{estimatedPricing.serviceFeeRate ? ` (${Math.round(estimatedPricing.serviceFeeRate * 100)}%)` : ''}</span>
                                   <span>{detailListing.currency} {estimatedPricing.serviceFee.toLocaleString()}</span>
                                 </div>
                                 {estimatedPricing.taxAmount > 0 && (
@@ -2922,7 +2924,7 @@ export default function TravellerDashboard() {
                                   </div>
                                 )}
                                 <div className="flex justify-between text-slate-500">
-                                  <span>Service fee{pricingPreview?.commissionRate ? ` (${Math.round(pricingPreview.commissionRate * 100)}%)` : ''}</span>
+                                  <span>Service fee{pricingPreview?.serviceFeeRate ? ` (${Math.round(pricingPreview.serviceFeeRate * 100)}%)` : ''}</span>
                                   <span>{listingValue(serviceFee)}</span>
                                 </div>
                                 {taxAmount > 0 && (
@@ -3044,7 +3046,7 @@ export default function TravellerDashboard() {
                                     <span>−{listingValue(discount)}</span>
                                   </div>
                                 )}
-                                <div className="flex justify-between"><span>Service fee{pricingPreview?.commissionRate ? ` (${Math.round(pricingPreview.commissionRate * 100)}%)` : ''}</span><span>{listingValue(serviceFee)}</span></div>
+                                <div className="flex justify-between"><span>Service fee{pricingPreview?.serviceFeeRate ? ` (${Math.round(pricingPreview.serviceFeeRate * 100)}%)` : ''}</span><span>{listingValue(serviceFee)}</span></div>
                                 {taxAmount > 0 && (
                                   <div className="flex justify-between text-slate-500">
                                     <span>Taxes{pricingPreview?.taxRate ? ` (${Math.round(pricingPreview.taxRate * 100)}%)` : ''}</span>

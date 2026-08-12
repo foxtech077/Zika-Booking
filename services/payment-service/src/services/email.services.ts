@@ -35,12 +35,17 @@ export async function sendGuestEmail(
   const dateLabel = isCar
     ? `Pick-up: ${booking.pickupDatetime ? new Date(booking.pickupDatetime).toLocaleString("en-GB") : "—"}<br>Return: ${booking.returnDatetime ? new Date(booking.returnDatetime).toLocaleString("en-GB") : "—"}`
     : `Check-in: ${booking.checkIn ? new Date(booking.checkIn).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—"}<br>Check-out: ${booking.checkOut ? new Date(booking.checkOut).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—"}`;
-  const commissionPct = booking.commissionRate ? Math.round(Number(booking.commissionRate) * 100) : 0;
+  const serviceFeePct = booking.serviceFeeRate ? Math.round(Number(booking.serviceFeeRate) * 100) : 0;
   const listingCurrency = invoice.listingCurrency ?? (booking.currency ?? "").toUpperCase();
   const platformCurrency = invoice.platform?.currency ?? listingCurrency;
   const platformAmount = invoice.platform?.amount ?? invoice.total;
   const listingTotal = invoice.total;
-  const nightlyRate = Number(booking.nightlyRate ?? booking.dailyRate ?? 0);
+  // Use the commission-inclusive per-night rate from the booking's price
+  // snapshot so the receipt line reconciles with the subtotal. The stored
+  // nightlyRate/dailyRate columns hold the raw base rate, and the internal
+  // fetch does not select them anyway — falling back to the snapshot first.
+  const snapRate = booking.priceBreakdownJson?.breakdown?.nightlyRate ?? booking.priceBreakdownJson?.breakdown?.dailyRate;
+  const nightlyRate = Number(snapRate ?? booking.nightlyRate ?? booking.dailyRate ?? 0);
 
   await sgMail.send({
     to: booking.user.email ?? ["EMAIL_ADDRESS"],
@@ -62,10 +67,10 @@ export async function sendGuestEmail(
 
       <h3 style="color:#1e293b;font-size:14px;margin:20px 0 8px">Receipt</h3>
       <table style="width:100%;border-collapse:collapse;margin:8px 0">
-        <tr><td style="padding:6px 8px;color:#6b7280">${listingCurrency} ${fmt(nightlyRate)} × ${booking.nightsOrDays} ${unitLabel}${booking.nightsOrDays !== 1 ? "s" : ""}</td><td style="padding:6px 8px;text-align:right">${money(invoice.baseAmount, listingCurrency)}</td></tr>
+        <tr><td style="padding:6px 8px;color:#6b7280">${listingCurrency} ${fmt(nightlyRate, listingCurrency)} × ${booking.nightsOrDays} ${unitLabel}${booking.nightsOrDays !== 1 ? "s" : ""}</td><td style="padding:6px 8px;text-align:right">${money(invoice.baseAmount, listingCurrency)}</td></tr>
         ${Number(invoice.discount) > 0 ? `<tr><td style="padding:6px 8px;color:#15803d">Discount</td><td style="padding:6px 8px;text-align:right;color:#15803d">−${money(invoice.discount, listingCurrency)}</td></tr>` : ''}
         <tr><td style="padding:6px 8px;border-top:1px solid #e5e7eb;color:#6b7280">Subtotal</td><td style="padding:6px 8px;border-top:1px solid #e5e7eb;text-align:right">${money(invoice.subtotal, listingCurrency)}</td></tr>
-        <tr><td style="padding:6px 8px;color:#6b7280">Service fee${commissionPct > 0 ? ` (${commissionPct}%)` : ''}</td><td style="padding:6px 8px;text-align:right">${money(invoice.serviceFee, listingCurrency)}</td></tr>
+        <tr><td style="padding:6px 8px;color:#6b7280">Service fee${serviceFeePct > 0 ? ` (${serviceFeePct}%)` : ''}</td><td style="padding:6px 8px;text-align:right">${money(invoice.serviceFee, listingCurrency)}</td></tr>
         ${Number(invoice.tax) > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Taxes</td><td style="padding:6px 8px;text-align:right">${money(invoice.tax, listingCurrency)}</td></tr>` : ''}
         ${isCar && Number(invoice.securityDeposit) > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Security deposit</td><td style="padding:6px 8px;text-align:right">${money(invoice.securityDeposit, listingCurrency)}</td></tr>` : ''}
         <tr>
