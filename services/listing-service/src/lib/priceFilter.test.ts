@@ -51,13 +51,32 @@ test("price_max filters on the commission-inclusive, FX-converted price (the rep
 });
 
 test("without a target currency the filter only bakes in commission (no FX, no ceiling)", () => {
-  const r = build({ priceMax: 1, targetCurrency: null, usdToTargetRate: null });
+  const r = build({ category: "apartment", priceMax: 1, targetCurrency: null, usdToTargetRate: null });
   assert.ok(r.clause!.includes("ROUND(l.price_per_night * (1 + "), "commission-inclusive rounding");
   assert.ok(r.clause!.includes(", 2)"), "2-decimal rounding");
   assert.ok(!r.clause!.includes("exchange_rates er"), "no fx join without target currency");
   assert.ok(!r.clause!.includes("CEIL("), "no ceiling without conversion");
   assert.ok(!r.joins.includes("exchange_rates er"), "no fx join in FROM");
   assert.deepEqual(r.params, [0.05, 1]);
+});
+
+test("hotels price from the min active room type, falling back to the listing column", () => {
+  const r = build({ priceMax: 1, targetCurrency: "USD", usdToTargetRate: 1 });
+  // The listing-level price column is often NULL when room types exist; the
+  // filter must use the cheapest active room type exactly like the response
+  // builder, so such hotels are not silently dropped from price-filtered searches.
+  assert.ok(
+    r.clause!.includes(
+      "COALESCE((SELECT MIN(hrt.price_per_night) FROM listing.hotel_room_types hrt WHERE hrt.listing_id = l.id AND hrt.is_active = true), l.price_per_night)",
+    ),
+    "hotel price expression uses min active room type with listing-column fallback",
+  );
+});
+
+test("apartments filter on the listing price column directly (no room-type subquery)", () => {
+  const r = build({ category: "apartment", priceMax: 1, targetCurrency: "USD", usdToTargetRate: 1 });
+  assert.ok(r.clause!.includes("l.price_per_night"));
+  assert.ok(!r.clause!.includes("hotel_room_types"), "no room-type subquery for apartments");
 });
 
 test("zero-decimal target currencies ceiling to a whole number (no /100)", () => {
