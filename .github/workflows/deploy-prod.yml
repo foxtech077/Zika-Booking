@@ -90,15 +90,29 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_PROD_DEPLOY_ROLE_ARN }}
           aws-region: af-south-1
-      # All services deploy in parallel — each runs `prisma migrate deploy` for
-      # its own schema on boot, and the ALB target-group health checks gate
+      # Deploy by registering a NEW task definition per service with the image
+      # pinned to the exact prod-<sha> just built, then updating the service to
+      # it. The existing task definitions (registered manually) pin older images,
+      # which is why --force-new-deployment alone kept re-deploying stale code
+      # while services-stable passed. The ALB target-group health checks gate
       # services-stable, so a broken task fails the deployment.
       - name: Deploy all services in parallel
         timeout-minutes: 30
         run: |
-          aws ecs update-service --cluster kainook-prod-cluster --service kainook-auth --force-new-deployment --region af-south-1
-          aws ecs update-service --cluster kainook-prod-cluster --service kainook-listing --force-new-deployment --region af-south-1
-          aws ecs update-service --cluster kainook-prod-cluster --service kainook-payment --force-new-deployment --region af-south-1
-          aws ecs update-service --cluster kainook-prod-cluster --service kainook-web --force-new-deployment --region af-south-1
-          aws ecs update-service --cluster kainook-prod-cluster --service kainook-admin --force-new-deployment --region af-south-1
+          set -euo pipefail
+          SHA="${{ github.sha }}"
+          for spec in \
+            "kainook-auth:auth-service:zika/auth-service" \
+            "kainook-listing:listing-service:zika/listing-service" \
+            "kainook-payment:payment-service:zika/payment-service" \
+            "kainook-web:web:zika/web" \
+            "kainook-admin:admin:zika/admin"; do
+            IFS=':' read -r ecs_svc _ img <<< "$spec"
+            NEW_IMAGE="${{ env.ECR_REGISTRY }}/$img:prod-$SHA"
+            TD=$(aws ecs describe-task-definition --task-definition "$ecs_svc" --query 'taskDefinition' --output json)
+            NEW_TD=$(printf '%s' "$TD" | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy, .deregisteredAt, .taskDefinitionId) | .containerDefinitions[].image = $image' --arg image "$NEW_IMAGE")
+            REV=$(aws ecs register-task-definition --cli-input-json "$NEW_TD" --query 'taskDefinition.revision' --output text)
+            aws ecs update-service --cluster kainook-prod-cluster --service "$ecs_svc" --task-definition "$ecs_svc:$REV" --force-new-deployment --region af-south-1
+            echo "deployed $ecs_svc -> $NEW_IMAGE (task-def rev $REV)"
+          done
           aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-auth kainook-listing kainook-payment kainook-web kainook-admin --region af-south-1
