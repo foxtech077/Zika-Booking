@@ -7,7 +7,7 @@ COPY packages/types/package.json ./packages/types/
 COPY packages/validators/package.json ./packages/validators/
 COPY services/payment-service/package.json ./services/payment-service/
 COPY services/payment-service/prisma ./services/payment-service/prisma/
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts --filter @zika/payment-service... --store-dir /pnpm/store
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts --store-dir /pnpm/store
 COPY packages/ ./packages/
 COPY services/payment-service/ ./services/payment-service/
 RUN pnpm --filter @zika/types build

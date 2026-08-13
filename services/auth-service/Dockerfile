@@ -7,7 +7,7 @@ COPY packages/types/package.json ./packages/types/
 COPY packages/validators/package.json ./packages/validators/
 COPY services/auth-service/package.json ./services/auth-service/
 COPY services/auth-service/prisma ./services/auth-service/prisma/
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts --filter @zika/auth-service... --store-dir /pnpm/store
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts --store-dir /pnpm/store
 COPY packages/ ./packages/
 COPY services/auth-service/ ./services/auth-service/
 RUN pnpm --filter @zika/types build
