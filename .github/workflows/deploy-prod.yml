@@ -57,6 +57,9 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           push: true
+          # Prod builds are always fully fresh — no layer cache reuse at all, so a
+          # stale cached layer can never be deployed. Slower, but deterministic.
+          no-cache: true
           tags: |
             ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
             ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:prod-${{ github.sha }}
