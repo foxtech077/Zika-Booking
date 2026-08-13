@@ -75,21 +75,15 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_PROD_DEPLOY_ROLE_ARN }}
           aws-region: af-south-1
-      - name: Deploy auth-service (owns migrations for auth, listing, payments)
+      # All services deploy in parallel — each runs `prisma migrate deploy` for
+      # its own schema on boot, and the ALB target-group health checks gate
+      # services-stable, so a broken task fails the deployment.
+      - name: Deploy all services in parallel
+        timeout-minutes: 30
         run: |
           aws ecs update-service --cluster kainook-prod-cluster --service kainook-auth --force-new-deployment --region af-south-1
-          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-auth --region af-south-1
-      - name: Deploy listing-service
-        run: |
           aws ecs update-service --cluster kainook-prod-cluster --service kainook-listing --force-new-deployment --region af-south-1
-          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-listing --region af-south-1
-      - name: Deploy payment-service
-        run: |
           aws ecs update-service --cluster kainook-prod-cluster --service kainook-payment --force-new-deployment --region af-south-1
-          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-payment --region af-south-1
-      - name: Deploy web and admin
-        run: |
           aws ecs update-service --cluster kainook-prod-cluster --service kainook-web --force-new-deployment --region af-south-1
           aws ecs update-service --cluster kainook-prod-cluster --service kainook-admin --force-new-deployment --region af-south-1
-          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-web --region af-south-1
-          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-admin --region af-south-1
+          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-auth kainook-listing kainook-payment kainook-web kainook-admin --region af-south-1
