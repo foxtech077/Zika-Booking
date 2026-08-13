@@ -171,12 +171,17 @@ export default function DateRangePickerModal({
     if (!selStart || (selStart && selEnd)) {
       setSelStart(ds);
       setSelEnd(null);
+    } else if (ds <= selStart) {
+      setSelStart(ds);
+      setSelEnd(null);
     } else {
-      if (ds <= selStart) {
-        setSelStart(ds);
-        setSelEnd(null);
-      } else {
-        setSelEnd(ds);
+      setSelEnd(ds);
+      // Completing the range is the confirmation — no separate Apply step.
+      // Car rentals are the exception: pickup and return times are chosen in
+      // this same sheet, so closing here would silently commit the defaults.
+      if (!isCar) {
+        onConfirm(selStart, ds);
+        onClose();
       }
     }
   }
@@ -386,20 +391,23 @@ export default function DateRangePickerModal({
             </View>
           )}
 
-          {/* Action buttons */}
+          {/* Stays commit on the second date tap, so only Clear is offered.
+              Cars still need a confirm step to lock in the times above. */}
           <View style={s.actionsRow}>
             {selStart && (
               <TouchableOpacity style={s.clearBtn} onPress={resetPicker}>
                 <Text style={s.clearBtnText}>Clear</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity
-              style={[s.confirmBtn, !canConfirm && s.confirmBtnDisabled]}
-              disabled={!canConfirm}
-              onPress={handleConfirm}
-            >
-              <Text style={s.confirmBtnText}>Apply Dates</Text>
-            </TouchableOpacity>
+            {isCar && (
+              <TouchableOpacity
+                style={[s.confirmBtn, !canConfirm && s.confirmBtnDisabled]}
+                disabled={!canConfirm}
+                onPress={handleConfirm}
+              >
+                <Text style={s.confirmBtnText}>Confirm dates & times</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       </SafeAreaView>

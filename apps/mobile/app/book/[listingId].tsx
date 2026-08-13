@@ -38,6 +38,7 @@ interface PricingPreview {
   subtotal: number;
   discountAmount?: number;
   serviceFee?: number;
+  serviceFeeRate?: number;
   taxAmount?: number;
   deliveryFee?: number;
   securityDeposit?: number;
@@ -45,16 +46,50 @@ interface PricingPreview {
   currency: string;
   cancellationPolicyName?: string;
   // Charge currency returned by /bookings/initiate — EUR for Stripe, XAF for
-  // Tara. The breakdown above stays in the listing currency; these describe
-  // what the card/mobile-money account is actually debited.
+  // Tara. Independent of the display currency below; these describe what the
+  // card/mobile-money account is actually debited.
   platformCurrency?: string | null;
   platformAmount?: number | null;
   platformRate?: number | null;
-  // Aggregate reference total in the guest's display currency (never
-  // converted client-side) — line items above never convert individually,
-  // since independent per-line conversions would not sum back to this total.
+  // Itemised equivalents in the guest's display currency, all computed
+  // server-side from a single rate so the lines still sum to the total.
+  // Present only when the API could convert; fall back to the raw field.
   localizedCurrency?: string | null;
+  localizedRatePerUnit?: number | null;
+  localizedSubtotal?: number | null;
+  localizedDiscountAmount?: number | null;
+  localizedServiceFee?: number | null;
+  localizedTaxAmount?: number | null;
+  localizedDeliveryFee?: number | null;
+  localizedSecurityDeposit?: number | null;
   localizedTotal?: number | null;
+}
+
+/**
+ * Pull the guest-display-currency lines out of a raw pricing payload.
+ * Every value is converted server-side off a single rate, so the lines still
+ * sum to the total — that's why none of this is ever computed locally.
+ * `localizedCurrency` is null when the API couldn't convert, and each render
+ * site falls back to the raw field in the listing's own currency.
+ */
+function mapLocalizedPricing(raw: any, units: number): Partial<PricingPreview> {
+  const subtotal = raw.localizedBaseAmount ?? null;
+  return {
+    localizedCurrency: raw.localizedCurrency ?? null,
+    // Derived from the converted subtotal rather than localizedNightlyRate so
+    // that rate × units always reconciles with the subtotal line shown below it.
+    localizedRatePerUnit: subtotal != null && units > 0 ? subtotal / units : null,
+    localizedSubtotal: subtotal,
+    localizedDiscountAmount: raw.localizedPromotionDiscount ?? null,
+    localizedServiceFee: raw.localizedServiceFee ?? null,
+    localizedTaxAmount: raw.localizedTaxAmount ?? null,
+    localizedDeliveryFee: raw.localizedDeliveryFee ?? null,
+    localizedSecurityDeposit: raw.localizedSecurityDeposit ?? null,
+    // localizedTotalAmount comes from the same conversion as the lines above;
+    // localCurrencyAmount is the platform-snapshot aggregate, used only as a
+    // fallback for payloads that predate the itemised fields.
+    localizedTotal: raw.localizedTotalAmount ?? raw.localCurrencyAmount ?? null,
+  };
 }
 
 interface LockState {
@@ -345,12 +380,12 @@ export default function BookingFlowScreen() {
         subtotal: rebookBaseAmount,
         discountAmount: raw.promotionDiscount || undefined,
         serviceFee: raw.serviceFee ?? undefined,
+        serviceFeeRate: raw.serviceFeeRate ?? undefined,
         taxAmount: raw.taxAmount ?? undefined,
         deliveryFee: raw.deliveryFee ?? undefined,
         total: raw.totalAmount ?? 0,
         currency: raw.currency ?? "",
-        localizedCurrency: raw.localizedCurrency ?? null,
-        localizedTotal: raw.localCurrencyAmount ?? null,
+        ...mapLocalizedPricing(raw, rebookUnits),
       };
 
       const lockStateObj = {
@@ -515,6 +550,7 @@ export default function BookingFlowScreen() {
           subtotal: baseAmount,
           discountAmount: raw.promotionDiscount || undefined,
           serviceFee: raw.serviceFee ?? undefined,
+          serviceFeeRate: raw.serviceFeeRate ?? undefined,
           taxAmount: raw.taxAmount ?? undefined,
           deliveryFee: raw.deliveryFee ?? undefined,
           securityDeposit: raw.securityDeposit ?? undefined,
@@ -523,8 +559,7 @@ export default function BookingFlowScreen() {
           platformRate: raw.platformRate ?? null,
           total: raw.totalAmount ?? 0,
           currency: raw.currency ?? "",
-          localizedCurrency: raw.localizedCurrency ?? null,
-          localizedTotal: raw.localCurrencyAmount ?? null,
+          ...mapLocalizedPricing(raw, units),
         };
 
         const lockStateObj = {
@@ -625,6 +660,11 @@ export default function BookingFlowScreen() {
                 subtotal: baseAmount,
                 discountAmount: raw.promotionDiscount || undefined,
                 serviceFee: raw.serviceFee ?? undefined,
+                // /bookings/pricing-estimate doesn't return serviceFeeRate (only
+                // /bookings/initiate does), so fall back to the rate the initial
+                // quote already gave us — otherwise re-quoting after a delivery
+                // toggle drops the "(4%)" off the Service fee label mid-checkout.
+                serviceFeeRate: raw.serviceFeeRate ?? prev.pricingPreview?.serviceFeeRate,
                 taxAmount: raw.taxAmount ?? undefined,
                 deliveryFee: raw.deliveryFee ?? undefined,
                 securityDeposit: raw.securityDeposit ?? undefined,
@@ -633,8 +673,7 @@ export default function BookingFlowScreen() {
                 platformRate: raw.platformRate ?? null,
                 total: raw.totalAmount ?? 0,
                 currency: raw.currency ?? "",
-                localizedCurrency: raw.localizedCurrency ?? null,
-                localizedTotal: raw.localCurrencyAmount ?? null,
+                ...mapLocalizedPricing(raw, units),
               },
             }
             : prev,
@@ -1013,6 +1052,33 @@ export default function BookingFlowScreen() {
         : `${formatCurrency(parseFloat(checkoutPromo.discountValue) || 0, pricing?.currency ?? "")} OFF`
       : null;
 
+  // ── Breakdown display currency ───────────────────────────────────────────
+  // The breakdown converts as a unit or not at all. Two amounts on this screen
+  // have no server-converted twin: the voucher discount (validated in the
+  // listing's currency) and the promo discount this screen computes itself
+  // because /bookings/initiate stubs promotionDiscount to 0. Converting the
+  // lines around either one would leave a total its own lines don't add up to,
+  // so in that case everything stays exact and the converted figure is shown
+  // as a separate "Approx." reference instead.
+  const hasClientSideDiscount =
+    (voucherDiscount ?? 0) > 0 || (pricing?.discountAmount == null && promoDiscountTotal > 0);
+  // localizedCurrency alone doesn't mean a conversion happened — the backend
+  // also returns it (equal to the listing's own currency) for the identity
+  // case. And with only the aggregate fields present, every dispAmt would fall
+  // back to a raw listing-currency amount under a swapped label. Both must hold.
+  const showLocalized = !!pricing?.localizedCurrency
+    && pricing.localizedCurrency !== pricing.currency
+    && pricing.localizedSubtotal != null
+    && !hasClientSideDiscount;
+  const dispCurrency = showLocalized ? pricing!.localizedCurrency! : (pricing?.currency ?? "");
+  const dispPrefix = showLocalized ? "~" : "";
+  /** Pick the converted value when the whole breakdown is converted, else the raw one. */
+  const dispAmt = (localized: number | null | undefined, raw: number) =>
+    showLocalized ? (localized ?? raw) : raw;
+  /** Same, pre-formatted with the display currency and the "~" approximation mark. */
+  const dispFmt = (localized: number | null | undefined, raw: number) =>
+    `${dispPrefix}${formatCurrency(dispAmt(localized, raw), dispCurrency)}`;
+
   return (
     <View style={styles.container}>
       {/* Dynamic header title */}
@@ -1270,11 +1336,12 @@ export default function BookingFlowScreen() {
 
                 <View style={styles.priceRow}>
                   <Text style={styles.priceLabel}>
-                    Rate: {pricing.currency} {(pricing.ratePerUnit ?? 0).toLocaleString()} × {pricing.units ?? 0}{" "}
+                    Rate: {dispPrefix}{dispCurrency}{" "}
+                    {dispAmt(pricing.localizedRatePerUnit, pricing.ratePerUnit ?? 0).toLocaleString()} × {pricing.units ?? 0}{" "}
                     {pricing.unitLabel}
                   </Text>
                   <Text style={[styles.priceValue, promo.hasPromotion && styles.originalPriceStrike]}>
-                    {formatCurrency(pricing.subtotal, pricing.currency)}
+                    {dispFmt(pricing.localizedSubtotal, pricing.subtotal)}
                   </Text>
                 </View>
 
@@ -1304,7 +1371,7 @@ export default function BookingFlowScreen() {
                             {bothExist ? " ✓ Best deal" : ""}
                           </Text>
                           <Text style={[styles.priceValue, styles.discountValue]}>
-                            – {formatCurrency(bestAmt, pricing.currency)}
+                            {dispPrefix}– {formatCurrency(dispAmt(pricing.localizedDiscountAmount, bestAmt), dispCurrency)}
                           </Text>
                         </View>
                         {bothExist && (
@@ -1317,7 +1384,14 @@ export default function BookingFlowScreen() {
                         <View style={styles.priceRow}>
                           <Text style={styles.subtotalLabel}>Subtotal</Text>
                           <Text style={styles.subtotalValue}>
-                            {formatCurrency(Math.max(0, pricing.subtotal - bestAmt), pricing.currency)}
+                            {dispPrefix}{formatCurrency(
+                              Math.max(
+                                0,
+                                dispAmt(pricing.localizedSubtotal, pricing.subtotal)
+                                - dispAmt(pricing.localizedDiscountAmount, bestAmt),
+                              ),
+                              dispCurrency,
+                            )}
                           </Text>
                         </View>
                       </View>
@@ -1329,10 +1403,10 @@ export default function BookingFlowScreen() {
                 {pricing.serviceFee != null && pricing.serviceFee > 0 && (
                   <View style={styles.priceRow}>
                     <Text style={styles.priceLabel}>
-                      Service fee ({Math.round((pricing.serviceFee / Math.max(1, pricing.subtotal - (pricing.discountAmount ?? promoDiscountTotal))) * 100)}%)
+                      Service fee{pricing.serviceFeeRate ? ` (${Math.round(pricing.serviceFeeRate * 100)}%)` : ''}
                     </Text>
                     <Text style={styles.priceValue}>
-                      + {formatCurrency(pricing.serviceFee, pricing.currency)}
+                      + {dispFmt(pricing.localizedServiceFee, pricing.serviceFee)}
                     </Text>
                   </View>
                 )}
@@ -1341,7 +1415,7 @@ export default function BookingFlowScreen() {
                   <View style={styles.priceRow}>
                     <Text style={styles.priceLabel}>Taxes</Text>
                     <Text style={styles.priceValue}>
-                      + {formatCurrency(pricing.taxAmount, pricing.currency)}
+                      + {dispFmt(pricing.localizedTaxAmount, pricing.taxAmount)}
                     </Text>
                   </View>
                 )}
@@ -1350,7 +1424,7 @@ export default function BookingFlowScreen() {
                   <View style={styles.priceRow}>
                     <Text style={styles.priceLabel}>Delivery</Text>
                     <Text style={styles.priceValue}>
-                      + {formatCurrency(pricing.deliveryFee, pricing.currency)}
+                      + {dispFmt(pricing.localizedDeliveryFee, pricing.deliveryFee)}
                     </Text>
                   </View>
                 )}
@@ -1359,7 +1433,7 @@ export default function BookingFlowScreen() {
                   <View style={styles.priceRow}>
                     <Text style={styles.priceLabel}>Security deposit</Text>
                     <Text style={styles.priceValue}>
-                      + {formatCurrency(pricing.securityDeposit, pricing.currency)}
+                      + {dispFmt(pricing.localizedSecurityDeposit, pricing.securityDeposit)}
                     </Text>
                   </View>
                 )}
@@ -1375,25 +1449,49 @@ export default function BookingFlowScreen() {
                   const sDep = pricing.securityDeposit ?? 0;
 
                   // Total = Subtotal after discount + Service fee + Taxes + Delivery fee + Security deposit
-                  const displayTotal = subAfterDiscount + sFee + tFee + dFee + sDep;
+                  const exactTotal = subAfterDiscount + sFee + tFee + dFee + sDep;
+                  // Summed from the same values the lines above render, so a
+                  // converted breakdown always adds up to its own total rather
+                  // than to a separately-converted grand total.
+                  const displayTotal = showLocalized
+                    ? Math.max(
+                      0,
+                      dispAmt(pricing.localizedSubtotal, pricing.subtotal)
+                      - dispAmt(pricing.localizedDiscountAmount, bestAmt),
+                    )
+                    + dispAmt(pricing.localizedServiceFee, sFee)
+                    + dispAmt(pricing.localizedTaxAmount, tFee)
+                    + dispAmt(pricing.localizedDeliveryFee, dFee)
+                    + dispAmt(pricing.localizedSecurityDeposit, sDep)
+                    : exactTotal;
                   // Cards are charged in EUR and Tara in XAF, so when the
                   // charge currency differs from the listing's, show what the
                   // account is actually debited rather than leaving the guest
-                  // to discover it at the payment sheet.
-                  const platform = derivePlatform(pricing, pricing.currency, displayTotal);
+                  // to discover it at the payment sheet. Always derived from the
+                  // listing-currency total — the display currency is a browsing
+                  // preference and must never drive the real charge.
+                  const platform = derivePlatform(pricing, pricing.currency, exactTotal);
                   return (
                     <>
                       <View style={[styles.priceRow, styles.totalRow]}>
                         <Text style={styles.totalLabel}>Total</Text>
                         <Text style={styles.totalValue}>
-                          {formatCurrency(displayTotal, pricing.currency)}
+                          {dispPrefix}{formatCurrency(displayTotal, dispCurrency)}
                         </Text>
                       </View>
-                      {/* Approx. reference in the guest's display currency — only
-                          shown when no voucher is applied, since the backend's
-                          localizedTotal (like its exact totalAmount) never
-                          accounts for a voucher discount. */}
-                      {voucherAmt === 0 && pricing.localizedCurrency && pricing.localizedTotal != null && (
+                      {/* When the breakdown is converted the total above is
+                          already in the guest's currency, so show the exact
+                          listing-currency figure instead. When it isn't
+                          converted (voucher or client-side promo in play), fall
+                          back to the aggregate approximation. */}
+                      {showLocalized ? (
+                        <View style={styles.priceRow}>
+                          <Text style={styles.priceLabel}>Exact ({pricing.currency})</Text>
+                          <Text style={styles.priceValue}>
+                            {formatCurrency(exactTotal, pricing.currency)}
+                          </Text>
+                        </View>
+                      ) : voucherAmt === 0 && pricing.localizedCurrency && pricing.localizedTotal != null && (
                         <View style={styles.priceRow}>
                           <Text style={styles.priceLabel}>Approx.</Text>
                           <Text style={styles.priceValue}>

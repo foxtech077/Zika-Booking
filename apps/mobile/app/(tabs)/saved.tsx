@@ -63,7 +63,7 @@ function priceLabel(listing: FavouriteListing): string {
   const rate = listing.localizedNightlyRate ?? listing.nightlyRate;
   if (rate == null) return "Price on request";
   const unit = listing.category === "car" ? "day" : "night";
-  return `${approxPrefix(listing.localizedCurrency)}${listing.localizedCurrency ?? listing.currency ?? ""} ${rate.toLocaleString()} / ${unit}`;
+  return `${approxPrefix(listing.localizedCurrency, listing.currency)}${listing.localizedCurrency ?? listing.currency ?? ""} ${rate.toLocaleString()} / ${unit}`;
 }
 
 function categoryLabel(cat: string): string {
@@ -102,7 +102,7 @@ function SavedCard({ item, onRemove, removePending, signedPhotoUrl, promotion }:
   const unit = listing.category === "car" ? "day" : "night";
   const rate = listing.localizedNightlyRate ?? listing.nightlyRate;
   const rateCurrency = listing.localizedCurrency ?? listing.currency;
-  const pricePrefix = approxPrefix(listing.localizedCurrency);
+  const pricePrefix = approxPrefix(listing.localizedCurrency, listing.currency);
   const promoted = applyPromotion(rate, promotion ?? null);
 
   return (

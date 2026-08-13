@@ -10,6 +10,7 @@ import { logoutUser } from "@/lib/api";
 import dynamic from "next/dynamic";
 import ListingCard from "./ListingCard";
 import DateRangePicker from "./DateRangePicker";
+import PriceRangeFields from "./PriceRangeFields";
 import type { PublicListingDetail } from "@/types";
 import { ActivityPromoBanner } from "./PromoBanner";
 import { isPromotionValid, type ActivePromotion } from "../utils/promo-utils";
@@ -341,10 +342,18 @@ function StyledDateInput({
   );
 }
 
+/**
+ * "No upper bound" for the price filter. Has to exceed any price a listing
+ * could carry — a 500000 sentinel is below real converted prices (millions in
+ * INR), which made any drag above it read as "uncapped" and reset the thumb.
+ */
+const PRICE_NO_CAP = Number.MAX_SAFE_INTEGER;
+
 /* ══════════════════════════════════════════════════════════════
    FILTER PANEL — shared for sidebar + mobile drawer
 ══════════════════════════════════════════════════════════════ */
 interface FilterState {
+  priceMin: number;
   priceMax: number;
   rating: number | null;
   amenities: string[];
@@ -369,7 +378,8 @@ interface FilterState {
 }
 
 const DEFAULT_FILTERS: FilterState = {
-  priceMax: 500000,
+  priceMin: 0,
+  priceMax: PRICE_NO_CAP,
   rating: null,
   amenities: [],
   cancellation: "",
@@ -391,7 +401,7 @@ const DEFAULT_FILTERS: FilterState = {
 
 function countActiveFilters(f: FilterState) {
   let n = 0;
-  if (f.priceMax < 500000) n++;
+  if (f.priceMin > 0 || f.priceMax < PRICE_NO_CAP) n++;
   if (f.rating) n++;
   if (f.amenities.length) n++;
   if (f.cancellation) n++;
@@ -418,41 +428,32 @@ function FilterPanel({
   onChange,
   onApply,
   onReset,
+  priceCurrency,
+  priceBounds,
 }: {
   category: "hotel" | "apartment" | "car";
   filters: FilterState;
   onChange: (patch: Partial<FilterState>) => void;
   onApply: () => void;
   onReset: () => void;
+  /** Currency the price filter is expressed in — matches the card labels. */
+  priceCurrency: string;
+  /** Cheapest/priciest result on screen; null until results arrive. */
+  priceBounds: { lo: number; hi: number } | null;
 }) {
   const isCar = category === "car";
   const isApt = category === "apartment";
 
   return (
     <div className="space-y-6">
-      {/* Price range */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <FilterLabel>Price Range</FilterLabel>
-          <span className="text-xs font-semibold text-slate-500">
-            {filters.priceMax >= 500000
-              ? "KES 500+"
-              : `KES ${filters.priceMax.toLocaleString()}`}
-          </span>
-        </div>
-        <input
-          type="range"
-          min={500}
-          max={50000}
-          step={500}
-          value={filters.priceMax >= 500000 ? 50000 : filters.priceMax}
-          onChange={(e) => {
-            const v = Number(e.target.value);
-            onChange({ priceMax: v >= 50000 ? 500000 : v });
-          }}
-          className="w-full h-1.5 accent-[#1D8D2B] cursor-pointer"
-        />
-      </div>
+      <PriceRangeFields
+        currency={priceCurrency}
+        bounds={priceBounds}
+        min={filters.priceMin}
+        max={filters.priceMax}
+        noCap={PRICE_NO_CAP}
+        onChange={({ min, max }) => onChange({ priceMin: min, priceMax: max })}
+      />
 
       {/* Hotel / Apartment: Star Rating */}
       {!isCar && (
@@ -784,7 +785,8 @@ export default function CategoryListingsClient({ category }: Props) {
   /* ── filter state (read initial values from URL) ──────────── */
   const [filters, setFilters] = useState<FilterState>({
     ...DEFAULT_FILTERS,
-    priceMax: sp.get("price_max") ? Number(sp.get("price_max")) : 500000,
+    priceMin: sp.get("price_min") ? Number(sp.get("price_min")) : 0,
+    priceMax: sp.get("price_max") ? Number(sp.get("price_max")) : PRICE_NO_CAP,
     rating: sp.get("rating") ? Number(sp.get("rating")) : null,
     amenities: sp.get("amenities") ? sp.get("amenities")!.split(",") : [],
     cancellation: sp.get("cancellation") || "",
@@ -836,7 +838,8 @@ export default function CategoryListingsClient({ category }: Props) {
     if (pickupDate) params.set("pickup", pickupDate);
     if (returnDate) params.set("return", returnDate);
     if (guests > 1) params.set("guests", String(guests));
-    if (filters.priceMax < 500000) params.set("price_max", String(filters.priceMax));
+    if (filters.priceMin > 0) params.set("price_min", String(filters.priceMin));
+    if (filters.priceMax < PRICE_NO_CAP) params.set("price_max", String(filters.priceMax));
     if (filters.rating) params.set("rating", String(filters.rating));
     if (filters.amenities.length) params.set("amenities", filters.amenities.join(","));
     if (filters.cancellation) params.set("cancellation", filters.cancellation);
@@ -897,7 +900,8 @@ export default function CategoryListingsClient({ category }: Props) {
     if (dest) params.q = dest;
 
     if (guests > 1) params.guests = guests;
-    if (filters.priceMax < 500000) params.price_max = filters.priceMax;
+    if (filters.priceMin > 0) params.price_min = filters.priceMin;
+    if (filters.priceMax < PRICE_NO_CAP) params.price_max = filters.priceMax;
     if (filters.rating) params.rating_min = filters.rating;
     if (filters.amenities.length) params.amenity_ids = filters.amenities.flatMap(k => AMENITY_CATEGORY[k] ? [`${AMENITY_CATEGORY[k]}:${k}`, k] : [k]).join(",");
     if (filters.cancellation) params.cancellation_policy = filters.cancellation;
@@ -1027,6 +1031,29 @@ export default function CategoryListingsClient({ category }: Props) {
     }
     fetchListings(0, false);
   }, [currency]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Price-filter bounds and label currency, both read off the results rather
+  // than hardcoded. Widen-only within a search so dragging the slider (which
+  // shrinks the result set) doesn't pull the track in under the cursor.
+  const [priceBounds, setPriceBounds] = useState<{ lo: number; hi: number } | null>(null);
+  useEffect(() => {
+    setPriceBounds(null);
+  }, [category, currency]);
+  useEffect(() => {
+    const values = listings
+      .map((l) => l.localizedPricePerNight ?? l.pricePerNight)
+      .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0);
+    if (values.length === 0) return;
+    const lo = Math.floor(Math.min(...values));
+    const hi = Math.ceil(Math.max(...values));
+    setPriceBounds((prev) => {
+      const next = prev ? { lo: Math.min(prev.lo, lo), hi: Math.max(prev.hi, hi) } : { lo, hi };
+      if (prev && prev.lo === next.lo && prev.hi === next.hi) return prev;
+      return next;
+    });
+  }, [listings]);
+  const priceFilterCurrency =
+    listings.find((l) => l.localizedCurrency)?.localizedCurrency ?? currency;
 
   /* ─────────────────────────────────────────────────────────── */
   /* Filter debounce — auto-search when sort changes             */
@@ -1377,6 +1404,8 @@ export default function CategoryListingsClient({ category }: Props) {
               )}
             </div>
             <FilterPanel
+              priceCurrency={priceFilterCurrency}
+              priceBounds={priceBounds}
               category={category}
               filters={filters}
               onChange={(patch) => setFilters((prev) => ({ ...prev, ...patch }))}
@@ -1529,7 +1558,7 @@ export default function CategoryListingsClient({ category }: Props) {
                 <>
                   <div
                     className={`grid gap-5 ${showMap
-                      ? "grid-cols-1 sm:grid-cols-2"
+                      ? "grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3"
                       : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
                       }`}
                   >
@@ -1617,6 +1646,8 @@ export default function CategoryListingsClient({ category }: Props) {
             </div>
             <div className="p-5 flex-1">
               <FilterPanel
+              priceCurrency={priceFilterCurrency}
+              priceBounds={priceBounds}
                 category={category}
                 filters={filters}
                 onChange={(patch) => setFilters((prev) => ({ ...prev, ...patch }))}

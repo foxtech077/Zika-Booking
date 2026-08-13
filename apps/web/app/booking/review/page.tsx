@@ -35,6 +35,19 @@ interface PricingPreview {
   platformAmount?: number;
   /** Exchange rate listingCurrency → platformCurrency at lock time. */
   platformRate?: number;
+  /** Itemised equivalents in the guest's chosen display currency, all converted
+   *  server-side off one rate so the lines still sum to the total. Absent (and
+   *  localizedCurrency null) when the API could not convert. Never a charge
+   *  amount — the money actually taken is always platformAmount. */
+  localizedCurrency?: string | null;
+  localizedBaseAmount?: number | null;
+  localizedNightlyRate?: number | null;
+  localizedPromotionDiscount?: number | null;
+  localizedServiceFee?: number | null;
+  localizedTaxAmount?: number | null;
+  localizedDeliveryFee?: number | null;
+  localizedSecurityDeposit?: number | null;
+  localizedTotalAmount?: number | null;
 }
 
 interface CheckoutCtx {
@@ -138,6 +151,27 @@ function getPricing(ctx: CheckoutCtx) {
   // the listing currency; only this converted total is shown in the platform
   // currency. Fall back to the listing total for older checkout sessions.
   const info = derivePlatform(pp, ctx.currency, total);
+
+  // Guest-display-currency view of the same lines. The breakdown converts as a
+  // unit or not at all: a voucher discount is validated in the listing's
+  // currency and has no server-converted twin, so converting the lines around
+  // it would leave a total its own lines don't add up to.
+  // A non-null localizedCurrency is not proof of a conversion: getLocalizedContext
+  // returns the base currency with a null rate when no target was requested or the
+  // target matches the listing's own currency. And when only the aggregate fields
+  // are present, every dispAmt would fall back to a raw listing-currency amount
+  // while the label switched to the target — relabelling, not converting.
+  const showLocalized = !!pp.localizedCurrency
+    && pp.localizedCurrency !== ctx.currency
+    && pp.localizedBaseAmount != null
+    && ctx.discountSource !== "voucher";
+  const dispAmt = (loc: number | null | undefined, rawVal: number) =>
+    showLocalized && loc != null ? loc : rawVal;
+  const dispSubtotal = Math.max(
+    0,
+    dispAmt(pp.localizedBaseAmount, base) - dispAmt(pp.localizedPromotionDiscount, totalDiscount),
+  );
+
   return {
     base, discount: totalDiscount, subtotal, serviceFee, taxes: taxAmount,
     deliveryFee, securityDeposit, total,
@@ -145,6 +179,19 @@ function getPricing(ctx: CheckoutCtx) {
     platformAmount: info.platformAmount,
     platformRate: info.platformRate,
     listingCurrency: ctx.currency,
+    showLocalized,
+    dispCurrency: showLocalized ? pp.localizedCurrency! : ctx.currency,
+    dispPrefix: showLocalized ? "~" : "",
+    dispAmt,
+    dispSubtotal,
+    // Summed from the rendered lines so the total always reconciles with them.
+    dispTotal: showLocalized
+      ? dispSubtotal
+      + dispAmt(pp.localizedServiceFee, serviceFee)
+      + dispAmt(pp.localizedTaxAmount, taxAmount)
+      + dispAmt(pp.localizedDeliveryFee, deliveryFee)
+      + dispAmt(pp.localizedSecurityDeposit, securityDeposit)
+      : total,
   };
 }
 
@@ -154,7 +201,7 @@ function MoneyValue({ platform, listing, currency, listingCurrency }: { platform
     <span className="text-right">
       <div>{fmtMoney(platform, currency)}</div>
       {currency !== listingCurrency && (
-        <div className="text-[10px] font-normal text-slate-400">Billed as approx. {fmtMoney(listing, listingCurrency)}</div>
+        <div className="text-xs font-medium text-slate-500 mt-0.5">Billed as approx. {fmtMoney(listing, listingCurrency)}</div>
       )}
     </span>
   );
@@ -1247,47 +1294,56 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
           </div>
         </div>
 
-        {/* Line items in listing currency; the total is shown in the platform currency */}
+        {/* Line items in the guest's display currency when the API converted them,
+            otherwise the listing's own. The amount charged is always the platform total. */}
         <div className="space-y-2.5 text-sm">
           <div className="flex justify-between text-slate-600">
-            <span>{ctx.currency} {fmt(ctx.pricingPreview?.nightlyRate ?? ctx.pricePerNight)} × {ctx.pricingPreview?.units ?? ctx.nightsOrDays} {isCar ? "day" : "night"}{(ctx.pricingPreview?.units ?? ctx.nightsOrDays) !== 1 ? "s" : ""}</span>
-            <span>{ctx.currency} {fmt(pricing.base)}</span>
+            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedNightlyRate, ctx.pricingPreview?.nightlyRate ?? ctx.pricePerNight))} × {ctx.pricingPreview?.units ?? ctx.nightsOrDays} {isCar ? "day" : "night"}{(ctx.pricingPreview?.units ?? ctx.nightsOrDays) !== 1 ? "s" : ""}</span>
+            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedBaseAmount, pricing.base))}</span>
           </div>
           {pricing.discount > 0 && (
             <div className="flex justify-between text-emerald-600">
               <span>{ctx.discountSource === "promotion" ? "Promotional discount" : "Voucher discount"}</span>
-              <span>−{ctx.currency} {fmt(pricing.discount)}</span>
+              <span>{pricing.dispPrefix}−{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedPromotionDiscount, pricing.discount))}</span>
             </div>
           )}
           <div className="flex justify-between text-slate-600 border-t border-slate-100 pt-2">
             <span>Subtotal</span>
-            <span>{ctx.currency} {fmt(pricing.subtotal)}</span>
+            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispSubtotal)}</span>
           </div>
           <div className="flex justify-between text-slate-600">
             <span>Service fee{ctx.pricingPreview?.serviceFeeRate ? ` (${Math.round(ctx.pricingPreview.serviceFeeRate * 100)}%)` : ''}</span>
-            <span>{ctx.currency} {fmt(pricing.serviceFee)}</span>
+            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedServiceFee, pricing.serviceFee))}</span>
           </div>
           {pricing.taxes > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Taxes{ctx.pricingPreview?.taxRate ? ` (${Math.round(ctx.pricingPreview.taxRate * 100)}%)` : ''}</span>
-              <span>{ctx.currency} {fmt(pricing.taxes)}</span>
+              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedTaxAmount, pricing.taxes))}</span>
             </div>
           )}
           {pricing.deliveryFee > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Delivery fee</span>
-              <span>{ctx.currency} {fmt(pricing.deliveryFee)}</span>
+              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedDeliveryFee, pricing.deliveryFee))}</span>
             </div>
           )}
           {isCar && securityDeposit > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Security deposit</span>
-              <span>{ctx.currency} {fmt(securityDeposit)}</span>
+              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedSecurityDeposit, securityDeposit))}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
             <span>Total</span>
-            <MoneyValue platform={pricing.platformAmount} listing={pricing.total} currency={pricing.platformCurrency} listingCurrency={pricing.listingCurrency} />
+            {pricing.showLocalized ? (
+              <span className="text-right">
+                <div>~{pricing.dispCurrency} {fmt(pricing.dispTotal)}</div>
+                <div className="text-xs font-medium text-slate-500 mt-0.5">Exact {fmtMoney(pricing.total, pricing.listingCurrency)}</div>
+                <div className="text-xs font-semibold text-slate-700">Charged {fmtMoney(pricing.platformAmount, pricing.platformCurrency)}</div>
+              </span>
+            ) : (
+              <MoneyValue platform={pricing.platformAmount} listing={pricing.total} currency={pricing.platformCurrency} listingCurrency={pricing.listingCurrency} />
+            )}
           </div>
         </div>
       </div>

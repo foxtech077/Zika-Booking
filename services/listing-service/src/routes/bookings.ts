@@ -1171,28 +1171,6 @@ export async function bookingRoutes(app: FastifyInstance) {
           listingCurrencyAmount: platformSnap.listingCurrencyAmount,
           localizedCurrency: platformSnap.localizedCurrency,
           localCurrencyAmount: platformSnap.localCurrencyAmount,
-          // Itemised guest-currency equivalents, matching what
-          // /bookings/pricing-estimate already returns via computePricingPreview.
-          // Without these the checkout breakdown (the only consumer of this
-          // endpoint) has no converted lines to render, so it falls back to the
-          // listing currency while the price header above it converts.
-          // Converted server-side off a single rate, so the lines still sum to
-          // the total — clients never convert anything themselves.
-          ...(await buildLocalizedBreakdown(
-            listing.currency ?? "USD",
-            body.currency,
-            {
-              baseAmount: billing.baseAmount,
-              nightlyRate: commissionInclusiveRate(baseRate, commissionRate),
-              promotionDiscount: billing.promotionDiscount,
-              voucherDiscount: billing.voucherDiscount,
-              serviceFee: billing.serviceFee,
-              taxAmount: billing.taxAmount,
-              deliveryFee: billing.deliveryFee,
-              securityDeposit: billing.securityDeposit,
-              totalAmount: billing.totalAmount,
-            }
-          )),
           // Room type info (if applicable)
           ...(roomTypeRecord && {
             roomType: roomTypeRecord.roomType,

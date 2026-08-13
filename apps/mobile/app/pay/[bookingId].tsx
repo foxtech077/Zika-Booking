@@ -486,6 +486,7 @@ export default function PaymentScreen() {
         subtotal: raw.subtotal,
         discountAmount: raw.discountAmount ?? undefined,
         serviceFee: raw.serviceFee ?? undefined,
+        serviceFeeRate: raw.serviceFeeRate ?? undefined,
         taxAmount: raw.taxAmount ?? undefined,
         deliveryFee: raw.deliveryFee ?? undefined,
         total: raw.totalAmount,
