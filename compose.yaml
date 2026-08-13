@@ -28,6 +28,11 @@ services:
     env_file:
       - services/auth-service/.env
     network_mode: host
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   listing-service:
     image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/listing-service:dev-latest
@@ -38,6 +43,11 @@ services:
     env_file:
       - services/listing-service/.env
     network_mode: host
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   payment-service:
     image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/payment-service:dev-latest
@@ -48,6 +58,11 @@ services:
     env_file:
       - services/payment-service/.env
     network_mode: host
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   web:
     image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/web:dev-latest
@@ -58,6 +73,11 @@ services:
     env_file:
       - apps/web/.env
     network_mode: host
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   admin:
     image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/admin:dev-latest
@@ -68,6 +88,11 @@ services:
     env_file:
       - apps/admin/.env
     network_mode: host
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 # volumes:
   # zika-redis-data:
