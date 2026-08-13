@@ -1,3 +1,11 @@
+/** Flat service fee charged to guests, as a decimal fraction (0.04 = 4%). */
+export const SERVICE_FEE_RATE = 0.04;
+
+/** Per-night/base rate with the provider commission baked in, for guest display. */
+export function commissionInclusiveRate(rate: number, commissionRate: number): number {
+  return Number((rate * (1 + commissionRate)).toFixed(2));
+}
+
 export type BillingInput = {
   listingCategory: string;
   checkIn?: string;
@@ -43,7 +51,10 @@ export function calculateBilling(input: BillingInput): BillingResult {
       ? calcDays(input.pickupDatetime, input.returnDatetime)
       : calcDays(input.checkIn, input.checkOut);
 
-  const baseAmount = Number((units * input.rate).toFixed(2));
+  // Commission is baked into the guest-facing base price: the amount the guest
+  // sees for the stay is rate × (1 + commissionRate). The 4% service fee is then
+  // computed on that commission-inclusive subtotal.
+  const baseAmount = Number((units * input.rate * (1 + input.commissionRate)).toFixed(2));
   const pointsDiscount = Number((input.pointsDiscount ?? 0).toFixed(2));
 
   // PRD 15.9: discount = best(promotion_discount, voucher_discount)
@@ -51,8 +62,9 @@ export function calculateBilling(input: BillingInput): BillingResult {
   const discount = Number((bestPromoVoucher + pointsDiscount).toFixed(2));
 
   const subtotal = Number(Math.max(0, baseAmount - discount).toFixed(2));
-  // PRD 15.9: service_fee = CEILING(subtotal × commission_rate, 2dp)
-  const serviceFee = Math.ceil(subtotal * input.commissionRate * 100) / 100;
+  // service_fee = CEILING(subtotal × 4%, 2dp) — a flat fee on the
+  // commission-inclusive subtotal, independent of the provider commission rate.
+  const serviceFee = Math.ceil(subtotal * SERVICE_FEE_RATE * 100) / 100;
   const taxAmount = Number((subtotal * input.taxRate).toFixed(2));
   const securityDeposit = input.listingCategory === "car" && !input.driverProvided
     ? Number((input.securityDeposit ?? 0).toFixed(2))

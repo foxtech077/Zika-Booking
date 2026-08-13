@@ -157,19 +157,14 @@ export default function DateRangePicker({
     if (!selStart || (selStart && selEnd)) {
       setSelStart(ds);
       setSelEnd("");
+    } else if (ds <= selStart) {
+      setSelStart(ds);
+      setSelEnd("");
     } else {
-      if (ds <= selStart) {
-        setSelStart(ds);
-        setSelEnd("");
-      } else {
-        setSelEnd(ds);
-      }
-    }
-  }
-
-  function handleApply() {
-    if (selStart && selEnd) {
-      onChange(selStart, selEnd);
+      setSelEnd(ds);
+      // Completing the range *is* the confirmation — commit and close rather
+      // than making the guest press a separate Apply.
+      onChange(selStart, ds);
       setIsOpen(false);
     }
   }
@@ -378,22 +373,14 @@ export default function DateRangePicker({
             )}
           </div>
 
-          {/* Action buttons */}
-          <div className="mt-3 flex gap-2 pt-1">
+          {/* Clear only — the range commits itself on the second date click. */}
+          <div className="mt-3 pt-1">
             <button
               type="button"
               onClick={handleClear}
-              className="flex-1 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition"
+              className="w-full py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition"
             >
-              Clear
-            </button>
-            <button
-              type="button"
-              disabled={!selStart || !selEnd}
-              onClick={handleApply}
-              className="flex-1 py-2.5 text-xs font-bold bg-[#0c2614] hover:bg-[#081b0d] disabled:opacity-40 text-white rounded-xl transition shadow-sm"
-            >
-              Apply
+              Clear dates
             </button>
           </div>
         </div>

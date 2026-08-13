@@ -36,12 +36,14 @@ interface ManageBooking {
   discountAmount: number;
   deliveryFee: number;
   serviceFee: number;
+  serviceFeeRate?: number;
   taxAmount: number;
   securityDeposit: number;
   voucherCode: string | null;
   voucherDiscount: number;
   totalAmount: number;
   currency: string;
+  priceBreakdownJson?: any;
   cancellationPolicy: string;
   refundAmount: number | null;
   cancelledAt: string | null;
@@ -242,6 +244,9 @@ export default function BookingManageView() {
     : `${booking.nightsOrDays} night${booking.nightsOrDays !== 1 ? "s" : ""}`;
   const totalGuests = Number(booking.adults ?? 0) + Number(booking.children ?? 0);
   const discount = Number(booking.discountAmount) + Number(booking.voucherDiscount);
+  // booking.subtotal is the post-discount subtotal; the gross commission-inclusive
+  // base is read from the price snapshot so the receipt lines reconcile.
+  const grossBase = Number(booking.priceBreakdownJson?.breakdown?.baseAmount ?? booking.subtotal);
   const currency = booking.currency;
   const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
@@ -349,7 +354,7 @@ export default function BookingManageView() {
           <div className="space-y-1.5 text-sm">
             <div className="flex justify-between text-slate-600">
               <span>Base amount ({durationLabel})</span>
-              <span>{currency} {fmt(Number(booking.subtotal))}</span>
+              <span>{currency} {fmt(grossBase)}</span>
             </div>
             {discount > 0 && (
               <div className="flex justify-between text-emerald-600">
@@ -359,7 +364,7 @@ export default function BookingManageView() {
             )}
             {Number(booking.serviceFee) > 0 && (
               <div className="flex justify-between text-slate-600">
-                <span>Service fee</span>
+                <span>Service fee{booking.serviceFeeRate ? ` (${Math.round(Number(booking.serviceFeeRate) * 100)}%)` : ''}</span>
                 <span>{currency} {fmt(Number(booking.serviceFee))}</span>
               </div>
             )}

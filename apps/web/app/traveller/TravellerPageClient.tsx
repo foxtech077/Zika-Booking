@@ -25,6 +25,7 @@ import PhotoGallery from "./components/PhotoGallery";
 import ReservationCard from "./components/ReservationCard";
 import MapView from "./components/MapView";
 import DateRangePicker from "./components/DateRangePicker";
+import PriceRangeFields from "./components/PriceRangeFields";
 import type { PublicListingDetail } from "@/types";
 import { isTaraCountry } from "@zika/types";
 
@@ -178,6 +179,21 @@ const POPULAR_DESTINATIONS = [
   { name: "Kampala", country: "Uganda", icon: "🦁", from: "from-yellow-400", to: "to-amber-700" },
 ] as const;
 
+/** Pill used for the at-a-glance spec row on the listing detail header. */
+const SPEC_CHIP =
+  "inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 text-[13px] font-medium text-slate-700";
+/** Policy cards flex-grow so a row of two doesn't leave a third column empty. */
+const POLICY_CARD =
+  "flex-1 min-w-[150px] rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3";
+
+/**
+ * "No upper bound" for the price filter. Must sit above any price a listing
+ * could ever have: the old 500000 sentinel was smaller than real converted
+ * prices (e.g. ~5.1M INR), so dragging the slider produced a value that then
+ * read as "uncapped" and snapped the thumb straight back to the top.
+ */
+const PRICE_NO_CAP = Number.MAX_SAFE_INTEGER;
+
 function toIsoDatetime(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
   if (dateStr.includes("T")) return dateStr;
@@ -279,9 +295,9 @@ export default function TravellerDashboard() {
   const nominatimTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Filters state — prices are in KES (Kenyan Shillings)
-  // Default 0 / 500000 = "no filter" — only pass to API when user changes
+  // Default 0 / PRICE_NO_CAP = "no filter" — only pass to API when user changes
   const [priceMin, setPriceMin] = useState<number>(0);
-  const [priceMax, setPriceMax] = useState<number>(500000);
+  const [priceMax, setPriceMax] = useState<number>(PRICE_NO_CAP);
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
   const [selectedCancellation, setSelectedCancellation] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("distance_asc");
@@ -565,6 +581,7 @@ export default function TravellerDashboard() {
     return result;
   }, [listings, filterBedrooms, filterBathrooms]);
 
+
   // Derived discount — explicit voucher selection always wins over auto-promotion.
   // Neither stacks with the other; we always pick the higher value.
   // Promotion discount comes from the server-computed pricing estimate.
@@ -772,6 +789,37 @@ export default function TravellerDashboard() {
   // re-runs on its own without this — unlike mobile, where the same screens
   // are keyed by currency in a react-query queryKey.
   const currency = useCurrencyStore((s) => s.currency);
+
+  // ── Price-filter bounds ──────────────────────────────────────────────────
+  // Derived from the prices actually returned, read from the same field the
+  // cards render, so the slider is never a hardcoded floor/ceiling and never
+  // assumes a currency. Bounds only ever widen within a search: dragging the
+  // slider shrinks the result set, and recomputing from that would pull the
+  // track in under the user's cursor.
+  const [priceBounds, setPriceBounds] = useState<{ lo: number; hi: number } | null>(null);
+
+  useEffect(() => {
+    setPriceBounds(null);
+  }, [searchCategory, searchDestination, currency]);
+
+  useEffect(() => {
+    const values = listings
+      .map((l) => l.localizedPricePerNight ?? l.pricePerNight)
+      .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0);
+    if (values.length === 0) return;
+    const lo = Math.floor(Math.min(...values));
+    const hi = Math.ceil(Math.max(...values));
+    setPriceBounds((prev) => {
+      const next = prev ? { lo: Math.min(prev.lo, lo), hi: Math.max(prev.hi, hi) } : { lo, hi };
+      if (prev && prev.lo === next.lo && prev.hi === next.hi) return prev;
+      return next;
+    });
+  }, [listings]);
+
+  /** Currency the filter is expressed in — the converted one when the API could
+   *  convert, otherwise the guest's chosen code. Matches the card price labels. */
+  const priceFilterCurrency =
+    listings.find((l) => l.localizedCurrency)?.localizedCurrency ?? currency;
   const currencyMountedRef = useRef(false);
   useEffect(() => {
     if (!currencyMountedRef.current) {
@@ -999,12 +1047,32 @@ export default function TravellerDashboard() {
     );
   }
 
-  // Filter Debounce Handler — re-fetch whenever any filter or sort changes while on the search tab
+  // Sort re-queries on change. Its control sits in the results header, nowhere
+  // near the filter panel, so waiting for "Apply Filters" would leave it looking
+  // broken. Guarded on the value actually changing, so merely switching back to
+  // the search tab doesn't re-fire.
+  //
+  // Every filter-panel input — price min/max, rating, cancellation, amenities,
+  // instant-book — is deliberately absent here. Those reach the API only when
+  // "Apply Filters" (or the drawer's "Show Results") is pressed, so a
+  // half-typed price can never fire a request of its own.
+  const lastSortRef = useRef(sortBy);
   useEffect(() => {
-    if (activeTab !== "search" || listings.length === 0) return;
-    const handler = setTimeout(() => { handleSearch(); }, 600);
-    return () => clearTimeout(handler);
-  }, [priceMin, priceMax, selectedRating, selectedCancellation, sortBy, showInstantOnly, selectedAmenities, activeTab]);
+    if (activeTab !== "search") return;
+    if (lastSortRef.current === sortBy) return;
+    lastSortRef.current = sortBy;
+    handleSearch();
+  }, [sortBy, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Explicit "run the search now" signal. Reset changes several filters and then
+  // needs to query with the new values — calling handleSearch() inline would read
+  // the pre-update state from the same closure, so it bumps this instead and the
+  // effect fires once the new state has committed.
+  const [filterApplyToken, setFilterApplyToken] = useState(0);
+  useEffect(() => {
+    if (filterApplyToken === 0) return;
+    handleSearch();
+  }, [filterApplyToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Autocomplete suggestions — populated from search results after a successful search (no extra API call)
   useEffect(() => {
@@ -1132,7 +1200,7 @@ export default function TravellerDashboard() {
       if (searchGuests > 1) params.guests = searchGuests;
       if (searchRooms > 1) params.rooms = searchRooms;
       if (priceMin > 0) params.price_min = priceMin;
-      if (priceMax < 499999) params.price_max = priceMax;
+      if (priceMax < PRICE_NO_CAP) params.price_max = priceMax;
       if (selectedRating) params.rating_min = selectedRating;
       if (selectedCancellation) params.cancellation_policy = selectedCancellation;
       if (showInstantOnly) params.instant_booking = true;
@@ -1227,7 +1295,7 @@ export default function TravellerDashboard() {
       if (searchGuests > 1) params.guests = searchGuests;
       if (searchRooms > 1) params.rooms = searchRooms;
       if (priceMin > 0) params.price_min = priceMin;
-      if (priceMax < 499999) params.price_max = priceMax;
+      if (priceMax < PRICE_NO_CAP) params.price_max = priceMax;
       if (selectedRating) params.rating_min = selectedRating;
       if (selectedCancellation) params.cancellation_policy = selectedCancellation;
       if (showInstantOnly) params.instant_booking = true;
@@ -1396,6 +1464,7 @@ export default function TravellerDashboard() {
           // runs before a pricing preview exists; without it that path silently
           // computed a 0% service fee.
           commissionRate: item.commissionRate ?? null,
+          serviceFeeRate: item.serviceFeeRate ?? null,
           deliveryAvailable: !!item.deliveryEnabled,
           deliveryFee: item.deliveryFee != null ? Number(item.deliveryFee) : null,
           deliveryRadiusKm: item.deliveryRadiusKm != null ? Number(item.deliveryRadiusKm) : null,
@@ -2144,6 +2213,7 @@ export default function TravellerDashboard() {
       // Carried through so checkout's no-preview fallback uses the same
       // country rate the listing page quoted, instead of a hardcoded guess.
       commissionRate: detailListing.commissionRate ?? undefined,
+      serviceFeeRate: detailListing.serviceFeeRate ?? undefined,
     };
     sessionStorage.setItem("zika:checkout", JSON.stringify(ctx));
     router.push("/booking/review");
@@ -2247,6 +2317,55 @@ export default function TravellerDashboard() {
     );
   }
 
+  // Where the map goes on the detail page. The sticky booking card is tall, so
+  // whichever column runs out of content first leaves the rest of that row
+  // empty as you scroll. A listing with a description and amenities already
+  // outgrows the card, so the map moves full-width below the two columns;
+  // a bare listing (most cars) needs it to keep the left column from
+  // collapsing to a couple of rows beside a 600px card.
+  const detailHasBody = !!detailListing && (
+    !!detailListing.description
+    || (detailListing.amenities?.length ?? 0) > 0
+    || (detailListing.customAmenities?.length ?? 0) > 0
+  );
+  const locationSection = !detailListing ? null : (
+    <>
+      <div className="flex flex-wrap items-end justify-between gap-2 mb-4">
+        <h2 className="text-2xl font-semibold">Where you'll be</h2>
+        {detailListing.address && (
+          <p className="text-slate-500 text-sm inline-flex items-center gap-1.5">
+            <svg className="w-4 h-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+            </svg>
+            {detailListing.address}
+          </p>
+        )}
+      </div>
+      <div className={`w-full ${detailHasBody ? "h-[380px] lg:h-[440px]" : "h-[320px]"} rounded-3xl overflow-hidden border border-slate-200 relative z-0`}>
+        {detailListing.lat && detailListing.lng ? (
+          <MapView
+            listings={[detailListing]}
+            hoveredId={detailListing.id}
+            onHover={() => { }}
+            onSelect={() => { }}
+          />
+        ) : (
+          <div className="w-full h-full bg-slate-100 flex items-center justify-center">
+            <div className="text-center space-y-2 text-slate-400">
+              <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+              </svg>
+              <p className="text-sm font-semibold text-slate-600">{detailListing.town}{detailListing.country ? `, ${detailListing.country}` : ""}</p>
+              <p className="text-xs text-slate-400 mt-1">Location coordinates not available</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans selection:bg-[#0c2614] selection:text-white antialiased">
       {/* Main Layout Area */}
@@ -2317,30 +2436,35 @@ export default function TravellerDashboard() {
                   />
                 </div>
 
-                {/* Left Column (Main content) */}
-                <div className="lg:col-span-8 space-y-8 text-left text-slate-800">
+                {/* Content + booking card share their own grid so the sticky card's
+                    containing block ends with this section. As a direct child of the
+                    page grid it could slide out of its row into the full-width map
+                    below, which then painted over it — Leaflet stacks its own panes. */}
+                <div className="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                  {/* Left Column (Main content) */}
+                  <div className="lg:col-span-8 space-y-8 text-left text-slate-800">
                   {/* Listing summary row */}
                   <div className="pb-5 border-b border-slate-200">
-                    <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                    <div className="flex flex-wrap items-center gap-2">
                       {detailListing.category !== "car" ? (
                         <>
-                          {detailListing.maxGuests && <span>{detailListing.maxGuests} guests</span>}
-                          {detailListing.bedrooms && <><span>·</span><span>{detailListing.bedrooms} bedrooms</span></>}
-                          {detailListing.bathrooms && <><span>·</span><span>{detailListing.bathrooms} baths</span></>}
-                          {detailListing.roomType && <><span>·</span><span className="capitalize">{detailListing.roomType}</span></>}
+                          {detailListing.maxGuests && <span className={SPEC_CHIP}>{detailListing.maxGuests} guests</span>}
+                          {detailListing.bedrooms && <span className={SPEC_CHIP}>{detailListing.bedrooms} bedrooms</span>}
+                          {detailListing.bathrooms && <span className={SPEC_CHIP}>{detailListing.bathrooms} baths</span>}
+                          {detailListing.roomType && <span className={`${SPEC_CHIP} capitalize`}>{detailListing.roomType}</span>}
                         </>
                       ) : (
                         <>
-                          {detailListing.carMake && <span>{detailListing.carMake} {detailListing.carModel} {detailListing.carYear}</span>}
-                          {detailListing.seats && <><span>·</span><span>{detailListing.seats} seats</span></>}
-                          {detailListing.transmission && <><span>·</span><span className="capitalize">{detailListing.transmission}</span></>}
-                          {detailListing.fuelType && <><span>·</span><span className="capitalize">{detailListing.fuelType}</span></>}
+                          {detailListing.carMake && <span className={`${SPEC_CHIP} bg-slate-900 text-white`}>{detailListing.carMake} {detailListing.carModel} {detailListing.carYear}</span>}
+                          {detailListing.seats && <span className={SPEC_CHIP}>{detailListing.seats} seats</span>}
+                          {detailListing.transmission && <span className={`${SPEC_CHIP} capitalize`}>{detailListing.transmission}</span>}
+                          {detailListing.fuelType && <span className={`${SPEC_CHIP} capitalize`}>{detailListing.fuelType}</span>}
                           {/* A supplied driver waives the deposit server-side, so the
                               guest must not be told one is payable. Surface the driver
                               instead — it is the more useful fact for the traveller. */}
                           {detailListing.driverProvided
-                            ? <><span>·</span><span className="font-semibold text-emerald-700">Driver included</span></>
-                            : detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && <><span>·</span><span>Deposit: {detailListing.currency} {detailListing.securityDeposit.toLocaleString()}</span></>}
+                            ? <span className={`${SPEC_CHIP} bg-emerald-50 text-emerald-700 font-semibold`}>Driver included</span>
+                            : detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && <span className={SPEC_CHIP}>Deposit: {detailListing.currency} {detailListing.securityDeposit.toLocaleString()}</span>}
                         </>
                       )}
                     </div>
@@ -2348,14 +2472,14 @@ export default function TravellerDashboard() {
 
                   {/* Description */}
                   {detailListing.description && (
-                    <div className="pb-6 border-b border-slate-200">
+                    <div className="pb-6 border-b border-slate-200 last:border-b-0 last:pb-0">
                       <p className="text-slate-600 leading-relaxed">{detailListing.description}</p>
                     </div>
                   )}
 
                   {/* Amenities from API */}
                   {(detailListing.amenities?.length > 0 || detailListing.customAmenities?.length > 0) && (
-                    <div className="pb-6 border-b border-slate-200">
+                    <div className="pb-6 border-b border-slate-200 last:border-b-0 last:pb-0">
                       <h2 className="text-xl font-semibold mb-5">What this place offers</h2>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {detailListing.amenities.map((a) => (
@@ -2379,63 +2503,42 @@ export default function TravellerDashboard() {
                   )}
 
                   {/* Listing policy info */}
-                  <div className="pb-6 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                  {/* Flex-wrap rather than a fixed 3-column grid: cards grow to fill
+                      the row, so a car (two policies) no longer leaves an empty third. */}
+                  <div className="pb-6 border-b border-slate-200 last:border-b-0 last:pb-0 flex flex-wrap gap-3 text-sm">
                     {detailListing.cancellationPolicy && (
-                      <div>
+                      <div className={POLICY_CARD}>
                         <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Cancellation</p>
                         <p className="font-semibold text-slate-800 mt-1 capitalize">{detailListing.cancellationPolicy}</p>
                       </div>
                     )}
                     {detailListing.category !== "car" && detailListing.minStayNights > 1 && (
-                      <div>
+                      <div className={POLICY_CARD}>
                         <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Min Stay</p>
                         <p className="font-semibold text-slate-800 mt-1">{detailListing.minStayNights} nights</p>
                       </div>
                     )}
                     {detailListing.category !== "car" && detailListing.checkinTime && (
-                      <div>
+                      <div className={POLICY_CARD}>
                         <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Check-in / out</p>
                         <p className="font-semibold text-slate-800 mt-1">{detailListing.checkinTime} → {detailListing.checkoutTime}</p>
                       </div>
                     )}
                     {detailListing.category === "car" && detailListing.mileagePolicy && (
-                      <div>
+                      <div className={POLICY_CARD}>
                         <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Mileage</p>
                         <p className="font-semibold text-slate-800 mt-1 capitalize">{detailListing.mileagePolicy}</p>
                       </div>
                     )}
                   </div>
 
-                  {/* Location Section */}
-                  <div className="pb-6">
-                    <h2 className="text-2xl font-semibold mb-3">Where you'll be</h2>
-                    {detailListing.address && <p className="text-slate-500 text-sm mb-4">{detailListing.address}</p>}
-                    <div className="w-full h-[300px] rounded-3xl overflow-hidden border border-slate-200 relative z-0">
-                      {detailListing.lat && detailListing.lng ? (
-                        <MapView
-                          listings={[detailListing]}
-                          hoveredId={detailListing.id}
-                          onHover={() => { }}
-                          onSelect={() => { }}
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-slate-100 flex items-center justify-center">
-                          <div className="text-center space-y-2 text-slate-400">
-                            <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-                            </svg>
-                            <p className="text-sm font-semibold text-slate-600">{detailListing.town}{detailListing.country ? `, ${detailListing.country}` : ""}</p>
-                            <p className="text-xs text-slate-400 mt-1">Location coordinates not available</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  {/* Sparse listings keep the map here so the column doesn't
+                      collapse to a couple of rows next to the tall booking card. */}
+                  {!detailHasBody && <div className="pb-6">{locationSection}</div>}
                 </div>
 
                 {/* Right Column (Sticky Sidebar) */}
-                <div className="lg:col-span-4 relative lg:sticky lg:top-28 top-4 self-start">
+                <div className="lg:col-span-4 relative z-10 lg:sticky lg:top-28 top-4 self-start">
                   <div className="bg-white border border-slate-200 shadow-xl rounded-2xl p-6 text-left shadow-slate-200/50">
                     {/* Price header */}
                     {!promotionLoaded ? (
@@ -2476,11 +2579,11 @@ export default function TravellerDashboard() {
                           <div>
                             <div className="flex items-baseline gap-2 flex-wrap">
                               <span className="text-2xl font-extrabold text-slate-900">
-                                {approxPrefix(detailListing.localizedCurrency)}{priceCurrency} {displayPrice.toLocaleString()}
+                                {approxPrefix(detailListing.localizedCurrency, detailListing.currency)}{priceCurrency} {displayPrice.toLocaleString()}
                               </span>
                               {basePrice > displayPrice && (
                                 <span className="text-sm font-semibold line-through text-slate-400">
-                                  {approxPrefix(detailListing.localizedCurrency)}{priceCurrency} {basePrice.toLocaleString()}
+                                  {approxPrefix(detailListing.localizedCurrency, detailListing.currency)}{priceCurrency} {basePrice.toLocaleString()}
                                 </span>
                               )}
                             </div>
@@ -2656,7 +2759,7 @@ export default function TravellerDashboard() {
                                     }
 
                                     const rtCurrency = detailListing.localizedCurrency ?? detailListing.currency;
-                                    const rtPrefix = approxPrefix(detailListing.localizedCurrency);
+                                    const rtPrefix = approxPrefix(detailListing.localizedCurrency, detailListing.currency);
                                     return (
                                       <option key={rt.id} value={rt.id}>
                                         {rt.name} — {rtPrefix}{rtCurrency} {displayRtPrice.toLocaleString()}/night{baseRtPrice > displayRtPrice ? ` (was ${rtPrefix}${rtCurrency} ${baseRtPrice.toLocaleString()})` : ""}
@@ -2742,16 +2845,52 @@ export default function TravellerDashboard() {
                               <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs font-semibold text-red-600">
                                 {pricingError}
                               </div>
-                            ) : estimatedPricing ? (
+                            ) : estimatedPricing ? (() => {
+                              // The breakdown converts as a unit or not at all. The voucher
+                              // discount is validated in the listing's currency and has no
+                              // server-converted twin, so converting the lines around it would
+                              // leave a total its own lines don't add up to — the exact
+                              // objection to per-line conversion. In that case everything stays
+                              // exact and the converted figure is shown as a reference instead.
+                              const voucherInPlay = effectiveDiscountSource === "voucher" && bestDiscount > 0;
+                              // A non-null localizedCurrency is not proof of a conversion:
+                              // getLocalizedContext returns the base currency with a null rate
+                              // when no target was asked for, or the target equals the listing's
+                              // own currency. And when only the aggregate fields are present
+                              // (an API that predates the itemised ones), falling back to raw
+                              // amounts would relabel them under the target currency. Require a
+                              // real currency change AND itemised data before converting.
+                              const converted = !!estimatedPricing.localizedCurrency
+                                && estimatedPricing.localizedCurrency !== detailListing.currency
+                                && estimatedPricing.localizedBaseAmount != null;
+                              const showLoc = converted && !voucherInPlay;
+                              const cur = showLoc ? estimatedPricing.localizedCurrency : detailListing.currency;
+                              const pre = showLoc ? "~" : "";
+                              const amt = (loc: number | null | undefined, rawVal: number) =>
+                                showLoc && loc != null ? loc : rawVal;
+                              const money = (loc: number | null | undefined, rawVal: number) =>
+                                `${pre}${cur} ${amt(loc, rawVal).toLocaleString()}`;
+                              // Summed from the same values the rows render, so the total always
+                              // reconciles with the lines above it rather than being converted
+                              // independently of them.
+                              const shownTotal = showLoc
+                                ? Math.max(0, amt(estimatedPricing.localizedBaseAmount, estimatedPricing.baseAmount)
+                                  - amt(estimatedPricing.localizedPromotionDiscount, estimatedPricing.promotionDiscount ?? 0))
+                                + amt(estimatedPricing.localizedServiceFee, estimatedPricing.serviceFee ?? 0)
+                                + amt(estimatedPricing.localizedTaxAmount, estimatedPricing.taxAmount ?? 0)
+                                + amt(estimatedPricing.localizedDeliveryFee, estimatedPricing.deliveryFee ?? 0)
+                                + amt(estimatedPricing.localizedSecurityDeposit, estimatedPricing.securityDeposit ?? 0)
+                                : estimatedPricing.totalAmount;
+                              return (
                               <div className="space-y-2 pt-2 border-t border-slate-100 text-sm text-slate-600">
                                 <div className="flex justify-between">
-                                  <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
-                                  <span>{detailListing.currency} {estimatedPricing.baseAmount.toLocaleString()}</span>
+                                  <span>{pre}{cur} {amt(estimatedPricing.localizedNightlyRate, pricePerNight).toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
+                                  <span>{money(estimatedPricing.localizedBaseAmount, estimatedPricing.baseAmount)}</span>
                                 </div>
                                 {effectiveDiscountSource === "promotion" && estimatedPricing.promotionDiscount > 0 && (
                                   <div className="flex justify-between text-emerald-600 font-semibold">
                                     <span>Promotional discount ({activePromotion?.discountValue}%)</span>
-                                    <span>−{detailListing.currency} {estimatedPricing.promotionDiscount.toLocaleString()}</span>
+                                    <span>{pre}−{cur} {amt(estimatedPricing.localizedPromotionDiscount, estimatedPricing.promotionDiscount).toLocaleString()}</span>
                                   </div>
                                 )}
                                 {effectiveDiscountSource === "voucher" && bestDiscount > 0 && (
@@ -2761,13 +2900,13 @@ export default function TravellerDashboard() {
                                   </div>
                                 )}
                                 <div className="flex justify-between">
-                                  <span>Service fee{estimatedPricing.commissionRate ? ` (${Math.round(estimatedPricing.commissionRate * 100)}%)` : ''}</span>
-                                  <span>{detailListing.currency} {estimatedPricing.serviceFee.toLocaleString()}</span>
+                                  <span>Service fee{estimatedPricing.serviceFeeRate ? ` (${Math.round(estimatedPricing.serviceFeeRate * 100)}%)` : ''}</span>
+                                  <span>{money(estimatedPricing.localizedServiceFee, estimatedPricing.serviceFee)}</span>
                                 </div>
                                 {estimatedPricing.taxAmount > 0 && (
                                   <div className="flex justify-between text-slate-500">
                                     <span>Taxes{estimatedPricing.taxRate ? ` (${Math.round(estimatedPricing.taxRate * 100)}%)` : ''}</span>
-                                    <span>{detailListing.currency} {estimatedPricing.taxAmount.toLocaleString()}</span>
+                                    <span>{money(estimatedPricing.localizedTaxAmount, estimatedPricing.taxAmount)}</span>
                                   </div>
                                 )}
                                 {/* Delivery is part of totalAmount server-side. Without this row
@@ -2775,30 +2914,36 @@ export default function TravellerDashboard() {
                                 {estimatedPricing.deliveryFee != null && estimatedPricing.deliveryFee > 0 && (
                                   <div className="flex justify-between">
                                     <span>Delivery fee</span>
-                                    <span>{detailListing.currency} {estimatedPricing.deliveryFee.toLocaleString()}</span>
+                                    <span>{money(estimatedPricing.localizedDeliveryFee, estimatedPricing.deliveryFee)}</span>
                                   </div>
                                 )}
                                 {isCar && estimatedPricing.securityDeposit != null && estimatedPricing.securityDeposit > 0 && (
                                   <div className="flex justify-between text-slate-600">
                                     <span>Security deposit</span>
-                                    <span>{detailListing.currency} {estimatedPricing.securityDeposit.toLocaleString()}</span>
+                                    <span>{money(estimatedPricing.localizedSecurityDeposit, estimatedPricing.securityDeposit)}</span>
                                   </div>
                                 )}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 mt-1">
                                   <span>Total</span>
-                                  <span>{detailListing.currency} {estimatedPricing.totalAmount.toLocaleString()}</span>
+                                  <span>{pre}{cur} {shownTotal.toLocaleString()}</span>
                                 </div>
-                                {/* Reference only — line items above never convert (would not
-                                    sum correctly across independent per-line conversions). Only
-                                    the total gets an approx figure in the guest's display currency. */}
-                                {estimatedPricing.localizedCurrency && estimatedPricing.localCurrencyAmount != null && (
+                                {/* Converted breakdown → show the exact listing-currency total so
+                                    the real figure stays visible. Unconverted → show the
+                                    aggregate approximation instead. */}
+                                {showLoc ? (
+                                  <div className="flex justify-between text-slate-400 text-xs">
+                                    <span>Exact ({detailListing.currency})</span>
+                                    <span>{detailListing.currency} {estimatedPricing.totalAmount.toLocaleString()}</span>
+                                  </div>
+                                ) : estimatedPricing.localizedCurrency && estimatedPricing.localCurrencyAmount != null ? (
                                   <div className="flex justify-between text-slate-400 text-xs">
                                     <span>Approx.</span>
                                     <span>~{estimatedPricing.localizedCurrency} {estimatedPricing.localCurrencyAmount.toLocaleString()}</span>
                                   </div>
-                                )}
+                                ) : null}
                               </div>
-                            ) : null
+                              );
+                            })() : null
                           )}
                         </div>
                       );
@@ -2869,6 +3014,34 @@ export default function TravellerDashboard() {
                           // total is shown in the platform (charge) currency.
                           const platform = derivePlatform(pricingPreview, detailListing.currency, grandTotal);
                           const listingValue = (v: number) => `${detailListing.currency} ${v.toLocaleString()}`;
+                          // The breakdown converts as a unit or not at all. A voucher discount
+                          // is validated in the listing's currency and has no server-converted
+                          // twin, so converting the lines around it would leave a total its own
+                          // lines don't add up to. Then everything stays exact instead.
+                          // Requires a real currency change (localizedCurrency is also set for
+                          // the identity case) AND itemised converted data — with only the
+                          // aggregate fields present, the raw fallbacks would be relabelled
+                          // under the target currency.
+                          const showLoc = !!pricingPreview.localizedCurrency
+                            && pricingPreview.localizedCurrency !== detailListing.currency
+                            && pricingPreview.localizedBaseAmount != null
+                            && !(effectiveDiscountSource === "voucher" && bestDiscount > 0);
+                          const dispCur = showLoc ? pricingPreview.localizedCurrency : detailListing.currency;
+                          const dispPre = showLoc ? "~" : "";
+                          const dispAmt = (loc: number | null | undefined, rawVal: number) =>
+                            showLoc && loc != null ? loc : rawVal;
+                          const dispValue = (loc: number | null | undefined, rawVal: number) =>
+                            `${dispPre}${dispCur} ${dispAmt(loc, rawVal).toLocaleString()}`;
+                          // Summed from the rendered values so the total reconciles with its
+                          // own lines rather than being converted independently of them.
+                          const shownTotal = showLoc
+                            ? Math.max(0, dispAmt(pricingPreview.localizedBaseAmount, base)
+                              - dispAmt(pricingPreview.localizedPromotionDiscount, discount))
+                            + dispAmt(pricingPreview.localizedServiceFee, serviceFee)
+                            + dispAmt(pricingPreview.localizedTaxAmount, taxAmount)
+                            + dispAmt(pricingPreview.localizedSecurityDeposit, securityDeposit)
+                            + dispAmt(pricingPreview.localizedDeliveryFee, deliveryFee)
+                            : grandTotal;
                           const fmt = (d: string | null | undefined) =>
                             d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
                           return (
@@ -2909,40 +3082,42 @@ export default function TravellerDashboard() {
                                 )}
                               </div>
 
-                              {/* Price breakdown in listing currency; total in platform currency */}
+                              {/* Breakdown in the guest's display currency when the API could
+                                  convert it, otherwise the listing's own. The charge itself is
+                                  always the platform amount, shown alongside. */}
                               <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
                                 <div className="flex justify-between">
-                                  <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days !== 1 ? "s" : ""}</span>
-                                  <span>{listingValue(base)}</span>
+                                  <span>{dispPre}{dispCur} {dispAmt(pricingPreview.localizedNightlyRate, pricePerNight).toLocaleString()} × {days} {isCar ? "day" : "night"}{days !== 1 ? "s" : ""}</span>
+                                  <span>{dispValue(pricingPreview.localizedBaseAmount, base)}</span>
                                 </div>
                                 {discount > 0 && (
                                   <div className="flex justify-between text-emerald-600 font-semibold">
                                     <span>{effectiveDiscountSource === "promotion" ? `Promotional discount (${activePromotion?.discountValue}%)` : "Voucher discount"}</span>
-                                    <span>−{listingValue(discount)}</span>
+                                    <span>{dispPre}−{dispCur} {dispAmt(pricingPreview.localizedPromotionDiscount, discount).toLocaleString()}</span>
                                   </div>
                                 )}
                                 <div className="flex justify-between text-slate-500">
-                                  <span>Service fee{pricingPreview?.commissionRate ? ` (${Math.round(pricingPreview.commissionRate * 100)}%)` : ''}</span>
-                                  <span>{listingValue(serviceFee)}</span>
+                                  <span>Service fee{pricingPreview?.serviceFeeRate ? ` (${Math.round(pricingPreview.serviceFeeRate * 100)}%)` : ''}</span>
+                                  <span>{dispValue(pricingPreview.localizedServiceFee, serviceFee)}</span>
                                 </div>
                                 {taxAmount > 0 && (
                                   <div className="flex justify-between text-slate-500">
                                     <span>Taxes & VAT{pricingPreview?.taxRate ? ` (${Math.round(pricingPreview.taxRate * 100)}%)` : ''}</span>
-                                    <span>{listingValue(taxAmount)}</span>
+                                    <span>{dispValue(pricingPreview.localizedTaxAmount, taxAmount)}</span>
                                   </div>
                                 )}
 
                                 {isCar && securityDeposit > 0 && (
                                   <div className="flex justify-between text-slate-600">
                                     <span>Security deposit</span>
-                                    <span>{listingValue(securityDeposit)}</span>
+                                    <span>{dispValue(pricingPreview.localizedSecurityDeposit, securityDeposit)}</span>
                                   </div>
                                 )}
 
                                 {isCar && deliveryFee > 0 && (
                                   <div className="flex justify-between text-slate-600">
                                     <span>Delivery fee</span>
-                                    <span>{listingValue(deliveryFee)}</span>
+                                    <span>{dispValue(pricingPreview.localizedDeliveryFee, deliveryFee)}</span>
                                   </div>
                                 )}
 
@@ -2950,9 +3125,14 @@ export default function TravellerDashboard() {
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 text-base">
                                   <span>Total</span>
                                   <span className="text-right">
-                                    <div>{fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
-                                    {platform.platformCurrency !== detailListing.currency && (
-                                      <div className="text-[10px] font-normal text-slate-400">Billed as approx. {listingValue(grandTotal)}</div>
+                                    <div>{showLoc ? `${dispPre}${dispCur} ${shownTotal.toLocaleString()}` : fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
+                                    {showLoc ? (
+                                      <>
+                                        <div className="text-xs font-medium text-slate-500 mt-0.5">Exact {listingValue(grandTotal)}</div>
+                                        <div className="text-xs font-semibold text-slate-700">Charged {fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
+                                      </>
+                                    ) : platform.platformCurrency !== detailListing.currency && (
+                                      <div className="text-xs font-medium text-slate-500 mt-0.5">Billed as approx. {listingValue(grandTotal)}</div>
                                     )}
                                   </span>
                                 </div>
@@ -3032,43 +3212,73 @@ export default function TravellerDashboard() {
                             // Breakdown in listing currency; end total in platform currency.
                             const platform = derivePlatform(pricingPreview, detailListing.currency, grandTotal);
                             const listingValue = (v: number) => `${detailListing.currency} ${v.toLocaleString()}`;
+                            // See the lock-step breakdown above: converts as a unit, and only
+                            // when no voucher (which has no server-converted twin) is applied.
+                            // Requires a real currency change (localizedCurrency is also set for
+                          // the identity case) AND itemised converted data — with only the
+                          // aggregate fields present, the raw fallbacks would be relabelled
+                          // under the target currency.
+                          const showLoc = !!pricingPreview.localizedCurrency
+                            && pricingPreview.localizedCurrency !== detailListing.currency
+                            && pricingPreview.localizedBaseAmount != null
+                            && !(effectiveDiscountSource === "voucher" && bestDiscount > 0);
+                            const dispCur = showLoc ? pricingPreview.localizedCurrency : detailListing.currency;
+                            const dispPre = showLoc ? "~" : "";
+                            const dispAmt = (loc: number | null | undefined, rawVal: number) =>
+                              showLoc && loc != null ? loc : rawVal;
+                            const dispValue = (loc: number | null | undefined, rawVal: number) =>
+                              `${dispPre}${dispCur} ${dispAmt(loc, rawVal).toLocaleString()}`;
+                            const shownTotal = showLoc
+                              ? Math.max(0, dispAmt(pricingPreview.localizedBaseAmount, baseTotal)
+                                - dispAmt(pricingPreview.localizedPromotionDiscount, discount))
+                              + dispAmt(pricingPreview.localizedServiceFee, serviceFee)
+                              + dispAmt(pricingPreview.localizedTaxAmount, taxAmount)
+                              + dispAmt(pricingPreview.localizedSecurityDeposit, securityDeposit)
+                              + dispAmt(pricingPreview.localizedDeliveryFee, deliveryFee)
+                              : grandTotal;
                             return (
                               <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
                                 <div className="flex justify-between">
-                                  <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
-                                  <span>{listingValue(baseTotal)}</span>
+                                  <span>{dispPre}{dispCur} {dispAmt(pricingPreview.localizedNightlyRate, pricePerNight).toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
+                                  <span>{dispValue(pricingPreview.localizedBaseAmount, baseTotal)}</span>
                                 </div>
                                 {discount > 0 && (
                                   <div className="flex justify-between text-emerald-600 font-semibold">
                                     <span>{effectiveDiscountSource === "promotion" ? `Promotional discount (${activePromotion?.discountValue}%)` : "Voucher discount"}</span>
-                                    <span>−{listingValue(discount)}</span>
+                                    <span>{dispPre}−{dispCur} {dispAmt(pricingPreview.localizedPromotionDiscount, discount).toLocaleString()}</span>
                                   </div>
                                 )}
-                                <div className="flex justify-between"><span>Service fee{pricingPreview?.commissionRate ? ` (${Math.round(pricingPreview.commissionRate * 100)}%)` : ''}</span><span>{listingValue(serviceFee)}</span></div>
+                                <div className="flex justify-between"><span>Service fee{pricingPreview?.serviceFeeRate ? ` (${Math.round(pricingPreview.serviceFeeRate * 100)}%)` : ''}</span><span>{dispValue(pricingPreview.localizedServiceFee, serviceFee)}</span></div>
                                 {taxAmount > 0 && (
                                   <div className="flex justify-between text-slate-500">
                                     <span>Taxes{pricingPreview?.taxRate ? ` (${Math.round(pricingPreview.taxRate * 100)}%)` : ''}</span>
-                                    <span>{listingValue(taxAmount)}</span>
+                                    <span>{dispValue(pricingPreview.localizedTaxAmount, taxAmount)}</span>
                                   </div>
                                 )}
                                 {isCar && securityDeposit > 0 && (
                                   <div className="flex justify-between text-slate-600">
                                     <span>Security deposit</span>
-                                    <span>{listingValue(securityDeposit)}</span>
+                                    <span>{dispValue(pricingPreview.localizedSecurityDeposit, securityDeposit)}</span>
                                   </div>
                                 )}
                                 {isCar && deliveryFee > 0 && (
                                   <div className="flex justify-between text-slate-600">
                                     <span>Delivery fee</span>
-                                    <span>{listingValue(deliveryFee)}</span>
+                                    <span>{dispValue(pricingPreview.localizedDeliveryFee, deliveryFee)}</span>
                                   </div>
                                 )}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
                                   <span>Total to pay</span>
                                   <span className="text-right">
-                                    <div>{fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
-                                    {platform.platformCurrency !== detailListing.currency && (
-                                      <div className="text-[10px] font-normal text-slate-400">Billed as approx. {listingValue(grandTotal)}</div>
+                                    <div>{showLoc ? `${dispPre}${dispCur} ${shownTotal.toLocaleString()}` : fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
+                                    {showLoc && (
+                                      <>
+                                        <div className="text-xs font-medium text-slate-500 mt-0.5">Exact {listingValue(grandTotal)}</div>
+                                        <div className="text-xs font-semibold text-slate-700">Charged {fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
+                                      </>
+                                    )}
+                                    {!showLoc && platform.platformCurrency !== detailListing.currency && (
+                                      <div className="text-xs font-medium text-slate-500 mt-0.5">Billed as approx. {listingValue(grandTotal)}</div>
                                     )}
                                     {pricingPreview.localizedCurrency && pricingPreview.localCurrencyAmount != null && (
                                       <div className="text-[10px] font-normal text-slate-400">~{pricingPreview.localizedCurrency} {pricingPreview.localCurrencyAmount.toLocaleString()}</div>
@@ -3244,6 +3454,12 @@ export default function TravellerDashboard() {
                     </div>
                   </div>
                 </div>
+                </div>
+
+                {detailHasBody && (
+                  <div className="lg:col-span-12">{locationSection}</div>
+                )}
+
                 <div className="lg:col-span-12">
                   <PublicReviewsSection listingId={detailListing.id} />
                 </div>
@@ -3749,7 +3965,7 @@ export default function TravellerDashboard() {
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-[#1D8D2B] uppercase tracking-wider">{item.category}</p>
                         <p className="text-sm font-bold text-slate-900 line-clamp-1 group-hover:text-[#1D8D2B] transition">{item.name}</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">{approxPrefix(item.localizedCurrency)}{item.localizedCurrency ?? item.currency} {(item.localizedPricePerNight ?? item.pricePerNight).toLocaleString()} / {item.category === "car" ? "day" : "night"}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{approxPrefix(item.localizedCurrency, item.currency)}{item.localizedCurrency ?? item.currency} {(item.localizedPricePerNight ?? item.pricePerNight).toLocaleString()} / {item.category === "car" ? "day" : "night"}</p>
                       </div>
                     </button>
                   ))}
@@ -3855,27 +4071,14 @@ export default function TravellerDashboard() {
                   <p className="text-[11px] text-slate-400 pl-6">Luxury Preferences</p>
                 </div>
 
-                {/* Price Range slider */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-700">Price Range</label>
-                    <span className="text-xs font-semibold text-slate-500">
-                      {priceMin > 0 ? `KES ${priceMin.toLocaleString()}` : "KES 500"} – {priceMax >= 499999 ? "KES 5,000+" : `KES ${priceMax.toLocaleString()}`}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={50000}
-                    step={500}
-                    value={priceMax >= 499999 ? 50000 : priceMax}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setPriceMax(v >= 50000 ? 500000 : v);
-                    }}
-                    className="w-full h-1.5 accent-[#1D8D2B] cursor-pointer"
-                  />
-                </div>
+                <PriceRangeFields
+                  currency={priceFilterCurrency}
+                  bounds={priceBounds}
+                  min={priceMin}
+                  max={priceMax}
+                  noCap={PRICE_NO_CAP}
+                  onChange={({ min, max }) => { setPriceMin(min); setPriceMax(max); }}
+                />
 
                 {/* Bedrooms & Bathrooms */}
                 <div className="grid grid-cols-2 gap-3">
@@ -4044,10 +4247,11 @@ export default function TravellerDashboard() {
                 {/* Reset */}
                 <button
                   onClick={() => {
-                    setPriceMin(0); setPriceMax(500000); setSelectedRating(null);
+                    setPriceMin(0); setPriceMax(PRICE_NO_CAP); setSelectedRating(null);
                     setSelectedCancellation(""); setSortBy("distance_asc");
                     setSelectedAmenities([]); setShowInstantOnly(false);
                     setFilterBedrooms(null); setFilterBathrooms(null); setFilterPropertyTypes([]);
+                    setFilterApplyToken((t) => t + 1);
                   }}
                   className="w-full text-xs font-bold text-slate-400 hover:text-slate-700 transition"
                 >
@@ -4069,7 +4273,7 @@ export default function TravellerDashboard() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
                   </svg>
                   Filters
-                  {(showInstantOnly || selectedAmenities.length > 0 || !!selectedRating || priceMin > 0 || priceMax < 499999) && (
+                  {(showInstantOnly || selectedAmenities.length > 0 || !!selectedRating || priceMin > 0 || priceMax < PRICE_NO_CAP) && (
                     <span className="w-2 h-2 rounded-full bg-[#E31C5F] inline-block" />
                   )}
                 </button>
@@ -4123,22 +4327,21 @@ export default function TravellerDashboard() {
               {/* Listings content */}
               <div className="px-6 lg:px-8 pb-10">
                 {searching ? (
-                  <div className="space-y-4">
-                    {[1, 2, 3].map((n) => (
-                      <div key={n} className="animate-pulse bg-white border border-slate-100 rounded-2xl overflow-hidden flex shadow-sm" style={{ minHeight: 190 }}>
-                        <div className="w-[42%] bg-slate-200 shrink-0" />
-                        <div className="flex-1 p-5 space-y-3">
-                          <div className="h-2.5 bg-slate-200 rounded w-1/4" />
-                          <div className="h-5 bg-slate-200 rounded w-3/4" />
-                          <div className="h-3 bg-slate-200 rounded w-1/2" />
-                          <div className="flex gap-4 mt-1">
-                            <div className="h-3 bg-slate-200 rounded w-16" />
-                            <div className="h-3 bg-slate-200 rounded w-16" />
-                            <div className="h-3 bg-slate-200 rounded w-16" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
+                    {/* Same grid and card shape as the results, so nothing
+                        shifts when the skeletons are swapped out. */}
+                    {[1, 2, 3, 4].map((n) => (
+                      <div key={n} className="animate-pulse bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+                        <div className="aspect-[3/2] w-full bg-slate-200" />
+                        <div className="p-4 space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="h-2.5 bg-slate-200 rounded w-1/3" />
+                            <div className="h-4 bg-slate-200 rounded w-16" />
                           </div>
-                          <div className="flex justify-between items-end pt-4 border-t border-slate-100 mt-4">
-                            <div className="h-7 bg-slate-200 rounded w-28" />
-                            <div className="h-9 bg-slate-200 rounded w-32" />
+                          <div className="h-4 bg-slate-200 rounded w-3/4" />
+                          <div className="flex items-center justify-between pt-1">
+                            <div className="h-3 bg-slate-200 rounded w-20" />
+                            <div className="h-3 bg-slate-200 rounded w-14" />
                           </div>
                         </div>
                       </div>
@@ -4173,21 +4376,6 @@ export default function TravellerDashboard() {
                   </div>
                 ) : (
                   <div className="space-y-5">
-                    {/* First featured card */}
-                    {displayedListings[0] && (
-                      <ListingCard
-                        listing={displayedListings[0]}
-                        onSelect={handleSelectListing}
-                        hoveredId={mapHoveredId}
-                        onHover={setMapHoveredId}
-                        variant="featured"
-                        promotionBadge={promotionBadge}
-                        activePromotion={activePromotion}
-                        isFavourited={isFavourited(displayedListings[0].id)}
-                        onToggleFavourite={handleToggleFavourite}
-                      />
-                    )}
-
                     {/* Activity promotion banner — non-dismissable, driven by backend (PRD §6.4) */}
                     {activePromotion && activePromotion.activity === searchCategory && isPromotionValid(activePromotion) && (
                       <ActivityPromoBanner
@@ -4218,38 +4406,13 @@ export default function TravellerDashboard() {
                       />
                     )}
 
-                    {/* Cards 2 and 3 as featured */}
-                    {displayedListings[1] && (
-                      <ListingCard
-                        listing={displayedListings[1]}
-                        onSelect={handleSelectListing}
-                        hoveredId={mapHoveredId}
-                        onHover={setMapHoveredId}
-                        variant="featured"
-                        promotionBadge={promotionBadge}
-                        activePromotion={activePromotion}
-                        isFavourited={isFavourited(displayedListings[1].id)}
-                        onToggleFavourite={handleToggleFavourite}
-                      />
-                    )}
-                    {displayedListings[2] && (
-                      <ListingCard
-                        listing={displayedListings[2]}
-                        onSelect={handleSelectListing}
-                        hoveredId={mapHoveredId}
-                        onHover={setMapHoveredId}
-                        variant="featured"
-                        promotionBadge={promotionBadge}
-                        activePromotion={activePromotion}
-                        isFavourited={isFavourited(displayedListings[2].id)}
-                        onToggleFavourite={handleToggleFavourite}
-                      />
-                    )}
-
-                    {/* Remaining cards in 2-column compact grid */}
-                    {displayedListings.length > 3 && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        {displayedListings.slice(3).map((l) => (
+                    {/* Every result in one grid. The first three used to render as
+                        full-width "featured" rows, which is what put a single
+                        stretched card on each line; column count now climbs with
+                        the viewport so a wide screen shows four at a time. */}
+                    {displayedListings.length > 0 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
+                        {displayedListings.map((l) => (
                           <ListingCard
                             key={l.id}
                             listing={l}
@@ -4502,7 +4665,7 @@ export default function TravellerDashboard() {
               <h3 className="text-base font-bold text-slate-900">Filters</h3>
               <div className="flex items-center gap-4">
                 <button
-                  onClick={() => { setPriceMin(0); setPriceMax(500000); setSelectedRating(null); setSelectedCancellation(""); setSortBy("distance_asc"); setSelectedAmenities([]); setShowInstantOnly(false); }}
+                  onClick={() => { setPriceMin(0); setPriceMax(PRICE_NO_CAP); setSelectedRating(null); setSelectedCancellation(""); setSortBy("distance_asc"); setSelectedAmenities([]); setShowInstantOnly(false); setFilterApplyToken((t) => t + 1); }}
                   className="text-xs font-bold text-slate-400 hover:text-slate-700 uppercase tracking-wider"
                 >
                   Reset all
@@ -4531,16 +4694,16 @@ export default function TravellerDashboard() {
                   <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${showInstantOnly ? "translate-x-5" : ""}`} />
                 </button>
               </div> */}
-              {/* Price range */}
-              <div className="space-y-2">
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                  Price per {searchCategory === "car" ? "day" : "night"}
-                </label>
-                <div className="flex gap-2">
-                  <input type="number" value={priceMin || ""} onChange={(e) => setPriceMin(e.target.value ? Number(e.target.value) : 0)} placeholder="Min" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
-                  <input type="number" value={priceMax >= 499999 ? "" : priceMax} onChange={(e) => setPriceMax(e.target.value ? Number(e.target.value) : 500000)} placeholder="Max" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
-                </div>
-              </div>
+              {/* Price range — same component as the sidebar so the clamping and
+                  commit-on-blur behaviour can't diverge between the two. */}
+              <PriceRangeFields
+                currency={priceFilterCurrency}
+                bounds={priceBounds}
+                min={priceMin}
+                max={priceMax}
+                noCap={PRICE_NO_CAP}
+                onChange={({ min, max }) => { setPriceMin(min); setPriceMax(max); }}
+              />
               {/* Rating */}
               {searchCategory !== "car" && (
                 <div className="space-y-2">
@@ -4637,8 +4800,11 @@ export default function TravellerDashboard() {
               )}
             </div>
             <div className="p-5 border-t border-slate-100 shrink-0">
+              {/* This is the drawer's apply action. It used to only close the
+                  sheet and rely on the filter-change effect to re-query; with
+                  that effect gone it has to run the search itself. */}
               <button
-                onClick={() => setShowFiltersDrawer(false)}
+                onClick={() => { setShowFiltersDrawer(false); handleSearch(); }}
                 className="w-full py-3.5 bg-[#0c2614] text-white font-bold rounded-xl text-sm hover:bg-[#081b0d] transition"
               >
                 Show Results

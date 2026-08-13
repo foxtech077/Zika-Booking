@@ -26,9 +26,18 @@ export const ALL_CURRENCIES: { code: string; symbol: string }[] = (() => {
  * "~" prefix for a converted/localized amount, per the BE-agreed convention:
  * a price shown in the listing's own currency is exact; a price converted
  * into the guest's chosen display currency is always an approximation.
+ *
  * Pass the `localizedCurrency` field the backend returns alongside a
- * conversion (null/undefined when no conversion was requested or available).
+ * conversion (null/undefined when no conversion was requested or available),
+ * and the listing's own currency. When the two match, the backend applied no
+ * conversion — getLocalizedContext returns the base currency with a null rate
+ * for that case — so the amount is exact and must not be marked approximate.
  */
-export function approxPrefix(localizedCurrency: string | null | undefined): string {
-  return localizedCurrency ? "~" : "";
+export function approxPrefix(
+  localizedCurrency: string | null | undefined,
+  baseCurrency?: string | null,
+): string {
+  if (!localizedCurrency) return "";
+  if (baseCurrency && localizedCurrency === baseCurrency) return "";
+  return "~";
 }

@@ -41,6 +41,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+      # The gha/registry cache backends need a container-driver buildx builder;
+      # the default docker driver only supports inline cache export.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -58,8 +64,14 @@ jobs:
           tags: |
             ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:dev-latest
             ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:dev-${{ github.sha }}
-          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ matrix.image }}:dev-latest
-          cache-to: type=inline
+          # gha backend caches ALL stages (incl. the builder's pnpm install) in
+          # GitHub's cache service between runs, so unchanged lockfiles skip the
+          # store download entirely. Inline (default, mode=min) only cached the
+          # final-stage layers, which is why installs rebuilt every run.
+          cache-from: |
+            type=gha,scope=${{ matrix.service }}
+            type=registry,ref=${{ env.ECR_REGISTRY }}/${{ matrix.image }}:dev-latest
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
           build-args: ${{ matrix.build_args }}
   deploy:
     needs: build-and-push
@@ -85,4 +97,6 @@ jobs:
             docker compose run --rm listing-service pnpm exec prisma migrate deploy
             docker compose run --rm payment-service pnpm exec prisma migrate deploy
             docker compose up -d --remove-orphans
-            docker image prune -f
+            # Prune unused images (incl. old dev-<sha> tags from previous deploys) and
+            # stopped containers — runs after up so running containers are protected.
+            docker system prune -af

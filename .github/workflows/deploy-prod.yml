@@ -44,6 +44,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+      # The gha/registry cache backends need a container-driver buildx builder;
+      # the default docker driver only supports inline cache export.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -60,8 +66,14 @@ jobs:
           tags: |
             ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
             ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:prod-${{ github.sha }}
-          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
-          cache-to: type=inline
+          # gha backend caches ALL stages (incl. the builder's pnpm install) in
+          # GitHub's cache service between runs, so unchanged lockfiles skip the
+          # store download entirely. Inline (default, mode=min) only cached the
+          # final-stage layers, which is why installs rebuilt every run.
+          cache-from: |
+            type=gha,scope=${{ matrix.service }}
+            type=registry,ref=${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
           build-args: ${{ matrix.build_args }}
   deploy-prod:
     needs: build-and-push-prod
@@ -75,21 +87,15 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_PROD_DEPLOY_ROLE_ARN }}
           aws-region: af-south-1
-      - name: Deploy auth-service (owns migrations for auth, listing, payments)
+      # All services deploy in parallel — each runs `prisma migrate deploy` for
+      # its own schema on boot, and the ALB target-group health checks gate
+      # services-stable, so a broken task fails the deployment.
+      - name: Deploy all services in parallel
+        timeout-minutes: 30
         run: |
           aws ecs update-service --cluster kainook-prod-cluster --service kainook-auth --force-new-deployment --region af-south-1
-          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-auth --region af-south-1
-      - name: Deploy listing-service
-        run: |
           aws ecs update-service --cluster kainook-prod-cluster --service kainook-listing --force-new-deployment --region af-south-1
-          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-listing --region af-south-1
-      - name: Deploy payment-service
-        run: |
           aws ecs update-service --cluster kainook-prod-cluster --service kainook-payment --force-new-deployment --region af-south-1
-          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-payment --region af-south-1
-      - name: Deploy web and admin
-        run: |
           aws ecs update-service --cluster kainook-prod-cluster --service kainook-web --force-new-deployment --region af-south-1
           aws ecs update-service --cluster kainook-prod-cluster --service kainook-admin --force-new-deployment --region af-south-1
-          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-web --region af-south-1
-          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-admin --region af-south-1
+          aws ecs wait services-stable --cluster kainook-prod-cluster --services kainook-auth kainook-listing kainook-payment kainook-web kainook-admin --region af-south-1

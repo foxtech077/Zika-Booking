@@ -72,13 +72,15 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
 
   const subtotalAfterDiscount = Math.max(0, originalSubtotal - longStayDiscountAmount);
 
-  // Service fee — country-specific rate served by GET /listings/:id/public, so
-  // this matches what checkout charges. Was hardcoded to 10% while checkout used
-  // the real rate (and other screens assumed 5%), so the same booking could be
-  // quoted two different totals.
-  const commissionRate = listing.commissionRate ?? 0;
-  const serviceFeePercent = Math.round(commissionRate * 1000) / 10;
-  const serviceFee = days > 0 ? Math.ceil(subtotalAfterDiscount * commissionRate * 100) / 100 : 0;
+  // Service fee — flat rate served by GET /listings/:id/public (serviceFeeRate,
+  // currently 0.04). This is NOT the provider commission: calculateBilling bakes
+  // commission into the base price (rate × (1 + commissionRate), already applied
+  // to the rates this endpoint returns) and then charges a flat 4% on top, so
+  // using commissionRate here quoted a country-specific rate the guest is never
+  // actually charged.
+  const serviceFeeRate = listing.serviceFeeRate ?? 0.04;
+  const serviceFeePercent = Math.round(serviceFeeRate * 1000) / 10;
+  const serviceFee = days > 0 ? Math.ceil(subtotalAfterDiscount * serviceFeeRate * 100) / 100 : 0;
   // Car rentals collect the security deposit upfront (added on dev).
   // Waived when the provider supplies a driver — mirrors the backend,
   // which zeroes the deposit in calculateBilling under the same condition.

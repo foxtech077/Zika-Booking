@@ -371,7 +371,7 @@ const ResultCard = memo(function ResultCard({
     ? (item.localizedDailyRate ?? item.dailyRate)
     : (item.localizedNightlyRate ?? item.nightlyRate);
   const priceCurrency = item.localizedCurrency ?? item.currency;
-  const pricePrefix = approxPrefix(item.localizedCurrency);
+  const pricePrefix = approxPrefix(item.localizedCurrency, item.currency);
   const priceLabel = isCar ? "/day" : "/night";
 
   // Derive promotion: item.promoBadge takes priority over global active promotion
@@ -1250,10 +1250,26 @@ export default function SearchScreen() {
     return allResults;
   }, [cursor, searchData, isPlaceholderData, allResults]);
 
+  // Currency the price filter is expressed in — the converted code when the API
+  // could convert, otherwise the guest's chosen one. Matches the card labels,
+  // and never a hardcoded currency.
+  const priceFilterCurrency =
+    effectiveResults.find((r: any) => r.localizedCurrency)?.localizedCurrency
+    ?? effectiveResults[0]?.currency
+    ?? localCurrency;
+
+  // Slider/input bounds read off the prices actually returned, so there is no
+  // invented floor or ceiling.
+  const priceBounds = useMemo(() => {
+    const values = effectiveResults
+      .map((r: any) => r.localizedNightlyRate ?? r.nightlyRate ?? r.localizedDailyRate ?? r.dailyRate)
+      .filter((v: any): v is number => typeof v === "number" && Number.isFinite(v) && v > 0);
+    if (values.length === 0) return null;
+    return { lo: Math.floor(Math.min(...values)), hi: Math.ceil(Math.max(...values)) };
+  }, [effectiveResults]);
+
   // ── Active filter badges (shown above results, each individually removable) ──
-  const currencyPrefix = effectiveResults[0]?.currency
-    ? `${effectiveResults[0].currency} `
-    : "";
+  const currencyPrefix = `${priceFilterCurrency} `;
   interface FilterBadge {
     key: string;
     label: string;
@@ -2015,20 +2031,20 @@ export default function SearchScreen() {
             <Text style={filterStyles.sectionTitle}>Price Range</Text>
             <View style={filterStyles.row}>
               <View style={filterStyles.priceInputBox}>
-                <Text style={filterStyles.priceLabel}>Min Price (KES)</Text>
+                <Text style={filterStyles.priceLabel}>Min Price ({priceFilterCurrency})</Text>
                 <TextInput
                   style={filterStyles.priceInput}
-                  placeholder="Any"
+                  placeholder={priceBounds ? String(priceBounds.lo) : "Any"}
                   keyboardType="numeric"
                   value={priceMin}
                   onChangeText={setPriceMin}
                 />
               </View>
               <View style={filterStyles.priceInputBox}>
-                <Text style={filterStyles.priceLabel}>Max Price (KES)</Text>
+                <Text style={filterStyles.priceLabel}>Max Price ({priceFilterCurrency})</Text>
                 <TextInput
                   style={filterStyles.priceInput}
-                  placeholder="Any"
+                  placeholder={priceBounds ? String(priceBounds.hi) : "Any"}
                   keyboardType="numeric"
                   value={priceMax}
                   onChangeText={setPriceMax}

@@ -27,6 +27,7 @@ interface PricingPreview {
   securityDeposit?: number;
   totalAmount: number;
   commissionRate?: number;
+  serviceFeeRate?: number;
   taxRate?: number;
   /** Platform (charge) currency — EUR for Stripe, XAF for Tara. */
   platformCurrency?: string;
@@ -34,6 +35,19 @@ interface PricingPreview {
   platformAmount?: number;
   /** Exchange rate listingCurrency → platformCurrency at lock time. */
   platformRate?: number;
+  /** Itemised equivalents in the guest's chosen display currency, all converted
+   *  server-side off one rate so the lines still sum to the total. Absent (and
+   *  localizedCurrency null) when the API could not convert. Never a charge
+   *  amount — the money actually taken is always platformAmount. */
+  localizedCurrency?: string | null;
+  localizedBaseAmount?: number | null;
+  localizedNightlyRate?: number | null;
+  localizedPromotionDiscount?: number | null;
+  localizedServiceFee?: number | null;
+  localizedTaxAmount?: number | null;
+  localizedDeliveryFee?: number | null;
+  localizedSecurityDeposit?: number | null;
+  localizedTotalAmount?: number | null;
 }
 
 interface CheckoutCtx {
@@ -101,6 +115,7 @@ interface ConfirmedBooking {
   securityDeposit?: number;
   deliveryFee?: number;
   commissionRate?: number;
+  serviceFeeRate?: number;
   taxRate?: number;
 }
 
@@ -136,6 +151,27 @@ function getPricing(ctx: CheckoutCtx) {
   // the listing currency; only this converted total is shown in the platform
   // currency. Fall back to the listing total for older checkout sessions.
   const info = derivePlatform(pp, ctx.currency, total);
+
+  // Guest-display-currency view of the same lines. The breakdown converts as a
+  // unit or not at all: a voucher discount is validated in the listing's
+  // currency and has no server-converted twin, so converting the lines around
+  // it would leave a total its own lines don't add up to.
+  // A non-null localizedCurrency is not proof of a conversion: getLocalizedContext
+  // returns the base currency with a null rate when no target was requested or the
+  // target matches the listing's own currency. And when only the aggregate fields
+  // are present, every dispAmt would fall back to a raw listing-currency amount
+  // while the label switched to the target — relabelling, not converting.
+  const showLocalized = !!pp.localizedCurrency
+    && pp.localizedCurrency !== ctx.currency
+    && pp.localizedBaseAmount != null
+    && ctx.discountSource !== "voucher";
+  const dispAmt = (loc: number | null | undefined, rawVal: number) =>
+    showLocalized && loc != null ? loc : rawVal;
+  const dispSubtotal = Math.max(
+    0,
+    dispAmt(pp.localizedBaseAmount, base) - dispAmt(pp.localizedPromotionDiscount, totalDiscount),
+  );
+
   return {
     base, discount: totalDiscount, subtotal, serviceFee, taxes: taxAmount,
     deliveryFee, securityDeposit, total,
@@ -143,6 +179,19 @@ function getPricing(ctx: CheckoutCtx) {
     platformAmount: info.platformAmount,
     platformRate: info.platformRate,
     listingCurrency: ctx.currency,
+    showLocalized,
+    dispCurrency: showLocalized ? pp.localizedCurrency! : ctx.currency,
+    dispPrefix: showLocalized ? "~" : "",
+    dispAmt,
+    dispSubtotal,
+    // Summed from the rendered lines so the total always reconciles with them.
+    dispTotal: showLocalized
+      ? dispSubtotal
+      + dispAmt(pp.localizedServiceFee, serviceFee)
+      + dispAmt(pp.localizedTaxAmount, taxAmount)
+      + dispAmt(pp.localizedDeliveryFee, deliveryFee)
+      + dispAmt(pp.localizedSecurityDeposit, securityDeposit)
+      : total,
   };
 }
 
@@ -152,7 +201,7 @@ function MoneyValue({ platform, listing, currency, listingCurrency }: { platform
     <span className="text-right">
       <div>{fmtMoney(platform, currency)}</div>
       {currency !== listingCurrency && (
-        <div className="text-[10px] font-normal text-slate-400">Billed as approx. {fmtMoney(listing, listingCurrency)}</div>
+        <div className="text-xs font-medium text-slate-500 mt-0.5">Billed as approx. {fmtMoney(listing, listingCurrency)}</div>
       )}
     </span>
   );
@@ -426,6 +475,7 @@ export default function BookingReviewPage() {
     securityDeposit?: number,
     deliveryFee?: number,
     commissionRate?: number,
+    serviceFeeRate?: number,
     taxRate?: number,
   ) {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -462,7 +512,7 @@ export default function BookingReviewPage() {
             baseAmount: base, serviceFee: fee, taxes: tax, discount: disc,
             securityDeposit,
             deliveryFee,
-            commissionRate, taxRate,
+            commissionRate, serviceFeeRate, taxRate,
           });
           sessionStorage.removeItem("zika:checkout");
           setStep("confirmed");
@@ -578,7 +628,7 @@ export default function BookingReviewPage() {
         pmId = payRes.data.data.paymentId as string;
         setPaymentId(pmId);
         setStep("polling");
-        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money", ctx.pricingPreview?.securityDeposit, ctx.pricingPreview?.deliveryFee, ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.taxRate);
+        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money", ctx.pricingPreview?.securityDeposit, ctx.pricingPreview?.deliveryFee, ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.serviceFeeRate, ctx.pricingPreview?.taxRate);
       }
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message ?? err?.response?.data?.message ?? err?.message ?? "Something went wrong.";
@@ -600,7 +650,7 @@ export default function BookingReviewPage() {
         setPayError(result.error.message ?? "Card payment failed. Please check your details.");
       } else {
         setStep("polling");
-        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Card", ctx!.pricingPreview?.securityDeposit, ctx!.pricingPreview?.deliveryFee, ctx!.pricingPreview?.commissionRate, ctx!.pricingPreview?.taxRate);
+        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Card", ctx!.pricingPreview?.securityDeposit, ctx!.pricingPreview?.deliveryFee, ctx!.pricingPreview?.commissionRate, ctx!.pricingPreview?.serviceFeeRate, ctx!.pricingPreview?.taxRate);
       }
     } catch (err: any) {
       setPayError(err?.message ?? "Card payment failed.");
@@ -1244,47 +1294,56 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
           </div>
         </div>
 
-        {/* Line items in listing currency; the total is shown in the platform currency */}
+        {/* Line items in the guest's display currency when the API converted them,
+            otherwise the listing's own. The amount charged is always the platform total. */}
         <div className="space-y-2.5 text-sm">
           <div className="flex justify-between text-slate-600">
-            <span>{ctx.currency} {fmt(ctx.pricingPreview?.nightlyRate ?? ctx.pricePerNight)} × {ctx.pricingPreview?.units ?? ctx.nightsOrDays} {isCar ? "day" : "night"}{(ctx.pricingPreview?.units ?? ctx.nightsOrDays) !== 1 ? "s" : ""}</span>
-            <span>{ctx.currency} {fmt(pricing.base)}</span>
+            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedNightlyRate, ctx.pricingPreview?.nightlyRate ?? ctx.pricePerNight))} × {ctx.pricingPreview?.units ?? ctx.nightsOrDays} {isCar ? "day" : "night"}{(ctx.pricingPreview?.units ?? ctx.nightsOrDays) !== 1 ? "s" : ""}</span>
+            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedBaseAmount, pricing.base))}</span>
           </div>
           {pricing.discount > 0 && (
             <div className="flex justify-between text-emerald-600">
               <span>{ctx.discountSource === "promotion" ? "Promotional discount" : "Voucher discount"}</span>
-              <span>−{ctx.currency} {fmt(pricing.discount)}</span>
+              <span>{pricing.dispPrefix}−{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedPromotionDiscount, pricing.discount))}</span>
             </div>
           )}
           <div className="flex justify-between text-slate-600 border-t border-slate-100 pt-2">
             <span>Subtotal</span>
-            <span>{ctx.currency} {fmt(pricing.subtotal)}</span>
+            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispSubtotal)}</span>
           </div>
           <div className="flex justify-between text-slate-600">
-            <span>Service fee{ctx.pricingPreview?.commissionRate ? ` (${Math.round(ctx.pricingPreview.commissionRate * 100)}%)` : ''}</span>
-            <span>{ctx.currency} {fmt(pricing.serviceFee)}</span>
+            <span>Service fee{ctx.pricingPreview?.serviceFeeRate ? ` (${Math.round(ctx.pricingPreview.serviceFeeRate * 100)}%)` : ''}</span>
+            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedServiceFee, pricing.serviceFee))}</span>
           </div>
           {pricing.taxes > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Taxes{ctx.pricingPreview?.taxRate ? ` (${Math.round(ctx.pricingPreview.taxRate * 100)}%)` : ''}</span>
-              <span>{ctx.currency} {fmt(pricing.taxes)}</span>
+              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedTaxAmount, pricing.taxes))}</span>
             </div>
           )}
           {pricing.deliveryFee > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Delivery fee</span>
-              <span>{ctx.currency} {fmt(pricing.deliveryFee)}</span>
+              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedDeliveryFee, pricing.deliveryFee))}</span>
             </div>
           )}
           {isCar && securityDeposit > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Security deposit</span>
-              <span>{ctx.currency} {fmt(securityDeposit)}</span>
+              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedSecurityDeposit, securityDeposit))}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
             <span>Total</span>
-            <MoneyValue platform={pricing.platformAmount} listing={pricing.total} currency={pricing.platformCurrency} listingCurrency={pricing.listingCurrency} />
+            {pricing.showLocalized ? (
+              <span className="text-right">
+                <div>~{pricing.dispCurrency} {fmt(pricing.dispTotal)}</div>
+                <div className="text-xs font-medium text-slate-500 mt-0.5">Exact {fmtMoney(pricing.total, pricing.listingCurrency)}</div>
+                <div className="text-xs font-semibold text-slate-700">Charged {fmtMoney(pricing.platformAmount, pricing.platformCurrency)}</div>
+              </span>
+            ) : (
+              <MoneyValue platform={pricing.platformAmount} listing={pricing.total} currency={pricing.platformCurrency} listingCurrency={pricing.listingCurrency} />
+            )}
           </div>
         </div>
       </div>
@@ -1394,7 +1453,7 @@ function ConfirmedView({
             </div>
           )}
           <div className="flex justify-between text-slate-600">
-            <span>Service fee{confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}</span>
+            <span>Service fee{confirmed.serviceFeeRate ? ` (${Math.round(confirmed.serviceFeeRate * 100)}%)` : ''}</span>
             <span>{confirmed.currency} {fmt(confirmed.serviceFee)}</span>
           </div>
           {confirmed.taxes > 0 && (
@@ -1530,7 +1589,7 @@ function VoucherLayout({
       <VoucherSection title="Itemised Receipt">
         <VoucherRow label="Base amount" value={lv(confirmed.baseAmount)} />
         {confirmed.discount > 0 && <VoucherRow label="Discount" value={`−${lv(confirmed.discount)}`} />}
-        <VoucherRow label={`Service fee${confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}`} value={lv(confirmed.serviceFee)} />
+        <VoucherRow label={`Service fee${confirmed.serviceFeeRate ? ` (${Math.round(confirmed.serviceFeeRate * 100)}%)` : ''}`} value={lv(confirmed.serviceFee)} />
         {confirmed.taxes > 0 && <VoucherRow label={`Taxes${confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}`} value={lv(confirmed.taxes)} />}
         {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && <VoucherRow label="Security deposit" value={lv(confirmed.securityDeposit)} />}
         <VoucherRow label="Total Paid" value={totalDisplay} bold />

@@ -236,7 +236,7 @@ const ListingCard = memo(function ListingCard({ item, onPress, width = 240, badg
     ? (item.localizedDailyRate ?? item.dailyRate)
     : (item.localizedNightlyRate ?? item.nightlyRate);
   const rateCurrency = item.localizedCurrency ?? item.currency;
-  const pricePrefix = approxPrefix(item.localizedCurrency);
+  const pricePrefix = approxPrefix(item.localizedCurrency, item.currency);
   const unit = isCar ? "day" : "night";
   const [imgErr, setImgErr] = useState(false);
   const displayPhoto = photoUrl ?? null;
@@ -343,7 +343,7 @@ const EliteCard = memo(function EliteCard({ item, onPress, badgeLabel, badgeColo
     ? (item.localizedDailyRate ?? item.dailyRate)
     : (item.localizedNightlyRate ?? item.nightlyRate);
   const rateCurrency = item.localizedCurrency ?? item.currency;
-  const pricePrefix = approxPrefix(item.localizedCurrency);
+  const pricePrefix = approxPrefix(item.localizedCurrency, item.currency);
   const unit = isCar ? "day" : "night";
   const [imgErr, setImgErr] = useState(false);
   const fallbackEmoji = isCar ? "🚗" : isApt ? "🏠" : "🏨";
@@ -477,7 +477,7 @@ const CompactCarCard = memo(function CompactCarCard({ item, onPress, photoUrl, p
     : item.title;
   const carRate = item.localizedDailyRate ?? item.dailyRate;
   const rateCurrency = item.localizedCurrency ?? item.currency;
-  const pricePrefix = approxPrefix(item.localizedCurrency);
+  const pricePrefix = approxPrefix(item.localizedCurrency, item.currency);
   const promoted = applyPromotion(carRate, promotion ?? null);
   const pct = promotion?.discountType === "percentage"
     ? Number(promotion.discountValue)

@@ -296,15 +296,15 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
         const lineItems: { label: string; amount: number; type: string }[] = [];
 
         if (isCar) {
-          lineItems.push({ label: `Daily rate × ${booking.nightsOrDays} days`, amount: fromSnap("subtotal", booking.subtotal), type: "subtotal" });
+          lineItems.push({ label: `Daily rate × ${booking.nightsOrDays} days`, amount: fromSnap("baseAmount", fromSnap("subtotal", booking.subtotal)), type: "subtotal" });
           if (fromSnap("deliveryFee", booking.deliveryFee) > 0)
             lineItems.push({ label: "Delivery fee", amount: fromSnap("deliveryFee", booking.deliveryFee), type: "fee" });
           if (fromSnap("securityDeposit", booking.securityDeposit ?? 0) > 0)
             lineItems.push({ label: "Security deposit", amount: fromSnap("securityDeposit", booking.securityDeposit ?? 0), type: "deposit" });
         } else {
-          lineItems.push({ label: `Nightly rate × ${booking.nightsOrDays} nights`, amount: fromSnap("subtotal", booking.subtotal), type: "subtotal" });
+          lineItems.push({ label: `Nightly rate × ${booking.nightsOrDays} nights`, amount: fromSnap("baseAmount", fromSnap("subtotal", booking.subtotal)), type: "subtotal" });
           if (fromSnap("discountAmount", booking.discountAmount) > 0)
-            lineItems.push({ label: "Long-stay discount", amount: -fromSnap("discountAmount", booking.discountAmount), type: "discount" });
+            lineItems.push({ label: "Discount", amount: -fromSnap("discountAmount", booking.discountAmount), type: "discount" });
         }
         if (fromSnap("voucherDiscount", booking.voucherDiscount) > 0) {
           lineItems.push({
