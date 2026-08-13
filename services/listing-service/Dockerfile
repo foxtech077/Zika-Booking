@@ -7,7 +7,7 @@ COPY packages/types/package.json ./packages/types/
 COPY packages/validators/package.json ./packages/validators/
 COPY services/listing-service/package.json ./services/listing-service/
 COPY services/listing-service/prisma ./services/listing-service/prisma/
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts --filter @zika/listing-service... --store-dir /pnpm/store
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts --store-dir /pnpm/store
 COPY packages/ ./packages/
 COPY services/listing-service/ ./services/listing-service/
 RUN pnpm --filter @zika/types build
