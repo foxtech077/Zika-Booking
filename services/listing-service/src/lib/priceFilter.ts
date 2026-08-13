@@ -38,6 +38,16 @@ export function buildPriceFilter(input: {
 
   const priceCol = category === "car" ? "l.price_per_day" : "l.price_per_night";
 
+  // Hotels price from the cheapest active room type, exactly like the response
+  // builder (search.ts: Math.min over hotelRoomTypes). The listing-level column
+  // is often NULL when room types exist, which previously made the whole filter
+  // expression NULL and silently dropped every such hotel from price-filtered
+  // searches. Other categories use their own price column directly.
+  const rawPriceExpr =
+    category === "hotel"
+      ? `COALESCE((SELECT MIN(hrt.price_per_night) FROM listing.hotel_room_types hrt WHERE hrt.listing_id = l.id AND hrt.is_active = true), ${priceCol})`
+      : priceCol;
+
   // Target currency has no exchange rate → the display can't produce a localized
   // price for any listing, so nothing can be verified against a price bound.
   if (targetCurrency && usdToTargetRate == null) {
@@ -67,15 +77,15 @@ export function buildPriceFilter(input: {
   //  - missing usd→base row (and listing not USD) → display shows null → excluded.
   let guestPrice: string;
   if (!targetCurrency) {
-    guestPrice = `ROUND(${priceCol} * (1 + ${commissionSql}), 2)`;
+    guestPrice = `ROUND(${rawPriceExpr} * (1 + ${commissionSql}), 2)`;
   } else {
     const fxSql = `(${usdTarget} / CASE WHEN l.currency IS NULL OR l.currency = 'USD' THEN 1 ELSE er.rate END)`;
-    const converted = `(${priceCol} * (1 + ${commissionSql}) * ${fxSql})`;
+    const converted = `(${rawPriceExpr} * (1 + ${commissionSql}) * ${fxSql})`;
     const rounded = ZERO_DECIMAL_CURRENCIES.has(targetCurrency)
       ? `CEIL(${converted})`
       : `CEIL(${converted} * 100) / 100`;
     guestPrice = `CASE
-        WHEN COALESCE(l.currency, 'USD') = ${target} THEN ROUND(${priceCol} * (1 + ${commissionSql}), 2)
+        WHEN COALESCE(l.currency, 'USD') = ${target} THEN ROUND(${rawPriceExpr} * (1 + ${commissionSql}), 2)
         WHEN l.currency IS NOT NULL AND l.currency <> 'USD' AND er.rate IS NULL THEN NULL
         ELSE ${rounded}
       END`;
