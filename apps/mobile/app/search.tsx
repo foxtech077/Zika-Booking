@@ -114,7 +114,8 @@ type SortOption =
   | "price_asc"
   | "price_desc"
   | "distance"
-  | "newest";
+  | "newest"
+  | "user_ratings_desc";
 
 interface GeoResult {
   lat: number;
@@ -211,6 +212,7 @@ const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: "recommended", label: "Recommended" },
   { key: "price_asc", label: "Price ↑" },
   { key: "price_desc", label: "Price ↓" },
+  { key: "user_ratings_desc", label: "Top Rated" },
   { key: "distance", label: "Distance" },
   { key: "newest", label: "Newest" },
 ];
@@ -832,6 +834,9 @@ export default function SearchScreen() {
   // Hotel + Apartment (backend's max_guests_min isn't category-gated)
   const [maxGuestsMin, setMaxGuestsMin] = useState<number | null>(null);
 
+  // Hotel + Apartment — user rating (average guest review score, rating_min)
+  const [userRating, setUserRating] = useState<number | null>(null);
+
   // Apartment specifics
   const [bedroomsMin, setBedroomsMin] = useState<number | null>(null);
 
@@ -841,6 +846,8 @@ export default function SearchScreen() {
   const [mileagePolicy, setMileagePolicy] = useState<string | null>(null);
   const [driveType, setDriveType] = useState<string | null>(null);
   const [airConditioning, setAirConditioning] = useState(false);
+  const [airportPickup, setAirportPickup] = useState(false);
+  const [deliveryAvailable, setDeliveryAvailable] = useState(false);
   const [seatsMin, setSeatsMin] = useState<number | null>(null);
   const [driverAge, setDriverAge] = useState("");
 
@@ -863,6 +870,7 @@ export default function SearchScreen() {
     radiusKm !== null ||
     onlyPromotions ||
     cancellationPolicy !== null ||
+    userRating !== null ||
     starRating.length > 0 ||
     amenityIds.length > 0 ||
     bedroomsMin !== null ||
@@ -872,6 +880,8 @@ export default function SearchScreen() {
     mileagePolicy !== null ||
     driveType !== null ||
     airConditioning ||
+    airportPickup ||
+    deliveryAvailable ||
     seatsMin !== null ||
     driverAge !== "";
 
@@ -881,6 +891,7 @@ export default function SearchScreen() {
     setRadiusKm(null);
     setOnlyPromotions(false);
     setCancellationPolicy(null);
+    setUserRating(null);
     setStarRating([]);
     setAmenityIds([]);
     setBedroomsMin(null);
@@ -890,6 +901,8 @@ export default function SearchScreen() {
     setMileagePolicy(null);
     setDriveType(null);
     setAirConditioning(false);
+    setAirportPickup(false);
+    setDeliveryAvailable(false);
     setSeatsMin(null);
     setDriverAge("");
     setCursor(null);
@@ -906,12 +919,15 @@ export default function SearchScreen() {
     setAmenityIds([]);
     setBedroomsMin(null);
     setMaxGuestsMin(null);
+    setUserRating(null);
     setOnlyPromotions(false);
     setCarCategory(null);
     setTransmission(null);
     setMileagePolicy(null);
     setDriveType(null);
     setAirConditioning(false);
+    setAirportPickup(false);
+    setDeliveryAvailable(false);
     setSeatsMin(null);
     setDriverAge("");
     setCursor(null);
@@ -1096,6 +1112,9 @@ export default function SearchScreen() {
 
       if (priceMin) qp.set("price_min", priceMin);
       if (priceMax) qp.set("price_max", priceMax);
+      // user rating (average guest review score) — hotel + apartment
+      if (userRating !== null && category !== "car")
+        qp.set("rating_min", String(userRating));
       if (cancellationPolicy) qp.set("cancellation_policy", cancellationPolicy);
       // long_stay_discount only makes sense for apartments (the field it filters,
       // listing.longStayEnabled, is an apartment long-stay-discount toggle)
@@ -1117,6 +1136,8 @@ export default function SearchScreen() {
         if (mileagePolicy) qp.set("mileage_policy", mileagePolicy);
         if (driveType) qp.set("drive_type", driveType);
         if (airConditioning) qp.set("air_conditioning", "true");
+        if (airportPickup) qp.set("airport_pickup", "true");
+        if (deliveryAvailable) qp.set("delivery", "true");
         if (seatsMin !== null) qp.set("seats_min", String(seatsMin));
         if (driverAge.trim()) qp.set("driver_age", driverAge.trim());
       }
@@ -1302,6 +1323,13 @@ export default function SearchScreen() {
         onRemove: () => setCancellationPolicy(null),
       });
     }
+    if (userRating !== null) {
+      badges.push({
+        key: "userrating",
+        label: `User rating ${userRating}+`,
+        onRemove: () => setUserRating(null),
+      });
+    }
     if (starRating.length) {
       badges.push({
         key: "stars",
@@ -1372,6 +1400,20 @@ export default function SearchScreen() {
         onRemove: () => setAirConditioning(false),
       });
     }
+    if (airportPickup) {
+      badges.push({
+        key: "airport",
+        label: "Airport pickup",
+        onRemove: () => setAirportPickup(false),
+      });
+    }
+    if (deliveryAvailable) {
+      badges.push({
+        key: "delivery",
+        label: "Delivery",
+        onRemove: () => setDeliveryAvailable(false),
+      });
+    }
     if (seatsMin !== null) {
       badges.push({
         key: "seats",
@@ -1392,6 +1434,7 @@ export default function SearchScreen() {
     priceMin,
     priceMax,
     cancellationPolicy,
+    userRating,
     starRating,
     amenityIds,
     bedroomsMin,
@@ -1402,6 +1445,8 @@ export default function SearchScreen() {
     mileagePolicy,
     driveType,
     airConditioning,
+    airportPickup,
+    deliveryAvailable,
     seatsMin,
     driverAge,
   ]);
@@ -1418,6 +1463,7 @@ export default function SearchScreen() {
     radiusKm,
     onlyPromotions,
     cancellationPolicy,
+    userRating,
     starRating,
     amenityIds,
     bedroomsMin,
@@ -1427,6 +1473,8 @@ export default function SearchScreen() {
     mileagePolicy,
     driveType,
     airConditioning,
+    airportPickup,
+    deliveryAvailable,
     seatsMin,
     driverAge,
   ]);
@@ -2107,6 +2155,34 @@ export default function SearchScreen() {
               )}
             </View>
 
+            {/* USER RATING — average guest review score (hotel + apartment) */}
+            {category !== "car" && (
+              <>
+                <Text style={filterStyles.sectionTitle}>User Rating</Text>
+                <View style={filterStyles.rowChips}>
+                  {[null as any, 3, 4, 5].map((r) => (
+                    <TouchableOpacity
+                      key={r ?? "any"}
+                      style={[
+                        filterStyles.chip,
+                        userRating === r && filterStyles.chipActive,
+                      ]}
+                      onPress={() => setUserRating(r)}
+                    >
+                      <Text
+                        style={[
+                          filterStyles.chipText,
+                          userRating === r && filterStyles.chipTextActive,
+                        ]}
+                      >
+                        {r === null ? "Any" : `${r}+`}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
+
             {/* PROMOTIONS ONLY — apartment only (filters listing.longStayEnabled) */}
             {category === "apartment" && (
               <View style={filterStyles.rowToggle}>
@@ -2474,6 +2550,56 @@ export default function SearchScreen() {
                       style={[
                         filterStyles.toggleDot,
                         airConditioning && filterStyles.toggleDotActive,
+                      ]}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Airport Pickup */}
+                <View style={filterStyles.rowToggle}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={filterStyles.toggleTitle}>Airport Pickup</Text>
+                    <Text style={filterStyles.toggleSub}>
+                      Only show cars with airport pickup
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setAirportPickup(!airportPickup)}
+                    style={[
+                      filterStyles.toggleSwitch,
+                      airportPickup && filterStyles.toggleSwitchActive,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        filterStyles.toggleDot,
+                        airportPickup && filterStyles.toggleDotActive,
+                      ]}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Delivery Available */}
+                <View style={filterStyles.rowToggle}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={filterStyles.toggleTitle}>
+                      Delivery Available
+                    </Text>
+                    <Text style={filterStyles.toggleSub}>
+                      Only show cars that offer delivery
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setDeliveryAvailable(!deliveryAvailable)}
+                    style={[
+                      filterStyles.toggleSwitch,
+                      deliveryAvailable && filterStyles.toggleSwitchActive,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        filterStyles.toggleDot,
+                        deliveryAvailable && filterStyles.toggleDotActive,
                       ]}
                     />
                   </TouchableOpacity>
