@@ -2,9 +2,10 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireUser, optionalAuth, type AuthRequest } from "../middleware/auth.js";
-import { getCommissionRate, getCommissionRateBatch } from "./bookings.js";
+import { getCommissionRate, getCommissionRateBatch, getGlobalCommissionRate } from "./bookings.js";
 import { commissionInclusiveRate, SERVICE_FEE_RATE } from "../services/billing.service.js";
-import { getRatesBatch, ceilingForCurrency, getConvertedAmounts, getLocalizedContext } from "../services/exchangeRate.services.js";
+import { getRatesBatch, getExchangeRate, ceilingForCurrency, getConvertedAmounts, getLocalizedContext } from "../services/exchangeRate.services.js";
+import { buildPriceFilter } from "../lib/priceFilter.js";
 
 // ── Route plugin ─────────────────────────────────────────────────────────────
 
@@ -100,9 +101,33 @@ export async function searchRoutes(app: FastifyInstance) {
     push(`l.category::text = ${next()}`, category);
     push(`l.status::text = ANY(${next()})`, validStatuses);
 
-    // Category-aware price filtering
-    if (priceMin !== undefined) push(`l.${priceCol} >= ${next()}`, priceMin);
-    if (priceMax !== undefined) push(`l.${priceCol} <= ${next()}`, priceMax);
+    // Category-aware price filtering — applied to the guest-payable price
+    // (commission-inclusive, converted to the requested currency, ceiling-
+    // rounded), i.e. the exact `localizedNightlyRate`/`localizedDailyRate`
+    // values the response exposes, minus the client-side promo badge (a
+    // category-wide label, not a per-booking guarantee). This prevents a
+    // `price_max` bound in the display currency from leaking listings whose
+    // displayed localized price exceeds it (e.g. a 1.0 KYD listing at 10%
+    // commission returned as $1.33 USD under price_max=1).
+    let priceJoins = "";
+    if (priceMin !== undefined || priceMax !== undefined) {
+      const globalCommissionRate = await getGlobalCommissionRate();
+      const usdToTargetRate = targetCurrency ? await getExchangeRate("USD", targetCurrency) : null;
+      const priceFilter = buildPriceFilter({
+        category,
+        priceMin,
+        priceMax,
+        targetCurrency,
+        usdToTargetRate,
+        globalCommissionRate,
+        next,
+      });
+      priceJoins = priceFilter.joins;
+      if (priceFilter.clause) {
+        push(priceFilter.clause);
+        params.push(...priceFilter.params);
+      }
+    }
     if (cancellationPolicy) push(`l.cancellation_policy::text = ${next()}`, cancellationPolicy);
     if (roomType) {
       if (category === "hotel") {
@@ -261,9 +286,10 @@ export async function searchRoutes(app: FastifyInstance) {
 
     // Pagination (cursor = offset)
     const paginationStart = params.length;
+    const fromSql = `FROM listing.listings l${priceJoins ? "\n      " + priceJoins : ""}`;
     const pageSql = `
       SELECT ${selectExprs}
-      FROM listing.listings l
+      ${fromSql}
       WHERE ${whereSql}
       ORDER BY ${orderCols.join(", ")}
       LIMIT ${next()} OFFSET ${next()}
@@ -280,7 +306,7 @@ export async function searchRoutes(app: FastifyInstance) {
         pageSql, ...params,
       ),
       prisma.$queryRawUnsafe<Array<{ total: number }>>(
-        `SELECT COUNT(*)::int AS total FROM listing.listings l WHERE ${whereSql}`,
+        `SELECT COUNT(*)::int AS total ${fromSql} WHERE ${whereSql}`,
         ...params.slice(0, countParamCount),
       ),
     ]);

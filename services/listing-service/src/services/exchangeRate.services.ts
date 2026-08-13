@@ -112,7 +112,7 @@ export async function fetchRatesWithFallback(): Promise<{ source: string; date: 
 }
 
 // Currencies with 0 decimal places (no cents/subunits)
-const ZERO_DECIMAL_CURRENCIES = new Set([
+export const ZERO_DECIMAL_CURRENCIES = new Set([
   "BIF", "CLP", "DJF", "GNF", "ISK", "KMF", "KRW", "KZT",
   "MGA", "PYG", "RWF", "UGX", "VND", "VUV",
   "XAF", "XOF", "XPF", "JPY",

@@ -46,7 +46,7 @@ import { getEffectiveCommissionRate } from "../services/commission.service.js";
 
 // ── Commission helper ─────────────────────────────────────────────────────────
 
-async function getGlobalCommissionRate(): Promise<number> {
+export async function getGlobalCommissionRate(): Promise<number> {
   const settings = await prisma.platformSettings.upsert({
     where: { id: "global" },
     update: {},
