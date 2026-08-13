@@ -78,7 +78,6 @@ async function fetchSource(source: RateSource): Promise<{ date: string; rates: R
   const normalized: Record<string, number> = {};
   for (const [code, value] of Object.entries(rates) as [string, unknown][]) {
     const upper = code.toUpperCase();
-    if (upper === BASE_CURRENCY) continue;
     if (!/^[A-Z]{3}$/.test(upper)) continue;
     const n = typeof value === "number" ? value : Number(value);
     if (!Number.isFinite(n) || n <= 0) continue;
@@ -153,7 +152,6 @@ async function doRefresh(): Promise<{ inserted: number; updated: number }> {
   const expiresAt = new Date(now.getTime() + STALENESS_THRESHOLD_MS);
 
   const entries = Object.entries(rates)
-    .filter(([currency]) => currency !== BASE_CURRENCY)
     .map(([currency, rate]) => ({
       fromCurrency: BASE_CURRENCY,
       toCurrency: currency,
