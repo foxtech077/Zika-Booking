@@ -27,6 +27,8 @@ const SORT_OPTIONS = [
   { key: "recommended", label: "Recommended" },
   { key: "price_asc", label: "Price ↑" },
   { key: "price_desc", label: "Price ↓" },
+  { key: "user_ratings_desc", label: "Top Rated" },
+  { key: "distance", label: "Nearest" },
   { key: "newest", label: "Newest" },
 ];
 

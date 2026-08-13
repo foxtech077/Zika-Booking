@@ -110,8 +110,9 @@ const SORT_OPTIONS = [
   { value: "recommended", label: "Recommended" },
   { value: "price_asc", label: "Price: Low to High" },
   { value: "price_desc", label: "Price: High to Low" },
-  { value: "rating_desc", label: "Highest Rated" },
-  { value: "distance_asc", label: "Distance" },
+  { value: "user_ratings_desc", label: "Top Rated" },
+  { value: "distance", label: "Nearest" },
+  { value: "newest", label: "Newest" },
 ];
 
 /* ── helpers ─────────────────────────────────────────────────── */
@@ -356,9 +357,9 @@ interface FilterState {
   priceMin: number;
   priceMax: number;
   rating: number | null;
+  starRatings: number[];
   amenities: string[];
   cancellation: string;
-  instantOnly: boolean;
   smokingAllowed: boolean;
   petsAllowed: boolean;
   minStay: number | null;
@@ -366,6 +367,7 @@ interface FilterState {
   // apartments
   bedrooms: number | null;
   bathrooms: number | null;
+  maxGuests: number | null;
   longStayDiscount: boolean;
   // cars
   carCategory: string;
@@ -381,14 +383,15 @@ const DEFAULT_FILTERS: FilterState = {
   priceMin: 0,
   priceMax: PRICE_NO_CAP,
   rating: null,
+  starRatings: [],
   amenities: [],
   cancellation: "",
-  instantOnly: false,
   smokingAllowed: false,
   petsAllowed: false,
   minStay: null,
   bedrooms: null,
   bathrooms: null,
+  maxGuests: null,
   longStayDiscount: false,
   carCategory: "",
   transmission: "",
@@ -403,14 +406,15 @@ function countActiveFilters(f: FilterState) {
   let n = 0;
   if (f.priceMin > 0 || f.priceMax < PRICE_NO_CAP) n++;
   if (f.rating) n++;
+  if (f.starRatings.length) n++;
   if (f.amenities.length) n++;
   if (f.cancellation) n++;
-  if (f.instantOnly) n++;
   if (f.smokingAllowed) n++;
   if (f.petsAllowed) n++;
   if (f.minStay) n++;
   if (f.bedrooms) n++;
   if (f.bathrooms) n++;
+  if (f.maxGuests) n++;
   if (f.longStayDiscount) n++;
   if (f.carCategory) n++;
   if (f.transmission) n++;
@@ -455,10 +459,11 @@ function FilterPanel({
         onChange={({ min, max }) => onChange({ priceMin: min, priceMax: max })}
       />
 
-      {/* Hotel / Apartment: Star Rating */}
+      {/* Hotel / Apartment: User Rating (average guest review score) */}
       {!isCar && (
         <div className="space-y-2">
-          <FilterLabel>Min. Rating</FilterLabel>
+          <FilterLabel>User Rating</FilterLabel>
+          <p className="text-[10px] text-slate-400 -mt-1.5 mb-1">Average guest review score</p>
           <div className="flex gap-2">
             {[3, 4, 5].map((s) => (
               <button
@@ -470,8 +475,32 @@ function FilterPanel({
                   : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
                   }`}
               >
-                ★ {s}+
+                {s}+
               </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Hotel: Star Rating (hotel classification) */}
+      {category === "hotel" && (
+        <div className="space-y-2">
+          <FilterLabel>Star Rating</FilterLabel>
+          <div className="flex flex-wrap gap-2">
+            {[3, 4, 5].map((s) => (
+              <Chip
+                key={s}
+                active={filters.starRatings.includes(s)}
+                onClick={() =>
+                  onChange({
+                    starRatings: filters.starRatings.includes(s)
+                      ? filters.starRatings.filter((v) => v !== s)
+                      : [...filters.starRatings, s],
+                  })
+                }
+              >
+                {s} Stars
+              </Chip>
             ))}
           </div>
         </div>
@@ -506,6 +535,23 @@ function FilterPanel({
               ))}
             </select>
           </div>
+        </div>
+      )}
+
+      {/* Apartment: Max Guests */}
+      {isApt && (
+        <div className="space-y-2">
+          <FilterLabel>Max Guests</FilterLabel>
+          <select
+            value={filters.maxGuests ?? ""}
+            onChange={(e) => onChange({ maxGuests: e.target.value ? Number(e.target.value) : null })}
+            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 bg-white focus:outline-none focus:border-[#1D8D2B] transition"
+          >
+            <option value="">Any</option>
+            {[2, 4, 6, 8].map((n) => (
+              <option key={n} value={n}>{n}+ guests</option>
+            ))}
+          </select>
         </div>
       )}
 
@@ -728,15 +774,6 @@ function FilterPanel({
         </div>
       )}
 
-      {/* Instant Book */}
-      {/* <div className="flex items-center justify-between py-1">
-        <div>
-          <p className="text-xs font-semibold text-slate-700">⚡ Instant Book</p>
-          <p className="text-[10px] text-slate-400">No approval needed</p>
-        </div>
-        <Toggle on={filters.instantOnly} onToggle={() => onChange({ instantOnly: !filters.instantOnly })} />
-      </div> */}
-
       {/* Action buttons */}
       <button
         type="button"
@@ -788,9 +825,9 @@ export default function CategoryListingsClient({ category }: Props) {
     priceMin: sp.get("price_min") ? Number(sp.get("price_min")) : 0,
     priceMax: sp.get("price_max") ? Number(sp.get("price_max")) : PRICE_NO_CAP,
     rating: sp.get("rating") ? Number(sp.get("rating")) : null,
+    starRatings: sp.get("star_rating") ? sp.get("star_rating")!.split(",").map(Number) : [],
     amenities: sp.get("amenities") ? sp.get("amenities")!.split(",") : [],
     cancellation: sp.get("cancellation") || "",
-    instantOnly: sp.get("instant") === "1",
     transmission: sp.get("transmission") || "",
     fuelType: sp.get("fuel") || "",
     carCategory: sp.get("car_category") || "",
@@ -798,6 +835,8 @@ export default function CategoryListingsClient({ category }: Props) {
     minDriverAge: sp.get("min_age") ? Number(sp.get("min_age")) : null,
     bedrooms: sp.get("bedrooms") ? Number(sp.get("bedrooms")) : null,
     bathrooms: sp.get("bathrooms") ? Number(sp.get("bathrooms")) : null,
+    maxGuests: sp.get("max_guests_min") ? Number(sp.get("max_guests_min")) : null,
+    airportPickup: sp.get("airport_pickup") === "1",
   });
 
   /* ── results state ────────────────────────────────────────── */
@@ -841,9 +880,9 @@ export default function CategoryListingsClient({ category }: Props) {
     if (filters.priceMin > 0) params.set("price_min", String(filters.priceMin));
     if (filters.priceMax < PRICE_NO_CAP) params.set("price_max", String(filters.priceMax));
     if (filters.rating) params.set("rating", String(filters.rating));
+    if (filters.starRatings.length) params.set("star_rating", filters.starRatings.join(","));
     if (filters.amenities.length) params.set("amenities", filters.amenities.join(","));
     if (filters.cancellation) params.set("cancellation", filters.cancellation);
-    if (filters.instantOnly) params.set("instant", "1");
     if (filters.transmission) params.set("transmission", filters.transmission);
     if (filters.fuelType) params.set("fuel", filters.fuelType);
     if (filters.carCategory) params.set("car_category", filters.carCategory);
@@ -851,6 +890,8 @@ export default function CategoryListingsClient({ category }: Props) {
     if (filters.minDriverAge) params.set("min_age", String(filters.minDriverAge));
     if (filters.bedrooms) params.set("bedrooms", String(filters.bedrooms));
     if (filters.bathrooms) params.set("bathrooms", String(filters.bathrooms));
+    if (filters.maxGuests) params.set("max_guests_min", String(filters.maxGuests));
+    if (filters.airportPickup) params.set("airport_pickup", "1");
     if (sortBy !== "recommended") params.set("sort", sortBy);
     for (const [k, v] of Object.entries(extra)) {
       if (v !== null) params.set(k, String(v));
@@ -903,6 +944,7 @@ export default function CategoryListingsClient({ category }: Props) {
     if (filters.priceMin > 0) params.price_min = filters.priceMin;
     if (filters.priceMax < PRICE_NO_CAP) params.price_max = filters.priceMax;
     if (filters.rating) params.rating_min = filters.rating;
+    if (category === "hotel" && filters.starRatings.length) params.star_rating = filters.starRatings.join(",");
     if (filters.amenities.length) params.amenity_ids = filters.amenities.flatMap(k => AMENITY_CATEGORY[k] ? [`${AMENITY_CATEGORY[k]}:${k}`, k] : [k]).join(",");
     if (filters.cancellation) params.cancellation_policy = filters.cancellation;
     if (filters.minStay) params.min_stay_nights = filters.minStay;
@@ -917,6 +959,7 @@ export default function CategoryListingsClient({ category }: Props) {
     if (category === "apartment") {
       if (filters.bedrooms) params.bedrooms_min = filters.bedrooms;
       if (filters.bathrooms) params.bathrooms_min = filters.bathrooms;
+      if (filters.maxGuests) params.max_guests_min = filters.maxGuests;
       if (filters.longStayDiscount) params.long_stay_discount = true;
     }
 
@@ -928,6 +971,7 @@ export default function CategoryListingsClient({ category }: Props) {
       if (filters.fuelType) params.fuel_type = filters.fuelType;
       if (filters.seats) params.seats_min = filters.seats;
       if (filters.minDriverAge) params.driver_age = filters.minDriverAge;
+      if (filters.airportPickup) params.airport_pickup = true;
       if (filters.deliveryAvailable) params.delivery = true;
     }
 

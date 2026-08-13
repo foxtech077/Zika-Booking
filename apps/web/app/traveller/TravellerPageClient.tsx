@@ -300,7 +300,7 @@ export default function TravellerDashboard() {
   const [priceMax, setPriceMax] = useState<number>(PRICE_NO_CAP);
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
   const [selectedCancellation, setSelectedCancellation] = useState<string>("");
-  const [sortBy, setSortBy] = useState<string>("distance_asc");
+  const [sortBy, setSortBy] = useState<string>("distance");
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [showInstantOnly, setShowInstantOnly] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -557,6 +557,9 @@ export default function TravellerDashboard() {
   const [filterBedrooms, setFilterBedrooms] = useState<number | null>(null);
   const [filterBathrooms, setFilterBathrooms] = useState<number | null>(null);
   const [filterPropertyTypes, setFilterPropertyTypes] = useState<string[]>([]);
+  const [filterStarRating, setFilterStarRating] = useState<number[]>([]);
+  const [filterMaxGuests, setFilterMaxGuests] = useState<number | null>(null);
+  const [filterAirportPickup, setFilterAirportPickup] = useState(false);
 
   // Timer Ref for lock countdown
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -1181,9 +1184,7 @@ export default function TravellerDashboard() {
       };
 
       if (isTextSearch) {
-        // Pass the user's raw search term as both `q` (standard) and `name` (some backends).
         params.q = queryText;
-        params.name = queryText;
         params.place_resolved = geoResolved ? "true" : "false";
         if (geoResolved && lat !== undefined && lng !== undefined) {
           params.lat = lat;
@@ -1198,12 +1199,15 @@ export default function TravellerDashboard() {
       }
 
       if (searchGuests > 1) params.guests = searchGuests;
-      if (searchRooms > 1) params.rooms = searchRooms;
       if (priceMin > 0) params.price_min = priceMin;
       if (priceMax < PRICE_NO_CAP) params.price_max = priceMax;
       if (selectedRating) params.rating_min = selectedRating;
+      if (activeCategory === "hotel" && filterStarRating.length) params.star_rating = filterStarRating.join(",");
+      if (activeCategory === "apartment" && filterMaxGuests) params.max_guests_min = filterMaxGuests;
       if (selectedCancellation) params.cancellation_policy = selectedCancellation;
       if (showInstantOnly) params.instant_booking = true;
+      if (activeCategory === "car" && filterAirportPickup) params.airport_pickup = true;
+      params.sort = sortBy;
       if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.flatMap(k => AMENITY_CATEGORY[k] ? [`${AMENITY_CATEGORY[k]}:${k}`, k] : [k]).join(",");
 
       if (activeCategory !== "car") {
@@ -1283,22 +1287,24 @@ export default function TravellerDashboard() {
         } catch { }
       }
       // Stay scoped to the active query — never falls back to the full inventory.
-      const params: Record<string, any> = { category: searchCategory, limit: 100, offset: nextOffset };
+      const params: Record<string, any> = { category: searchCategory, limit: 100, cursor: nextOffset };
       if (activeQuery) {
         params.q = activeQuery;
-        params.name = activeQuery;
         params.place_resolved = geoResolved ? "true" : "false";
         if (geoResolved) { params.lat = lat; params.lng = lng; params.radius_km = 20000; }
       } else {
         params.lat = lat; params.lng = lng; params.radius_km = 20000;
       }
       if (searchGuests > 1) params.guests = searchGuests;
-      if (searchRooms > 1) params.rooms = searchRooms;
       if (priceMin > 0) params.price_min = priceMin;
       if (priceMax < PRICE_NO_CAP) params.price_max = priceMax;
       if (selectedRating) params.rating_min = selectedRating;
+      if (searchCategory === "hotel" && filterStarRating.length) params.star_rating = filterStarRating.join(",");
+      if (searchCategory === "apartment" && filterMaxGuests) params.max_guests_min = filterMaxGuests;
       if (selectedCancellation) params.cancellation_policy = selectedCancellation;
       if (showInstantOnly) params.instant_booking = true;
+      if (searchCategory === "car" && filterAirportPickup) params.airport_pickup = true;
+      params.sort = sortBy;
       if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.flatMap(k => AMENITY_CATEGORY[k] ? [`${AMENITY_CATEGORY[k]}:${k}`, k] : [k]).join(",");
       if (searchCategory !== "car") {
         if (searchCheckIn) params.check_in = searchCheckIn;
@@ -4179,34 +4185,11 @@ export default function TravellerDashboard() {
                   </div>
                 )}
 
-                {/* Car transmission */}
-                {searchCategory === "car" && (
-                  <div className="space-y-2">
-                    <label className="block text-xs font-semibold text-slate-700">Transmission</label>
-                    <div className="flex gap-2 pt-0.5">
-                      {["automatic", "manual"].map((t) => {
-                        const active = selectedAmenities.includes(t);
-                        return (
-                          <button
-                            key={t}
-                            onClick={() => setSelectedAmenities((prev) =>
-                              active ? prev.filter((a) => a !== t) : [...prev, t]
-                            )}
-                            className={`flex-1 py-2 border rounded-xl text-xs font-semibold capitalize transition ${active ? "bg-[#0c2614] text-white border-[#0c2614]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-                              }`}
-                          >
-                            {t}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Min Rating */}
+                {/* User Rating — average guest review score */}
                 {searchCategory !== "car" && (
                   <div className="space-y-2">
-                    <label className="block text-xs font-semibold text-slate-700">Min. Rating</label>
+                    <label className="block text-xs font-semibold text-slate-700">User Rating</label>
+                    <p className="text-[10px] text-slate-400">Average guest review score</p>
                     <div className="flex gap-2 pt-0.5">
                       {[3, 4, 5].map((star) => (
                         <button
@@ -4215,10 +4198,65 @@ export default function TravellerDashboard() {
                           className={`flex-1 py-2 border rounded-xl text-xs font-semibold transition ${star === selectedRating ? "bg-[#0c2614] text-white border-[#0c2614]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
                             }`}
                         >
-                          ★ {star}+
+                          {star}+
                         </button>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Star Rating — hotels only (hotel classification) */}
+                {searchCategory === "hotel" && (
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-slate-700">Star Rating</label>
+                    <div className="flex flex-wrap gap-2 pt-0.5">
+                      {[3, 4, 5].map((s) => {
+                        const active = filterStarRating.includes(s);
+                        return (
+                          <button
+                            key={s}
+                            onClick={() => setFilterStarRating((prev) => active ? prev.filter((v) => v !== s) : [...prev, s])}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${active ? "bg-[#0c2614] text-white border-[#0c2614]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                              }`}
+                          >
+                            {s} Stars
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Max Guests — apartments only */}
+                {searchCategory === "apartment" && (
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-slate-700">Max Guests</label>
+                    <select
+                      value={filterMaxGuests ?? ""}
+                      onChange={(e) => setFilterMaxGuests(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 bg-white focus:outline-none focus:border-[#1D8D2B] transition"
+                    >
+                      <option value="">Any</option>
+                      {[2, 4, 6, 8].map((n) => (
+                        <option key={n} value={n}>{n}+ guests</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Car: Airport Pickup */}
+                {searchCategory === "car" && (
+                  <div className="flex items-center justify-between py-1">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700">Airport Pickup</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Only show cars with airport pickup</p>
+                    </div>
+                    <button
+                      onClick={() => setFilterAirportPickup((v) => !v)}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${filterAirportPickup ? "bg-[#0c2614]" : "bg-slate-200"}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${filterAirportPickup ? "translate-x-5" : ""}`} />
+                    </button>
                   </div>
                 )}
 
@@ -4248,9 +4286,10 @@ export default function TravellerDashboard() {
                 <button
                   onClick={() => {
                     setPriceMin(0); setPriceMax(PRICE_NO_CAP); setSelectedRating(null);
-                    setSelectedCancellation(""); setSortBy("distance_asc");
+                    setSelectedCancellation(""); setSortBy("distance");
                     setSelectedAmenities([]); setShowInstantOnly(false);
                     setFilterBedrooms(null); setFilterBathrooms(null); setFilterPropertyTypes([]);
+                    setFilterStarRating([]); setFilterMaxGuests(null); setFilterAirportPickup(false);
                     setFilterApplyToken((t) => t + 1);
                   }}
                   className="w-full text-xs font-bold text-slate-400 hover:text-slate-700 transition"
@@ -4282,11 +4321,11 @@ export default function TravellerDashboard() {
                   onChange={(e) => setSortBy(e.target.value)}
                   className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 focus:outline-none shadow-sm"
                 >
-                  <option value="distance_asc">Nearest First</option>
+                  <option value="distance">Nearest First</option>
                   <option value="price_asc">Price: Low → High</option>
                   <option value="price_desc">Price: High → Low</option>
-                  <option value="rating_desc">Best Rated</option>
-                  <option value="popularity_desc">Most Popular</option>
+                  <option value="user_ratings_desc">Best Rated</option>
+                  <option value="newest">Newest</option>
                 </select>
               </div>
 
@@ -4314,11 +4353,11 @@ export default function TravellerDashboard() {
                       onChange={(e) => setSortBy(e.target.value)}
                       className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 focus:outline-none shadow-sm"
                     >
-                      <option value="distance_asc">Nearest First</option>
+                      <option value="distance">Nearest First</option>
                       <option value="price_asc">Price: Low to High</option>
                       <option value="price_desc">Price: High to Low</option>
-                      <option value="rating_desc">Best Rated</option>
-                      <option value="popularity_desc">Popular</option>
+                      <option value="user_ratings_desc">Best Rated</option>
+                      <option value="newest">Newest</option>
                     </select>
                   </div>
                 </div>
@@ -4665,7 +4704,7 @@ export default function TravellerDashboard() {
               <h3 className="text-base font-bold text-slate-900">Filters</h3>
               <div className="flex items-center gap-4">
                 <button
-                  onClick={() => { setPriceMin(0); setPriceMax(PRICE_NO_CAP); setSelectedRating(null); setSelectedCancellation(""); setSortBy("distance_asc"); setSelectedAmenities([]); setShowInstantOnly(false); setFilterApplyToken((t) => t + 1); }}
+                  onClick={() => { setPriceMin(0); setPriceMax(PRICE_NO_CAP); setSelectedRating(null); setSelectedCancellation(""); setSortBy("distance"); setSelectedAmenities([]); setShowInstantOnly(false); setFilterStarRating([]); setFilterMaxGuests(null); setFilterAirportPickup(false); setFilterApplyToken((t) => t + 1); }}
                   className="text-xs font-bold text-slate-400 hover:text-slate-700 uppercase tracking-wider"
                 >
                   Reset all
@@ -4704,10 +4743,11 @@ export default function TravellerDashboard() {
                 noCap={PRICE_NO_CAP}
                 onChange={({ min, max }) => { setPriceMin(min); setPriceMax(max); }}
               />
-              {/* Rating */}
+              {/* User Rating — average guest review score */}
               {searchCategory !== "car" && (
                 <div className="space-y-2">
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Min. Rating</label>
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">User Rating</label>
+                  <p className="text-[10px] text-slate-400 -mt-1">Average guest review score</p>
                   <div className="flex gap-2">
                     {[3, 4, 5].map((star) => (
                       <button
@@ -4715,10 +4755,61 @@ export default function TravellerDashboard() {
                         onClick={() => setSelectedRating(star === selectedRating ? null : star)}
                         className={`flex-1 py-2.5 border rounded-xl text-sm font-semibold transition ${star === selectedRating ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200"}`}
                       >
-                        ★ {star}+
+                        {star}+
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+              {/* Star Rating — hotels only (hotel classification) */}
+              {searchCategory === "hotel" && (
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Star Rating</label>
+                  <div className="flex flex-wrap gap-2">
+                    {[3, 4, 5].map((s) => {
+                      const active = filterStarRating.includes(s);
+                      return (
+                        <button
+                          key={s}
+                          onClick={() => setFilterStarRating((prev) => active ? prev.filter((v) => v !== s) : [...prev, s])}
+                          className={`px-3 py-2 border rounded-xl text-xs font-semibold transition ${active ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200"}`}
+                        >
+                          {s} Stars
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {/* Max Guests — apartments only */}
+              {searchCategory === "apartment" && (
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Max Guests</label>
+                  <select
+                    value={filterMaxGuests ?? ""}
+                    onChange={(e) => setFilterMaxGuests(e.target.value ? Number(e.target.value) : null)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 focus:outline-none"
+                  >
+                    <option value="">Any</option>
+                    {[2, 4, 6, 8].map((n) => (
+                      <option key={n} value={n}>{n}+ guests</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {/* Car: Airport Pickup */}
+              {searchCategory === "car" && (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">Airport Pickup</p>
+                    <p className="text-xs text-slate-400">Only show cars with airport pickup</p>
+                  </div>
+                  <button
+                    onClick={() => setFilterAirportPickup((v) => !v)}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${filterAirportPickup ? "bg-[#0c2614]" : "bg-slate-200"}`}
+                  >
+                    <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${filterAirportPickup ? "translate-x-5" : ""}`} />
+                  </button>
                 </div>
               )}
               {/* Amenities */}
@@ -4782,22 +4873,6 @@ export default function TravellerDashboard() {
                   <option value="strict">Strict</option>
                 </select>
               </div>
-              {/* Car transmission */}
-              {searchCategory === "car" && (
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Transmission</label>
-                  <div className="flex gap-2">
-                    {["automatic", "manual"].map((t) => {
-                      const active = selectedAmenities.includes(t);
-                      return (
-                        <button key={t} onClick={() => setSelectedAmenities((prev) => active ? prev.filter((a) => a !== t) : [...prev, t])} className={`flex-1 py-2.5 border rounded-xl text-sm font-semibold capitalize transition ${active ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200"}`}>
-                          {t}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
             </div>
             <div className="p-5 border-t border-slate-100 shrink-0">
               {/* This is the drawer's apply action. It used to only close the
