@@ -728,6 +728,22 @@ export async function bookingRoutes(app: FastifyInstance) {
       },
     });
 
+    const localizedBreakdown = await buildLocalizedBreakdown(
+      listing.currency ?? "USD",
+      body.currency,
+      {
+        baseAmount: billing.baseAmount,
+        nightlyRate: displayedNightlyRate,
+        promotionDiscount: billing.promotionDiscount,
+        voucherDiscount: billing.voucherDiscount,
+        serviceFee: billing.serviceFee,
+        taxAmount: billing.taxAmount,
+        deliveryFee: billing.deliveryFee,
+        securityDeposit: billing.securityDeposit,
+        totalAmount: billing.totalAmount,
+      },
+    );
+
     return {
       units: billing.units,
       baseAmount: billing.baseAmount,
@@ -752,21 +768,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       listingCurrencyAmount: platformSnap.listingCurrencyAmount,
       localizedCurrency: platformSnap.localizedCurrency,
       localCurrencyAmount: platformSnap.localCurrencyAmount,
-      ...(await buildLocalizedBreakdown(
-        listing.currency ?? "USD",
-        body.currency,
-        {
-          baseAmount: billing.baseAmount,
-          nightlyRate: displayedNightlyRate,
-          promotionDiscount: billing.promotionDiscount,
-          voucherDiscount: billing.voucherDiscount,
-          serviceFee: billing.serviceFee,
-          taxAmount: billing.taxAmount,
-          deliveryFee: billing.deliveryFee,
-          securityDeposit: billing.securityDeposit,
-          totalAmount: billing.totalAmount,
-        }
-      )),
+      ...localizedBreakdown,
       ...(roomTypeRecord && {
         roomType: roomTypeRecord.roomType,
         roomTypeName: roomTypeRecord.name,
@@ -1147,6 +1149,22 @@ export async function bookingRoutes(app: FastifyInstance) {
           },
         });
 
+        const localizedBreakdown = await buildLocalizedBreakdown(
+          listing.currency ?? "USD",
+          body.currency,
+          {
+            baseAmount: billing.baseAmount,
+            nightlyRate: commissionInclusiveRate(baseRate, commissionRate),
+            promotionDiscount: billing.promotionDiscount,
+            voucherDiscount: billing.voucherDiscount,
+            serviceFee: billing.serviceFee,
+            taxAmount: billing.taxAmount,
+            deliveryFee: billing.deliveryFee,
+            securityDeposit: billing.securityDeposit,
+            totalAmount: billing.totalAmount,
+          },
+        );
+
         const pricingPreview = {
           units: billing.units,
           baseAmount: billing.baseAmount,
@@ -1171,6 +1189,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           listingCurrencyAmount: platformSnap.listingCurrencyAmount,
           localizedCurrency: platformSnap.localizedCurrency,
           localCurrencyAmount: platformSnap.localCurrencyAmount,
+          ...localizedBreakdown,
           // Room type info (if applicable)
           ...(roomTypeRecord && {
             roomType: roomTypeRecord.roomType,
