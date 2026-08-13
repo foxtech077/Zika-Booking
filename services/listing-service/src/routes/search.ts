@@ -5,7 +5,7 @@ import { requireUser, optionalAuth, type AuthRequest } from "../middleware/auth.
 import { getCommissionRate, getCommissionRateBatch, getGlobalCommissionRate } from "./bookings.js";
 import { commissionInclusiveRate, SERVICE_FEE_RATE } from "../services/billing.service.js";
 import { getRatesBatch, getExchangeRate, ceilingForCurrency, getConvertedAmounts, getLocalizedContext } from "../services/exchangeRate.services.js";
-import { buildPriceFilter } from "../lib/priceFilter.js";
+import { buildPriceFilter, buildGuestPriceExpr } from "../lib/priceFilter.js";
 import { buildUserRatingFilterClause, userRatingsOrderExpr } from "../lib/searchFilters.js";
 
 // ── Route plugin ─────────────────────────────────────────────────────────────
@@ -283,16 +283,37 @@ export async function searchRoutes(app: FastifyInstance) {
     const whereSql = where.join("\n      AND ");
     const selectExprs = ["l.id", textRankExpr, distanceExpr, latExpr, lngExpr].join(",\n      ");
 
+    // Price sort — order by the SAME guest-payable price the response displays
+    // (min active room-type price for hotels, commission-inclusive, converted to
+    // the requested currency and ceiling-rounded), not the raw listing column.
+    // The expression's placeholders are allocated after all WHERE params, and
+    // their values are pushed after `paginationStart` is captured, so the COUNT
+    // query never receives params it does not reference.
+    let priceOrderExpr: string | null = null;
+    let priceOrderParams: unknown[] = [];
+    const priceSorting = sort === "price_asc" || sort === "price_desc";
+    if (priceSorting) {
+      const globalCommissionRate = await getGlobalCommissionRate();
+      const usdToTargetRate = targetCurrency ? await getExchangeRate("USD", targetCurrency) : null;
+      const price = buildGuestPriceExpr({ category, targetCurrency, usdToTargetRate, globalCommissionRate, next });
+      priceOrderExpr = price.expr;
+      priceOrderParams = price.params;
+      if (!priceJoins) priceJoins = price.joins;
+    }
+
     const orderCols: string[] = [];
     if (textQuery) orderCols.push("text_rank ASC");
-    if (sort === "price_asc") orderCols.push(`l.${priceCol} ASC NULLS LAST`);
-    else if (sort === "price_desc") orderCols.push(`l.${priceCol} DESC NULLS LAST`);
+    if (sort === "price_asc") orderCols.push(`${priceOrderExpr ?? `l.${priceCol}`} ASC NULLS LAST`);
+    else if (sort === "price_desc") orderCols.push(`${priceOrderExpr ?? `l.${priceCol}`} DESC NULLS LAST`);
     else if (sort === "newest") orderCols.push("l.created_at DESC");
     else if (sort === "user_ratings_desc") orderCols.push(userRatingsOrderExpr());
     else orderCols.push(hasGeo ? "distance_km ASC" : "l.created_at DESC");
 
     // Pagination (cursor = offset)
     const paginationStart = params.length;
+    // Price-sort params are referenced only by the ORDER BY (page query), so
+    // they must come after the COUNT slice but before LIMIT/OFFSET.
+    if (priceOrderParams.length) params.push(...priceOrderParams);
     const fromSql = `FROM listing.listings l${priceJoins ? "\n      " + priceJoins : ""}`;
     const pageSql = `
       SELECT ${selectExprs}
