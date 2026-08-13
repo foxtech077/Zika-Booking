@@ -66,6 +66,7 @@ interface BookingDetail {
   subtotal: number;
   discountAmount?: number;
   serviceFee?: number;
+  serviceFeeRate?: number;
   taxAmount?: number;
   deliveryFee?: number;
   securityDeposit?: number;
@@ -582,7 +583,9 @@ export default function BookingDetailScreen() {
               )}
               {booking.serviceFee != null && booking.serviceFee > 0 && (
                 <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>Service fee</Text>
+                  <Text style={styles.priceLabel}>
+                    Service fee{booking.serviceFeeRate ? ` (${Math.round(Number(booking.serviceFeeRate) * 100)}%)` : ''}
+                  </Text>
                   <Text style={styles.priceValue}>+ {formatCurrency(booking.serviceFee, booking.currency)}</Text>
                 </View>
               )}

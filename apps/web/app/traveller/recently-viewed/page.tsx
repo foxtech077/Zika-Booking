@@ -135,7 +135,7 @@ export default function RecentlyViewedPage() {
                       <div>
                         <p className="text-[9px] uppercase font-bold text-slate-400 tracking-widest">Per {isCar ? "day" : "night"}</p>
                         <p className="text-base font-bold text-[#024622]">
-                          {approxPrefix(l.localizedCurrency)}{l.localizedCurrency ?? l.currency ?? "KES"} {rate != null ? rate.toLocaleString() : "—"}
+                          {approxPrefix(l.localizedCurrency, l.currency)}{l.localizedCurrency ?? l.currency ?? "KES"} {rate != null ? rate.toLocaleString() : "—"}
                         </p>
                       </div>
                       {/* Address the listing in the URL. This used to stash the

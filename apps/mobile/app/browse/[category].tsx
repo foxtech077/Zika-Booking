@@ -107,7 +107,7 @@ function ListingCard({ item, apiCategory, onPress, signedPhotoUrl, promotion }: 
     ? (item.localizedDailyRate ?? item.dailyRate)
     : (item.localizedNightlyRate ?? item.nightlyRate);
   const priceCurrency = item.localizedCurrency ?? item.currency;
-  const pricePrefix = approxPrefix(item.localizedCurrency);
+  const pricePrefix = approxPrefix(item.localizedCurrency, item.currency);
   const unit = isCar ? "/day" : "/night";
 
   const promoPercentFromBadge = item.promoBadge?.labelText

@@ -62,10 +62,17 @@ interface PublicListing {
   nightlyRate?: number | null; dailyRate?: number | null;
   localizedNightlyRate?: number | null; localizedDailyRate?: number | null;
   localizedCurrency?: string | null;
+  /** Absolute-money fees converted into the guest's display currency, served by
+   *  GET /listings/:id/public alongside the localized rates. Must be used
+   *  wherever the amount is rendered under `localizedCurrency` — pairing a raw
+   *  fee with the converted currency label silently mixes two currencies. */
+  localizedDeliveryFee?: number | null; localizedSecurityDeposit?: number | null;
   cancellationPolicy: string | null; minStayNights: number | null;
-  /** Service-fee rate for this listing's country, as a decimal fraction (0.05 = 5%).
-   *  Served by GET /listings/:id/public — the same value the booking flow charges. */
-  commissionRate?: number | null;
+  /** Flat service-fee rate charged to guests (0.04 = 4%). Served by GET /listings/:id/public.
+   *  The provider commission is *not* part of this — the backend bakes it into the
+   *  nightly/daily rate this endpoint returns (rate × (1 + commissionRate)), so the
+   *  rates below are already commission-inclusive and the fee sits on top at 4%. */
+  serviceFeeRate?: number | null;
   checkinTime: string | null; checkoutTime: string | null;
   smokingAllowed: boolean | null; petsAllowed: boolean | null;
   starRating: number | null; roomType: string | null; unitCount: number | null;
@@ -400,9 +407,17 @@ function CalendarPicker({ visible, onClose, onConfirm, isCar, unavailableRanges 
     const ds = calToStr(d);
     if (!selStart || (selStart && selEnd)) {
       setSelStart(ds); setSelEnd(null);
+    } else if (ds <= selStart) {
+      setSelStart(ds); setSelEnd(null);
     } else {
-      if (ds <= selStart) { setSelStart(ds); setSelEnd(null); }
-      else setSelEnd(ds);
+      setSelEnd(ds);
+      // Completing the range is the confirmation — no separate Confirm step.
+      // Cars keep theirs: pickup/return times live in this same sheet, so
+      // closing here would silently commit the 10:00 defaults.
+      if (!isCar) {
+        onConfirm(selStart, ds);
+        onClose();
+      }
     }
   }
 
@@ -559,16 +574,19 @@ function CalendarPicker({ visible, onClose, onConfirm, isCar, unavailableRanges 
           )}
         </ScrollView>
 
-        {/* Confirm button */}
-        <View style={{ paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: BORDER }}>
-          <TouchableOpacity
-            style={{ backgroundColor: canConfirm ? GREEN : "#D1D5DB", borderRadius: 14, paddingVertical: 16, alignItems: "center" }}
-            onPress={handleConfirm}
-            disabled={!canConfirm}
-          >
-            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Confirm Dates</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Stays commit on the second date tap; only cars need a confirm step,
+            to lock in the pickup/return times above. */}
+        {isCar && (
+          <View style={{ paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: BORDER }}>
+            <TouchableOpacity
+              style={{ backgroundColor: canConfirm ? GREEN : "#D1D5DB", borderRadius: 14, paddingVertical: 16, alignItems: "center" }}
+              onPress={handleConfirm}
+              disabled={!canConfirm}
+            >
+              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Confirm dates &amp; times</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </SafeAreaView>
     </Modal>
   );
@@ -838,14 +856,16 @@ export default function ListingDetailScreen() {
     const totalDiscount = promoDiscount + longStayDiscount;
     const discountedSubtotal = Math.max(0, originalSubtotal - totalDiscount);
 
-    // Service fee — rate comes from the API (country-specific commission), so the
-    // figure quoted here matches what /bookings/initiate will actually charge.
-    // Previously hardcoded to 10% while checkout used the real rate, so the
-    // listing page and the payment screen could disagree.
-    const commissionRate = listing.commissionRate ?? 0;
-    const serviceFeePercent = Math.round(commissionRate * 1000) / 10;
-    const serviceFee = Math.ceil(discountedSubtotal * commissionRate * 100) / 100;
-    const delivery = isCar && listing.deliveryAvailable && listing.deliveryFee ? Number(listing.deliveryFee) : 0;
+    // Service fee — flat 4% rate returned by the API (serviceFeeRate = 0.04).
+    const serviceFeeRate = listing.serviceFeeRate ?? 0.04;
+    const serviceFeePercent = Math.round(serviceFeeRate * 100);
+    const serviceFee = Math.ceil(discountedSubtotal * serviceFeeRate * 100) / 100;
+    // Delivery must come from the localized field: everything above is derived
+    // from the localized rate, so adding the raw fee summed two currencies into
+    // one total and rendered it under the converted label.
+    const delivery = isCar && listing.deliveryAvailable && listing.deliveryFee
+      ? Number(listing.localizedDeliveryFee ?? listing.deliveryFee)
+      : 0;
     const total = discountedSubtotal + serviceFee + delivery;
 
     return {
@@ -947,7 +967,12 @@ export default function ListingDetailScreen() {
     if (listing.driverProvided) {
       rows.push({ icon: "person-circle-outline", label: "Driver", value: "Included — no deposit" });
     } else if (listing.securityDeposit && listing.securityDeposit > 0) {
-      rows.push({ icon: "lock-closed-outline", label: "Security deposit", value: `${listing.currency ?? ""} ${listing.securityDeposit}` });
+      // `curr`/`pricePrefix` are declared further down, so resolve the pair inline.
+      rows.push({
+        icon: "lock-closed-outline",
+        label: "Security deposit",
+        value: `${approxPrefix(listing.localizedCurrency, listing.currency)}${listing.localizedCurrency ?? listing.currency ?? ""} ${(listing.localizedSecurityDeposit ?? listing.securityDeposit).toLocaleString()}`,
+      });
     }
     rows.push({ icon: "navigate-outline", label: "Delivery", value: listing.deliveryAvailable ? `Yes · within ${listing.deliveryRadiusKm ?? "?"}km` : "Not available" });
     return rows;
@@ -1033,7 +1058,7 @@ export default function ListingDetailScreen() {
   }
 
   const curr = listing.localizedCurrency ?? listing.currency ?? "XAF";
-  const pricePrefix = approxPrefix(listing.localizedCurrency);
+  const pricePrefix = approxPrefix(listing.localizedCurrency, listing.currency);
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
@@ -1183,7 +1208,7 @@ export default function ListingDetailScreen() {
 
           {isCar && listing.deliveryAvailable && listing.deliveryFee ? (
             <Text style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>
-              + {pricePrefix}{curr} {listing.deliveryFee} delivery available
+              + {pricePrefix}{curr} {(listing.localizedDeliveryFee ?? listing.deliveryFee)?.toLocaleString()} delivery available
             </Text>
           ) : null}
         </View>

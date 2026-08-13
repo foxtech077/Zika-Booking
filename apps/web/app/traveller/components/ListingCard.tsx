@@ -71,7 +71,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   // display-currency conversion was requested or available for this listing.
   const rawRate = listing.localizedPricePerNight ?? listing.pricePerNight ?? 0;
   const rateCurrency = listing.localizedCurrency ?? listing.currency;
-  const pricePrefix = approxPrefix(listing.localizedCurrency);
+  const pricePrefix = approxPrefix(listing.localizedCurrency, listing.currency);
   const isCar = listing.category === "car";
   const unit = isCar ? "day" : "night";
 
@@ -126,8 +126,10 @@ export const ListingCard: React.FC<ListingCardProps> = ({
           isHovered ? "border-[#1D8D2B] shadow-xl" : "border-slate-200 shadow-md hover:shadow-xl"
         }`}
       >
-        {/* Image — fixed height so cards stay consistent regardless of column width */}
-        <div className="h-44 w-full overflow-hidden relative">
+        {/* Image — fixed ratio rather than fixed height. A flat h-44 letterboxes
+            badly once a card is wide (two columns on a large monitor), while a
+            ratio keeps the same crop at every column count. */}
+        <div className="aspect-[3/2] w-full overflow-hidden relative">
           <ListingImage
             listingId={listing.id}
             alt={listing.name}
@@ -208,19 +210,53 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   }
 
   /* ── FEATURED card (full-width horizontal) ── */
+  // Rendered in both the wide right-hand rail and the narrow inline row, so the
+  // two layouts can't drift apart.
+  const priceBlock = (
+    <div>
+      <p className="text-[22px] font-bold text-slate-900 leading-none tracking-tight">
+        {pricePrefix}{rateCurrency} {displayPrice > 0 ? displayPrice.toLocaleString() : "—"}
+      </p>
+      {basePrice > displayPrice && (
+        <p className="text-[11px] text-slate-400 line-through leading-none mt-1">{pricePrefix}{rateCurrency} {basePrice.toLocaleString()}</p>
+      )}
+      <p className="text-[9px] uppercase font-bold text-slate-400 tracking-widest mt-1">Per {unit}</p>
+    </div>
+  );
+
+  const ctaButton = (
+    <button
+      onClick={(e) => { e.stopPropagation(); onSelect(listing.id); }}
+      className="flex items-center justify-center gap-1.5 bg-[#0c2614] text-white text-xs font-semibold px-4 py-2.5 rounded-xl hover:bg-[#1D8D2B] transition shadow-sm"
+    >
+      View Details
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+      </svg>
+    </button>
+  );
+
+  const ratingBadge = listing.starRating ? (
+    <div className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
+      <span className="text-amber-400 leading-none">★</span>
+      {listing.starRating}
+    </div>
+  ) : null;
+
   return (
     <div
       onClick={() => onSelect(listing.id)}
       onMouseEnter={() => onHover?.(listing.id)}
       onMouseLeave={() => onHover?.(null)}
-      className={`group relative bg-white border rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 flex h-[200px] ${
+      className={`group relative bg-white border rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 flex h-[210px] ${
         isHovered
           ? "border-[#1D8D2B] shadow-xl ring-1 ring-[#1D8D2B]/20"
           : "border-slate-200 shadow-md hover:shadow-xl hover:-translate-y-0.5"
       }`}
     >
-      {/* Image — left 38% fixed height */}
-      <div className="relative w-[38%] shrink-0 overflow-hidden">
+      {/* Image — capped in absolute terms so a wide viewport doesn't stretch it
+          into a letterbox against the fixed card height. */}
+      <div className="relative w-[38%] max-w-[320px] shrink-0 overflow-hidden">
         <ListingImage
           listingId={listing.id}
           alt={listing.name}
@@ -265,12 +301,13 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         </button>
       </div>
 
-      {/* Content — right 62%, fixed height via parent */}
-      <div className="flex-1 px-4 py-3 flex flex-col justify-between min-w-0">
+      {/* Details zone — grows to absorb the width the price rail doesn't take,
+          instead of leaving a void between the title and the CTA. */}
+      <div className="flex-1 px-5 py-4 flex flex-col min-w-0">
         {/* Top: location + rating, title, specs */}
         <div className="flex flex-col gap-1.5">
           {/* Location + Rating */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1 truncate">
               <svg className="w-2.5 h-2.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -278,16 +315,12 @@ export const ListingCard: React.FC<ListingCardProps> = ({
               </svg>
               {listing.town}{listing.country ? `, ${listing.country}` : ""}
             </p>
-            {listing.starRating ? (
-              <div className="shrink-0 flex items-center gap-0.5 text-xs font-bold text-slate-700 ml-2">
-                <span className="text-amber-400">★</span>
-                {listing.starRating}
-              </div>
-            ) : null}
+            {/* On wide cards the rating lives in the rail instead. */}
+            <div className="md:hidden">{ratingBadge}</div>
           </div>
 
           {/* Title */}
-          <h3 className="font-bold text-sm text-slate-900 leading-snug group-hover:text-[#024622] transition line-clamp-1">
+          <h3 className="font-bold text-base text-slate-900 leading-snug group-hover:text-[#024622] transition line-clamp-1">
             {listing.name}
           </h3>
 
@@ -336,26 +369,20 @@ export const ListingCard: React.FC<ListingCardProps> = ({
           )}
         </div>
 
-        {/* Bottom: Price + CTA */}
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xl font-bold text-slate-900 leading-tight">
-              {pricePrefix}{rateCurrency} {displayPrice > 0 ? displayPrice.toLocaleString() : "—"}
-            </p>
-            {basePrice > displayPrice && (
-              <p className="text-[10px] text-slate-400 line-through leading-none">{pricePrefix}{rateCurrency} {basePrice.toLocaleString()}</p>
-            )}
-            <p className="text-[9px] uppercase font-bold text-slate-400 tracking-widest">Per {unit}</p>
-          </div>
-          <button
-            onClick={(e) => { e.stopPropagation(); onSelect(listing.id); }}
-            className="flex items-center gap-1.5 bg-[#0c2614] text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-[#1D8D2B] transition shadow-sm"
-          >
-            View Details
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
-            </svg>
-          </button>
+        {/* Narrow cards keep price + CTA inline; the rail takes over at md. */}
+        <div className="md:hidden mt-auto flex items-end justify-between gap-3">
+          {priceBlock}
+          {ctaButton}
+        </div>
+      </div>
+
+      {/* Price rail — anchors the money and the CTA to the right edge so a wide
+          card reads as three deliberate zones rather than one stretched row. */}
+      <div className="hidden md:flex w-[200px] lg:w-[224px] shrink-0 flex-col items-end justify-between border-l border-slate-100 px-5 py-4 text-right">
+        {ratingBadge ?? <span />}
+        <div className="w-full flex flex-col items-end gap-2.5">
+          {priceBlock}
+          <div className="w-full [&>button]:w-full">{ctaButton}</div>
         </div>
       </div>
     </div>
