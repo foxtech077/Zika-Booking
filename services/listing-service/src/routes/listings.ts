@@ -3,7 +3,6 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireUser, type AuthRequest } from "../middleware/auth.js";
-import { requireAuth } from "../middleware/auth.js";
 import {
   createPresignedUploadUrl,
   createPresignedDownloadUrl,
@@ -1856,9 +1855,9 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // GET /geocode — Geocoding proxy; accepts placeId, address, or lat+lng (UC-2.3)
   app.get("/geocode", {
-    preHandler: [requireAuth],
     schema: {
       tags: ["Listings"],
+      security: [],
       querystring: {
         type: "object",
         properties: {
