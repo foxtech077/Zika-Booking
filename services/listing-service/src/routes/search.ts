@@ -5,7 +5,8 @@ import { requireUser, optionalAuth, type AuthRequest } from "../middleware/auth.
 import { getCommissionRate, getCommissionRateBatch, getGlobalCommissionRate } from "./bookings.js";
 import { commissionInclusiveRate, SERVICE_FEE_RATE } from "../services/billing.service.js";
 import { getRatesBatch, getExchangeRate, ceilingForCurrency, getConvertedAmounts, getLocalizedContext } from "../services/exchangeRate.services.js";
-import { buildPriceFilter } from "../lib/priceFilter.js";
+import { buildPriceFilter, buildGuestPriceExpr } from "../lib/priceFilter.js";
+import { buildUserRatingFilterClause, userRatingsOrderExpr } from "../lib/searchFilters.js";
 
 // ── Route plugin ─────────────────────────────────────────────────────────────
 
@@ -52,6 +53,8 @@ export async function searchRoutes(app: FastifyInstance) {
     const amenityIds = q["amenity_ids"] ? q["amenity_ids"].split(",") : undefined;
     const smokingAllowed = q["smoking_allowed"];
     const petsAllowed = q["pets_allowed"];
+    const airportPickup = q["airport_pickup"];
+    const instantBooking = q["instant_booking"];
     const roomType = q["room_type"];
     // Hotel filters
     const starRatings = q["star_rating"] ? q["star_rating"].split(",").map(Number) : undefined;
@@ -171,6 +174,8 @@ export async function searchRoutes(app: FastifyInstance) {
     }
     if (airConditioning !== undefined) push(`l.air_conditioning = ${next()}`, airConditioning === "true");
     if (delivery !== undefined) push(`l.delivery_enabled = ${next()}`, delivery === "true");
+    if (airportPickup !== undefined) push(`l.airport_pickup = ${next()}`, airportPickup === "true");
+    if (instantBooking !== undefined) push(`l.instant_booking = ${next()}`, instantBooking === "true");
     // Amenities — each requested key is an EXISTS over the join table
     if (amenityIds?.length) {
       const PREFIXES = ["Connectivity", "Food & Drink", "Wellness", "Comfort", "Services"];
@@ -214,12 +219,13 @@ export async function searchRoutes(app: FastifyInstance) {
       );
     }
 
-    // Review rating — correlated subquery keeps the count query correct beside LIMIT/OFFSET
+    // User rating (guest review score) — explicit NULL semantics: listings
+    // without visible reviews are excluded when a threshold is applied, and the
+    // clause states that directly (COALESCE sentinel) instead of relying on
+    // three-valued logic. Correlated subquery keeps the COUNT query correct
+    // beside LIMIT/OFFSET.
     if (ratingMin !== undefined) {
-      push(
-        `(SELECT AVG(r.rating) FROM listing.listing_reviews r WHERE r.listing_id = l.id AND r.is_hidden = false) >= ${next()}`,
-        ratingMin,
-      );
+      push(buildUserRatingFilterClause(next, ratingMin), ratingMin);
     }
 
     // Geo anchor (optional) — distance ranking needs both coordinates. No
@@ -277,15 +283,37 @@ export async function searchRoutes(app: FastifyInstance) {
     const whereSql = where.join("\n      AND ");
     const selectExprs = ["l.id", textRankExpr, distanceExpr, latExpr, lngExpr].join(",\n      ");
 
+    // Price sort — order by the SAME guest-payable price the response displays
+    // (min active room-type price for hotels, commission-inclusive, converted to
+    // the requested currency and ceiling-rounded), not the raw listing column.
+    // The expression's placeholders are allocated after all WHERE params, and
+    // their values are pushed after `paginationStart` is captured, so the COUNT
+    // query never receives params it does not reference.
+    let priceOrderExpr: string | null = null;
+    let priceOrderParams: unknown[] = [];
+    const priceSorting = sort === "price_asc" || sort === "price_desc";
+    if (priceSorting) {
+      const globalCommissionRate = await getGlobalCommissionRate();
+      const usdToTargetRate = targetCurrency ? await getExchangeRate("USD", targetCurrency) : null;
+      const price = buildGuestPriceExpr({ category, targetCurrency, usdToTargetRate, globalCommissionRate, next });
+      priceOrderExpr = price.expr;
+      priceOrderParams = price.params;
+      if (!priceJoins) priceJoins = price.joins;
+    }
+
     const orderCols: string[] = [];
     if (textQuery) orderCols.push("text_rank ASC");
-    if (sort === "price_asc") orderCols.push(`l.${priceCol} ASC NULLS LAST`);
-    else if (sort === "price_desc") orderCols.push(`l.${priceCol} DESC NULLS LAST`);
+    if (sort === "price_asc") orderCols.push(`${priceOrderExpr ?? `l.${priceCol}`} ASC NULLS LAST`);
+    else if (sort === "price_desc") orderCols.push(`${priceOrderExpr ?? `l.${priceCol}`} DESC NULLS LAST`);
     else if (sort === "newest") orderCols.push("l.created_at DESC");
+    else if (sort === "user_ratings_desc") orderCols.push(userRatingsOrderExpr());
     else orderCols.push(hasGeo ? "distance_km ASC" : "l.created_at DESC");
 
     // Pagination (cursor = offset)
     const paginationStart = params.length;
+    // Price-sort params are referenced only by the ORDER BY (page query), so
+    // they must come after the COUNT slice but before LIMIT/OFFSET.
+    if (priceOrderParams.length) params.push(...priceOrderParams);
     const fromSql = `FROM listing.listings l${priceJoins ? "\n      " + priceJoins : ""}`;
     const pageSql = `
       SELECT ${selectExprs}
@@ -517,15 +545,15 @@ export async function searchRoutes(app: FastifyInstance) {
           guests: { type: "integer", description: "Number of guests" },
           sort: {
             type: "string",
-            enum: ["recommended", "price_asc", "price_desc", "distance", "newest"],
+            enum: ["recommended", "price_asc", "price_desc", "distance", "newest", "user_ratings_desc"],
             default: "recommended",
-            description: "Sort order",
+            description: "Sort order. user_ratings_desc sorts by average guest review score, highest first (unrated listings last).",
           },
           limit: { type: "integer", default: 20, description: "Page size (max 50)" },
           cursor: { type: "integer", default: 0, description: "Pagination offset cursor" },
           price_min: { type: "number", description: "Minimum price per night/day" },
           price_max: { type: "number", description: "Maximum price per night/day" },
-          rating_min: { type: "number", description: "Minimum average guest review rating (0–5). Only listings with rated reviews >= this value are returned." },
+          rating_min: { type: "number", description: "Minimum average guest review rating (1–5). Only listings whose visible guest reviews average >= this value are returned; listings with no reviews are excluded." },
           cancellation_policy: { type: "string", description: "Cancellation policy filter" },
           amenity_ids: { type: "string", description: "Comma-separated amenity keys to require (e.g. wifi,pool)" },
           smoking_allowed: { type: "string", enum: ["true", "false"], description: "Filter by smoking policy" },
@@ -536,7 +564,7 @@ export async function searchRoutes(app: FastifyInstance) {
             description: "Hotel room type filter",
           },
           // Hotel filters
-          star_rating: { type: "string", description: "Comma-separated hotel star classifications e.g. 3,4,5" },
+          star_rating: { type: "string", pattern: "^[1-5](,[1-5])*$", description: "Hotel star classification filter. Comma-separated values from 1 to 5, e.g. 3,4,5. Hotel category only." },
           // Apartment filters
           bedrooms_min: { type: "integer", description: "Minimum number of bedrooms" },
           bathrooms_min: { type: "integer", description: "Minimum number of bathrooms" },
@@ -556,6 +584,8 @@ export async function searchRoutes(app: FastifyInstance) {
           driver_age: { type: "integer", description: "Driver age — filters out listings with minimum driver age requirement above this value" },
           min_rental_days: { type: "integer", description: "User's planned rental duration in days — filters out listings that require more than this many days minimum" },
           delivery: { type: "string", enum: ["true", "false"], description: "Filter by delivery availability" },
+          airport_pickup: { type: "string", enum: ["true", "false"], description: "Car filter: only listings offering airport pickup" },
+          instant_booking: { type: "string", enum: ["true", "false"], description: "Filter listings that support instant booking" },
           currency: { type: "string", description: "ISO 4217 currency code for localized prices (e.g. KES, NGN, USD)" },
         },
         required: ["category"],
