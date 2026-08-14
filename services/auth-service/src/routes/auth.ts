@@ -1635,7 +1635,11 @@ export async function authRoutes(app: FastifyInstance) {
 
       if (!p?.email || !p?.sub) throw new Error("Missing fields");
       googlePayload = { email: p.email, given_name: p.given_name, family_name: p.family_name, sub: p.sub };
-    } catch {
+    } catch (err) {
+      req.log.error(
+        { err, audience: process.env["GOOGLE_CLIENT_ID_WEB"] },
+        "Google OAuth: idToken verification failed",
+      );
       return sendError(reply, 401, "OAUTH_FAILED", "Sign in with Google failed. Please try again.");
     }
 
@@ -1702,6 +1706,10 @@ export async function authRoutes(app: FastifyInstance) {
       fireAndForgetBookingClaim(user.email, tokens.accessToken);
       return sendSuccess(reply, 200, { user: publicUser(user), tokens });
     } catch (err) {
+      req.log.error(
+        { err, email: googlePayload?.email },
+        "Google OAuth: sign-in flow failed",
+      );
       return sendError(reply, 400, "OAUTH_FAILED", "Sign in with Google could not be completed. Please try again.");
     }
   });
@@ -1820,7 +1828,8 @@ export async function authRoutes(app: FastifyInstance) {
       });
 
       reply.redirect(authUrl);
-    } catch {
+    } catch (err) {
+      req.log.error({ err }, "Google OAuth: redirect init failed");
       return sendError(reply, 400, "OAUTH_INIT_FAILED", "Google sign-in could not be initiated. Please try again.");
     }
   });
@@ -2010,7 +2019,7 @@ export async function authRoutes(app: FastifyInstance) {
 </html>
       `);
     } catch (err: any) {
-      app.log.error(err);
+      req.log.error({ err }, "Google OAuth: callback failed");
       return reply.redirect(`${webBaseUrl}/auth/login?error=OAUTH_FAILED&message=${encodeURIComponent(err.message || "OAuth verification failed")}`);
     }
   });
