@@ -123,21 +123,35 @@ async function build() {
     "http://localhost:3002",
     "http://localhost:3005",
   ];
+  const PROD_ORIGINS = [
+    process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
+    process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
+    process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005",
+    "https://kainook.com",
+    ...LOCALHOST_ORIGINS,
+  ];
   await app.register(cors, {
     // In development, allow all origins so the Expo mobile app (which sends no
     // Origin header from React Native) can reach the API. In production, lock
     // down to known web / admin URLs only.
-    origin: isDev
-      ? true
-      : [
-          process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
-          process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
-          process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005",
-          "https://kainook.com",
-          ...LOCALHOST_ORIGINS,
-        ],
+    origin: isDev ? true : PROD_ORIGINS,
     credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+  });
+  // @fastify/cors injects its headers in an onRequest hook, so replies sent
+  // from error handlers or failed hooks can go out without CORS headers. Add
+  // them back on every outgoing response so browsers don't surface real API
+  // errors (4xx/5xx) as CORS errors instead.
+  app.addHook("onSend", (req, reply, _payload, done) => {
+    const origin = req.headers.origin;
+    if (!origin || reply.hasHeader("access-control-allow-origin")) {
+      return done();
+    }
+    if (isDev || PROD_ORIGINS.includes(origin)) {
+      reply.header("Access-Control-Allow-Origin", origin);
+      reply.header("Access-Control-Allow-Credentials", "true");
+    }
+    done();
   });
 
   const redis = new Redis(process.env["REDIS_URL"] ?? "redis://localhost:6379");
