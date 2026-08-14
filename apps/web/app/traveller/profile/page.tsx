@@ -27,6 +27,10 @@ import { CountryCombobox, WORLD_COUNTRIES } from "@/components/ui/CountryCombobo
 import { cn } from "@/lib/utils";
 import { ALL_COUNTRIES, parsePhoneNumber } from "@/lib/countries";
 
+// Must match the API's international format rule (see registerSchema /
+// patchProfileSchema in the auth-service): a "+" country prefix is required.
+const PHONE_REGEX = /^\+[1-9]\d{6,14}$/;
+
 const TIER_CONFIG: Record<string, { label: string; className: string }> = {
   bronze:  { label: "Bronze",  className: "bg-amber-50 text-amber-800 border-amber-200" },
   silver:  { label: "Silver",  className: "bg-slate-100 text-slate-700 border-slate-300" },
@@ -137,7 +141,7 @@ export default function TravellerProfilePage() {
   // PATCH /auth/profile
   const profileMutation = useMutation({
     mutationFn: () => {
-      const combinedPhone = phoneLocalNumber ? `${phoneCountryCode}${phoneLocalNumber}` : "";
+      const combinedPhone = buildCombinedPhone();
       return api.patch("/auth/profile", {
         firstName:    profileForm.firstName.trim(),
         lastName:     profileForm.lastName.trim(),
@@ -189,10 +193,22 @@ export default function TravellerProfilePage() {
     },
   });
 
+  const buildCombinedPhone = () => {
+    if (!phoneLocalNumber) return "";
+    const code = phoneCountryCode.startsWith("+") ? phoneCountryCode : `+${phoneCountryCode}`;
+    return `${code}${phoneLocalNumber}`;
+  };
+
   const handleProfileSave = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!profileForm.firstName.trim() || !profileForm.lastName.trim()) {
       setProfileMsg({ type: "error", text: "First name and last name are required." });
+      return;
+    }
+    const combinedPhone = buildCombinedPhone();
+    if (phoneLocalNumber && !PHONE_REGEX.test(combinedPhone)) {
+      setFieldErrors((prev) => ({ ...prev, phone: "Phone number must include the + country prefix in international format (e.g. +254712345678)." }));
+      setProfileMsg({ type: "error", text: "Phone number must include the + country prefix in international format (e.g. +254712345678)." });
       return;
     }
     setProfileMsg(null);
