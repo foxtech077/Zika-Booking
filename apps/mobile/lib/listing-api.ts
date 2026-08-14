@@ -1,12 +1,7 @@
 import axios from "axios";
 import { useAuthStore } from "../store/auth";
 import { getCachedAnonymousToken } from "./anonymous";
-
-const getListingBaseUrl = () => {
-  const envUrl = process.env["EXPO_PUBLIC_LISTING_API_URL"];
-  if (envUrl) return envUrl;
-  return "https://api.kainook.com/listings";
-};
+import { getListingBaseUrl, getAuthBaseUrl } from "./config";
 
 const LISTING_BASE_URL = getListingBaseUrl();
 
@@ -61,12 +56,6 @@ function _listingErrorLogger(error: any): void {
   console.log("[LISTING-API] Response body:", JSON.stringify(error?.response?.data, null, 2));
   console.log("[LISTING-API] Error message:", error?.message);
 }
-
-const getAuthBaseUrl = () => {
-  const envUrl = process.env["EXPO_PUBLIC_AUTH_API_URL"];
-  if (envUrl) return envUrl;
-  return "https://api.kainook.com/auth";
-};
 
 const AUTH_BASE_URL = getAuthBaseUrl();
 

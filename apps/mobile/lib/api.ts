@@ -2,13 +2,9 @@ import axios from "axios";
 import type { PublicUser } from "@zika/types";
 import { useAuthStore } from "../store/auth";
 
-const getBaseUrl = () => {
-  const envUrl = process.env["EXPO_PUBLIC_API_URL"];
-  const base = envUrl ?? "https://api.kainook.com/auth";
-  return base.endsWith("/") ? base : `${base}/`;
-};
+import { getAuthBaseUrl } from "./config";
 
-export const BASE_URL = getBaseUrl();
+export const BASE_URL = getAuthBaseUrl();
 
 export const api = axios.create({
   baseURL: BASE_URL,
