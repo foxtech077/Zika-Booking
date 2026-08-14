@@ -3,6 +3,7 @@
     "name": "Kainook",
     "slug": "kainook",
     "version": "1.0.0",
+    "runtimeVersion": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "kainook",
@@ -104,7 +105,7 @@
       ]
     ],
     "updates": {
-      "enabled": false
+      "url": "https://u.expo.dev/eb02914a-9afa-4816-8d96-31d713f19022"
     },
     "experiments": {
       "typedRoutes": true
