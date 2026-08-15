@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 
 // Safely load MapView and Marker to prevent crashes in environments without the native module
@@ -36,6 +36,7 @@ import { ListingImage } from "../components/ListingImage";
 import { ActivePromotion, applyPromotion } from "../lib/promotions";
 import { useLocationStore } from "../store/location";
 import { useRefreshOnFocus } from "../hooks/useRefreshOnFocus";
+import { CurrencyPickerModal } from "../components/CurrencyPickerModal";
 import { approxPrefix } from "../lib/currency";
 
 // Deterministic coordinates calculator from search center + distance
@@ -754,7 +755,10 @@ const cardStyles = StyleSheet.create({
 
 export default function SearchScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const localCurrency = useAuthStore((s) => s.localCurrency);
+  const setLocalCurrency = useAuthStore((s) => s.setLocalCurrency);
+  const [currencyModalVisible, setCurrencyModalVisible] = useState(false);
   const params = useLocalSearchParams<{
     category: string;
     placeName: string;
@@ -1538,6 +1542,14 @@ export default function SearchScreen() {
         </View>
 
         <TouchableOpacity
+          onPress={() => setCurrencyModalVisible(true)}
+          style={styles.currencyHeaderBtn}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.currencyHeaderBtnText}>{localCurrency ?? "USD"}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           onPress={() => setFilterVisible(true)}
           style={[styles.filterBtn, hasActiveFilters && styles.filterBtnActive]}
           activeOpacity={0.8}
@@ -1998,6 +2010,20 @@ export default function SearchScreen() {
           setCursor(null);
         }}
         onClose={() => setShowRangePicker(false)}
+      />
+
+      {/* ─── Currency Picker Modal ─── */}
+      <CurrencyPickerModal
+        visible={currencyModalVisible}
+        selected={localCurrency ?? "USD"}
+        onSelect={async (code) => {
+          await setLocalCurrency(code);
+          setCurrencyModalVisible(false);
+          setCursor(null);
+          setAllResults([]);
+          queryClient.invalidateQueries({ queryKey: ["listings"] });
+        }}
+        onClose={() => setCurrencyModalVisible(false)}
       />
 
       {/* ─── Premium Filter Sheet Modal ─── */}
@@ -2563,6 +2589,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: TEXT,
     padding: 0,
+  },
+  currencyHeaderBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    marginRight: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F9FAFB",
+  },
+  currencyHeaderBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: TEXT,
   },
   filterBtn: {
     padding: 8,
