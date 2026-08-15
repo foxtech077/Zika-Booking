@@ -22,9 +22,12 @@ import { K } from "../../constants/theme";
 import { useAuthStore } from "../../store/auth";
 import { SignInRequired } from "../../components/SignInRequired";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
+import { useReadableWidth } from "../../lib/responsive";
 
 const { width: W } = Dimensions.get("window");
-const PHOTO_H = Math.round(W * 0.56);
+// 56% of a phone's width is a pleasant hero; 56% of a tablet's is a wall of
+// photo. The list is width-capped on tablets, so cap the photo to match.
+const PHOTO_H = Math.round(Math.min(W, 720) * 0.56);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -607,6 +610,9 @@ export default function BookingsScreen() {
     return <SignInRequired icon="airplane-outline" title="Sign in to see your trips" message="Your bookings and trip history live in your account. Guests can still book without signing in — you will get a confirmation by email." />;
   }
 
+  // Tablet: keep this list at a readable width instead of letting rows
+  // stretch edge to edge. No-op on phones.
+  const readable = useReadableWidth();
   const [activeChip, setActiveChip] = useState<ChipKey>("all");
   const [search, setSearch] = useState("");
   const qc = useQueryClient();
@@ -781,7 +787,7 @@ export default function BookingsScreen() {
               return <EmptyTripsState chipKey={item.chipKey} />;
           }
         }}
-        contentContainerStyle={s.listContent}
+        contentContainerStyle={[s.listContent, readable]}
         showsVerticalScrollIndicator={false}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.4}

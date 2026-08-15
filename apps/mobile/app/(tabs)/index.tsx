@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, memo } from "react";
 import {
   View, Text, ScrollView, FlatList, TextInput, TouchableOpacity,
-  StyleSheet, Dimensions, Modal, Animated, ImageBackground,
+  StyleSheet, Dimensions, useWindowDimensions, Modal, Animated, ImageBackground,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -24,6 +24,14 @@ import { CurrencyPickerModal } from "../../components/CurrencyPickerModal";
 
 
 const { width: W } = Dimensions.get("window");
+// Carousel cards are sized from the screen width, which on a tablet produced a
+// single card almost as wide as the display. Capping the width means a phone
+// behaves exactly as before while a tablet simply shows more cards per row.
+const ELITE_CARD_W = Math.min(W - 48, 420);
+// Full-bleed blocks (search card, promo banner) look stretched on a tablet.
+// Cap and centre them; on a phone the cap is never reached.
+const MAX_BAND_W = 860;
+const RECENT_CARD_W = Math.min(W * 0.72, 340);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -424,7 +432,7 @@ const EliteCard = memo(function EliteCard({ item, onPress, badgeLabel, badgeColo
 });
 const ec = StyleSheet.create({
   card: {
-    width: W - 48,
+    width: ELITE_CARD_W,
     backgroundColor: K.colors.bgCard,
     borderRadius: K.radius.xl,
     overflow: "hidden",
@@ -648,7 +656,10 @@ const PROMO_PALETTES = [
 const PromoSlider = memo(function PromoSlider({ promos, onPress }: {
   promos: Promotion[]; onPress: (p: Promotion) => void;
 }) {
-  const SLIDE_W = W - K.spacing.screen * 2;
+  // Live width, not the module-scope snapshot: on rotation or iPad split view
+  // a stale slide width desyncs the pager from the dots.
+  const { width: winW } = useWindowDimensions();
+  const SLIDE_W = Math.min(winW - K.spacing.screen * 2, MAX_BAND_W);
   const scrollRef = useRef<ScrollView>(null);
   const [active, setActive] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -666,7 +677,7 @@ const PromoSlider = memo(function PromoSlider({ promos, onPress }: {
   }, [promos.length, SLIDE_W]);
 
   return (
-    <View style={{ marginHorizontal: K.spacing.screen }}>
+    <View style={{ marginHorizontal: K.spacing.screen, maxWidth: MAX_BAND_W, width: "100%", alignSelf: "center" }}>
       <ScrollView
         ref={scrollRef}
         horizontal
@@ -1648,7 +1659,11 @@ const s = StyleSheet.create({
   avatarText: { fontSize: 15, fontWeight: "800", color: K.colors.accentLight },
 
   searchCardWrap: { backgroundColor: K.colors.darkGreen, paddingHorizontal: K.spacing.screen, paddingBottom: 22 },
-  searchCard: { backgroundColor: "#fff", borderRadius: K.radius.xl, overflow: "hidden", ...K.shadow.md },
+  searchCard: {
+    backgroundColor: "#fff", borderRadius: K.radius.xl, overflow: "hidden",
+    maxWidth: MAX_BAND_W, width: "100%", alignSelf: "center",
+    ...K.shadow.md,
+  },
   searchRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14 },
   searchIconWrap: { width: 34, height: 34, borderRadius: K.radius.full, backgroundColor: K.colors.bgTint, alignItems: "center", justifyContent: "center", marginRight: 10 },
   locationInput: { flex: 1, fontSize: K.font.base, color: K.colors.textDark, fontWeight: "500" },
@@ -1759,7 +1774,7 @@ const ly = StyleSheet.create({
 
 const rb = StyleSheet.create({
   card: {
-    width: W * 0.72, backgroundColor: K.colors.bgCard, borderRadius: K.radius.xl,
+    width: RECENT_CARD_W, backgroundColor: K.colors.bgCard, borderRadius: K.radius.xl,
     padding: 16, borderWidth: 1, borderColor: K.colors.border, ...K.shadow.sm,
   },
   datesRow: { marginBottom: 10 },

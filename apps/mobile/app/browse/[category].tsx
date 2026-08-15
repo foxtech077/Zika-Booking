@@ -14,6 +14,7 @@ import { ListingImage } from "../../components/ListingImage";
 import { useActivePromotion, ActivePromotion, applyPromotion } from "../../lib/promotions";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 import { approxPrefix } from "../../lib/currency";
+import { useResponsive, padToColumns } from "../../lib/responsive";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const GREEN = "#1B5E20";
@@ -97,9 +98,9 @@ const badge = StyleSheet.create({
 });
 
 // ── Listing Card ──────────────────────────────────────────────────────────────
-function ListingCard({ item, apiCategory, onPress, signedPhotoUrl, promotion }: {
+function ListingCard({ item, apiCategory, onPress, signedPhotoUrl, promotion, columns = 1 }: {
   item: Listing; apiCategory: string; onPress: () => void; signedPhotoUrl: string | null;
-  promotion?: ActivePromotion | null;
+  promotion?: ActivePromotion | null; columns?: number;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const isCar = apiCategory === "car";
@@ -129,13 +130,13 @@ function ListingCard({ item, apiCategory, onPress, signedPhotoUrl, promotion }: 
   const promoted = applyPromotion(price, effectivePromo);
 
   return (
-    <TouchableOpacity style={card.wrap} onPress={onPress} activeOpacity={0.88}>
+    <TouchableOpacity style={[card.wrap, columns > 1 && card.wrapInGrid]} onPress={onPress} activeOpacity={0.88}>
       {/* Photo */}
       <View style={card.photoWrap}>
         {!imgErr && signedPhotoUrl ? (
-          <ListingImage uri={signedPhotoUrl} style={card.photo} onError={() => setImgErr(true)} />
+          <ListingImage uri={signedPhotoUrl} style={[card.photo, columns > 1 && card.photoInGrid]} onError={() => setImgErr(true)} />
         ) : (
-          <View style={[card.photo, card.photoFallback]}>
+          <View style={[card.photo, columns > 1 && card.photoInGrid, card.photoFallback]}>
             <Text style={{ fontSize: 32 }}>{isCar ? "🚗" : apiCategory === "apartment" ? "🏠" : "🏨"}</Text>
           </View>
         )}
@@ -219,8 +220,10 @@ const card = StyleSheet.create({
     marginBottom: 14, overflow: "hidden",
     shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
   },
+  wrapInGrid: { flex: 1, marginBottom: 0 },
   photoWrap: { position: "relative" },
   photo: { width: "100%", height: 200 },
+  photoInGrid: { height: undefined, aspectRatio: 4 / 3 },
   photoFallback: { backgroundColor: "#E5F3E6", alignItems: "center", justifyContent: "center" },
   accreditedBadge: {
     position: "absolute", top: 10, left: 10, backgroundColor: GREEN,
@@ -299,6 +302,8 @@ export default function BrowseCategoryScreen() {
   const browsePromo = useActivePromotion(apiCategory);
 
   const [keyword, setKeyword] = useState("");
+  // Tablet grid: 2–4 listing cards per row instead of one stretched card.
+  const { columns } = useResponsive();
   const [sort, setSort] = useState<string>("recommended");
   const [cursor, setCursor] = useState(0);
   const [allResults, setAllResults] = useState<Listing[]>([]);
@@ -492,18 +497,24 @@ export default function BrowseCategoryScreen() {
       {/* Results */}
       {!isFirstLoad && !isError && (
         <FlatList
-          data={displayResults}
-          keyExtractor={(item) => item.id}
+          data={padToColumns(displayResults, columns)}
+          keyExtractor={(item, index) => item?.id ?? `spacer-${index}`}
+          key={`grid-${columns}`}
+          numColumns={columns}
+          columnWrapperStyle={columns > 1 ? s.gridRow : undefined}
           contentContainerStyle={s.list}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
+            item == null ? <View style={{ flex: 1 }} /> : (
             <ListingCard
               item={item}
               apiCategory={apiCategory}
               onPress={() => navToListing(item.id)}
               signedPhotoUrl={signedPhotoMap[item.id] ?? null}
               promotion={browsePromo}
+              columns={columns}
             />
+            )
           )}
           ListEmptyComponent={
             <View style={s.empty}>
@@ -576,6 +587,7 @@ const s = StyleSheet.create({
   sortChipTextActive: { color: GREEN, fontWeight: "700" },
 
   list: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 32 },
+  gridRow: { gap: 14, marginBottom: 14, alignItems: "stretch" },
 
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
   errTitle: { fontSize: 18, fontWeight: "700", color: TEXT, marginTop: 16, textAlign: "center" },

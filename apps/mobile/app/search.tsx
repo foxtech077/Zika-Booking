@@ -38,6 +38,16 @@ import { useLocationStore } from "../store/location";
 import { useRefreshOnFocus } from "../hooks/useRefreshOnFocus";
 import { CurrencyPickerModal } from "../components/CurrencyPickerModal";
 import { approxPrefix } from "../lib/currency";
+import { useResponsive, padToColumns } from "../lib/responsive";
+
+/**
+ * The search API returns `COALESCE(ST_Distance(...), 999999)`, so a listing with
+ * no stored geography arrives as 999999 rather than null. Rendering that
+ * verbatim produced "999999.0 km" on the card.
+ */
+function hasKnownDistance(km: number | null | undefined): km is number {
+  return km != null && km < 999999;
+}
 
 // Deterministic coordinates calculator from search center + distance
 function getListingCoordinates(
@@ -52,7 +62,7 @@ function getListingCoordinates(
     };
   }
 
-  const distance = item.distanceKm ?? 0.1;
+  const distance = hasKnownDistance(item.distanceKm) ? item.distanceKm : 0.1;
   let hash = 0;
   const idStr = item.id || "";
   for (let i = 0; i < idStr.length; i++) {
@@ -349,6 +359,8 @@ interface ResultCardProps {
   favouriteLoading: string | null;
   signedPhotoUrl: string | null;
   promotion?: ActivePromotion | null;
+  /** Columns in the parent grid. 1 on phones — the card keeps its phone layout. */
+  columns?: number;
 }
 
 const ResultCard = memo(function ResultCard({
@@ -363,6 +375,7 @@ const ResultCard = memo(function ResultCard({
   favouriteLoading,
   signedPhotoUrl,
   promotion,
+  columns = 1,
 }: ResultCardProps) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -412,7 +425,7 @@ const ResultCard = memo(function ResultCard({
 
   return (
     <TouchableOpacity
-      style={cardStyles.card}
+      style={[cardStyles.card, columns > 1 && cardStyles.cardInGrid]}
       onPress={handlePress}
       activeOpacity={0.88}
     >
@@ -421,13 +434,14 @@ const ResultCard = memo(function ResultCard({
         {!imgError && signedPhotoUrl ? (
           <ListingImage
             uri={signedPhotoUrl}
-            style={cardStyles.photo}
+            style={[cardStyles.photo, columns > 1 && cardStyles.photoInGrid]}
             onError={() => setImgError(true)}
           />
         ) : (
           <View
             style={[
               cardStyles.photo,
+              columns > 1 && cardStyles.photoInGrid,
               cardStyles.photoPlaceholder,
               { alignItems: "center", justifyContent: "center" },
             ]}
@@ -524,7 +538,7 @@ const ResultCard = memo(function ResultCard({
             <Ionicons name="location" size={13} color={PRIMARY} />
             <Text style={cardStyles.locationText} numberOfLines={1}>
               {item.city}
-              {item.distanceKm != null
+              {hasKnownDistance(item.distanceKm)
                 ? ` · ${item.distanceKm.toFixed(1)} km`
                 : ""}
             </Text>
@@ -664,8 +678,15 @@ const cardStyles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
+  // In a multi-column grid the card must share the row evenly. `flex: 1`
+  // combined with `columnWrapperStyle`'s gap does that without hard-coding a
+  // width against the screen size, so it survives rotation and split view.
+  cardInGrid: { flex: 1, marginBottom: 0 },
   photoWrapper: { position: "relative" },
   photo: { width: "100%", height: 200 },
+  // A fixed 200dp photo looks squat once the card is only a third of the
+  // screen wide, so grid cards scale the photo with the column instead.
+  photoInGrid: { height: undefined, aspectRatio: 4 / 3 },
   photoPlaceholder: { backgroundColor: "#e5e7eb" },
   heartBtn: {
     position: "absolute",
@@ -855,7 +876,10 @@ export default function SearchScreen() {
 
   // FlatList ref — used to programmatically scroll to the top when the user
   // switches categories so they always see new-category results from the start.
-  const flatListRef = useRef<import("react-native").FlatList<SearchResult>>(null);
+  // Item type is nullable because the grid pads its last row with spacers.
+  const flatListRef = useRef<import("react-native").FlatList<SearchResult | null>>(null);
+  // Tablet grid: 2–4 result cards per row instead of one stretched card.
+  const { columns } = useResponsive();
   // Tracks the current vertical scroll offset for optional future restoration.
   const scrollY = useRef(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -1511,56 +1535,58 @@ export default function SearchScreen() {
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       {/* ── Search header refiner bar ── */}
-      <View style={styles.searchHeader}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.searchBackBtn}
-        >
-          <Ionicons name="arrow-back" size={24} color={TEXT} />
-        </TouchableOpacity>
+      <View style={styles.searchHeaderBand}>
+        <View style={[styles.searchHeader, styles.bandInner]}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.searchBackBtn}
+          >
+            <Ionicons name="arrow-back" size={24} color={TEXT} />
+          </TouchableOpacity>
 
-        <View style={styles.searchInputContainer}>
-          <Ionicons
-            name="search"
-            size={18}
-            color={MUTED}
-            style={{ marginRight: 6 }}
-          />
-          <TextInput
-            style={styles.searchTextInput}
-            placeholder="Where to? (e.g. Nairobi, Mombasa)"
-            value={searchInput}
-            onChangeText={setSearchInput}
-            onSubmitEditing={() => {
-              if (searchInput.trim()) {
-                router.setParams({ placeName: searchInput.trim() });
-                setCursor(null);
-                setAllResults([]);
-              }
-            }}
-          />
+          <View style={styles.searchInputContainer}>
+            <Ionicons
+              name="search"
+              size={18}
+              color={MUTED}
+              style={{ marginRight: 6 }}
+            />
+            <TextInput
+              style={styles.searchTextInput}
+              placeholder="Where to? (e.g. Nairobi, Mombasa)"
+              value={searchInput}
+              onChangeText={setSearchInput}
+              onSubmitEditing={() => {
+                if (searchInput.trim()) {
+                  router.setParams({ placeName: searchInput.trim() });
+                  setCursor(null);
+                  setAllResults([]);
+                }
+              }}
+            />
+          </View>
+
+          <TouchableOpacity
+            onPress={() => setCurrencyModalVisible(true)}
+            style={styles.currencyHeaderBtn}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.currencyHeaderBtnText}>{localCurrency ?? "USD"}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setFilterVisible(true)}
+            style={[styles.filterBtn, hasActiveFilters && styles.filterBtnActive]}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="funnel-outline"
+              size={20}
+              color={hasActiveFilters ? "#fff" : TEXT}
+            />
+            {hasActiveFilters && <View style={styles.filterDot} />}
+          </TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          onPress={() => setCurrencyModalVisible(true)}
-          style={styles.currencyHeaderBtn}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.currencyHeaderBtnText}>{localCurrency ?? "USD"}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setFilterVisible(true)}
-          style={[styles.filterBtn, hasActiveFilters && styles.filterBtnActive]}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="funnel-outline"
-            size={20}
-            color={hasActiveFilters ? "#fff" : TEXT}
-          />
-          {hasActiveFilters && <View style={styles.filterDot} />}
-        </TouchableOpacity>
       </View>
 
       {/* ── Category tabs ── */}
@@ -1593,7 +1619,7 @@ export default function SearchScreen() {
       </View>
 
       {/* ── Date Range Bar ── */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 2 }}>
+      <View style={[{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 2 }, styles.bandInner]}>
         <TouchableOpacity
           style={{
             flexDirection: "row",
@@ -1887,8 +1913,13 @@ export default function SearchScreen() {
         ) : (
           <FlatList
             ref={flatListRef}
-            data={effectiveResults}
-            keyExtractor={(item) => item.id}
+            data={padToColumns(effectiveResults, columns)}
+            keyExtractor={(item, index) => item?.id ?? `spacer-${index}`}
+            // FlatList cannot change numColumns on an existing list, so the
+            // key forces a remount on rotation / split-view resize.
+            key={`grid-${columns}`}
+            numColumns={columns}
+            columnWrapperStyle={columns > 1 ? styles.gridRow : undefined}
             style={styles.list}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
@@ -1906,6 +1937,7 @@ export default function SearchScreen() {
             maxToRenderPerBatch={8}
             removeClippedSubviews
             renderItem={({ item }) => (
+              item == null ? <View style={{ flex: 1 }} /> : (
               <ResultCard
                 item={item}
                 category={category}
@@ -1918,7 +1950,9 @@ export default function SearchScreen() {
                 favouriteLoading={favouriteLoading}
                 signedPhotoUrl={signedPhotoMap[item.id] ?? null}
                 promotion={activePromotion as unknown as ActivePromotion | null}
+                columns={columns}
               />
+              )
             )}
             ListEmptyComponent={
               (searchLoading || searchFetching || isPlaceholderData) ? (
@@ -2562,13 +2596,20 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
 
   // Search Header refiner bar
+  // The band stays edge-to-edge; `bandInner` caps the controls inside it so a
+  // tablet does not get a 1000dp-wide text field or three enormous pills.
+  bandInner: { maxWidth: 860, width: "100%", alignSelf: "center" },
+  searchHeaderBand: {
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
   searchHeader: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderBottomWidth: 1,
+    borderBottomWidth: 0,
     borderBottomColor: BORDER,
   },
   searchBackBtn: {
@@ -2631,6 +2672,7 @@ const styles = StyleSheet.create({
   categoryTabRow: {
     flexDirection: "row",
     backgroundColor: "#fff",
+    justifyContent: "center",
     paddingHorizontal: 12,
     paddingVertical: 10,
     gap: 8,
@@ -2639,6 +2681,7 @@ const styles = StyleSheet.create({
   },
   categoryTab: {
     flex: 1,
+    maxWidth: 240,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -2719,6 +2762,9 @@ const styles = StyleSheet.create({
   // List
   list: { flex: 1 },
   listContent: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 32 },
+  // `gap` supplies both the column gutter and the row spacing that
+  // `cardInGrid` drops by zeroing marginBottom.
+  gridRow: { gap: 14, marginBottom: 14, alignItems: "stretch" },
 
   // Center states (loading/error/empty)
   center: {

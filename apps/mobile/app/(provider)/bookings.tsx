@@ -17,6 +17,7 @@ import { BookingCard, type BookingCardData } from "../../components/bookings/Boo
 import { BookingFilterBar, type FilterTab } from "../../components/bookings/BookingFilterBar";
 import { BookingListLoading } from "../../components/bookings/BookingLoadingSkeleton";
 import { BookingEmptyState, BookingErrorState } from "../../components/bookings/BookingEmptyState";
+import { useReadableWidth } from "../../lib/responsive";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,9 @@ function showMessageStub() {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function ProviderBookingsScreen() {
+  // Tablet: keep this list at a readable width instead of letting rows
+  // stretch edge to edge. No-op on phones.
+  const readable = useReadableWidth();
   const [activeTab, setActiveTab] = useState("all");
 
   const { data, isLoading, isError, refetch, isRefetching } = useQuery<BookingListResponse>({
@@ -143,7 +147,7 @@ export default function ProviderBookingsScreen() {
           <FlatList
             data={bookings}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={s.list}
+            contentContainerStyle={[s.list, readable]}
             showsVerticalScrollIndicator={false}
             removeClippedSubviews
             windowSize={7}
