@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { CurrencyCombobox } from "@/components/ui/CurrencyCombobox";
+import { PaymentSettingsForm } from "@/components/payments/PaymentSettingsForm";
 import { cn } from "@/lib/utils";
 
 type SettingsTab =
@@ -415,21 +416,7 @@ export default function SettingsPage() {
           )}
 
           {tab === "payments" && (
-            <SettingsCard title="Payout & Payment Settings" subtitle="Manage bank, billing, payout, and tax information." icon={<CreditCard />} feedback={sectionFeedback.payments} footer={<SectionActions loading={fakeSaveMutation.isPending} onSave={() => fakeSaveMutation.mutate("Payment")} onReset={resetSection} />}>
-              <div className="mb-4 grid gap-3 md:grid-cols-3">
-                <StatusTile label="Payout method" value={payments.bankName ? "Connected" : "Not configured"} tone={payments.bankName ? "success" : "warning"} />
-                <StatusTile label="Verification" value="Pending review" tone="warning" />
-                <StatusTile label="Payment status" value="Ready" tone="success" />
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <Input label="Bank name" value={payments.bankName} onChange={(e) => setPayments((f) => ({ ...f, bankName: e.target.value }))} />
-                <Input label="Account holder" value={payments.accountHolder} onChange={(e) => setPayments((f) => ({ ...f, accountHolder: e.target.value }))} />
-                <Input label="Account last 4 digits" value={payments.accountLast4} onChange={(e) => setPayments((f) => ({ ...f, accountLast4: e.target.value }))} />
-                <Select label="Payout schedule" value={payments.payoutSchedule} onChange={(e) => setPayments((f) => ({ ...f, payoutSchedule: e.target.value }))} options={[{ value: "weekly", label: "Weekly" }, { value: "monthly", label: "Monthly" }, { value: "manual", label: "Manual" }]} />
-                <Input label="Tax ID" value={payments.taxId} onChange={(e) => setPayments((f) => ({ ...f, taxId: e.target.value }))} />
-                <Input label="Billing address" value={payments.billingAddress} onChange={(e) => setPayments((f) => ({ ...f, billingAddress: e.target.value }))} />
-              </div>
-            </SettingsCard>
+            <PaymentSettingsForm />
           )}
 
           {tab === "preferences" && (
