@@ -185,7 +185,7 @@ export default function ProviderDashboardScreen() {
   // ever 403s. Not linked from the tab bar (href: null), but still a routable
   // path, so it guards itself rather than trusting that.
   const user = useAuthStore((s) => s.user);
-  const isHost = user?.hostStatus === "approved";
+  const isHost = !!user;
 
   const { data, isLoading, isError, refetch, isRefetching } = useQuery<DashboardData>({
     queryKey: ["providerDashboard"],
