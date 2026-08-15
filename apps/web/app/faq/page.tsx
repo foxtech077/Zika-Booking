@@ -562,6 +562,13 @@ export default function FAQPage() {
                   <PhoneCall className="w-3.5 h-3.5" />
                   Email Support
                 </a>
+                <Link
+                  href="/contact"
+                  className="flex items-center gap-1.5 bg-white border border-slate-200 hover:border-brand/40 text-brand-darkest font-semibold text-xs py-2.5 px-4 rounded-xl shadow-sm transition"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                  Contact Page
+                </Link>
               </div>
             </div>
           </section>
