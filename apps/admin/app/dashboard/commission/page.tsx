@@ -54,7 +54,7 @@ export default function CommissionPage() {
   });
 
   const rates: CommissionRate[] = data?.rates ?? [];
-  const defaultRate: number = (data as any)?.globalRate != null ? (data as any).globalRate * 100 : (data?.defaultRate ?? 5);
+  const defaultRate: number = (data as any)?.globalRate ?? 5;
 
   const filteredRates = useMemo(() => {
     if (role === "super_admin" || role === "admin" || role === "finance" || role === "support") {
@@ -82,7 +82,7 @@ export default function CommissionPage() {
     }) =>
       listingApi.post("/admin/commission-rates", {
         country,
-        rate: rate / 100, // Backend expects decimal representation (e.g. 0.125 for 12.5%)
+        rate, // Backend expects percentage (e.g. 12.5 for 12.5%)
         effectiveFrom,
         notifyProviders,
         reason,
@@ -107,7 +107,7 @@ export default function CommissionPage() {
       notifyProviders: boolean;
     }) =>
       listingApi.post("/admin/commission-rates/global", {
-        rate: body.rate / 100, // backend expects decimal
+        rate: body.rate, // backend expects percentage (e.g. 12.5 for 12.5%)
         effectiveFrom: body.effectiveFrom,
         reason: body.reason,
         applyToAll: body.applyToAll,

@@ -125,9 +125,9 @@ export default function CommissionHistoryPage() {
       label: "Rate Transition",
       render: (h) => (
         <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-          <span className="line-through text-slate-400 tabular">{(h.oldRate * 100).toFixed(1)}%</span>
+          <span className="line-through text-slate-400 tabular">{(h.oldRate).toFixed(1)}%</span>
           <span>→</span>
-          <span className="text-primary font-bold text-sm tabular">{(h.newRate * 100).toFixed(1)}%</span>
+          <span className="text-primary font-bold text-sm tabular">{(h.newRate).toFixed(1)}%</span>
         </div>
       ),
     },

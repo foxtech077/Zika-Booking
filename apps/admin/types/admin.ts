@@ -254,7 +254,9 @@ export interface CommissionRate {
 }
 
 export interface CommissionRatesResponse {
-  defaultRate: number;
+  globalRate: number;
+  pendingGlobalRate: number | null;
+  pendingGlobalEffectiveFrom: string | null;
   rates: CommissionRate[];
 }
 
