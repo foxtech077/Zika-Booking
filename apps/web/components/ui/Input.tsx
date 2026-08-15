@@ -105,6 +105,8 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ label, error, options, placeholder, className, id, ...props }, ref) => {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, "-");
+    const currentValue = String(props.value ?? "");
+    const needsPlaceholder = Boolean(placeholder) && !options.some((option) => option.value === currentValue);
     return (
       <div className="w-full">
         {label && (
@@ -124,7 +126,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
           )}
           {...props}
         >
-          {placeholder && <option value="">{placeholder}</option>}
+          {needsPlaceholder && <option value="">{placeholder}</option>}
           {options.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}

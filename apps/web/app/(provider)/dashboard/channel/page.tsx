@@ -8,8 +8,10 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  CircleSlash,
   Clock3,
   Globe2,
+  Info,
   Link2,
   Loader2,
   Plus,
@@ -193,7 +195,7 @@ function normalizeChannelStatus(raw: unknown, listingId: string): ChannelStatus 
 
 async function fetchListings() {
   try {
-    const response = await listingApi.get("/listings", { params: { status: "active", limit: 50 } });
+    const response = await listingApi.get("/listings", { params: { status: "all", limit: 50 } });
     return unwrapList<Listing>(response.data, ["listings", "items", "results"]);
   } catch {
     return [];
@@ -479,6 +481,11 @@ export default function ChannelPage() {
     return { total, active, failed, pending, lastSuccessful };
   }, [filteredFeeds]);
 
+  const noFeedsConnected = useMemo(
+    () => !listingsLoading && !feedsLoading && feeds.length === 0,
+    [feeds, feedsLoading, listingsLoading],
+  );
+
   const calendarDays = useMemo(() => visibleMonthDays(calendarDate), [calendarDate]);
 
   const openAddModal = () => {
@@ -549,7 +556,7 @@ export default function ChannelPage() {
       <Card>
         <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr_1fr_1fr]">
           <Input placeholder="Search feed, listing, or channel" value={search} onChange={(event) => setSearch(event.target.value)} leftIcon={<Search />} />
-          <Select value={selectedListing} onChange={(event) => setSelectedListing(event.target.value)} options={listingOptions} placeholder={listingsLoading ? "Loading listings..." : "All listings"} />
+          <Select value={selectedListing} onChange={(event) => setSelectedListing(event.target.value)} options={listingOptions} />
           <Select value={platform} onChange={(event) => setPlatform(event.target.value)} options={platforms} />
           <Select value={status} onChange={(event) => setStatus(event.target.value)} options={statusOptions} />
         </div>
@@ -623,10 +630,23 @@ export default function ChannelPage() {
               <h3 className="font-semibold text-slate-900">Channel Analytics & Health</h3>
               <p className="text-xs text-slate-500">Connection health and sync response summary for the selected listing.</p>
             </div>
+            {noFeedsConnected && (
+              <div className="mb-4 flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">No feeds connected</p>
+                  <p className="text-xs text-slate-500">
+                    {listings.length === 0
+                      ? "No live listings found. Feeds are added per listing."
+                      : "Add an iCal feed to start syncing blocked dates and availability."}
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="grid gap-3 sm:grid-cols-3">
-              <HealthTile label="Sync Health" value={channelStatus?.health ?? (stats.failed ? "warning" : "connected")} />
-              <HealthTile label="Feed Validation" value={stats.failed ? "warning" : "connected"} />
-              <HealthTile label="API Response" value={feedsFetching ? "syncing" : "connected"} />
+              <HealthTile label="Sync Health" value={noFeedsConnected ? "disconnected" : channelStatus?.health ?? (stats.failed ? "warning" : "connected")} />
+              <HealthTile label="Feed Validation" value={noFeedsConnected ? "disconnected" : stats.failed ? "warning" : "connected"} />
+              <HealthTile label="API Response" value={listingsLoading || feedsLoading || feedsFetching ? "syncing" : noFeedsConnected ? "disconnected" : "connected"} />
             </div>
           </Card>
 
@@ -811,7 +831,7 @@ function HealthTile({ label, value }: { label: string; value: SyncStatus }) {
     <div className={cn("rounded-xl border p-4", statusTone(value))}>
       <p className="text-xs font-medium opacity-80">{label}</p>
       <p className="mt-2 flex items-center gap-2 font-bold capitalize">
-        {value === "syncing" ? <Loader2 className="h-4 w-4 animate-spin" /> : value === "failed" ? <XCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+        {value === "syncing" ? <Loader2 className="h-4 w-4 animate-spin" /> : value === "failed" ? <XCircle className="h-4 w-4" /> : value === "disconnected" ? <CircleSlash className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
         {value}
       </p>
     </div>
