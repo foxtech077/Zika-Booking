@@ -42,6 +42,11 @@
       },
       "package": "com.kainook.app",
       "googleServicesFile": "./google-services.json",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCeNlKL-HkohatfvLTNUGbK5ZKfNQ2qjGY"
+        }
+      },
       "permissions": [
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.RECEIVE_BOOT_COMPLETED",
