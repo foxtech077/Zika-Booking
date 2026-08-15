@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { fetchUnreadConversationCount } from "@/services/traveller";
 import { useAuthStore } from "@/stores/auth";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, Building2, ChevronDown, FileText, Heart, HelpCircle, LogOut, Menu, MessageSquare, Shield, Star, User } from "lucide-react";
+import { Bell, Building2, ChevronDown, FileText, Heart, HelpCircle, LogOut, Mail, Menu, MessageSquare, Shield, Star, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -24,6 +24,7 @@ const TRAVELLER_ROUTES = {
   reviews: "/traveller/reviews",
   profile: "/traveller/profile",
   faq: "/faq",
+  contact: "/contact",
   createListing: "/dashboard/listings/new",
   manageListings: "/dashboard",
 } as const;
@@ -413,6 +414,14 @@ export function TravellerHeader({
                           Help &amp; FAQ
                         </Link>
                         <Link
+                          href={TRAVELLER_ROUTES.contact}
+                          onClick={() => setMenuOpen(false)}
+                          className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all"
+                        >
+                          <Mail className="h-4 w-4 text-green-600" />
+                          Contact Support
+                        </Link>
+                        <Link
                           href="/legal/privacy"
                           target="_blank"
                           rel="noopener noreferrer"
@@ -490,6 +499,14 @@ export function TravellerHeader({
                     {mobileNavBtn("My Reviews", TRAVELLER_ROUTES.reviews, isReviewsActive)}
                     {mobileNavBtn("Profile", TRAVELLER_ROUTES.profile, isProfileActive)}
                     {mobileNavBtn(listingsLabel, listingsHref, isListingsActive)}
+                    <Link
+                      href={TRAVELLER_ROUTES.contact}
+                      className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1D8D2B] hover:text-[#0c2614]"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <span>Contact Support</span>
+                      <Mail className="h-4 w-4 text-slate-400" />
+                    </Link>
                     <Link
                       href="/legal/privacy"
                       target="_blank"
