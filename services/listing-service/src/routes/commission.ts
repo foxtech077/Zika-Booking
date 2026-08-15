@@ -11,21 +11,19 @@ function isSuperAdmin(role: string) { return role === "super_admin"; }
 function canWriteCommission(role: string) { return role === "super_admin" || role === "admin"; }
 function canExport(role: string) { return role === "super_admin" || role === "finance_agent"; }
 
-// ── Rate validation (stored as decimal: 0.05 = 5%) ────────────────────────────
-// PRD 15.5: 0.00–50.00 in % terms = 0.00–0.50 in decimal, max 2dp in % terms
+// ── Rate validation ────────────────────────────────────────────────────────────
+// PRD 15.5: 0–50%. The admin API accepts percentage values (12.5 = 12.5%);
+// they are converted to decimal (÷100) for storage and computation.
 
 function validateRate(rate: unknown): string | null {
   if (typeof rate !== "number" || isNaN(rate)) return "rate must be a number.";
-  if (rate < 0 || rate > 0.50) return "rate must be between 0 and 0.50 (0%–50%).";
-  // 2 decimal places in percentage = 4 decimal places in decimal
-  // e.g. 12.50% = 0.1250 valid; 12.555% = 0.12555 invalid
-  const pct = Math.round(rate * 1_000_000) / 10_000; // rate as %, 2dp safe
-  if (Math.round(pct * 100) !== Math.round(pct * 100 - 0) || Math.round(pct * 100) / 100 !== Math.round(pct * 100) / 100) {
-    // simpler check: (rate * 10000) must be an integer
-  }
-  if (!Number.isInteger(Math.round(rate * 10_000))) return "rate supports at most 2 decimal places (e.g. 0.125 = 12.5% is valid).";
+  if (rate < 0 || rate > 50) return "rate must be between 0 and 50 percent.";
+  if (!Number.isInteger(Math.round(rate * 100))) return "rate supports at most 2 decimal places (e.g. 12.5 is valid).";
   return null;
 }
+
+// Convert a percentage rate to its decimal storage form (12.5 → 0.125)
+const toDecimalRate = (pct: number): number => pct / 100;
 
 function validateEffectiveFrom(effectiveFrom: string): string | null {
   const d = new Date(effectiveFrom);
@@ -84,8 +82,8 @@ function formatRate(r: {
   return {
     id: r.id,
     country: r.country,
-    rate: Number(r.rate),
-    pendingRate: r.pendingRate != null ? Number(r.pendingRate) : null,
+    rate: Number(r.rate) * 100,
+    pendingRate: r.pendingRate != null ? Number(r.pendingRate) * 100 : null,
     pendingEffectiveFrom: r.pendingEffectiveFrom?.toISOString() ?? null,
     setBy: r.setBy,
     createdAt: r.createdAt.toISOString(),
@@ -126,8 +124,8 @@ export async function commissionRoutes(app: FastifyInstance) {
     try {
       const s = await getGlobalSettings();
       return sendSuccess(reply, 200, {
-        globalCommissionRate: Number(s.globalCommissionRate),
-        pendingGlobalRate: s.pendingGlobalRate != null ? Number(s.pendingGlobalRate) : null,
+        globalCommissionRate: Number(s.globalCommissionRate) * 100,
+        pendingGlobalRate: s.pendingGlobalRate != null ? Number(s.pendingGlobalRate) * 100 : null,
         pendingGlobalEffectiveFrom: s.pendingGlobalEffectiveFrom?.toISOString() ?? null,
         pendingGlobalReason: s.pendingGlobalReason ?? null,
         updatedAt: s.updatedAt.toISOString(),
@@ -153,7 +151,7 @@ export async function commissionRoutes(app: FastifyInstance) {
         type: "object",
         required: ["rate", "effectiveFrom", "reason"],
         properties: {
-          rate: { type: "number", minimum: 0, maximum: 0.50, description: "New global rate as decimal (0.05 = 5%)" },
+          rate: { type: "number", minimum: 0, maximum: 50, description: "New global rate as percentage (12.5 = 12.5%)" },
           effectiveFrom: { type: "string", format: "date", description: "Effective date (today or future, YYYY-MM-DD)" },
           applyToAll: { type: "boolean", description: "Replace all country overrides with this rate" },
           notifyProviders: { type: "boolean", description: "Send email to all active providers" },
@@ -196,11 +194,13 @@ export async function commissionRoutes(app: FastifyInstance) {
     const dateErr = validateEffectiveFrom(body.effectiveFrom);
     if (dateErr) return sendError(reply, 422, "VALIDATION_ERROR", dateErr);
 
+    const decimalRate = toDecimalRate(body.rate);
+
     try {
       const settings = await getGlobalSettings();
 
       // Duplicate-rate check
-      if (Number(settings.globalCommissionRate) === body.rate && !settings.pendingGlobalRate) {
+      if (Number(settings.globalCommissionRate) === decimalRate && !settings.pendingGlobalRate) {
         return sendError(reply, 422, "DUPLICATE_RATE", "The global rate is already set to this value.");
       }
 
@@ -219,7 +219,7 @@ export async function commissionRoutes(app: FastifyInstance) {
           await tx.platformSettings.update({
             where: { id: "global" },
             data: {
-              globalCommissionRate: body.rate,
+              globalCommissionRate: decimalRate,
               pendingGlobalRate: null,
               pendingGlobalEffectiveFrom: null,
               pendingGlobalReason: null,
@@ -231,7 +231,7 @@ export async function commissionRoutes(app: FastifyInstance) {
             await tx.commissionRate.updateMany({
               where: {},
               data: {
-                rate: body.rate,
+                rate: decimalRate,
                 pendingRate: null,
                 pendingEffectiveFrom: null,
                 pendingReason: null,
@@ -244,7 +244,7 @@ export async function commissionRoutes(app: FastifyInstance) {
             data: {
               scope: "global",
               oldRate: oldGlobalRate,
-              newRate: body.rate,
+              newRate: decimalRate,
               effectiveFrom: effectiveDate,
               changedBy: admin.adminId,
               changedByRole: admin.adminRole,
@@ -256,9 +256,9 @@ export async function commissionRoutes(app: FastifyInstance) {
         });
 
         if (notifyProviders) {
-          sendGlobalCommissionEmails(body.rate, oldGlobalRate, effectiveDate, body.reason).catch(() => null);
+          sendGlobalCommissionEmails(decimalRate, oldGlobalRate, effectiveDate, body.reason).catch(() => null);
           prisma.listing.findMany({ where: { status: "active" }, select: { providerId: true }, distinct: ["providerId"] })
-            .then((rows) => fireCommissionNotifications(rows.map((r) => r.providerId), "All markets", body.rate, effectiveDate))
+            .then((rows) => fireCommissionNotifications(rows.map((r) => r.providerId), "All markets", decimalRate, effectiveDate))
             .catch(() => null);
         }
       } else {
@@ -266,7 +266,7 @@ export async function commissionRoutes(app: FastifyInstance) {
         await prisma.platformSettings.update({
           where: { id: "global" },
           data: {
-            pendingGlobalRate: body.rate,
+            pendingGlobalRate: decimalRate,
             pendingGlobalEffectiveFrom: effectiveDate,
             pendingGlobalReason: body.reason,
             updatedBy: admin.adminId,
@@ -276,8 +276,8 @@ export async function commissionRoutes(app: FastifyInstance) {
 
       return sendSuccess(reply, 200, {
         message: isImmediate
-          ? `Global commission rate updated to ${body.rate * 100}%.`
-          : `Global commission rate change to ${body.rate * 100}% scheduled for ${body.effectiveFrom}.`,
+          ? `Global commission rate updated to ${body.rate}%.`
+          : `Global commission rate change to ${body.rate}% scheduled for ${body.effectiveFrom}.`,
         applied: isImmediate,
       });
     } catch (err) {
@@ -325,8 +325,8 @@ export async function commissionRoutes(app: FastifyInstance) {
       ]);
 
       return sendSuccess(reply, 200, {
-        globalRate: Number(settings.globalCommissionRate),
-        pendingGlobalRate: settings.pendingGlobalRate != null ? Number(settings.pendingGlobalRate) : null,
+        globalRate: Number(settings.globalCommissionRate) * 100,
+        pendingGlobalRate: settings.pendingGlobalRate != null ? Number(settings.pendingGlobalRate) * 100 : null,
         pendingGlobalEffectiveFrom: settings.pendingGlobalEffectiveFrom?.toISOString() ?? null,
         rates: rates.map(formatRate),
       });
@@ -347,7 +347,7 @@ export async function commissionRoutes(app: FastifyInstance) {
         required: ["country", "rate", "effectiveFrom", "reason"],
         properties: {
           country: { type: "string", minLength: 2, maxLength: 2, description: "ISO-3166-1 alpha-2 country code" },
-          rate: { type: "number", minimum: 0, maximum: 0.50, description: "Rate as decimal (0.05 = 5%)" },
+          rate: { type: "number", minimum: 0, maximum: 50, description: "Rate as percentage (12.5 = 12.5%)" },
           effectiveFrom: { type: "string", format: "date", description: "Effective date (today or future)" },
           notifyProviders: { type: "boolean", description: "Send email notification to providers in this country" },
           reason: { type: "string", maxLength: 500, description: "Required reason logged to audit trail" },
@@ -390,6 +390,8 @@ export async function commissionRoutes(app: FastifyInstance) {
     const dateErr = validateEffectiveFrom(body.effectiveFrom);
     if (dateErr) return sendError(reply, 422, "VALIDATION_ERROR", dateErr);
 
+    const decimalRate = toDecimalRate(body.rate);
+
     const countryCode = body.country.toUpperCase();
     const effectiveDate = new Date(body.effectiveFrom);
     effectiveDate.setUTCHours(0, 0, 0, 0);
@@ -406,7 +408,7 @@ export async function commissionRoutes(app: FastifyInstance) {
       const existing = await prisma.commissionRate.findUnique({ where: { country: countryCode } });
 
       // Duplicate-rate check (PRD 15.5)
-      if (existing && Number(existing.rate) === body.rate && !existing.pendingRate) {
+      if (existing && Number(existing.rate) === decimalRate && !existing.pendingRate) {
         return sendError(reply, 422, "DUPLICATE_RATE", `${countryCode} already has this commission rate.`);
       }
 
@@ -419,7 +421,7 @@ export async function commissionRoutes(app: FastifyInstance) {
           const r = await (tx.commissionRate.upsert as any)({
             where: { country: countryCode },
             update: {
-              rate: body.rate,
+              rate: decimalRate,
               pendingRate: null,
               pendingEffectiveFrom: null,
               pendingReason: null,
@@ -427,7 +429,7 @@ export async function commissionRoutes(app: FastifyInstance) {
             },
             create: {
               country: countryCode,
-              rate: body.rate,
+              rate: decimalRate,
               setBy: admin.adminId,
             },
           });
@@ -436,7 +438,7 @@ export async function commissionRoutes(app: FastifyInstance) {
               scope: "country",
               countryCode,
               oldRate,
-              newRate: body.rate,
+              newRate: decimalRate,
               effectiveFrom: effectiveDate,
               changedBy: admin.adminId,
               changedByRole: admin.adminRole,
@@ -449,9 +451,9 @@ export async function commissionRoutes(app: FastifyInstance) {
         });
 
         if (notifyProviders) {
-          sendCountryCommissionEmail(countryCode, body.rate, oldRate, effectiveDate, body.reason).catch(() => null);
+          sendCountryCommissionEmail(countryCode, decimalRate, oldRate, effectiveDate, body.reason).catch(() => null);
           prisma.listing.findMany({ where: { status: "active", country: countryCode }, select: { providerId: true }, distinct: ["providerId"] })
-            .then((rows) => fireCommissionNotifications(rows.map((r) => r.providerId), countryCode, body.rate, effectiveDate))
+            .then((rows) => fireCommissionNotifications(rows.map((r) => r.providerId), countryCode, decimalRate, effectiveDate))
             .catch(() => null);
         }
       } else {
@@ -459,7 +461,7 @@ export async function commissionRoutes(app: FastifyInstance) {
         savedRate = await (prisma.commissionRate.upsert as any)({
           where: { country: countryCode },
           update: {
-            pendingRate: body.rate,
+            pendingRate: decimalRate,
             pendingEffectiveFrom: effectiveDate,
             pendingReason: body.reason,
             setBy: admin.adminId,
@@ -467,7 +469,7 @@ export async function commissionRoutes(app: FastifyInstance) {
           create: {
             country: countryCode,
             rate: existing?.rate ?? globalSettings.globalCommissionRate,
-            pendingRate: body.rate,
+            pendingRate: decimalRate,
             pendingEffectiveFrom: effectiveDate,
             pendingReason: body.reason,
             setBy: admin.adminId,
@@ -507,7 +509,7 @@ export async function commissionRoutes(app: FastifyInstance) {
             minItems: 1,
             description: "Array of ISO-3166-1 alpha-2 country codes",
           },
-          rate: { type: "number", minimum: 0, maximum: 0.50 },
+          rate: { type: "number", minimum: 0, maximum: 50, description: "Rate as percentage (12.5 = 12.5%)" },
           effectiveFrom: { type: "string", format: "date" },
           notifyProviders: { type: "boolean" },
           reason: { type: "string", maxLength: 500 },
@@ -551,6 +553,8 @@ export async function commissionRoutes(app: FastifyInstance) {
     const dateErr = validateEffectiveFrom(body.effectiveFrom);
     if (dateErr) return sendError(reply, 422, "VALIDATION_ERROR", dateErr);
 
+    const decimalRate = toDecimalRate(body.rate);
+
     try {
       const effectiveDate = new Date(body.effectiveFrom);
       effectiveDate.setUTCHours(0, 0, 0, 0);
@@ -574,12 +578,12 @@ export async function commissionRoutes(app: FastifyInstance) {
           await (tx.commissionRate.upsert as any)({
             where: { country: code },
             update: isImmediate
-              ? { rate: body.rate, pendingRate: null, pendingEffectiveFrom: null, pendingReason: null, setBy: admin.adminId }
-              : { pendingRate: body.rate, pendingEffectiveFrom: effectiveDate, pendingReason: body.reason, setBy: admin.adminId },
+              ? { rate: decimalRate, pendingRate: null, pendingEffectiveFrom: null, pendingReason: null, setBy: admin.adminId }
+              : { pendingRate: decimalRate, pendingEffectiveFrom: effectiveDate, pendingReason: body.reason, setBy: admin.adminId },
             create: {
               country: code,
-              rate: isImmediate ? body.rate : (old?.rate ?? globalSettings.globalCommissionRate),
-              ...(isImmediate ? {} : { pendingRate: body.rate, pendingEffectiveFrom: effectiveDate, pendingReason: body.reason }),
+              rate: isImmediate ? decimalRate : (old?.rate ?? globalSettings.globalCommissionRate),
+              ...(isImmediate ? {} : { pendingRate: decimalRate, pendingEffectiveFrom: effectiveDate, pendingReason: body.reason }),
               setBy: admin.adminId,
             },
           });
@@ -590,7 +594,7 @@ export async function commissionRoutes(app: FastifyInstance) {
                 scope: "country",
                 countryCode: code,
                 oldRate,
-                newRate: body.rate,
+                newRate: decimalRate,
                 effectiveFrom: effectiveDate,
                 changedBy: admin.adminId,
                 changedByRole: admin.adminRole,
@@ -607,9 +611,9 @@ export async function commissionRoutes(app: FastifyInstance) {
         for (const code of countryCodes) {
           const old = existingMap.get(code);
           const oldRate = old ? Number(old.rate) : Number(globalSettings.globalCommissionRate);
-          sendCountryCommissionEmail(code, body.rate, oldRate, effectiveDate, body.reason).catch(() => null);
+          sendCountryCommissionEmail(code, decimalRate, oldRate, effectiveDate, body.reason).catch(() => null);
           prisma.listing.findMany({ where: { status: "active", country: code }, select: { providerId: true }, distinct: ["providerId"] })
-            .then((rows) => fireCommissionNotifications(rows.map((r) => r.providerId), code, body.rate, effectiveDate))
+            .then((rows) => fireCommissionNotifications(rows.map((r) => r.providerId), code, decimalRate, effectiveDate))
             .catch(() => null);
         }
       }
@@ -785,8 +789,8 @@ export async function commissionRoutes(app: FastifyInstance) {
           id: h.id,
           scope: h.scope,
           countryCode: h.countryCode ?? null,
-          oldRate: Number(h.oldRate),
-          newRate: Number(h.newRate),
+          oldRate: Number(h.oldRate) * 100,
+          newRate: Number(h.newRate) * 100,
           effectiveFrom: h.effectiveFrom.toISOString(),
           changedBy: h.changedBy,
           changedByRole: h.changedByRole,
@@ -841,7 +845,7 @@ export async function commissionRoutes(app: FastifyInstance) {
       const lines = rows.map((h) =>
         [
           h.id, h.scope, h.countryCode ?? "",
-          Number(h.oldRate), Number(h.newRate),
+          Number(h.oldRate) * 100, Number(h.newRate) * 100,
           h.effectiveFrom.toISOString(),
           h.changedBy, h.changedByRole,
           `"${h.reason.replace(/"/g, '""')}"`,

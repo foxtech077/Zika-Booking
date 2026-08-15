@@ -55,13 +55,13 @@ export default function FinancialReportsPage() {
     const rules = dbCommissionRules.map((r: any) => ({
       id: r.id,
       country: r.country,
-      rate: Number(r.rate) * 100,
+      rate: Number(r.rate),
       setBy: r.setBy,
       updatedAt: r.updatedAt,
       effectiveDate: r.pendingEffectiveFrom ?? undefined,
       isScheduled: r.pendingRate !== null,
     }));
-    const globalRate = commissionData?.globalRate !== undefined ? Number(commissionData.globalRate) * 100 : 10;
+    const globalRate = commissionData?.globalRate !== undefined ? Number(commissionData.globalRate) : 10;
     rules.push({
       id: "global",
       country: "Global",
