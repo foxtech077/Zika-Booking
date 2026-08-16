@@ -8,7 +8,7 @@ env:
   ECR_REGISTRY: 891924441446.dkr.ecr.af-south-1.amazonaws.com
 jobs:
   build-and-push-prod:
-    name: Build & Push Prod (${{ matrix.service }})
+    name:  Build ${{ matrix.app_name }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -16,16 +16,16 @@ jobs:
     strategy:
       matrix:
         include:
-          - service: auth-service
+          - app_name: "Auth Service"
             dockerfile: services/auth-service/Dockerfile
             image: zika/auth-service
-          - service: listing-service
+          - app_name: "Listing Service"
             dockerfile: services/listing-service/Dockerfile
             image: zika/listing-service
-          - service: payment-service
+          - app_name: "Payment Service"
             dockerfile: services/payment-service/Dockerfile
             image: zika/payment-service
-          - service: web
+          - app_name: "Web App"
             dockerfile: apps/web/Dockerfile
             image: zika/web
             build_args: |
@@ -33,7 +33,8 @@ jobs:
               NEXT_PUBLIC_AUTH_API_URL=https://api.kainook.com/auth
               NEXT_PUBLIC_LISTING_API_URL=https://api.kainook.com/listings
               NEXT_PUBLIC_PAYMENT_API_URL=https://api.kainook.com/payments
-          - service: admin
+              NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=${{vars.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}}
+          - app_name: "Web Admin"
             dockerfile: apps/admin/Dockerfile
             image: zika/admin
             build_args: |
@@ -41,6 +42,7 @@ jobs:
               NEXT_PUBLIC_AUTH_API_URL=https://api.kainook.com/auth
               NEXT_PUBLIC_LISTING_API_URL=https://api.kainook.com/listings
               NEXT_PUBLIC_PAYMENT_API_URL=https://api.kainook.com/payments
+              NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=${{vars.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -57,7 +59,7 @@ jobs:
           aws-region: af-south-1
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
-      - name: Build and push ${{ matrix.service }}
+      - name: Build and Publish ${{ matrix.app_name }}
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -65,7 +67,7 @@ jobs:
           push: true
           # Prod builds are always fully fresh — no layer cache reuse at all, so a
           # stale cached layer can never be deployed. Slower, but deterministic.
-          no-cache: true
+          # no-cache: true
           tags: |
             ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
             ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:prod-${{ github.sha }}
@@ -74,9 +76,9 @@ jobs:
           # store download entirely. Inline (default, mode=min) only cached the
           # final-stage layers, which is why installs rebuilt every run.
           cache-from: |
-            type=gha,scope=${{ matrix.service }}
+            type=gha,scope=${{ matrix.image }}
             type=registry,ref=${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
-          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
           build-args: ${{ matrix.build_args }}
   deploy-prod:
     needs: build-and-push-prod
