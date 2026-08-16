@@ -30,7 +30,7 @@ jobs:
               NEXT_PUBLIC_AUTH_API_URL=${{vars.NEXT_PUBLIC_AUTH_API_URL}}
               NEXT_PUBLIC_LISTING_API_URL=${{vars.NEXT_PUBLIC_LISTING_API_URL}}
               NEXT_PUBLIC_PAYMENT_API_URL=${{vars.NEXT_PUBLIC_PAYMENT_API_URL}}
-              NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=${{vars.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}}
+              NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=${{ vars.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || secrets.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || secrets.GOOGLE_MAPS_API_KEY }}
           - app_name: "Web Admin"
             dockerfile: apps/admin/Dockerfile
             image: zika/admin
@@ -39,7 +39,7 @@ jobs:
               NEXT_PUBLIC_AUTH_API_URL=${{vars.NEXT_PUBLIC_AUTH_API_URL}}
               NEXT_PUBLIC_LISTING_API_URL=${{vars.NEXT_PUBLIC_LISTING_API_URL}}
               NEXT_PUBLIC_PAYMENT_API_URL=${{vars.NEXT_PUBLIC_PAYMENT_API_URL}}
-              NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=${{vars.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}}
+              NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=${{ vars.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || secrets.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || secrets.GOOGLE_MAPS_API_KEY }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
