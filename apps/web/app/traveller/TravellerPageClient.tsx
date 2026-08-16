@@ -28,6 +28,7 @@ import DateRangePicker from "./components/DateRangePicker";
 import PriceRangeFields from "./components/PriceRangeFields";
 import type { PublicListingDetail } from "@/types";
 import { isTaraCountry } from "@zika/types";
+import { geocodePlaceText, getSearchOrigin } from "@/lib/geo";
 
 // Accent-insensitive matching: strips diacritics so "makepe" matches "Maképé".
 function normalizeText(value: string): string {
@@ -739,7 +740,7 @@ export default function TravellerDashboard() {
     fetchActivePromotion(cat);
     try {
       const res = await listingApi.get<any>("/search", {
-        params: { category: cat, limit: 8, lat: -1.2921, lng: 36.8219, radius_km: 5000 },
+        params: { category: cat, limit: 8, ...(await getSearchOrigin()) },
       });
       const data = res.data?.data ?? {};
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
@@ -757,24 +758,13 @@ export default function TravellerDashboard() {
     setShowQuickDrop(true);
     setQuickResults([]);
     try {
-      const q = searchDestination.trim() || "Nairobi, Kenya";
-      let lat = -1.2921, lng = 36.8219;
-      const lower = q.toLowerCase();
-      if (lower.includes("mombasa")) { lat = -3.982; lng = 39.726; }
-      else if (lower.includes("dubai")) { lat = 25.2048; lng = 55.2708; }
-      else if (lower.includes("cape town")) { lat = -33.9249; lng = 18.4241; }
-      else if (!lower.includes("nairobi") && !lower.includes("kenya")) {
-        try {
-          const r = await fetch(
-            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
-            { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } }
-          );
-          const d = await r.json();
-          if (d?.[0]) { lat = parseFloat(d[0].lat); lng = parseFloat(d[0].lon); }
-        } catch { /* use defaults */ }
-      }
+      const q = searchDestination.trim();
+      // Typed destination → its place geocode when it is a real place;
+      // otherwise the visitor's own origin, never a blind text geocode.
+      const place = q ? await geocodePlaceText(q) : null;
+      const { lat, lng } = place ?? (await getSearchOrigin());
       const res = await listingApi.get<any>("/search", {
-        params: { category: cat, limit: 8, lat, lng, radius_km: 5000 },
+        params: { category: cat, limit: 8, lat, lng },
       });
       const data = res.data?.data ?? {};
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
@@ -1155,19 +1145,14 @@ export default function TravellerDashboard() {
       }
 
       if (queryText && lat === undefined) {
-        try {
-          const geoRes = await fetch(
-            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryText)}&format=json&limit=1`,
-            { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } }
-          );
-          const geoData = await geoRes.json();
-          if (geoData && geoData.length > 0) {
-            lat = parseFloat(geoData[0].lat);
-            lng = parseFloat(geoData[0].lon);
-            geoResolved = true;
-          }
-        } catch {
-          // Geocoding failed — destination stays unresolved
+        // Place-shaped geocodes only (cities, towns, regions). A hotel name
+        // like "abacus" also geocodes — to some business on another continent —
+        // and must never become the anchor; it stays a pure text search.
+        const place = await geocodePlaceText(queryText);
+        if (place) {
+          lat = place.lat;
+          lng = place.lng;
+          geoResolved = true;
         }
       }
 
@@ -1189,13 +1174,15 @@ export default function TravellerDashboard() {
         if (geoResolved && lat !== undefined && lng !== undefined) {
           params.lat = lat;
           params.lng = lng;
-          // Nearby fallback is global — ranked nearest-first around the place
-          params.radius_km = 20000;
+          // No radius: the backend widens the area adaptively (Airbnb-style)
+          // and reports the reach back via `searchArea`.
         }
       } else {
-        params.lat = lat ?? -1.2921;
-        params.lng = lng ?? 36.8219;
-        params.radius_km = 20000;
+        // Browsing with no destination: rank from the visitor's own origin
+        // (browser location → timezone city → Nairobi).
+        const origin = await getSearchOrigin();
+        params.lat = lat ?? origin.lat;
+        params.lng = lng ?? origin.lng;
       }
 
       if (searchGuests > 1) params.guests = searchGuests;
@@ -1274,27 +1261,29 @@ export default function TravellerDashboard() {
     const activeQuery = searchDestination.trim();
     try {
       const destinationLower = activeQuery.toLowerCase();
-      let lat = -1.2921, lng = 36.8219;
+      let lat: number | undefined;
+      let lng: number | undefined;
       let geoResolved = false;
       if (destinationLower.includes("mombasa")) { lat = -3.982; lng = 39.726; geoResolved = true; }
       else if (destinationLower.includes("paris")) { lat = 48.8566; lng = 2.3522; geoResolved = true; }
       else if (destinationLower.includes("nairobi") || destinationLower.includes("kenya")) { lat = -1.2921; lng = 36.8219; geoResolved = true; }
       else if (activeQuery) {
-        try {
-          const g = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(activeQuery)}&format=json&limit=1`, { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } });
-          const gd = await g.json();
-          if (gd?.[0]) { lat = parseFloat(gd[0].lat); lng = parseFloat(gd[0].lon); geoResolved = true; }
-        } catch { }
+        // Place-shaped geocodes only — business names stay a pure text search.
+        const place = await geocodePlaceText(activeQuery);
+        if (place) { lat = place.lat; lng = place.lng; geoResolved = true; }
+      }
+      if (lat === undefined || lng === undefined) {
+        const origin = await getSearchOrigin();
+        lat = origin.lat; lng = origin.lng;
       }
       // Stay scoped to the active query — never falls back to the full inventory.
       const params: Record<string, any> = { category: searchCategory, limit: 100, cursor: nextOffset };
       if (activeQuery) {
         params.q = activeQuery;
         params.place_resolved = geoResolved ? "true" : "false";
-        if (geoResolved) { params.lat = lat; params.lng = lng; params.radius_km = 20000; }
+        if (geoResolved) { params.lat = lat; params.lng = lng; }
       } else {
-        params.lat = lat; params.lng = lng; params.radius_km = 20000;
-      }
+        params.lat = lat; params.lng = lng;      }
       if (searchGuests > 1) params.guests = searchGuests;
       if (priceMin > 0) params.price_min = priceMin;
       if (priceMax < PRICE_NO_CAP) params.price_max = priceMax;
@@ -1593,27 +1582,27 @@ export default function TravellerDashboard() {
     // Only fetch pricing estimate + vouchers when dates are selected.
     const pricingPromise = hasDates
       ? listingApi.post<any>("/bookings/pricing-estimate", {
-          listingId: detailListing.id,
-          roomTypeId: selectedRoomTypeId || undefined,
-          checkIn: isCar ? undefined : detailCheckIn || undefined,
-          checkOut: isCar ? undefined : detailCheckOut || undefined,
-          pickupDatetime: isCar ? toIsoDatetime(detailPickupDate) || undefined : undefined,
-          returnDatetime: isCar ? toIsoDatetime(detailReturnDate) || undefined : undefined,
-          deliveryRequested: isCar ? wantDelivery : undefined,
-          guests: searchAdults + searchChildren,
-          // Backend returns a full localized* breakdown alongside the exact
-          // listing-currency figures when this is set — never computed here.
-          currency: useCurrencyStore.getState().currency,
-        })
+        listingId: detailListing.id,
+        roomTypeId: selectedRoomTypeId || undefined,
+        checkIn: isCar ? undefined : detailCheckIn || undefined,
+        checkOut: isCar ? undefined : detailCheckOut || undefined,
+        pickupDatetime: isCar ? toIsoDatetime(detailPickupDate) || undefined : undefined,
+        returnDatetime: isCar ? toIsoDatetime(detailReturnDate) || undefined : undefined,
+        deliveryRequested: isCar ? wantDelivery : undefined,
+        guests: searchAdults + searchChildren,
+        // Backend returns a full localized* breakdown alongside the exact
+        // listing-currency figures when this is set — never computed here.
+        currency: useCurrencyStore.getState().currency,
+      })
       : Promise.resolve(null);
 
     const voucherPromises = hasDates && hasAuthToken
       ? [
-          listingApi.get<any>("/vouchers/wallet"),
-          listingApi.get<any>("/vouchers/applicable", {
-            params: { listingId: detailListing.id, category: detailListing.category, country: detailListing.country, totalAmount: 0 },
-          }),
-        ]
+        listingApi.get<any>("/vouchers/wallet"),
+        listingApi.get<any>("/vouchers/applicable", {
+          params: { listingId: detailListing.id, category: detailListing.category, country: detailListing.country, totalAmount: 0 },
+        }),
+      ]
       : [];
 
     try {
@@ -2449,754 +2438,555 @@ export default function TravellerDashboard() {
                 <div className="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                   {/* Left Column (Main content) */}
                   <div className="lg:col-span-8 space-y-8 text-left text-slate-800">
-                  {/* Listing summary row */}
-                  <div className="pb-5 border-b border-slate-200">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {detailListing.category !== "car" ? (
-                        <>
-                          {detailListing.maxGuests && <span className={SPEC_CHIP}>{detailListing.maxGuests} guests</span>}
-                          {detailListing.bedrooms && <span className={SPEC_CHIP}>{detailListing.bedrooms} bedrooms</span>}
-                          {detailListing.bathrooms && <span className={SPEC_CHIP}>{detailListing.bathrooms} baths</span>}
-                          {detailListing.roomType && <span className={`${SPEC_CHIP} capitalize`}>{detailListing.roomType}</span>}
-                        </>
-                      ) : (
-                        <>
-                          {detailListing.carMake && <span className={`${SPEC_CHIP} bg-slate-900 text-white`}>{detailListing.carMake} {detailListing.carModel} {detailListing.carYear}</span>}
-                          {detailListing.seats && <span className={SPEC_CHIP}>{detailListing.seats} seats</span>}
-                          {detailListing.transmission && <span className={`${SPEC_CHIP} capitalize`}>{detailListing.transmission}</span>}
-                          {detailListing.fuelType && <span className={`${SPEC_CHIP} capitalize`}>{detailListing.fuelType}</span>}
-                          {/* A supplied driver waives the deposit server-side, so the
+                    {/* Listing summary row */}
+                    <div className="pb-5 border-b border-slate-200">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {detailListing.category !== "car" ? (
+                          <>
+                            {detailListing.maxGuests && <span className={SPEC_CHIP}>{detailListing.maxGuests} guests</span>}
+                            {detailListing.bedrooms && <span className={SPEC_CHIP}>{detailListing.bedrooms} bedrooms</span>}
+                            {detailListing.bathrooms && <span className={SPEC_CHIP}>{detailListing.bathrooms} baths</span>}
+                            {detailListing.roomType && <span className={`${SPEC_CHIP} capitalize`}>{detailListing.roomType}</span>}
+                          </>
+                        ) : (
+                          <>
+                            {detailListing.carMake && <span className={`${SPEC_CHIP} bg-slate-900 text-white`}>{detailListing.carMake} {detailListing.carModel} {detailListing.carYear}</span>}
+                            {detailListing.seats && <span className={SPEC_CHIP}>{detailListing.seats} seats</span>}
+                            {detailListing.transmission && <span className={`${SPEC_CHIP} capitalize`}>{detailListing.transmission}</span>}
+                            {detailListing.fuelType && <span className={`${SPEC_CHIP} capitalize`}>{detailListing.fuelType}</span>}
+                            {/* A supplied driver waives the deposit server-side, so the
                               guest must not be told one is payable. Surface the driver
                               instead — it is the more useful fact for the traveller. */}
-                          {detailListing.driverProvided
-                            ? <span className={`${SPEC_CHIP} bg-emerald-50 text-emerald-700 font-semibold`}>Driver included</span>
-                            : detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && <span className={SPEC_CHIP}>Deposit: {detailListing.currency} {detailListing.securityDeposit.toLocaleString()}</span>}
-                        </>
+                            {detailListing.driverProvided
+                              ? <span className={`${SPEC_CHIP} bg-emerald-50 text-emerald-700 font-semibold`}>Driver included</span>
+                              : detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && <span className={SPEC_CHIP}>Deposit: {detailListing.currency} {detailListing.securityDeposit.toLocaleString()}</span>}
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Description */}
+                    {detailListing.description && (
+                      <div className="pb-6 border-b border-slate-200 last:border-b-0 last:pb-0">
+                        <p className="text-slate-600 leading-relaxed">{detailListing.description}</p>
+                      </div>
+                    )}
+
+                    {/* Amenities from API */}
+                    {(detailListing.amenities?.length > 0 || detailListing.customAmenities?.length > 0) && (
+                      <div className="pb-6 border-b border-slate-200 last:border-b-0 last:pb-0">
+                        <h2 className="text-xl font-semibold mb-5">What this place offers</h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {detailListing.amenities.map((a) => (
+                            <div key={a.amenityKey} className="flex items-center gap-3 text-slate-700 text-sm">
+                              <svg className="w-5 h-5 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              {AMENITY_LABELS[a.amenityKey] ?? a.amenityKey}
+                            </div>
+                          ))}
+                          {detailListing.customAmenities.map((a) => (
+                            <div key={a.id} className="flex items-center gap-3 text-slate-700 text-sm">
+                              <svg className="w-5 h-5 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              {a.name}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Listing policy info */}
+                    {/* Flex-wrap rather than a fixed 3-column grid: cards grow to fill
+                      the row, so a car (two policies) no longer leaves an empty third. */}
+                    <div className="pb-6 border-b border-slate-200 last:border-b-0 last:pb-0 flex flex-wrap gap-3 text-sm">
+                      {detailListing.cancellationPolicy && (
+                        <div className={POLICY_CARD}>
+                          <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Cancellation</p>
+                          <p className="font-semibold text-slate-800 mt-1 capitalize">{detailListing.cancellationPolicy}</p>
+                        </div>
+                      )}
+                      {detailListing.category !== "car" && detailListing.minStayNights > 1 && (
+                        <div className={POLICY_CARD}>
+                          <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Min Stay</p>
+                          <p className="font-semibold text-slate-800 mt-1">{detailListing.minStayNights} nights</p>
+                        </div>
+                      )}
+                      {detailListing.category !== "car" && detailListing.checkinTime && (
+                        <div className={POLICY_CARD}>
+                          <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Check-in / out</p>
+                          <p className="font-semibold text-slate-800 mt-1">{detailListing.checkinTime} → {detailListing.checkoutTime}</p>
+                        </div>
+                      )}
+                      {detailListing.category === "car" && detailListing.mileagePolicy && (
+                        <div className={POLICY_CARD}>
+                          <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Mileage</p>
+                          <p className="font-semibold text-slate-800 mt-1 capitalize">{detailListing.mileagePolicy}</p>
+                        </div>
                       )}
                     </div>
-                  </div>
 
-                  {/* Description */}
-                  {detailListing.description && (
-                    <div className="pb-6 border-b border-slate-200 last:border-b-0 last:pb-0">
-                      <p className="text-slate-600 leading-relaxed">{detailListing.description}</p>
-                    </div>
-                  )}
-
-                  {/* Amenities from API */}
-                  {(detailListing.amenities?.length > 0 || detailListing.customAmenities?.length > 0) && (
-                    <div className="pb-6 border-b border-slate-200 last:border-b-0 last:pb-0">
-                      <h2 className="text-xl font-semibold mb-5">What this place offers</h2>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {detailListing.amenities.map((a) => (
-                          <div key={a.amenityKey} className="flex items-center gap-3 text-slate-700 text-sm">
-                            <svg className="w-5 h-5 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            {AMENITY_LABELS[a.amenityKey] ?? a.amenityKey}
-                          </div>
-                        ))}
-                        {detailListing.customAmenities.map((a) => (
-                          <div key={a.id} className="flex items-center gap-3 text-slate-700 text-sm">
-                            <svg className="w-5 h-5 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            {a.name}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Listing policy info */}
-                  {/* Flex-wrap rather than a fixed 3-column grid: cards grow to fill
-                      the row, so a car (two policies) no longer leaves an empty third. */}
-                  <div className="pb-6 border-b border-slate-200 last:border-b-0 last:pb-0 flex flex-wrap gap-3 text-sm">
-                    {detailListing.cancellationPolicy && (
-                      <div className={POLICY_CARD}>
-                        <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Cancellation</p>
-                        <p className="font-semibold text-slate-800 mt-1 capitalize">{detailListing.cancellationPolicy}</p>
-                      </div>
-                    )}
-                    {detailListing.category !== "car" && detailListing.minStayNights > 1 && (
-                      <div className={POLICY_CARD}>
-                        <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Min Stay</p>
-                        <p className="font-semibold text-slate-800 mt-1">{detailListing.minStayNights} nights</p>
-                      </div>
-                    )}
-                    {detailListing.category !== "car" && detailListing.checkinTime && (
-                      <div className={POLICY_CARD}>
-                        <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Check-in / out</p>
-                        <p className="font-semibold text-slate-800 mt-1">{detailListing.checkinTime} → {detailListing.checkoutTime}</p>
-                      </div>
-                    )}
-                    {detailListing.category === "car" && detailListing.mileagePolicy && (
-                      <div className={POLICY_CARD}>
-                        <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Mileage</p>
-                        <p className="font-semibold text-slate-800 mt-1 capitalize">{detailListing.mileagePolicy}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Sparse listings keep the map here so the column doesn't
+                    {/* Sparse listings keep the map here so the column doesn't
                       collapse to a couple of rows next to the tall booking card. */}
-                  {!detailHasBody && <div className="pb-6">{locationSection}</div>}
-                </div>
+                    {!detailHasBody && <div className="pb-6">{locationSection}</div>}
+                  </div>
 
-                {/* Right Column (Sticky Sidebar) */}
-                <div className="lg:col-span-4 relative z-10 lg:sticky lg:top-28 top-4 self-start">
-                  <div className="bg-white border border-slate-200 shadow-xl rounded-2xl p-6 text-left shadow-slate-200/50">
-                    {/* Price header */}
-                    {!promotionLoaded ? (
-                      <div className="mb-3 animate-pulse">
-                        <div className="h-8 bg-slate-200 rounded w-1/2 mb-2" />
-                        <div className="h-4 bg-slate-200 rounded w-1/4" />
-                      </div>
-                    ) : (() => {
-                      const isHotel = detailListing.category === "hotel";
-                      const selectedRt = isHotel
-                        ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
-                        : null;
-                      // Browsing header only — matches the search-card price. The
-                      // checkout breakdown further down always uses the raw
-                      // (non-localized) pricePerNight/currency instead.
-                      const priceCurrency = detailListing.localizedCurrency ?? detailListing.currency;
-                      const basePrice = selectedRt
-                        ? (selectedRt.localizedPricePerNight ?? selectedRt.pricePerNight)
-                        : (detailListing.localizedPricePerNight ?? detailListing.pricePerNight);
-
-                      // Calculate discount
-                      const hasLongStay = detailListing.longStayDiscountEnabled;
-                      const longStayPct = hasLongStay ? 15 : 0;
-                      let displayPrice = basePrice;
-                      const isValidPromo = activePromotion && activePromotion.activity === detailListing.category && isPromotionValid(activePromotion);
-
-                      if (isValidPromo) {
-                        const promoDiscount = activePromotion.discountType === "percentage"
-                          ? Number((basePrice * (Number(activePromotion.discountValue) / 100)).toFixed(2))
-                          : Number(Number(activePromotion.discountValue).toFixed(2));
-                        displayPrice = Math.max(0, basePrice - promoDiscount);
-                      } else if (hasLongStay) {
-                        displayPrice = Number((basePrice * (1 - longStayPct / 100)).toFixed(2));
-                      }
-
-                      return (
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <div className="flex items-baseline gap-2 flex-wrap">
-                              <span className="text-2xl font-extrabold text-slate-900">
-                                {approxPrefix(detailListing.localizedCurrency, detailListing.currency)}{priceCurrency} {displayPrice.toLocaleString()}
-                              </span>
-                              {basePrice > displayPrice && (
-                                <span className="text-sm font-semibold line-through text-slate-400">
-                                  {approxPrefix(detailListing.localizedCurrency, detailListing.currency)}{priceCurrency} {basePrice.toLocaleString()}
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs text-slate-400 font-medium mt-0.5">
-                              / {detailListing.category === "car" ? "day" : "night"}
-                            </div>
-                          </div>
-                          {detailListing.starRating && (
-                            <div className="text-sm font-semibold flex items-center gap-1 text-slate-800 bg-slate-50 border border-slate-100 rounded-full px-2.5 py-1">
-                              ⭐ {detailListing.starRating}
-                            </div>
-                          )}
+                  {/* Right Column (Sticky Sidebar) */}
+                  <div className="lg:col-span-4 relative z-10 lg:sticky lg:top-28 top-4 self-start">
+                    <div className="bg-white border border-slate-200 shadow-xl rounded-2xl p-6 text-left shadow-slate-200/50">
+                      {/* Price header */}
+                      {!promotionLoaded ? (
+                        <div className="mb-3 animate-pulse">
+                          <div className="h-8 bg-slate-200 rounded w-1/2 mb-2" />
+                          <div className="h-4 bg-slate-200 rounded w-1/4" />
                         </div>
-                      );
-                    })()}
+                      ) : (() => {
+                        const isHotel = detailListing.category === "hotel";
+                        const selectedRt = isHotel
+                          ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
+                          : null;
+                        // Browsing header only — matches the search-card price. The
+                        // checkout breakdown further down always uses the raw
+                        // (non-localized) pricePerNight/currency instead.
+                        const priceCurrency = detailListing.localizedCurrency ?? detailListing.currency;
+                        const basePrice = selectedRt
+                          ? (selectedRt.localizedPricePerNight ?? selectedRt.pricePerNight)
+                          : (detailListing.localizedPricePerNight ?? detailListing.pricePerNight);
 
-                    {/* Driver included — replaces the deposit notice, since the
+                        // Calculate discount
+                        const hasLongStay = detailListing.longStayDiscountEnabled;
+                        const longStayPct = hasLongStay ? 15 : 0;
+                        let displayPrice = basePrice;
+                        const isValidPromo = activePromotion && activePromotion.activity === detailListing.category && isPromotionValid(activePromotion);
+
+                        if (isValidPromo) {
+                          const promoDiscount = activePromotion.discountType === "percentage"
+                            ? Number((basePrice * (Number(activePromotion.discountValue) / 100)).toFixed(2))
+                            : Number(Number(activePromotion.discountValue).toFixed(2));
+                          displayPrice = Math.max(0, basePrice - promoDiscount);
+                        } else if (hasLongStay) {
+                          displayPrice = Number((basePrice * (1 - longStayPct / 100)).toFixed(2));
+                        }
+
+                        return (
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <div className="flex items-baseline gap-2 flex-wrap">
+                                <span className="text-2xl font-extrabold text-slate-900">
+                                  {approxPrefix(detailListing.localizedCurrency, detailListing.currency)}{priceCurrency} {displayPrice.toLocaleString()}
+                                </span>
+                                {basePrice > displayPrice && (
+                                  <span className="text-sm font-semibold line-through text-slate-400">
+                                    {approxPrefix(detailListing.localizedCurrency, detailListing.currency)}{priceCurrency} {basePrice.toLocaleString()}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-slate-400 font-medium mt-0.5">
+                                / {detailListing.category === "car" ? "day" : "night"}
+                              </div>
+                            </div>
+                            {detailListing.starRating && (
+                              <div className="text-sm font-semibold flex items-center gap-1 text-slate-800 bg-slate-50 border border-slate-100 rounded-full px-2.5 py-1">
+                                ⭐ {detailListing.starRating}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Driver included — replaces the deposit notice, since the
                         backend waives the deposit whenever the provider supplies
                         a driver. Showing both would contradict what is charged. */}
-                    {detailListing.category === "car" && detailListing.driverProvided && (
-                      <div className="flex items-center gap-2 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 mb-3">
-                        <span className="shrink-0">🧑‍✈️</span>
-                        <span><strong>Driver included:</strong> a driver is provided with this vehicle — no security deposit is required.</span>
-                      </div>
-                    )}
-
-                    {/* Security deposit notice for car rentals */}
-                    {detailListing.category === "car" && !detailListing.driverProvided && detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && (
-                      <div className="flex items-center gap-2 text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-3">
-                        <span className="text-amber-600 font-bold">🔒</span>
-                        <span><strong>Security deposit:</strong> {detailListing.currency} {detailListing.securityDeposit.toLocaleString()} — collected at booking.</span>
-                      </div>
-                    )}
-                    {/* Best Offer banner — shown when an active promotion exists */}
-                    {activePromotion && (
-                      <div className="mb-4 flex items-center gap-2.5 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
-                        <span className="text-base shrink-0">🏷️</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Best Offer</p>
-                          <p className="text-xs font-semibold text-emerald-800 truncate">{activePromotion.name}</p>
+                      {detailListing.category === "car" && detailListing.driverProvided && (
+                        <div className="flex items-center gap-2 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 mb-3">
+                          <span className="shrink-0">🧑‍✈️</span>
+                          <span><strong>Driver included:</strong> a driver is provided with this vehicle — no security deposit is required.</span>
                         </div>
-                        <span className="shrink-0 text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full whitespace-nowrap">
-                          {activePromotion.discountType === "percentage"
-                            ? `${activePromotion.discountValue}% off`
-                            : `${detailListing.currency} ${activePromotion.discountValue} off`}
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="mb-4 space-y-3">
-                      {detailListing.allowPreBooking && (
-                        <MessageProviderButton listingId={detailListing.id} />
                       )}
-                      <GiveReviewEntry listingId={detailListing.id} listingName={detailListing.name} />
-                    </div>
 
-                    {!lockToken ? (() => {
-                      const isCar = detailListing.category === "car";
-                      const isHotel = detailListing.category === "hotel";
-                      const selectedRt = isHotel
-                        ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
-                        : null;
-                      const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
+                      {/* Security deposit notice for car rentals */}
+                      {detailListing.category === "car" && !detailListing.driverProvided && detailListing.securityDeposit != null && detailListing.securityDeposit > 0 && (
+                        <div className="flex items-center gap-2 text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-3">
+                          <span className="text-amber-600 font-bold">🔒</span>
+                          <span><strong>Security deposit:</strong> {detailListing.currency} {detailListing.securityDeposit.toLocaleString()} — collected at booking.</span>
+                        </div>
+                      )}
+                      {/* Best Offer banner — shown when an active promotion exists */}
+                      {activePromotion && (
+                        <div className="mb-4 flex items-center gap-2.5 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
+                          <span className="text-base shrink-0">🏷️</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Best Offer</p>
+                            <p className="text-xs font-semibold text-emerald-800 truncate">{activePromotion.name}</p>
+                          </div>
+                          <span className="shrink-0 text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full whitespace-nowrap">
+                            {activePromotion.discountType === "percentage"
+                              ? `${activePromotion.discountValue}% off`
+                              : `${detailListing.currency} ${activePromotion.discountValue} off`}
+                          </span>
+                        </div>
+                      )}
 
-                      const start = isCar ? detailPickupDate : detailCheckIn;
-                      const end = isCar ? detailReturnDate : detailCheckOut;
-                      const days = calcDays(start, end);
-                      const baseTotal = pricePerNight * days;
-                      const sidebarDiscount = bestDiscount;
+                      <div className="mb-4 space-y-3">
+                        {detailListing.allowPreBooking && (
+                          <MessageProviderButton listingId={detailListing.id} />
+                        )}
+                        <GiveReviewEntry listingId={detailListing.id} listingName={detailListing.name} />
+                      </div>
 
-                      return (
-                        <div className="space-y-4">
-                          {/* Date inputs */}
-                          <div className="space-y-3">
-                            {isCar ? (
-                              <DateRangePicker
-                                label="Rental Dates"
-                                isCar
-                                startDate={detailPickupDate}
-                                endDate={detailReturnDate}
-                                onChange={(start, end) => {
-                                  setDetailPickupDate(start);
-                                  setDetailReturnDate(end);
-                                }}
-                                minDate={getTodayString()}
-                              />
-                            ) : (
-                              <>
+                      {!lockToken ? (() => {
+                        const isCar = detailListing.category === "car";
+                        const isHotel = detailListing.category === "hotel";
+                        const selectedRt = isHotel
+                          ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
+                          : null;
+                        const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
+
+                        const start = isCar ? detailPickupDate : detailCheckIn;
+                        const end = isCar ? detailReturnDate : detailCheckOut;
+                        const days = calcDays(start, end);
+                        const baseTotal = pricePerNight * days;
+                        const sidebarDiscount = bestDiscount;
+
+                        return (
+                          <div className="space-y-4">
+                            {/* Date inputs */}
+                            <div className="space-y-3">
+                              {isCar ? (
                                 <DateRangePicker
-                                  label="Check-in – Check-out"
-                                  startDate={detailCheckIn}
-                                  endDate={detailCheckOut}
+                                  label="Rental Dates"
+                                  isCar
+                                  startDate={detailPickupDate}
+                                  endDate={detailReturnDate}
                                   onChange={(start, end) => {
-                                    setDetailCheckIn(start);
-                                    setDetailCheckOut(end);
+                                    setDetailPickupDate(start);
+                                    setDetailReturnDate(end);
                                   }}
                                   minDate={getTodayString()}
                                 />
-                                <div className="border border-slate-200 rounded-xl p-3 bg-slate-50">
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Guests</p>
-                                  <select
-                                    value={searchAdults}
-                                    onChange={(e) => setSearchAdults(Number(e.target.value))}
-                                    className="w-full mt-1 text-sm bg-transparent outline-none font-bold text-slate-700"
-                                  >
-                                    {[1, 2, 3, 4, 5, 6].map((n) => (
-                                      <option key={n} value={n}>{n} guest{n > 1 ? "s" : ""}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </>
+                              ) : (
+                                <>
+                                  <DateRangePicker
+                                    label="Check-in – Check-out"
+                                    startDate={detailCheckIn}
+                                    endDate={detailCheckOut}
+                                    onChange={(start, end) => {
+                                      setDetailCheckIn(start);
+                                      setDetailCheckOut(end);
+                                    }}
+                                    minDate={getTodayString()}
+                                  />
+                                  <div className="border border-slate-200 rounded-xl p-3 bg-slate-50">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Guests</p>
+                                    <select
+                                      value={searchAdults}
+                                      onChange={(e) => setSearchAdults(Number(e.target.value))}
+                                      className="w-full mt-1 text-sm bg-transparent outline-none font-bold text-slate-700"
+                                    >
+                                      {[1, 2, 3, 4, 5, 6].map((n) => (
+                                        <option key={n} value={n}>{n} guest{n > 1 ? "s" : ""}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                            {isCar && detailListing.deliveryAvailable && (
+                              <div className="p-3 border border-slate-200 rounded-xl bg-slate-50 space-y-2">
+                                <label className="flex items-center justify-between gap-2 cursor-pointer select-none">
+                                  <div>
+                                    <p className="text-sm font-semibold text-slate-800">Request vehicle delivery</p>
+                                    <p className="text-xs text-slate-400 mt-0.5">
+                                      {detailListing.deliveryFee && detailListing.deliveryFee > 0
+                                        ? `${detailListing.currency} ${detailListing.deliveryFee.toLocaleString()} delivery fee · within ${detailListing.deliveryRadiusKm ?? "—"} km`
+                                        : `Free delivery · within ${detailListing.deliveryRadiusKm ?? "—"} km`}
+                                    </p>
+                                  </div>
+                                  <input
+                                    type="checkbox"
+                                    checked={deliveryRequested}
+                                    onChange={(e) => {
+                                      setDeliveryRequested(e.target.checked);
+                                      if (detailPickupDate && detailReturnDate) {
+                                        fetchAllPricing(e.target.checked);
+                                      }
+                                    }}
+                                    className="rounded border-slate-300 text-primary focus:ring-primary"
+                                  />
+                                </label>
+                                {deliveryRequested && (
+                                  <input
+                                    type="text"
+                                    required
+                                    placeholder="Delivery address"
+                                    value={deliveryAddress}
+                                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1D8D2B]"
+                                  />
+                                )}
+                              </div>
                             )}
-                          </div>
-                          {isCar && detailListing.deliveryAvailable && (
-                            <div className="p-3 border border-slate-200 rounded-xl bg-slate-50 space-y-2">
-                              <label className="flex items-center justify-between gap-2 cursor-pointer select-none">
-                                <div>
-                                  <p className="text-sm font-semibold text-slate-800">Request vehicle delivery</p>
-                                  <p className="text-xs text-slate-400 mt-0.5">
-                                    {detailListing.deliveryFee && detailListing.deliveryFee > 0
-                                      ? `${detailListing.currency} ${detailListing.deliveryFee.toLocaleString()} delivery fee · within ${detailListing.deliveryRadiusKm ?? "—"} km`
-                                      : `Free delivery · within ${detailListing.deliveryRadiusKm ?? "—"} km`}
-                                  </p>
-                                </div>
-                                <input
-                                  type="checkbox"
-                                  checked={deliveryRequested}
-                                  onChange={(e) => {
-                                    setDeliveryRequested(e.target.checked);
-                                    if (detailPickupDate && detailReturnDate) {
-                                      fetchAllPricing(e.target.checked);
-                                    }
-                                  }}
-                                  className="rounded border-slate-300 text-primary focus:ring-primary"
-                                />
-                              </label>
-                              {deliveryRequested && (
-                                <input
-                                  type="text"
-                                  required
-                                  placeholder="Delivery address"
-                                  value={deliveryAddress}
-                                  onChange={(e) => setDeliveryAddress(e.target.value)}
-                                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1D8D2B]"
-                                />
-                              )}
-                            </div>
-                          )}
-                          {detailListing.category === "hotel" && detailListing.roomTypes && detailListing.roomTypes.length > 0 && (
-                            <div className="p-3 border-t border-slate-200">
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Room Type</p>
-                              <select
-                                value={selectedRoomTypeId || ""}
-                                onChange={(e) => setSelectedRoomTypeId(e.target.value || null)}
-                                className="w-full mt-1 text-sm bg-transparent outline-none font-semibold text-slate-800"
-                              >
-                                {detailListing.roomTypes
-                                  .filter((rt) => rt.isActive !== false)
-                                  .map((rt) => {
-                                    const baseRtPrice = rt.localizedPricePerNight ?? rt.pricePerNight;
-                                    let displayRtPrice = baseRtPrice;
-                                    const isValidPromo = activePromotion && activePromotion.activity === detailListing.category && isPromotionValid(activePromotion);
-                                    const hasLongStay = detailListing.longStayDiscountEnabled;
-                                    const longStayPct = hasLongStay ? 15 : 0;
+                            {detailListing.category === "hotel" && detailListing.roomTypes && detailListing.roomTypes.length > 0 && (
+                              <div className="p-3 border-t border-slate-200">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Room Type</p>
+                                <select
+                                  value={selectedRoomTypeId || ""}
+                                  onChange={(e) => setSelectedRoomTypeId(e.target.value || null)}
+                                  className="w-full mt-1 text-sm bg-transparent outline-none font-semibold text-slate-800"
+                                >
+                                  {detailListing.roomTypes
+                                    .filter((rt) => rt.isActive !== false)
+                                    .map((rt) => {
+                                      const baseRtPrice = rt.localizedPricePerNight ?? rt.pricePerNight;
+                                      let displayRtPrice = baseRtPrice;
+                                      const isValidPromo = activePromotion && activePromotion.activity === detailListing.category && isPromotionValid(activePromotion);
+                                      const hasLongStay = detailListing.longStayDiscountEnabled;
+                                      const longStayPct = hasLongStay ? 15 : 0;
 
-                                    if (isValidPromo) {
-                                      const promoDiscount = activePromotion.discountType === "percentage"
-                                        ? Number((baseRtPrice * (Number(activePromotion.discountValue) / 100)).toFixed(2))
-                                        : Number(Number(activePromotion.discountValue).toFixed(2));
-                                      displayRtPrice = Math.max(0, baseRtPrice - promoDiscount);
-                                    } else if (hasLongStay) {
-                                      displayRtPrice = Number((baseRtPrice * (1 - longStayPct / 100)).toFixed(2));
-                                    }
+                                      if (isValidPromo) {
+                                        const promoDiscount = activePromotion.discountType === "percentage"
+                                          ? Number((baseRtPrice * (Number(activePromotion.discountValue) / 100)).toFixed(2))
+                                          : Number(Number(activePromotion.discountValue).toFixed(2));
+                                        displayRtPrice = Math.max(0, baseRtPrice - promoDiscount);
+                                      } else if (hasLongStay) {
+                                        displayRtPrice = Number((baseRtPrice * (1 - longStayPct / 100)).toFixed(2));
+                                      }
 
-                                    const rtCurrency = detailListing.localizedCurrency ?? detailListing.currency;
-                                    const rtPrefix = approxPrefix(detailListing.localizedCurrency, detailListing.currency);
-                                    return (
-                                      <option key={rt.id} value={rt.id}>
-                                        {rt.name} — {rtPrefix}{rtCurrency} {displayRtPrice.toLocaleString()}/night{baseRtPrice > displayRtPrice ? ` (was ${rtPrefix}${rtCurrency} ${baseRtPrice.toLocaleString()})` : ""}
-                                      </option>
-                                    );
-                                  })}
-                              </select>
-                            </div>
-                          )}
+                                      const rtCurrency = detailListing.localizedCurrency ?? detailListing.currency;
+                                      const rtPrefix = approxPrefix(detailListing.localizedCurrency, detailListing.currency);
+                                      return (
+                                        <option key={rt.id} value={rt.id}>
+                                          {rt.name} — {rtPrefix}{rtCurrency} {displayRtPrice.toLocaleString()}/night{baseRtPrice > displayRtPrice ? ` (was ${rtPrefix}${rtCurrency} ${baseRtPrice.toLocaleString()})` : ""}
+                                        </option>
+                                      );
+                                    })}
+                                </select>
+                              </div>
+                            )}
 
-                          {/* Voucher / Promo code selector */}
-                          {renderVoucherSelector()}
+                            {/* Voucher / Promo code selector */}
+                            {renderVoucherSelector()}
 
-                          {/* Availability indicator */}
-                          {availabilityStatus === "checking" && (
-                            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
-                              <div className="w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
-                              Checking availability…
-                            </div>
-                          )}
-                          {availabilityStatus === "unavailable" && (
-                            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs font-semibold text-red-700">
-                              Selected dates are no longer available. Please choose different dates.
-                            </div>
-                          )}
+                            {/* Availability indicator */}
+                            {availabilityStatus === "checking" && (
+                              <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                                <div className="w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                                Checking availability…
+                              </div>
+                            )}
+                            {availabilityStatus === "unavailable" && (
+                              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs font-semibold text-red-700">
+                                Selected dates are no longer available. Please choose different dates.
+                              </div>
+                            )}
 
-                          {/* Error from lock attempt */}
-                          {bookingError && (
-                            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-2">
-                              <p className="text-xs font-semibold text-red-600">{bookingError}</p>
-                              {bookingError.toLowerCase().includes("pending") && (
-                                <div className="space-y-2 pt-1">
-                                  {loadingInlinePending && (
-                                    <div className="flex items-center gap-2 text-xs text-red-500">
-                                      <div className="w-3 h-3 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
-                                      Loading pending reservations…
-                                    </div>
-                                  )}
-                                  {inlinePending.length === 0 && !loadingInlinePending && (
-                                    <button type="button" onClick={fetchInlinePending}
-                                      className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition">
-                                      Show pending reservations
-                                    </button>
-                                  )}
-                                  {inlinePending.map((b) => (
-                                    <div key={b.id} className="flex items-center justify-between gap-2 bg-white border border-red-200 rounded-lg px-3 py-2">
-                                      <div className="min-w-0">
-                                        <p className="text-xs font-bold text-slate-800 truncate">{b.listingTitle || "Reservation"}</p>
-                                        <p className="text-[10px] text-slate-400 font-mono">{b.reference}</p>
+                            {/* Error from lock attempt */}
+                            {bookingError && (
+                              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-2">
+                                <p className="text-xs font-semibold text-red-600">{bookingError}</p>
+                                {bookingError.toLowerCase().includes("pending") && (
+                                  <div className="space-y-2 pt-1">
+                                    {loadingInlinePending && (
+                                      <div className="flex items-center gap-2 text-xs text-red-500">
+                                        <div className="w-3 h-3 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
+                                        Loading pending reservations…
                                       </div>
-                                      <button type="button"
-                                        onClick={() => handleInlineCancel(b.id)}
-                                        disabled={inlineCancellingId === b.id}
-                                        className="shrink-0 px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-bold transition">
-                                        {inlineCancellingId === b.id ? "…" : "Cancel"}
+                                    )}
+                                    {inlinePending.length === 0 && !loadingInlinePending && (
+                                      <button type="button" onClick={fetchInlinePending}
+                                        className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition">
+                                        Show pending reservations
                                       </button>
+                                    )}
+                                    {inlinePending.map((b) => (
+                                      <div key={b.id} className="flex items-center justify-between gap-2 bg-white border border-red-200 rounded-lg px-3 py-2">
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-bold text-slate-800 truncate">{b.listingTitle || "Reservation"}</p>
+                                          <p className="text-[10px] text-slate-400 font-mono">{b.reference}</p>
+                                        </div>
+                                        <button type="button"
+                                          onClick={() => handleInlineCancel(b.id)}
+                                          disabled={inlineCancellingId === b.id}
+                                          className="shrink-0 px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-bold transition">
+                                          {inlineCancellingId === b.id ? "…" : "Cancel"}
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Book Now button */}
+                            <button
+                              onClick={handleInitiateLock}
+                              disabled={lockingListing || pricingLoading || availabilityStatus === "unavailable" || availabilityStatus === "checking"}
+                              className="w-full py-3.5 bg-[#0c2614] hover:bg-[#081b0d] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition text-sm"
+                            >
+                              {lockingListing ? "Securing your dates…" : "Continue — You won't be charged yet"}
+                            </button>
+
+                            {/* Dynamic price breakdown */}
+                            {days > 0 && (
+                              pricingLoading ? (
+                                <div className="space-y-3 pt-2 border-t border-slate-100 animate-pulse">
+                                  <div className="h-4 bg-slate-200 rounded w-3/4" />
+                                  <div className="h-4 bg-slate-200 rounded w-1/2" />
+                                  <div className="h-4 bg-slate-200 rounded w-5/6" />
+                                  <div className="h-5 bg-slate-200 rounded w-2/3 mt-2" />
+                                </div>
+                              ) : pricingError ? (
+                                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs font-semibold text-red-600">
+                                  {pricingError}
+                                </div>
+                              ) : estimatedPricing ? (() => {
+                                // The breakdown converts as a unit or not at all. The voucher
+                                // discount is validated in the listing's currency and has no
+                                // server-converted twin, so converting the lines around it would
+                                // leave a total its own lines don't add up to — the exact
+                                // objection to per-line conversion. In that case everything stays
+                                // exact and the converted figure is shown as a reference instead.
+                                const voucherInPlay = effectiveDiscountSource === "voucher" && bestDiscount > 0;
+                                // A non-null localizedCurrency is not proof of a conversion:
+                                // getLocalizedContext returns the base currency with a null rate
+                                // when no target was asked for, or the target equals the listing's
+                                // own currency. And when only the aggregate fields are present
+                                // (an API that predates the itemised ones), falling back to raw
+                                // amounts would relabel them under the target currency. Require a
+                                // real currency change AND itemised data before converting.
+                                const converted = !!estimatedPricing.localizedCurrency
+                                  && estimatedPricing.localizedCurrency !== detailListing.currency
+                                  && estimatedPricing.localizedBaseAmount != null;
+                                const showLoc = converted && !voucherInPlay;
+                                const cur = showLoc ? estimatedPricing.localizedCurrency : detailListing.currency;
+                                const pre = showLoc ? "~" : "";
+                                const amt = (loc: number | null | undefined, rawVal: number) =>
+                                  showLoc && loc != null ? loc : rawVal;
+                                const money = (loc: number | null | undefined, rawVal: number) =>
+                                  `${pre}${cur} ${amt(loc, rawVal).toLocaleString()}`;
+                                // Summed from the same values the rows render, so the total always
+                                // reconciles with the lines above it rather than being converted
+                                // independently of them.
+                                const shownTotal = showLoc
+                                  ? Math.max(0, amt(estimatedPricing.localizedBaseAmount, estimatedPricing.baseAmount)
+                                    - amt(estimatedPricing.localizedPromotionDiscount, estimatedPricing.promotionDiscount ?? 0))
+                                  + amt(estimatedPricing.localizedServiceFee, estimatedPricing.serviceFee ?? 0)
+                                  + amt(estimatedPricing.localizedTaxAmount, estimatedPricing.taxAmount ?? 0)
+                                  + amt(estimatedPricing.localizedDeliveryFee, estimatedPricing.deliveryFee ?? 0)
+                                  + amt(estimatedPricing.localizedSecurityDeposit, estimatedPricing.securityDeposit ?? 0)
+                                  : estimatedPricing.totalAmount;
+                                return (
+                                  <div className="space-y-2 pt-2 border-t border-slate-100 text-sm text-slate-600">
+                                    <div className="flex justify-between">
+                                      <span>{pre}{cur} {amt(estimatedPricing.localizedNightlyRate, pricePerNight).toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
+                                      <span>{money(estimatedPricing.localizedBaseAmount, estimatedPricing.baseAmount)}</span>
                                     </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Book Now button */}
-                          <button
-                            onClick={handleInitiateLock}
-                            disabled={lockingListing || pricingLoading || availabilityStatus === "unavailable" || availabilityStatus === "checking"}
-                            className="w-full py-3.5 bg-[#0c2614] hover:bg-[#081b0d] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition text-sm"
-                          >
-                            {lockingListing ? "Securing your dates…" : "Continue — You won't be charged yet"}
-                          </button>
-
-                          {/* Dynamic price breakdown */}
-                          {days > 0 && (
-                            pricingLoading ? (
-                              <div className="space-y-3 pt-2 border-t border-slate-100 animate-pulse">
-                                <div className="h-4 bg-slate-200 rounded w-3/4" />
-                                <div className="h-4 bg-slate-200 rounded w-1/2" />
-                                <div className="h-4 bg-slate-200 rounded w-5/6" />
-                                <div className="h-5 bg-slate-200 rounded w-2/3 mt-2" />
-                              </div>
-                            ) : pricingError ? (
-                              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs font-semibold text-red-600">
-                                {pricingError}
-                              </div>
-                            ) : estimatedPricing ? (() => {
-                              // The breakdown converts as a unit or not at all. The voucher
-                              // discount is validated in the listing's currency and has no
-                              // server-converted twin, so converting the lines around it would
-                              // leave a total its own lines don't add up to — the exact
-                              // objection to per-line conversion. In that case everything stays
-                              // exact and the converted figure is shown as a reference instead.
-                              const voucherInPlay = effectiveDiscountSource === "voucher" && bestDiscount > 0;
-                              // A non-null localizedCurrency is not proof of a conversion:
-                              // getLocalizedContext returns the base currency with a null rate
-                              // when no target was asked for, or the target equals the listing's
-                              // own currency. And when only the aggregate fields are present
-                              // (an API that predates the itemised ones), falling back to raw
-                              // amounts would relabel them under the target currency. Require a
-                              // real currency change AND itemised data before converting.
-                              const converted = !!estimatedPricing.localizedCurrency
-                                && estimatedPricing.localizedCurrency !== detailListing.currency
-                                && estimatedPricing.localizedBaseAmount != null;
-                              const showLoc = converted && !voucherInPlay;
-                              const cur = showLoc ? estimatedPricing.localizedCurrency : detailListing.currency;
-                              const pre = showLoc ? "~" : "";
-                              const amt = (loc: number | null | undefined, rawVal: number) =>
-                                showLoc && loc != null ? loc : rawVal;
-                              const money = (loc: number | null | undefined, rawVal: number) =>
-                                `${pre}${cur} ${amt(loc, rawVal).toLocaleString()}`;
-                              // Summed from the same values the rows render, so the total always
-                              // reconciles with the lines above it rather than being converted
-                              // independently of them.
-                              const shownTotal = showLoc
-                                ? Math.max(0, amt(estimatedPricing.localizedBaseAmount, estimatedPricing.baseAmount)
-                                  - amt(estimatedPricing.localizedPromotionDiscount, estimatedPricing.promotionDiscount ?? 0))
-                                + amt(estimatedPricing.localizedServiceFee, estimatedPricing.serviceFee ?? 0)
-                                + amt(estimatedPricing.localizedTaxAmount, estimatedPricing.taxAmount ?? 0)
-                                + amt(estimatedPricing.localizedDeliveryFee, estimatedPricing.deliveryFee ?? 0)
-                                + amt(estimatedPricing.localizedSecurityDeposit, estimatedPricing.securityDeposit ?? 0)
-                                : estimatedPricing.totalAmount;
-                              return (
-                              <div className="space-y-2 pt-2 border-t border-slate-100 text-sm text-slate-600">
-                                <div className="flex justify-between">
-                                  <span>{pre}{cur} {amt(estimatedPricing.localizedNightlyRate, pricePerNight).toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
-                                  <span>{money(estimatedPricing.localizedBaseAmount, estimatedPricing.baseAmount)}</span>
-                                </div>
-                                {effectiveDiscountSource === "promotion" && estimatedPricing.promotionDiscount > 0 && (
-                                  <div className="flex justify-between text-emerald-600 font-semibold">
-                                    <span>Promotional discount ({activePromotion?.discountValue}%)</span>
-                                    <span>{pre}−{cur} {amt(estimatedPricing.localizedPromotionDiscount, estimatedPricing.promotionDiscount).toLocaleString()}</span>
-                                  </div>
-                                )}
-                                {effectiveDiscountSource === "voucher" && bestDiscount > 0 && (
-                                  <div className="flex justify-between text-emerald-600 font-semibold">
-                                    <span>Voucher discount</span>
-                                    <span>−{detailListing.currency} {bestDiscount.toLocaleString()}</span>
-                                  </div>
-                                )}
-                                <div className="flex justify-between">
-                                  <span>Service fee{estimatedPricing.serviceFeeRate ? ` (${Math.round(estimatedPricing.serviceFeeRate * 100)}%)` : ''}</span>
-                                  <span>{money(estimatedPricing.localizedServiceFee, estimatedPricing.serviceFee)}</span>
-                                </div>
-                                {estimatedPricing.taxAmount > 0 && (
-                                  <div className="flex justify-between text-slate-500">
-                                    <span>Taxes{estimatedPricing.taxRate ? ` (${Math.round(estimatedPricing.taxRate * 100)}%)` : ''}</span>
-                                    <span>{money(estimatedPricing.localizedTaxAmount, estimatedPricing.taxAmount)}</span>
-                                  </div>
-                                )}
-                                {/* Delivery is part of totalAmount server-side. Without this row
+                                    {effectiveDiscountSource === "promotion" && estimatedPricing.promotionDiscount > 0 && (
+                                      <div className="flex justify-between text-emerald-600 font-semibold">
+                                        <span>Promotional discount ({activePromotion?.discountValue}%)</span>
+                                        <span>{pre}−{cur} {amt(estimatedPricing.localizedPromotionDiscount, estimatedPricing.promotionDiscount).toLocaleString()}</span>
+                                      </div>
+                                    )}
+                                    {effectiveDiscountSource === "voucher" && bestDiscount > 0 && (
+                                      <div className="flex justify-between text-emerald-600 font-semibold">
+                                        <span>Voucher discount</span>
+                                        <span>−{detailListing.currency} {bestDiscount.toLocaleString()}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex justify-between">
+                                      <span>Service fee{estimatedPricing.serviceFeeRate ? ` (${Math.round(estimatedPricing.serviceFeeRate * 100)}%)` : ''}</span>
+                                      <span>{money(estimatedPricing.localizedServiceFee, estimatedPricing.serviceFee)}</span>
+                                    </div>
+                                    {estimatedPricing.taxAmount > 0 && (
+                                      <div className="flex justify-between text-slate-500">
+                                        <span>Taxes{estimatedPricing.taxRate ? ` (${Math.round(estimatedPricing.taxRate * 100)}%)` : ''}</span>
+                                        <span>{money(estimatedPricing.localizedTaxAmount, estimatedPricing.taxAmount)}</span>
+                                      </div>
+                                    )}
+                                    {/* Delivery is part of totalAmount server-side. Without this row
                                     the itemised lines did not add up to the total shown below. */}
-                                {estimatedPricing.deliveryFee != null && estimatedPricing.deliveryFee > 0 && (
-                                  <div className="flex justify-between">
-                                    <span>Delivery fee</span>
-                                    <span>{money(estimatedPricing.localizedDeliveryFee, estimatedPricing.deliveryFee)}</span>
-                                  </div>
-                                )}
-                                {isCar && estimatedPricing.securityDeposit != null && estimatedPricing.securityDeposit > 0 && (
-                                  <div className="flex justify-between text-slate-600">
-                                    <span>Security deposit</span>
-                                    <span>{money(estimatedPricing.localizedSecurityDeposit, estimatedPricing.securityDeposit)}</span>
-                                  </div>
-                                )}
-                                <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 mt-1">
-                                  <span>Total</span>
-                                  <span>{pre}{cur} {shownTotal.toLocaleString()}</span>
-                                </div>
-                                {/* Converted breakdown → show the exact listing-currency total so
+                                    {estimatedPricing.deliveryFee != null && estimatedPricing.deliveryFee > 0 && (
+                                      <div className="flex justify-between">
+                                        <span>Delivery fee</span>
+                                        <span>{money(estimatedPricing.localizedDeliveryFee, estimatedPricing.deliveryFee)}</span>
+                                      </div>
+                                    )}
+                                    {isCar && estimatedPricing.securityDeposit != null && estimatedPricing.securityDeposit > 0 && (
+                                      <div className="flex justify-between text-slate-600">
+                                        <span>Security deposit</span>
+                                        <span>{money(estimatedPricing.localizedSecurityDeposit, estimatedPricing.securityDeposit)}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 mt-1">
+                                      <span>Total</span>
+                                      <span>{pre}{cur} {shownTotal.toLocaleString()}</span>
+                                    </div>
+                                    {/* Converted breakdown → show the exact listing-currency total so
                                     the real figure stays visible. Unconverted → show the
                                     aggregate approximation instead. */}
-                                {showLoc ? (
-                                  <div className="flex justify-between text-slate-400 text-xs">
-                                    <span>Exact ({detailListing.currency})</span>
-                                    <span>{detailListing.currency} {estimatedPricing.totalAmount.toLocaleString()}</span>
-                                  </div>
-                                ) : estimatedPricing.localizedCurrency && estimatedPricing.localCurrencyAmount != null ? (
-                                  <div className="flex justify-between text-slate-400 text-xs">
-                                    <span>Approx.</span>
-                                    <span>~{estimatedPricing.localizedCurrency} {estimatedPricing.localCurrencyAmount.toLocaleString()}</span>
-                                  </div>
-                                ) : null}
-                              </div>
-                              );
-                            })() : null
-                          )}
-                        </div>
-                      );
-                    })() : (
-                      <form onSubmit={handleCheckout} className="space-y-4">
-                        {/* Step indicator — 4 steps */}
-                        {(() => {
-                          const steps = [
-                            { key: "review", label: "Review" },
-                            { key: "details", label: "Details" },
-                            { key: "stripe_card", label: "Payment" },
-                            { key: "polling", label: "Confirm" },
-                          ];
-                          const currentIdx = steps.findIndex(s => s.key === checkoutStep);
-                          return (
-                            <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider mb-1">
-                              {steps.map((s, i) => (
-                                <React.Fragment key={s.key}>
-                                  {i > 0 && <div className="flex-1 h-px bg-slate-200" />}
-                                  <div className={`flex items-center gap-1 shrink-0 ${i < currentIdx ? "text-emerald-600" : i === currentIdx ? "text-[#1D8D2B]" : "text-slate-300"}`}>
-                                    <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${i < currentIdx ? "bg-emerald-500 text-white" : i === currentIdx ? "bg-[#0c2614] text-white" : "bg-slate-200 text-slate-400"}`}>
-                                      {i < currentIdx ? (
-                                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                      ) : i + 1}
-                                    </div>
-                                    <span className="hidden sm:inline">{s.label}</span>
-                                  </div>
-                                </React.Fragment>
-                              ))}
-                            </div>
-                          );
-                        })()}
-
-                        {/* Countdown timer — only during details step */}
-                        {checkoutStep === "details" && (
-                          <div className={`flex items-center justify-between px-4 py-3 rounded-xl text-xs font-bold border ${(secondsLeft ?? 0) < 60 ? "bg-red-50 border-red-200 text-red-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
-                            <span className="flex items-center gap-1.5">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                              {(secondsLeft ?? 0) < 60 ? "Expiring soon!" : "Hold expires in"}
-                            </span>
-                            <span className="font-mono text-sm tracking-wider">
-                              {Math.floor((secondsLeft || 0) / 60).toString().padStart(2, "0")}:{((secondsLeft || 0) % 60).toString().padStart(2, "0")}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* ── STEP 0: Booking Review ── */}
-                        {checkoutStep === "review" && (() => {
-                          const isCar = detailListing.category === "car";
-                          const isHotel = detailListing.category === "hotel";
-                          const selectedRt = isHotel
-                            ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
-                            : null;
-                          const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
-                          const start = isCar ? detailPickupDate : detailCheckIn;
-                          const end = isCar ? detailReturnDate : detailCheckOut;
-                          if (!pricingPreview) return null;
-                          const days = pricingPreview.units;
-                          const base = pricingPreview.baseAmount;
-                          const discount = pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0);
-                          const subtotal = base - discount;
-                          const serviceFee = pricingPreview.serviceFee;
-                          const taxAmount = pricingPreview.taxAmount;
-                          const securityDeposit = isCar ? (pricingPreview.securityDeposit ?? 0) : 0;
-                          const deliveryFee = pricingPreview.deliveryFee ?? 0;
-                          const grandTotal = pricingPreview.totalAmount;
-                          // Breakdown stays in the listing currency; only the end
-                          // total is shown in the platform (charge) currency.
-                          const platform = derivePlatform(pricingPreview, detailListing.currency, grandTotal);
-                          const listingValue = (v: number) => `${detailListing.currency} ${v.toLocaleString()}`;
-                          // The breakdown converts as a unit or not at all. A voucher discount
-                          // is validated in the listing's currency and has no server-converted
-                          // twin, so converting the lines around it would leave a total its own
-                          // lines don't add up to. Then everything stays exact instead.
-                          // Requires a real currency change (localizedCurrency is also set for
-                          // the identity case) AND itemised converted data — with only the
-                          // aggregate fields present, the raw fallbacks would be relabelled
-                          // under the target currency.
-                          const showLoc = !!pricingPreview.localizedCurrency
-                            && pricingPreview.localizedCurrency !== detailListing.currency
-                            && pricingPreview.localizedBaseAmount != null
-                            && !(effectiveDiscountSource === "voucher" && bestDiscount > 0);
-                          const dispCur = showLoc ? pricingPreview.localizedCurrency : detailListing.currency;
-                          const dispPre = showLoc ? "~" : "";
-                          const dispAmt = (loc: number | null | undefined, rawVal: number) =>
-                            showLoc && loc != null ? loc : rawVal;
-                          const dispValue = (loc: number | null | undefined, rawVal: number) =>
-                            `${dispPre}${dispCur} ${dispAmt(loc, rawVal).toLocaleString()}`;
-                          // Summed from the rendered values so the total reconciles with its
-                          // own lines rather than being converted independently of them.
-                          const shownTotal = showLoc
-                            ? Math.max(0, dispAmt(pricingPreview.localizedBaseAmount, base)
-                              - dispAmt(pricingPreview.localizedPromotionDiscount, discount))
-                            + dispAmt(pricingPreview.localizedServiceFee, serviceFee)
-                            + dispAmt(pricingPreview.localizedTaxAmount, taxAmount)
-                            + dispAmt(pricingPreview.localizedSecurityDeposit, securityDeposit)
-                            + dispAmt(pricingPreview.localizedDeliveryFee, deliveryFee)
-                            : grandTotal;
-                          const fmt = (d: string | null | undefined) =>
-                            d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
-                          return (
-                            <div className="space-y-4">
-                              {/* Listing summary card */}
-                              <div className="flex gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                                <ListingImage
-                                  listingId={detailListing.id}
-                                  alt={detailListing.name}
-                                  className="w-16 h-16 rounded-lg object-cover shrink-0"
-                                />
-                                <div className="min-w-0">
-                                  <p className="font-bold text-slate-900 text-sm leading-tight truncate">{detailListing.name}</p>
-                                  <p className="text-[10px] text-slate-500 mt-0.5 capitalize">{detailListing.category} · {detailListing.neighborhood ? `${detailListing.neighborhood}, ` : ""}{detailListing.town}, {detailListing.country}</p>
-                                  {detailListing.starRating && <p className="text-[10px] text-amber-500 font-semibold">⭐ {detailListing.starRating}</p>}
-                                </div>
-                              </div>
-
-                              {/* Dates */}
-                              <div className="bg-slate-50 rounded-xl border border-slate-200 divide-y divide-slate-200 text-xs">
-                                <div className="flex justify-between items-center px-3 py-2.5">
-                                  <span className="text-slate-500 font-semibold uppercase tracking-wider">{isCar ? "Pickup" : "Check-in"}</span>
-                                  <span className="font-bold text-slate-900">{isCar ? fmt(detailPickupDate) : fmt(detailCheckIn)}</span>
-                                </div>
-                                <div className="flex justify-between items-center px-3 py-2.5">
-                                  <span className="text-slate-500 font-semibold uppercase tracking-wider">{isCar ? "Return" : "Check-out"}</span>
-                                  <span className="font-bold text-slate-900">{isCar ? fmt(detailReturnDate) : fmt(detailCheckOut)}</span>
-                                </div>
-                                <div className="flex justify-between items-center px-3 py-2.5">
-                                  <span className="text-slate-500 font-semibold uppercase tracking-wider">Duration</span>
-                                  <span className="font-bold text-slate-900">{days} {isCar ? "day" : "night"}{days !== 1 ? "s" : ""}</span>
-                                </div>
-                                {!isCar && searchAdults > 0 && (
-                                  <div className="flex justify-between items-center px-3 py-2.5">
-                                    <span className="text-slate-500 font-semibold uppercase tracking-wider">Guests</span>
-                                    <span className="font-bold text-slate-900">{searchAdults + searchChildren} guest{searchAdults + searchChildren !== 1 ? "s" : ""}</span>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Breakdown in the guest's display currency when the API could
-                                  convert it, otherwise the listing's own. The charge itself is
-                                  always the platform amount, shown alongside. */}
-                              <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
-                                <div className="flex justify-between">
-                                  <span>{dispPre}{dispCur} {dispAmt(pricingPreview.localizedNightlyRate, pricePerNight).toLocaleString()} × {days} {isCar ? "day" : "night"}{days !== 1 ? "s" : ""}</span>
-                                  <span>{dispValue(pricingPreview.localizedBaseAmount, base)}</span>
-                                </div>
-                                {discount > 0 && (
-                                  <div className="flex justify-between text-emerald-600 font-semibold">
-                                    <span>{effectiveDiscountSource === "promotion" ? `Promotional discount (${activePromotion?.discountValue}%)` : "Voucher discount"}</span>
-                                    <span>{dispPre}−{dispCur} {dispAmt(pricingPreview.localizedPromotionDiscount, discount).toLocaleString()}</span>
-                                  </div>
-                                )}
-                                <div className="flex justify-between text-slate-500">
-                                  <span>Service fee{pricingPreview?.serviceFeeRate ? ` (${Math.round(pricingPreview.serviceFeeRate * 100)}%)` : ''}</span>
-                                  <span>{dispValue(pricingPreview.localizedServiceFee, serviceFee)}</span>
-                                </div>
-                                {taxAmount > 0 && (
-                                  <div className="flex justify-between text-slate-500">
-                                    <span>Taxes & VAT{pricingPreview?.taxRate ? ` (${Math.round(pricingPreview.taxRate * 100)}%)` : ''}</span>
-                                    <span>{dispValue(pricingPreview.localizedTaxAmount, taxAmount)}</span>
-                                  </div>
-                                )}
-
-                                {isCar && securityDeposit > 0 && (
-                                  <div className="flex justify-between text-slate-600">
-                                    <span>Security deposit</span>
-                                    <span>{dispValue(pricingPreview.localizedSecurityDeposit, securityDeposit)}</span>
-                                  </div>
-                                )}
-
-                                {isCar && deliveryFee > 0 && (
-                                  <div className="flex justify-between text-slate-600">
-                                    <span>Delivery fee</span>
-                                    <span>{dispValue(pricingPreview.localizedDeliveryFee, deliveryFee)}</span>
-                                  </div>
-                                )}
-
-                                {renderVoucherSelector()}
-                                <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 text-base">
-                                  <span>Total</span>
-                                  <span className="text-right">
-                                    <div>{showLoc ? `${dispPre}${dispCur} ${shownTotal.toLocaleString()}` : fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
                                     {showLoc ? (
-                                      <>
-                                        <div className="text-xs font-medium text-slate-500 mt-0.5">Exact {listingValue(grandTotal)}</div>
-                                        <div className="text-xs font-semibold text-slate-700">Charged {fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
-                                      </>
-                                    ) : platform.platformCurrency !== detailListing.currency && (
-                                      <div className="text-xs font-medium text-slate-500 mt-0.5">Billed as approx. {listingValue(grandTotal)}</div>
-                                    )}
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Countdown */}
-                              <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold border ${(secondsLeft ?? 0) < 60 ? "bg-red-50 border-red-200 text-red-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
-                                <span className="flex items-center gap-1.5">
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 018 0z" /></svg>
-                                  {(secondsLeft ?? 0) < 60 ? "Expiring soon!" : "Hold expires in"}
-                                </span>
-                                <span className="font-mono tracking-wider">
-                                  {Math.floor((secondsLeft || 0) / 60).toString().padStart(2, "0")}:{((secondsLeft || 0) % 60).toString().padStart(2, "0")}
-                                </span>
-                              </div>
-
-                              <button type="button" onClick={() => { setCheckoutStep("details"); fetchSavedMethods(); }}
-                                className="w-full py-3.5 bg-[#0c2614] hover:bg-[#081b0d] text-white font-bold rounded-xl transition text-sm">
-                                Continue to Guest Details →
-                              </button>
-                              <button type="button" onClick={abandonLock}
-                                className="w-full text-center text-xs text-slate-400 hover:text-slate-600 transition">
-                                Cancel and release hold
-                              </button>
-                            </div>
-                          );
-                        })()}
-
-                        {/* ── STEP 1: Guest details + payment method selection ── */}
-                        {checkoutStep === "details" && (<>
-                          <div className="space-y-2.5">
-                            <div className="grid grid-cols-2 gap-2">
-                              <input type="text" required placeholder="First Name" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
-                              <input type="text" required placeholder="Last Name" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
-                            </div>
-                            <input type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
-                            <input type="tel" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
-                            <textarea placeholder="Special requests (optional)" value={specialRequests} onChange={(e) => setSpecialRequests(e.target.value)} rows={2} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B] resize-none" />
-                            {detailListing.category === "car" && (
-                              <input type="number" required min="18" max="99" placeholder="Driver Age" value={driverAge} onChange={(e) => setDriverAge(Number(e.target.value))} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
+                                      <div className="flex justify-between text-slate-400 text-xs">
+                                        <span>Exact ({detailListing.currency})</span>
+                                        <span>{detailListing.currency} {estimatedPricing.totalAmount.toLocaleString()}</span>
+                                      </div>
+                                    ) : estimatedPricing.localizedCurrency && estimatedPricing.localCurrencyAmount != null ? (
+                                      <div className="flex justify-between text-slate-400 text-xs">
+                                        <span>Approx.</span>
+                                        <span>~{estimatedPricing.localizedCurrency} {estimatedPricing.localCurrencyAmount.toLocaleString()}</span>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })() : null
                             )}
                           </div>
-
-                           {/* Discount section — promotion badge */}
-                           {serverPromotionDiscount > 0 && activePromotion && (
-                             <div className="space-y-2">
-                               <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
-                                 <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
-                                   <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                   {activePromotion.name}
-                                 </span>
-                                 <span className="text-xs font-bold text-emerald-700">−{detailListing.currency} {serverPromotionDiscount.toLocaleString()}</span>
-                                </div>
-                             </div>
-                           )}
-
-                          {/* Price summary */}
+                        );
+                      })() : (
+                        <form onSubmit={handleCheckout} className="space-y-4">
+                          {/* Step indicator — 4 steps */}
                           {(() => {
+                            const steps = [
+                              { key: "review", label: "Review" },
+                              { key: "details", label: "Details" },
+                              { key: "stripe_card", label: "Payment" },
+                              { key: "polling", label: "Confirm" },
+                            ];
+                            const currentIdx = steps.findIndex(s => s.key === checkoutStep);
+                            return (
+                              <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider mb-1">
+                                {steps.map((s, i) => (
+                                  <React.Fragment key={s.key}>
+                                    {i > 0 && <div className="flex-1 h-px bg-slate-200" />}
+                                    <div className={`flex items-center gap-1 shrink-0 ${i < currentIdx ? "text-emerald-600" : i === currentIdx ? "text-[#1D8D2B]" : "text-slate-300"}`}>
+                                      <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${i < currentIdx ? "bg-emerald-500 text-white" : i === currentIdx ? "bg-[#0c2614] text-white" : "bg-slate-200 text-slate-400"}`}>
+                                        {i < currentIdx ? (
+                                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                        ) : i + 1}
+                                      </div>
+                                      <span className="hidden sm:inline">{s.label}</span>
+                                    </div>
+                                  </React.Fragment>
+                                ))}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Countdown timer — only during details step */}
+                          {checkoutStep === "details" && (
+                            <div className={`flex items-center justify-between px-4 py-3 rounded-xl text-xs font-bold border ${(secondsLeft ?? 0) < 60 ? "bg-red-50 border-red-200 text-red-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
+                              <span className="flex items-center gap-1.5">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                {(secondsLeft ?? 0) < 60 ? "Expiring soon!" : "Hold expires in"}
+                              </span>
+                              <span className="font-mono text-sm tracking-wider">
+                                {Math.floor((secondsLeft || 0) / 60).toString().padStart(2, "0")}:{((secondsLeft || 0) % 60).toString().padStart(2, "0")}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* ── STEP 0: Booking Review ── */}
+                          {checkoutStep === "review" && (() => {
                             const isCar = detailListing.category === "car";
                             const isHotel = detailListing.category === "hotel";
                             const selectedRt = isHotel
@@ -3207,259 +2997,458 @@ export default function TravellerDashboard() {
                             const end = isCar ? detailReturnDate : detailCheckOut;
                             if (!pricingPreview) return null;
                             const days = pricingPreview.units;
-                            const baseTotal = pricingPreview.baseAmount;
+                            const base = pricingPreview.baseAmount;
                             const discount = pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0);
-                            const subtotal = baseTotal - discount;
+                            const subtotal = base - discount;
                             const serviceFee = pricingPreview.serviceFee;
-                            const taxAmount = pricingPreview.taxAmount ?? 0;
+                            const taxAmount = pricingPreview.taxAmount;
                             const securityDeposit = isCar ? (pricingPreview.securityDeposit ?? 0) : 0;
                             const deliveryFee = pricingPreview.deliveryFee ?? 0;
                             const grandTotal = pricingPreview.totalAmount;
-                            // Breakdown in listing currency; end total in platform currency.
+                            // Breakdown stays in the listing currency; only the end
+                            // total is shown in the platform (charge) currency.
                             const platform = derivePlatform(pricingPreview, detailListing.currency, grandTotal);
                             const listingValue = (v: number) => `${detailListing.currency} ${v.toLocaleString()}`;
-                            // See the lock-step breakdown above: converts as a unit, and only
-                            // when no voucher (which has no server-converted twin) is applied.
+                            // The breakdown converts as a unit or not at all. A voucher discount
+                            // is validated in the listing's currency and has no server-converted
+                            // twin, so converting the lines around it would leave a total its own
+                            // lines don't add up to. Then everything stays exact instead.
                             // Requires a real currency change (localizedCurrency is also set for
-                          // the identity case) AND itemised converted data — with only the
-                          // aggregate fields present, the raw fallbacks would be relabelled
-                          // under the target currency.
-                          const showLoc = !!pricingPreview.localizedCurrency
-                            && pricingPreview.localizedCurrency !== detailListing.currency
-                            && pricingPreview.localizedBaseAmount != null
-                            && !(effectiveDiscountSource === "voucher" && bestDiscount > 0);
+                            // the identity case) AND itemised converted data — with only the
+                            // aggregate fields present, the raw fallbacks would be relabelled
+                            // under the target currency.
+                            const showLoc = !!pricingPreview.localizedCurrency
+                              && pricingPreview.localizedCurrency !== detailListing.currency
+                              && pricingPreview.localizedBaseAmount != null
+                              && !(effectiveDiscountSource === "voucher" && bestDiscount > 0);
                             const dispCur = showLoc ? pricingPreview.localizedCurrency : detailListing.currency;
                             const dispPre = showLoc ? "~" : "";
                             const dispAmt = (loc: number | null | undefined, rawVal: number) =>
                               showLoc && loc != null ? loc : rawVal;
                             const dispValue = (loc: number | null | undefined, rawVal: number) =>
                               `${dispPre}${dispCur} ${dispAmt(loc, rawVal).toLocaleString()}`;
+                            // Summed from the rendered values so the total reconciles with its
+                            // own lines rather than being converted independently of them.
                             const shownTotal = showLoc
-                              ? Math.max(0, dispAmt(pricingPreview.localizedBaseAmount, baseTotal)
+                              ? Math.max(0, dispAmt(pricingPreview.localizedBaseAmount, base)
                                 - dispAmt(pricingPreview.localizedPromotionDiscount, discount))
                               + dispAmt(pricingPreview.localizedServiceFee, serviceFee)
                               + dispAmt(pricingPreview.localizedTaxAmount, taxAmount)
                               + dispAmt(pricingPreview.localizedSecurityDeposit, securityDeposit)
                               + dispAmt(pricingPreview.localizedDeliveryFee, deliveryFee)
                               : grandTotal;
+                            const fmt = (d: string | null | undefined) =>
+                              d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
                             return (
-                              <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
-                                <div className="flex justify-between">
-                                  <span>{dispPre}{dispCur} {dispAmt(pricingPreview.localizedNightlyRate, pricePerNight).toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
-                                  <span>{dispValue(pricingPreview.localizedBaseAmount, baseTotal)}</span>
+                              <div className="space-y-4">
+                                {/* Listing summary card */}
+                                <div className="flex gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                                  <ListingImage
+                                    listingId={detailListing.id}
+                                    alt={detailListing.name}
+                                    className="w-16 h-16 rounded-lg object-cover shrink-0"
+                                  />
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-slate-900 text-sm leading-tight truncate">{detailListing.name}</p>
+                                    <p className="text-[10px] text-slate-500 mt-0.5 capitalize">{detailListing.category} · {detailListing.neighborhood ? `${detailListing.neighborhood}, ` : ""}{detailListing.town}, {detailListing.country}</p>
+                                    {detailListing.starRating && <p className="text-[10px] text-amber-500 font-semibold">⭐ {detailListing.starRating}</p>}
+                                  </div>
                                 </div>
-                                {discount > 0 && (
-                                  <div className="flex justify-between text-emerald-600 font-semibold">
-                                    <span>{effectiveDiscountSource === "promotion" ? `Promotional discount (${activePromotion?.discountValue}%)` : "Voucher discount"}</span>
-                                    <span>{dispPre}−{dispCur} {dispAmt(pricingPreview.localizedPromotionDiscount, discount).toLocaleString()}</span>
+
+                                {/* Dates */}
+                                <div className="bg-slate-50 rounded-xl border border-slate-200 divide-y divide-slate-200 text-xs">
+                                  <div className="flex justify-between items-center px-3 py-2.5">
+                                    <span className="text-slate-500 font-semibold uppercase tracking-wider">{isCar ? "Pickup" : "Check-in"}</span>
+                                    <span className="font-bold text-slate-900">{isCar ? fmt(detailPickupDate) : fmt(detailCheckIn)}</span>
                                   </div>
-                                )}
-                                <div className="flex justify-between"><span>Service fee{pricingPreview?.serviceFeeRate ? ` (${Math.round(pricingPreview.serviceFeeRate * 100)}%)` : ''}</span><span>{dispValue(pricingPreview.localizedServiceFee, serviceFee)}</span></div>
-                                {taxAmount > 0 && (
+                                  <div className="flex justify-between items-center px-3 py-2.5">
+                                    <span className="text-slate-500 font-semibold uppercase tracking-wider">{isCar ? "Return" : "Check-out"}</span>
+                                    <span className="font-bold text-slate-900">{isCar ? fmt(detailReturnDate) : fmt(detailCheckOut)}</span>
+                                  </div>
+                                  <div className="flex justify-between items-center px-3 py-2.5">
+                                    <span className="text-slate-500 font-semibold uppercase tracking-wider">Duration</span>
+                                    <span className="font-bold text-slate-900">{days} {isCar ? "day" : "night"}{days !== 1 ? "s" : ""}</span>
+                                  </div>
+                                  {!isCar && searchAdults > 0 && (
+                                    <div className="flex justify-between items-center px-3 py-2.5">
+                                      <span className="text-slate-500 font-semibold uppercase tracking-wider">Guests</span>
+                                      <span className="font-bold text-slate-900">{searchAdults + searchChildren} guest{searchAdults + searchChildren !== 1 ? "s" : ""}</span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Breakdown in the guest's display currency when the API could
+                                  convert it, otherwise the listing's own. The charge itself is
+                                  always the platform amount, shown alongside. */}
+                                <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
+                                  <div className="flex justify-between">
+                                    <span>{dispPre}{dispCur} {dispAmt(pricingPreview.localizedNightlyRate, pricePerNight).toLocaleString()} × {days} {isCar ? "day" : "night"}{days !== 1 ? "s" : ""}</span>
+                                    <span>{dispValue(pricingPreview.localizedBaseAmount, base)}</span>
+                                  </div>
+                                  {discount > 0 && (
+                                    <div className="flex justify-between text-emerald-600 font-semibold">
+                                      <span>{effectiveDiscountSource === "promotion" ? `Promotional discount (${activePromotion?.discountValue}%)` : "Voucher discount"}</span>
+                                      <span>{dispPre}−{dispCur} {dispAmt(pricingPreview.localizedPromotionDiscount, discount).toLocaleString()}</span>
+                                    </div>
+                                  )}
                                   <div className="flex justify-between text-slate-500">
-                                    <span>Taxes{pricingPreview?.taxRate ? ` (${Math.round(pricingPreview.taxRate * 100)}%)` : ''}</span>
-                                    <span>{dispValue(pricingPreview.localizedTaxAmount, taxAmount)}</span>
+                                    <span>Service fee{pricingPreview?.serviceFeeRate ? ` (${Math.round(pricingPreview.serviceFeeRate * 100)}%)` : ''}</span>
+                                    <span>{dispValue(pricingPreview.localizedServiceFee, serviceFee)}</span>
                                   </div>
-                                )}
-                                {isCar && securityDeposit > 0 && (
-                                  <div className="flex justify-between text-slate-600">
-                                    <span>Security deposit</span>
-                                    <span>{dispValue(pricingPreview.localizedSecurityDeposit, securityDeposit)}</span>
+                                  {taxAmount > 0 && (
+                                    <div className="flex justify-between text-slate-500">
+                                      <span>Taxes & VAT{pricingPreview?.taxRate ? ` (${Math.round(pricingPreview.taxRate * 100)}%)` : ''}</span>
+                                      <span>{dispValue(pricingPreview.localizedTaxAmount, taxAmount)}</span>
+                                    </div>
+                                  )}
+
+                                  {isCar && securityDeposit > 0 && (
+                                    <div className="flex justify-between text-slate-600">
+                                      <span>Security deposit</span>
+                                      <span>{dispValue(pricingPreview.localizedSecurityDeposit, securityDeposit)}</span>
+                                    </div>
+                                  )}
+
+                                  {isCar && deliveryFee > 0 && (
+                                    <div className="flex justify-between text-slate-600">
+                                      <span>Delivery fee</span>
+                                      <span>{dispValue(pricingPreview.localizedDeliveryFee, deliveryFee)}</span>
+                                    </div>
+                                  )}
+
+                                  {renderVoucherSelector()}
+                                  <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 text-base">
+                                    <span>Total</span>
+                                    <span className="text-right">
+                                      <div>{showLoc ? `${dispPre}${dispCur} ${shownTotal.toLocaleString()}` : fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
+                                      {showLoc ? (
+                                        <>
+                                          <div className="text-xs font-medium text-slate-500 mt-0.5">Exact {listingValue(grandTotal)}</div>
+                                          <div className="text-xs font-semibold text-slate-700">Charged {fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
+                                        </>
+                                      ) : platform.platformCurrency !== detailListing.currency && (
+                                        <div className="text-xs font-medium text-slate-500 mt-0.5">Billed as approx. {listingValue(grandTotal)}</div>
+                                      )}
+                                    </span>
                                   </div>
-                                )}
-                                {isCar && deliveryFee > 0 && (
-                                  <div className="flex justify-between text-slate-600">
-                                    <span>Delivery fee</span>
-                                    <span>{dispValue(pricingPreview.localizedDeliveryFee, deliveryFee)}</span>
-                                  </div>
-                                )}
-                                <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
-                                  <span>Total to pay</span>
-                                  <span className="text-right">
-                                    <div>{showLoc ? `${dispPre}${dispCur} ${shownTotal.toLocaleString()}` : fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
-                                    {showLoc && (
-                                      <>
-                                        <div className="text-xs font-medium text-slate-500 mt-0.5">Exact {listingValue(grandTotal)}</div>
-                                        <div className="text-xs font-semibold text-slate-700">Charged {fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
-                                      </>
-                                    )}
-                                    {!showLoc && platform.platformCurrency !== detailListing.currency && (
-                                      <div className="text-xs font-medium text-slate-500 mt-0.5">Billed as approx. {listingValue(grandTotal)}</div>
-                                    )}
-                                    {pricingPreview.localizedCurrency && pricingPreview.localCurrencyAmount != null && (
-                                      <div className="text-[10px] font-normal text-slate-400">~{pricingPreview.localizedCurrency} {pricingPreview.localCurrencyAmount.toLocaleString()}</div>
-                                    )}
+                                </div>
+
+                                {/* Countdown */}
+                                <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold border ${(secondsLeft ?? 0) < 60 ? "bg-red-50 border-red-200 text-red-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
+                                  <span className="flex items-center gap-1.5">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 018 0z" /></svg>
+                                    {(secondsLeft ?? 0) < 60 ? "Expiring soon!" : "Hold expires in"}
+                                  </span>
+                                  <span className="font-mono tracking-wider">
+                                    {Math.floor((secondsLeft || 0) / 60).toString().padStart(2, "0")}:{((secondsLeft || 0) % 60).toString().padStart(2, "0")}
                                   </span>
                                 </div>
+
+                                <button type="button" onClick={() => { setCheckoutStep("details"); fetchSavedMethods(); }}
+                                  className="w-full py-3.5 bg-[#0c2614] hover:bg-[#081b0d] text-white font-bold rounded-xl transition text-sm">
+                                  Continue to Guest Details →
+                                </button>
+                                <button type="button" onClick={abandonLock}
+                                  className="w-full text-center text-xs text-slate-400 hover:text-slate-600 transition">
+                                  Cancel and release hold
+                                </button>
                               </div>
                             );
                           })()}
 
-                          {bookingError && (
-                            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-2">
-                              <p className="text-xs font-semibold text-red-600">{bookingError}</p>
-                              {bookingError.toLowerCase().includes("pending") && (
-                                <div className="space-y-2 pt-1">
-                                  {loadingInlinePending && (
-                                    <div className="flex items-center gap-2 text-xs text-red-500">
-                                      <div className="w-3 h-3 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
-                                      Loading pending reservations…
+                          {/* ── STEP 1: Guest details + payment method selection ── */}
+                          {checkoutStep === "details" && (<>
+                            <div className="space-y-2.5">
+                              <div className="grid grid-cols-2 gap-2">
+                                <input type="text" required placeholder="First Name" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
+                                <input type="text" required placeholder="Last Name" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
+                              </div>
+                              <input type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
+                              <input type="tel" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
+                              <textarea placeholder="Special requests (optional)" value={specialRequests} onChange={(e) => setSpecialRequests(e.target.value)} rows={2} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B] resize-none" />
+                              {detailListing.category === "car" && (
+                                <input type="number" required min="18" max="99" placeholder="Driver Age" value={driverAge} onChange={(e) => setDriverAge(Number(e.target.value))} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
+                              )}
+                            </div>
+
+                            {/* Discount section — promotion badge */}
+                            {serverPromotionDiscount > 0 && activePromotion && (
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
+                                  <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                    {activePromotion.name}
+                                  </span>
+                                  <span className="text-xs font-bold text-emerald-700">−{detailListing.currency} {serverPromotionDiscount.toLocaleString()}</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Price summary */}
+                            {(() => {
+                              const isCar = detailListing.category === "car";
+                              const isHotel = detailListing.category === "hotel";
+                              const selectedRt = isHotel
+                                ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
+                                : null;
+                              const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
+                              const start = isCar ? detailPickupDate : detailCheckIn;
+                              const end = isCar ? detailReturnDate : detailCheckOut;
+                              if (!pricingPreview) return null;
+                              const days = pricingPreview.units;
+                              const baseTotal = pricingPreview.baseAmount;
+                              const discount = pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0);
+                              const subtotal = baseTotal - discount;
+                              const serviceFee = pricingPreview.serviceFee;
+                              const taxAmount = pricingPreview.taxAmount ?? 0;
+                              const securityDeposit = isCar ? (pricingPreview.securityDeposit ?? 0) : 0;
+                              const deliveryFee = pricingPreview.deliveryFee ?? 0;
+                              const grandTotal = pricingPreview.totalAmount;
+                              // Breakdown in listing currency; end total in platform currency.
+                              const platform = derivePlatform(pricingPreview, detailListing.currency, grandTotal);
+                              const listingValue = (v: number) => `${detailListing.currency} ${v.toLocaleString()}`;
+                              // See the lock-step breakdown above: converts as a unit, and only
+                              // when no voucher (which has no server-converted twin) is applied.
+                              // Requires a real currency change (localizedCurrency is also set for
+                              // the identity case) AND itemised converted data — with only the
+                              // aggregate fields present, the raw fallbacks would be relabelled
+                              // under the target currency.
+                              const showLoc = !!pricingPreview.localizedCurrency
+                                && pricingPreview.localizedCurrency !== detailListing.currency
+                                && pricingPreview.localizedBaseAmount != null
+                                && !(effectiveDiscountSource === "voucher" && bestDiscount > 0);
+                              const dispCur = showLoc ? pricingPreview.localizedCurrency : detailListing.currency;
+                              const dispPre = showLoc ? "~" : "";
+                              const dispAmt = (loc: number | null | undefined, rawVal: number) =>
+                                showLoc && loc != null ? loc : rawVal;
+                              const dispValue = (loc: number | null | undefined, rawVal: number) =>
+                                `${dispPre}${dispCur} ${dispAmt(loc, rawVal).toLocaleString()}`;
+                              const shownTotal = showLoc
+                                ? Math.max(0, dispAmt(pricingPreview.localizedBaseAmount, baseTotal)
+                                  - dispAmt(pricingPreview.localizedPromotionDiscount, discount))
+                                + dispAmt(pricingPreview.localizedServiceFee, serviceFee)
+                                + dispAmt(pricingPreview.localizedTaxAmount, taxAmount)
+                                + dispAmt(pricingPreview.localizedSecurityDeposit, securityDeposit)
+                                + dispAmt(pricingPreview.localizedDeliveryFee, deliveryFee)
+                                : grandTotal;
+                              return (
+                                <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
+                                  <div className="flex justify-between">
+                                    <span>{dispPre}{dispCur} {dispAmt(pricingPreview.localizedNightlyRate, pricePerNight).toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
+                                    <span>{dispValue(pricingPreview.localizedBaseAmount, baseTotal)}</span>
+                                  </div>
+                                  {discount > 0 && (
+                                    <div className="flex justify-between text-emerald-600 font-semibold">
+                                      <span>{effectiveDiscountSource === "promotion" ? `Promotional discount (${activePromotion?.discountValue}%)` : "Voucher discount"}</span>
+                                      <span>{dispPre}−{dispCur} {dispAmt(pricingPreview.localizedPromotionDiscount, discount).toLocaleString()}</span>
                                     </div>
                                   )}
-                                  {inlinePending.length === 0 && !loadingInlinePending && (
-                                    <button type="button" onClick={fetchInlinePending}
-                                      className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition">
-                                      Show pending reservations
-                                    </button>
+                                  <div className="flex justify-between"><span>Service fee{pricingPreview?.serviceFeeRate ? ` (${Math.round(pricingPreview.serviceFeeRate * 100)}%)` : ''}</span><span>{dispValue(pricingPreview.localizedServiceFee, serviceFee)}</span></div>
+                                  {taxAmount > 0 && (
+                                    <div className="flex justify-between text-slate-500">
+                                      <span>Taxes{pricingPreview?.taxRate ? ` (${Math.round(pricingPreview.taxRate * 100)}%)` : ''}</span>
+                                      <span>{dispValue(pricingPreview.localizedTaxAmount, taxAmount)}</span>
+                                    </div>
                                   )}
-                                  {inlinePending.map((b) => (
-                                    <div key={b.id} className="flex items-center justify-between gap-2 bg-white border border-red-200 rounded-lg px-3 py-2">
-                                      <div className="min-w-0">
-                                        <p className="text-xs font-bold text-slate-800 truncate">{b.listingTitle || "Reservation"}</p>
-                                        <p className="text-[10px] text-slate-400 font-mono">{b.reference}</p>
+                                  {isCar && securityDeposit > 0 && (
+                                    <div className="flex justify-between text-slate-600">
+                                      <span>Security deposit</span>
+                                      <span>{dispValue(pricingPreview.localizedSecurityDeposit, securityDeposit)}</span>
+                                    </div>
+                                  )}
+                                  {isCar && deliveryFee > 0 && (
+                                    <div className="flex justify-between text-slate-600">
+                                      <span>Delivery fee</span>
+                                      <span>{dispValue(pricingPreview.localizedDeliveryFee, deliveryFee)}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
+                                    <span>Total to pay</span>
+                                    <span className="text-right">
+                                      <div>{showLoc ? `${dispPre}${dispCur} ${shownTotal.toLocaleString()}` : fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
+                                      {showLoc && (
+                                        <>
+                                          <div className="text-xs font-medium text-slate-500 mt-0.5">Exact {listingValue(grandTotal)}</div>
+                                          <div className="text-xs font-semibold text-slate-700">Charged {fmtMoney(platform.platformAmount, platform.platformCurrency)}</div>
+                                        </>
+                                      )}
+                                      {!showLoc && platform.platformCurrency !== detailListing.currency && (
+                                        <div className="text-xs font-medium text-slate-500 mt-0.5">Billed as approx. {listingValue(grandTotal)}</div>
+                                      )}
+                                      {pricingPreview.localizedCurrency && pricingPreview.localCurrencyAmount != null && (
+                                        <div className="text-[10px] font-normal text-slate-400">~{pricingPreview.localizedCurrency} {pricingPreview.localCurrencyAmount.toLocaleString()}</div>
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            {bookingError && (
+                              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-2">
+                                <p className="text-xs font-semibold text-red-600">{bookingError}</p>
+                                {bookingError.toLowerCase().includes("pending") && (
+                                  <div className="space-y-2 pt-1">
+                                    {loadingInlinePending && (
+                                      <div className="flex items-center gap-2 text-xs text-red-500">
+                                        <div className="w-3 h-3 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
+                                        Loading pending reservations…
                                       </div>
-                                      <button type="button"
-                                        onClick={() => handleInlineCancel(b.id)}
-                                        disabled={inlineCancellingId === b.id}
-                                        className="shrink-0 px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-bold transition">
-                                        {inlineCancellingId === b.id ? "…" : "Cancel"}
+                                    )}
+                                    {inlinePending.length === 0 && !loadingInlinePending && (
+                                      <button type="button" onClick={fetchInlinePending}
+                                        className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition">
+                                        Show pending reservations
                                       </button>
+                                    )}
+                                    {inlinePending.map((b) => (
+                                      <div key={b.id} className="flex items-center justify-between gap-2 bg-white border border-red-200 rounded-lg px-3 py-2">
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-bold text-slate-800 truncate">{b.listingTitle || "Reservation"}</p>
+                                          <p className="text-[10px] text-slate-400 font-mono">{b.reference}</p>
+                                        </div>
+                                        <button type="button"
+                                          onClick={() => handleInlineCancel(b.id)}
+                                          disabled={inlineCancellingId === b.id}
+                                          className="shrink-0 px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-bold transition">
+                                          {inlineCancellingId === b.id ? "…" : "Cancel"}
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            <button type="button" onClick={handleContinueToReview} className="w-full py-3.5 bg-[#0c2614] hover:bg-[#081b0d] text-white font-bold rounded-xl transition text-sm mt-1">
+                              Continue to Review →
+                            </button>
+                            <button type="button" onClick={abandonLock} className="w-full text-center text-xs text-slate-400 hover:text-slate-600 transition mt-1">
+                              Cancel and release hold
+                            </button>
+                          </>)}
+
+                          {/* ── STEP 2: Stripe card element (mounted by useEffect) ── */}
+                          {checkoutStep === "stripe_card" && (
+                            <div className="space-y-4">
+                              <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Enter Card Details</p>
+                              <div ref={stripeCardRef} className="bg-white border border-slate-300 rounded-lg px-3 py-3 min-h-[44px]" />
+                              <p className="text-[10px] text-slate-400 flex items-center gap-1.5">
+                                <svg className="w-3 h-3 text-emerald-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                256-bit SSL encrypted · Powered by Stripe
+                              </p>
+                              {bookingError && (
+                                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-2">
+                                  <p className="text-xs font-semibold text-red-600">{bookingError}</p>
+                                  {bookingError.toLowerCase().includes("pending") && (
+                                    <div className="space-y-2 pt-1">
+                                      {loadingInlinePending && (
+                                        <div className="flex items-center gap-2 text-xs text-red-500">
+                                          <div className="w-3 h-3 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
+                                          Loading pending reservations…
+                                        </div>
+                                      )}
+                                      {inlinePending.length === 0 && !loadingInlinePending && (
+                                        <button type="button" onClick={fetchInlinePending}
+                                          className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition">
+                                          Show pending reservations
+                                        </button>
+                                      )}
+                                      {inlinePending.map((b) => (
+                                        <div key={b.id} className="flex items-center justify-between gap-2 bg-white border border-red-200 rounded-lg px-3 py-2">
+                                          <div className="min-w-0">
+                                            <p className="text-xs font-bold text-slate-800 truncate">{b.listingTitle || "Reservation"}</p>
+                                            <p className="text-[10px] text-slate-400 font-mono">{b.reference}</p>
+                                          </div>
+                                          <button type="button"
+                                            onClick={() => handleInlineCancel(b.id)}
+                                            disabled={inlineCancellingId === b.id}
+                                            className="shrink-0 px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-bold transition">
+                                            {inlineCancellingId === b.id ? "…" : "Cancel"}
+                                          </button>
+                                        </div>
+                                      ))}
                                     </div>
-                                  ))}
+                                  )}
+                                </div>
+                              )}
+                              <button type="button" onClick={handleStripeConfirm} disabled={submittingCheckout || !stripeCardElement}
+                                className="w-full py-3.5 bg-[#635BFF] hover:bg-[#4f48cc] disabled:opacity-50 text-white font-bold rounded-xl transition text-sm">
+                                {(() => {
+                                  const p = derivePlatform(pricingPreview, detailListing.currency, pendingBookingAmount || 0);
+                                  return submittingCheckout ? "Processing…" : `Pay ${fmtMoney(p.platformAmount, p.platformCurrency)}`;
+                                })()}
+                              </button>
+                              <button type="button" onClick={() => { setCheckoutStep("details"); setBookingError(""); }}
+                                className="w-full text-center text-xs text-slate-400 hover:text-slate-600 transition">
+                                ← Back
+                              </button>
+                            </div>
+                          )}
+
+                          {/* ── STEP 3: Polling / waiting for payment confirmation ── */}
+                          {checkoutStep === "polling" && (
+                            <div className="space-y-4 text-center py-4">
+                              {paymentProvider === "tara" ? (<>
+                                <div className="w-14 h-14 rounded-full bg-green-50 border border-green-200 flex items-center justify-center mx-auto text-2xl">📱</div>
+                                <p className="font-bold text-slate-800">Check your phone!</p>
+                                <p className="text-xs text-slate-500">A payment prompt has been sent to your M-Pesa number. Please approve it to complete your booking.</p>
+                              </>) : (<>
+                                <div className="w-14 h-14 rounded-full bg-green-50 border border-green-200 flex items-center justify-center mx-auto">
+                                  <div className="w-6 h-6 border-3 border-[#635BFF] border-t-transparent rounded-full animate-spin" />
+                                </div>
+                                <p className="font-bold text-slate-800">Processing payment…</p>
+                              </>)}
+                              <div className="flex items-center justify-center gap-1.5 text-xs text-slate-400">
+                                <div className="w-2 h-2 rounded-full bg-slate-300 animate-pulse" />
+                                <div className="w-2 h-2 rounded-full bg-slate-300 animate-pulse" style={{ animationDelay: "0.3s" }} />
+                                <div className="w-2 h-2 rounded-full bg-slate-300 animate-pulse" style={{ animationDelay: "0.6s" }} />
+                              </div>
+                              {bookingError && (
+                                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-2">
+                                  <p className="text-xs font-semibold text-red-600">{bookingError}</p>
+                                  {bookingError.toLowerCase().includes("pending") && (
+                                    <div className="space-y-2 pt-1">
+                                      {loadingInlinePending && (
+                                        <div className="flex items-center gap-2 text-xs text-red-500">
+                                          <div className="w-3 h-3 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
+                                          Loading pending reservations…
+                                        </div>
+                                      )}
+                                      {inlinePending.length === 0 && !loadingInlinePending && (
+                                        <button type="button" onClick={fetchInlinePending}
+                                          className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition">
+                                          Show pending reservations
+                                        </button>
+                                      )}
+                                      {inlinePending.map((b) => (
+                                        <div key={b.id} className="flex items-center justify-between gap-2 bg-white border border-red-200 rounded-lg px-3 py-2">
+                                          <div className="min-w-0">
+                                            <p className="text-xs font-bold text-slate-800 truncate">{b.listingTitle || "Reservation"}</p>
+                                            <p className="text-[10px] text-slate-400 font-mono">{b.reference}</p>
+                                          </div>
+                                          <button type="button"
+                                            onClick={() => handleInlineCancel(b.id)}
+                                            disabled={inlineCancellingId === b.id}
+                                            className="shrink-0 px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-bold transition">
+                                            {inlineCancellingId === b.id ? "…" : "Cancel"}
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
                           )}
-                          <button type="button" onClick={handleContinueToReview} className="w-full py-3.5 bg-[#0c2614] hover:bg-[#081b0d] text-white font-bold rounded-xl transition text-sm mt-1">
-                            Continue to Review →
-                          </button>
-                          <button type="button" onClick={abandonLock} className="w-full text-center text-xs text-slate-400 hover:text-slate-600 transition mt-1">
-                            Cancel and release hold
-                          </button>
-                        </>)}
+                        </form>
+                      )}
 
-                        {/* ── STEP 2: Stripe card element (mounted by useEffect) ── */}
-                        {checkoutStep === "stripe_card" && (
-                          <div className="space-y-4">
-                            <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Enter Card Details</p>
-                            <div ref={stripeCardRef} className="bg-white border border-slate-300 rounded-lg px-3 py-3 min-h-[44px]" />
-                            <p className="text-[10px] text-slate-400 flex items-center gap-1.5">
-                              <svg className="w-3 h-3 text-emerald-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                              256-bit SSL encrypted · Powered by Stripe
-                            </p>
-                            {bookingError && (
-                              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-2">
-                                <p className="text-xs font-semibold text-red-600">{bookingError}</p>
-                                {bookingError.toLowerCase().includes("pending") && (
-                                  <div className="space-y-2 pt-1">
-                                    {loadingInlinePending && (
-                                      <div className="flex items-center gap-2 text-xs text-red-500">
-                                        <div className="w-3 h-3 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
-                                        Loading pending reservations…
-                                      </div>
-                                    )}
-                                    {inlinePending.length === 0 && !loadingInlinePending && (
-                                      <button type="button" onClick={fetchInlinePending}
-                                        className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition">
-                                        Show pending reservations
-                                      </button>
-                                    )}
-                                    {inlinePending.map((b) => (
-                                      <div key={b.id} className="flex items-center justify-between gap-2 bg-white border border-red-200 rounded-lg px-3 py-2">
-                                        <div className="min-w-0">
-                                          <p className="text-xs font-bold text-slate-800 truncate">{b.listingTitle || "Reservation"}</p>
-                                          <p className="text-[10px] text-slate-400 font-mono">{b.reference}</p>
-                                        </div>
-                                        <button type="button"
-                                          onClick={() => handleInlineCancel(b.id)}
-                                          disabled={inlineCancellingId === b.id}
-                                          className="shrink-0 px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-bold transition">
-                                          {inlineCancellingId === b.id ? "…" : "Cancel"}
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            <button type="button" onClick={handleStripeConfirm} disabled={submittingCheckout || !stripeCardElement}
-                              className="w-full py-3.5 bg-[#635BFF] hover:bg-[#4f48cc] disabled:opacity-50 text-white font-bold rounded-xl transition text-sm">
-                              {(() => {
-                                const p = derivePlatform(pricingPreview, detailListing.currency, pendingBookingAmount || 0);
-                                return submittingCheckout ? "Processing…" : `Pay ${fmtMoney(p.platformAmount, p.platformCurrency)}`;
-                              })()}
-                            </button>
-                            <button type="button" onClick={() => { setCheckoutStep("details"); setBookingError(""); }}
-                              className="w-full text-center text-xs text-slate-400 hover:text-slate-600 transition">
-                              ← Back
-                            </button>
-                          </div>
-                        )}
-
-                        {/* ── STEP 3: Polling / waiting for payment confirmation ── */}
-                        {checkoutStep === "polling" && (
-                          <div className="space-y-4 text-center py-4">
-                            {paymentProvider === "tara" ? (<>
-                              <div className="w-14 h-14 rounded-full bg-green-50 border border-green-200 flex items-center justify-center mx-auto text-2xl">📱</div>
-                              <p className="font-bold text-slate-800">Check your phone!</p>
-                              <p className="text-xs text-slate-500">A payment prompt has been sent to your M-Pesa number. Please approve it to complete your booking.</p>
-                            </>) : (<>
-                              <div className="w-14 h-14 rounded-full bg-green-50 border border-green-200 flex items-center justify-center mx-auto">
-                                <div className="w-6 h-6 border-3 border-[#635BFF] border-t-transparent rounded-full animate-spin" />
-                              </div>
-                              <p className="font-bold text-slate-800">Processing payment…</p>
-                            </>)}
-                            <div className="flex items-center justify-center gap-1.5 text-xs text-slate-400">
-                              <div className="w-2 h-2 rounded-full bg-slate-300 animate-pulse" />
-                              <div className="w-2 h-2 rounded-full bg-slate-300 animate-pulse" style={{ animationDelay: "0.3s" }} />
-                              <div className="w-2 h-2 rounded-full bg-slate-300 animate-pulse" style={{ animationDelay: "0.6s" }} />
-                            </div>
-                            {bookingError && (
-                              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-2">
-                                <p className="text-xs font-semibold text-red-600">{bookingError}</p>
-                                {bookingError.toLowerCase().includes("pending") && (
-                                  <div className="space-y-2 pt-1">
-                                    {loadingInlinePending && (
-                                      <div className="flex items-center gap-2 text-xs text-red-500">
-                                        <div className="w-3 h-3 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
-                                        Loading pending reservations…
-                                      </div>
-                                    )}
-                                    {inlinePending.length === 0 && !loadingInlinePending && (
-                                      <button type="button" onClick={fetchInlinePending}
-                                        className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition">
-                                        Show pending reservations
-                                      </button>
-                                    )}
-                                    {inlinePending.map((b) => (
-                                      <div key={b.id} className="flex items-center justify-between gap-2 bg-white border border-red-200 rounded-lg px-3 py-2">
-                                        <div className="min-w-0">
-                                          <p className="text-xs font-bold text-slate-800 truncate">{b.listingTitle || "Reservation"}</p>
-                                          <p className="text-[10px] text-slate-400 font-mono">{b.reference}</p>
-                                        </div>
-                                        <button type="button"
-                                          onClick={() => handleInlineCancel(b.id)}
-                                          disabled={inlineCancellingId === b.id}
-                                          className="shrink-0 px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-bold transition">
-                                          {inlineCancellingId === b.id ? "…" : "Cancel"}
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </form>
-                    )}
-
-                    <div className="flex items-center justify-center gap-2 mt-5 text-slate-400 text-xs font-medium hover:text-slate-600 cursor-pointer transition">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" /></svg>
-                      Report this listing
+                      <div className="flex items-center justify-center gap-2 mt-5 text-slate-400 text-xs font-medium hover:text-slate-600 cursor-pointer transition">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" /></svg>
+                        Report this listing
+                      </div>
                     </div>
                   </div>
-                </div>
                 </div>
 
                 {detailHasBody && (
