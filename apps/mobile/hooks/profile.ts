@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { api } from "../lib/api";
 import { useAuthStore } from "../store/auth";
 import { queryClient as globalQueryClient } from "../lib/query-client";
-import type { ApiResponse, HostStatus, LoyaltyTier, UserStatus, UserType } from "@zika/types";
+import type { ApiResponse, LoyaltyTier, UserStatus, UserType } from "@zika/types";
 
 export const PROFILE_QK = {
   me: ["auth", "me"] as const,
@@ -19,8 +19,6 @@ interface AuthMeUser {
   email: string;
   status: UserStatus;
   userType: UserType;
-  // Hosting is applied for and admin-approved; it is not an account type.
-  hostStatus?: HostStatus;
   businessName: string | null;
   country: string | null;
   emailVerified: boolean;
@@ -129,8 +127,6 @@ export interface ProfileScreenData {
   email: string;
   status: UserStatus;
   userType: UserType;
-  // Hosting is applied for and admin-approved; it is not an account type.
-  hostStatus?: HostStatus;
   businessName: string | null;
   country: string | null;
   emailVerified: boolean;
@@ -166,7 +162,6 @@ export function useProfileScreenData() {
       email: data.email,
       status: data.status,
       userType: data.userType,
-      hostStatus: data.hostStatus,
       businessName: data.businessName,
       country: data.country,
       emailVerified: data.emailVerified,

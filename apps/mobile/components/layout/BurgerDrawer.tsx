@@ -174,7 +174,7 @@ export function BurgerDrawer({ open, onClose }: Props) {
               <DrawerRow
                 icon="card-outline"
                 label="Payout Setup"
-                sub="Connect Stripe for payouts"
+                sub="Bank, mobile money, or Stripe payouts"
                 onPress={() => navigate("/(provider)/stripe-connect")}
               />
               <SectionDivider />

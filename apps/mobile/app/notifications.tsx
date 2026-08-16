@@ -18,6 +18,7 @@ import {
   type AppNotification,
 } from "../hooks/notifications";
 import { K } from "../constants/theme";
+import { useReadableWidth } from "../lib/responsive";
 
 // ── Category helpers ──────────────────────────────────────────────────────────
 
@@ -177,6 +178,9 @@ function EmptyState() {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function NotificationsScreen() {
+  // Tablet: keep this list at a readable width instead of letting rows
+  // stretch edge to edge. No-op on phones.
+  const readable = useReadableWidth();
 
   const { data, isLoading, isError, refetch, isRefetching } = useNotifications();
   const markRead    = useMarkNotificationRead();
@@ -310,7 +314,7 @@ export default function NotificationsScreen() {
               onPress={handlePress}
             />
           )}
-          contentContainerStyle={s.listContent}
+          contentContainerStyle={[s.listContent, readable]}
           showsVerticalScrollIndicator={false}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           ListFooterComponent={<View style={{ height: 32 }} />}

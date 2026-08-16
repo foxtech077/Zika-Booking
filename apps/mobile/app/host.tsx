@@ -76,6 +76,9 @@ export default function HostOnboardingScreen() {
   const [taxId, setTaxId] = useState("");
   const [documentsUrl, setDocumentsUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    router.replace("/(provider)" as any);
+  }, []);
 
   const { data: hostProfile, isLoading } = useQuery<HostProfile | null>({
     queryKey: ["host-profile"],
@@ -106,44 +109,12 @@ export default function HostOnboardingScreen() {
   // call is merely "already started".
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
   function refreshHostStatus(): Promise<void> {
-    if (useAuthStore.getState().user?.hostStatus === "approved") return Promise.resolve();
-    if (refreshInFlightRef.current) return refreshInFlightRef.current;
-    refreshInFlightRef.current = (async () => {
-      try {
-        const res = await axios.post(`${BASE_URL}auth/refresh`, {}, { withCredentials: true });
-        const body = (res.data as { data: { tokens: { accessToken: string }; user?: PublicUser } }).data;
-        const nextUser = body.user ?? useAuthStore.getState().user;
-        if (nextUser) await setAuth(nextUser, body.tokens.accessToken);
-      } catch {
-        // Non-fatal: the caller decides how to proceed without a fresh token.
-      } finally {
-        refreshInFlightRef.current = null;
-      }
-    })();
-    return refreshInFlightRef.current;
+    return Promise.resolve();
   }
-
-  // Fires once as soon as the application shows approved, so the store is
-  // already correct if the guest never taps the button below (e.g. backs out
-  // and reaches the switch some other way).
-  useEffect(() => {
-    if (hostProfile?.status !== "approved") return;
-    if (user?.hostStatus === "approved") return;
-    void refreshHostStatus();
-  }, [hostProfile?.status, user?.hostStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const status = hostProfile?.status ?? null;
   const isApproved = status === "approved";
   const isPending = status === "pending";
-  // Pending applications are shown read-only — the details are already with a
-  // reviewer.
-  //
-  // Approved hosts get no form at all. POST /auth/host/profile is an upsert
-  // that sets status back to "pending" unconditionally, so resubmitting to fix
-  // a typo would silently demote an approved host and revoke their listing
-  // access until an admin re-approved them. Changing details after approval
-  // needs a flow that does not reset the status; until then, not offering it
-  // is safer than offering a trap.
   const canEdit = !isPending && !isApproved;
 
   const mutation = useMutation({
@@ -160,7 +131,6 @@ export default function HostOnboardingScreen() {
     onSuccess: async () => {
       setError(null);
       await qc.invalidateQueries({ queryKey: ["host-profile"] });
-      await updateUser({ hostStatus: "pending" });
     },
     onError: (err: any) => {
       console.log("errrorrr:", err)

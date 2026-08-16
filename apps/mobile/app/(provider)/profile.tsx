@@ -132,7 +132,7 @@ export default function ProfileScreen() {
 
         <Text style={s.sectionLabel}>FINANCIAL</Text>
         <MenuCard>
-          <MenuRow iconName="card-outline"    iconBg="#f0fdf4" label="Payout Setup"    sub="Connect Stripe for payouts"    onPress={() => router.push("/(provider)/stripe-connect" as any)} />
+          <MenuRow iconName="card-outline"    iconBg="#f0fdf4" label="Payout Setup"    sub="Bank, mobile money, or Stripe payouts" onPress={() => router.push("/(provider)/stripe-connect" as any)} />
           <MenuDivider />
           <MenuRow iconName="wallet-outline"  iconBg="#f0fdf4" label="Payout History"  sub="Scheduled & processed payouts" onPress={() => router.push("/(provider)/payouts" as any)} />
           <MenuDivider />

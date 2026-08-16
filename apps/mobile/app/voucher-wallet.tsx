@@ -14,10 +14,14 @@ import { K } from "../constants/theme";
 import { useVoucherWallet, useMergedVouchers, isVoucherActive } from "../hooks/vouchers";
 import { VoucherCard } from "../components/vouchers/VoucherCard";
 import type { WalletVoucher } from "../lib/types/voucher";
+import { useReadableWidth } from "../lib/responsive";
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function VoucherWalletScreen() {
+  // Tablet: keep this list at a readable width instead of letting rows
+  // stretch edge to edge. No-op on phones.
+  const readable = useReadableWidth();
   // Wallet-only data still drives the "used / expired" tail of the list (the
   // /vouchers/applicable fallback has no concept of a guest's redemption history).
   const { data: walletData } = useVoucherWallet();
@@ -66,7 +70,7 @@ export default function VoucherWalletScreen() {
           keyExtractor={(item) => item.code}
           renderItem={({ item }) => <VoucherCard item={item} />}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-          contentContainerStyle={s.listContent}
+          contentContainerStyle={[s.listContent, readable]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl

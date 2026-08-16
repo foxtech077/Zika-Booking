@@ -22,6 +22,7 @@ import { K } from "../../constants/theme";
 import { useAuthStore } from "../../store/auth";
 import { formatCurrency, getCurrencyForCountry } from "../../lib/currency";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
+import { useResponsive, padToColumns } from "../../lib/responsive";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -105,9 +106,11 @@ interface CardProps {
   maxBookings: number;
   onEdit: () => void;
   onMore: () => void;
+  /** Columns in the parent grid. 1 on phones — card keeps its phone layout. */
+  columns?: number;
 }
 
-const ListingCard = memo(function ListingCard({ item, summary, maxBookings, onEdit, onMore }: CardProps) {
+const ListingCard = memo(function ListingCard({ item, summary, maxBookings, onEdit, onMore, columns = 1 }: CardProps) {
   const cfg = STATUS_CFG[item.status] ?? { label: item.status, bg: "#64748B", text: "#fff" };
   const coverUrl = item.photos[0]?.cdnUrl ?? null;
   const bookings  = summary?.bookingCount ?? 0;
@@ -121,9 +124,9 @@ const ListingCard = memo(function ListingCard({ item, summary, maxBookings, onEd
   const rating = summary?.averageRating;
 
   return (
-    <View style={s.card}>
+    <View style={[s.card, columns > 1 && s.cardInGrid]}>
       {/* Photo */}
-      <View style={s.photoWrap}>
+      <View style={[s.photoWrap, columns > 1 && s.photoWrapInGrid]}>
         {coverUrl ? (
           <ListingImage uri={coverUrl} style={s.photo} resizeMode="cover" />
         ) : (
@@ -253,6 +256,8 @@ const ListingCard = memo(function ListingCard({ item, summary, maxBookings, onEd
 
 export default function ListingsScreen() {
   const qc = useQueryClient();
+  // Tablet grid: 2–4 listing cards per row instead of one stretched card.
+  const { columns } = useResponsive();
   const { user } = useAuthStore();
   const [search,    setSearch]    = useState("");
   const [catFilter, setCatFilter] = useState("");
@@ -442,16 +447,19 @@ export default function ListingsScreen() {
   const isRefreshing = listingsQ.isRefetching;
 
   const renderItem = useCallback(
-    ({ item }: { item: ListingItem }) => (
+    ({ item }: { item: ListingItem | null }) => (
+      item == null ? <View style={{ flex: 1 }} /> : (
       <ListingCard
         item={item}
         summary={summaryMap[item.id]}
         maxBookings={maxBookings}
         onEdit={() => router.push(editRoute(item))}
         onMore={() => openMoreMenu(item)}
+        columns={columns}
       />
+      )
     ),
-    [summaryMap, maxBookings]
+    [summaryMap, maxBookings, columns]
   );
 
   return (
@@ -459,8 +467,11 @@ export default function ListingsScreen() {
       <View style={s.container}>
       {/* ── Scrollable body ─────────────────────────────────── */}
       <FlatList
-        data={isLoading ? [] : filtered}
-        keyExtractor={(l) => l.id}
+        data={isLoading ? [] : padToColumns(filtered, columns)}
+        keyExtractor={(l, index) => l?.id ?? `spacer-${index}`}
+        key={`grid-${columns}`}
+        numColumns={columns}
+        columnWrapperStyle={columns > 1 ? s.gridRow : undefined}
         contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
         removeClippedSubviews
@@ -712,7 +723,10 @@ const s = StyleSheet.create({
   },
 
   // Photo
+  cardInGrid: { flex: 1 },
   photoWrap: { height: 200, width: "100%", position: "relative" },
+  photoWrapInGrid: { height: undefined, aspectRatio: 4 / 3 },
+  gridRow: { gap: 16, alignItems: "stretch" },
   photo: { width: "100%", height: "100%" },
   photoPlaceholder: {
     flex: 1,

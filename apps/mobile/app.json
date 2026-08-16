@@ -3,6 +3,7 @@
     "name": "Kainook",
     "slug": "kainook",
     "version": "1.0.0",
+    "runtimeVersion": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "kainook",
@@ -42,6 +43,11 @@
       },
       "package": "com.kainook.app",
       "googleServicesFile": "./google-services.json",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBtITwwJXuiQsjNusLT4CKheR5g_cd4QPA"
+        }
+      },
       "permissions": [
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.RECEIVE_BOOT_COMPLETED",
@@ -105,7 +111,7 @@
       ]
     ],
     "updates": {
-      "enabled": false
+      "url": "https://u.expo.dev/eb02914a-9afa-4816-8d96-31d713f19022"
     },
     "experiments": {
       "typedRoutes": true

@@ -2,18 +2,7 @@ import axios from "axios";
 import { useAuthStore } from "../store/auth";
 import { getCachedAnonymousToken } from "./anonymous";
 import { payLog } from "./payment-logger";
-
-const getPaymentBaseUrl = () => {
-  const envUrl = process.env["EXPO_PUBLIC_PAYMENT_API_URL"];
-  if (envUrl) return envUrl;
-  return "https://api.kainook.com/payments";
-};
-
-const getAuthBaseUrl = () => {
-  const envUrl = process.env["EXPO_PUBLIC_API_URL"];
-  if (envUrl) return envUrl;
-  return "https://api.kainook.com";
-};
+import { getPaymentBaseUrl, getAuthBaseUrl } from "./config";
 
 const PAYMENT_BASE_URL = getPaymentBaseUrl();
 const AUTH_BASE_URL = getAuthBaseUrl();

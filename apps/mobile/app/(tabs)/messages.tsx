@@ -21,6 +21,7 @@ import { K } from "../../constants/theme";
 import { SignInRequired } from "../../components/SignInRequired";
 import type { ListingBasics } from "../../hooks/messaging";
 import { INACTIVE_LISTING } from "../../hooks/messaging";
+import { useReadableWidth } from "../../lib/responsive";
 
 // ── Filter chips ──────────────────────────────────────────────────────────────
 
@@ -87,6 +88,9 @@ function EmptyState({ hasFilter }: { hasFilter: boolean }) {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function MessagesScreen() {
+  // Tablet: keep this list at a readable width instead of letting rows
+  // stretch edge to edge. No-op on phones.
+  const readable = useReadableWidth();
   // Guests can browse and book; this screen is account-only. Returned
   // before any other hook — the tab layout remounts on session change so
   // the hook count never shifts under React.
@@ -216,7 +220,7 @@ export default function MessagesScreen() {
             />
           )}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-          contentContainerStyle={s.listContent}
+          contentContainerStyle={[s.listContent, readable]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl

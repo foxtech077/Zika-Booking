@@ -62,18 +62,6 @@ export default function ProfileScreen() {
   // listingsHref / listingsLabel: an approved host switches into the hosting
   // tab bar (web's equivalent is routing into the separate dashboard Shell);
   // anyone else goes to the application first.
-  const hostStatus = data?.hostStatus ?? storeUser?.hostStatus ?? null;
-  const isApprovedHost = hostStatus === "approved";
-  const hostRowLabel =
-    hostStatus === "pending" ? "Host application" :
-    hostStatus === "rejected" ? "Host application" :
-    isApprovedHost ? "Switch to Hosting" :
-    "Become a Host";
-  const hostRowSublabel =
-    hostStatus === "pending" ? "Under review" :
-    hostStatus === "rejected" ? "Not approved — tap to resubmit" :
-    isApprovedHost ? "Manage your listings and bookings" :
-    "List your property or vehicle";
   const verified = data?.emailVerified ?? storeUser?.emailVerified ?? false;
 
   const showSkeleton = isLoading && !storeUser;
@@ -141,23 +129,13 @@ export default function ProfileScreen() {
                 used to be an automatic redirect for provider accounts, which
                 no longer exist. */}
             <SettingsSection title="Hosting">
-              {isApprovedHost ? (
-                <MenuRow
-                  icon="business-outline"
-                  label={hostRowLabel}
-                  sublabel={hostRowSublabel}
-                  onPress={() => router.replace("/(provider)" as any)}
-                  showBorder={false}
-                />
-              ) : (
-                <MenuRow
-                  icon="business-outline"
-                  label={hostRowLabel}
-                  sublabel={hostRowSublabel}
-                  onPress={() => router.push("/host" as any)}
-                  showBorder={false}
-                />
-              )}
+              <MenuRow
+                icon="business-outline"
+                label="Switch to Hosting"
+                sublabel="Manage your listings and bookings"
+                onPress={() => router.replace("/(provider)" as any)}
+                showBorder={false}
+              />
             </SettingsSection>
 
             <SettingsSection title="Preferences">
