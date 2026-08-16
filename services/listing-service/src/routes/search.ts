@@ -36,6 +36,10 @@ export async function searchRoutes(app: FastifyInstance) {
     // Radius is optional — when omitted, results are ranked nearest-first with
     // no distance cap (the historical 20000km default that faked a global sort).
     const radiusKm = q["radius_km"] ? parseInt(q["radius_km"], 10) : undefined;
+    // ~half Earth's circumference: the "give up on locality" tier.
+    const GLOBAL_RADIUS_KM = 20100;
+    // Airbnb-style page fill: stop widening once this many results exist.
+    const MIN_AREA_RESULTS = 6;
     const checkIn = q["check_in"];
     const checkOut = q["check_out"];
     const pickupDatetime = q["pickup_datetime"];
@@ -241,16 +245,27 @@ export async function searchRoutes(app: FastifyInstance) {
     const hasGeo = hasGeoCoords && !textOnly;
     let lngRef: string | null = null;
     let latRef: string | null = null;
+    // Airbnb-style adaptive area: when the caller gives an anchor but no
+    // explicit radius, start local and widen only until a page's worth of
+    // results exists. A fixed radius fails both ways on a sparse inventory —
+    // 200 km returns nothing almost everywhere, and an Earth-sized one turns
+    // "near Kollam" into a list of the whole planet.
+    const ADAPTIVE_TIERS_KM = [100, 500, 2000, GLOBAL_RADIUS_KM];
+    const adaptive = hasGeo && !radiusKm;
+    let radiusParamIdx: number | null = null;
     if (hasGeo) {
       lngRef = next();
       params.push(lng);
       latRef = next();
       params.push(lat);
-      if (radiusKm) {
+      if (radiusKm || adaptive) {
         push(
           `(l.location IS NULL OR public.ST_DWithin(l.location, public.ST_SetSRID(public.ST_MakePoint(${lngRef}, ${latRef}), 4326)::public.geography, ${next()}))`,
-          radiusKm * 1000,
+          (radiusKm ?? ADAPTIVE_TIERS_KM[0]!) * 1000,
         );
+        // The tier loop below rebinds this single value; indexes of every
+        // other param stay untouched.
+        radiusParamIdx = params.length - 1;
       }
     }
 
@@ -329,17 +344,33 @@ export async function searchRoutes(app: FastifyInstance) {
     // must exclude it there or Postgres rejects the bind.
     const countParamCount = paginationStart - (textQuery && !textOnly ? 1 : 0);
 
-    const [pageRows, countRows] = await Promise.all([
-      prisma.$queryRawUnsafe<Array<{ id: string; distance_km: number | null; lat: number | null; lng: number | null }>>(
-        pageSql, ...params,
-      ),
-      prisma.$queryRawUnsafe<Array<{ total: number }>>(
-        `SELECT COUNT(*)::int AS total ${fromSql} WHERE ${whereSql}`,
-        ...params.slice(0, countParamCount),
-      ),
-    ]);
+    const countSql = `SELECT COUNT(*)::int AS total ${fromSql} WHERE ${whereSql}`;
 
-    const total = countRows[0]?.total ?? 0;
+    let total: number;
+    let effectiveRadiusKm: number | null = radiusKm ?? null;
+    if (adaptive && radiusParamIdx !== null) {
+      // Widen tier by tier until enough results exist. Counts are cheap and
+      // sequential probes only happen while the area is still sparse.
+      total = 0;
+      for (const tierKm of ADAPTIVE_TIERS_KM) {
+        params[radiusParamIdx] = tierKm * 1000;
+        const rows = await prisma.$queryRawUnsafe<Array<{ total: number }>>(
+          countSql, ...params.slice(0, countParamCount),
+        );
+        total = rows[0]?.total ?? 0;
+        effectiveRadiusKm = tierKm;
+        if (total >= MIN_AREA_RESULTS) break;
+      }
+    } else {
+      const rows = await prisma.$queryRawUnsafe<Array<{ total: number }>>(
+        countSql, ...params.slice(0, countParamCount),
+      );
+      total = rows[0]?.total ?? 0;
+    }
+
+    const pageRows = await prisma.$queryRawUnsafe<Array<{ id: string; distance_km: number | null; lat: number | null; lng: number | null }>>(
+      pageSql, ...params,
+    );
     const available = total;
     const nextCursor = cursor + limit < total ? String(cursor + limit) : null;
 
@@ -517,6 +548,13 @@ export async function searchRoutes(app: FastifyInstance) {
       availableCount: available,
       nextCursor,
       results,
+      // How far the search actually reached. `expanded` means the local area
+      // was too sparse and the radius widened — clients show an Airbnb-style
+      // "showing results further away" note on it.
+      searchArea: {
+        effectiveRadiusKm,
+        expanded: adaptive && effectiveRadiusKm !== ADAPTIVE_TIERS_KM[0],
+      },
     });
     } catch (err) {
       req.log.error({ err }, "Failed to execute search");
