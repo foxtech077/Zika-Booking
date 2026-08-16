@@ -22,6 +22,10 @@ interface Props {
   onChange: (next: PickedLocation) => void;
   /** Called when only the pin moved, leaving the typed address alone. */
   onCoordinatesChange?: (lat: number, lng: number) => void;
+  /**
+   * Fallback country for a GPS fix that reverse-geocoding could not resolve.
+   * Deliberately NOT used to filter search: results stay worldwide.
+   */
   countryHint?: string;
   label?: string;
   error?: string;
@@ -154,7 +158,9 @@ export function LocationPicker({
         value={search}
         onChange={setSearch}
         onResolved={adopt}
-        countryHint={countryHint}
+        // Rank nearby results first once a pin exists, without ever limiting
+        // the search to one country.
+        biasLocation={hasPin ? { lat: value.lat!, lng: value.lng! } : null}
         error={error}
       />
 

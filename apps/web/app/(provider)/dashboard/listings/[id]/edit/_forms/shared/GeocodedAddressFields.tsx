@@ -70,6 +70,7 @@ export function GeocodedAddressFields({
         onCoordinatesChange={(nextLat, nextLng) =>
           onGeocoded({ lat: nextLat, lng: nextLng, town, neighborhood, country })
         }
+        // Only a fallback for an unresolvable GPS fix — search stays worldwide.
         countryHint={country || undefined}
         error={errors?.address}
       />

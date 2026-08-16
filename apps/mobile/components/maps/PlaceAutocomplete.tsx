@@ -26,8 +26,11 @@ interface Props {
   onResolved: (place: ResolvedPlace) => void;
   placeholder?: string;
   error?: string;
-  /** Bias results to a country, e.g. "CM". Improves relevance markedly. */
-  countryHint?: string;
+  /**
+   * Optional point to rank nearby results higher. A *bias*, never a filter:
+   * a provider listing a property abroad still finds it.
+   */
+  biasLocation?: { lat: number; lng: number } | null;
 }
 
 const DEBOUNCE_MS = 300;
@@ -48,7 +51,7 @@ export function PlaceAutocomplete({
   onResolved,
   placeholder = "Search your property by name or address",
   error,
-  countryHint,
+  biasLocation,
 }: Props) {
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
@@ -74,7 +77,7 @@ export function PlaceAutocomplete({
         sessionRef.current ??= newSessionToken();
         const results = await fetchPlaceSuggestions(input, {
           sessionToken: sessionRef.current,
-          ...(countryHint ? { countryHint } : {}),
+          ...(biasLocation ? { biasLocation } : {}),
         });
         if (seq !== seqRef.current) return; // a newer keystroke won
         setFailed(false);
@@ -87,7 +90,7 @@ export function PlaceAutocomplete({
         if (seq === seqRef.current) setLoading(false);
       }
     },
-    [countryHint]
+    [biasLocation?.lat, biasLocation?.lng]
   );
 
   const handleChange = (next: string) => {

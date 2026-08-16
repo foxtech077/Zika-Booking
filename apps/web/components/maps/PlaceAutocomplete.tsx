@@ -26,13 +26,19 @@ interface Props {
   label?: string;
   placeholder?: string;
   error?: string;
-  /** Bias results to a country, e.g. "CM". Improves relevance markedly. */
-  countryHint?: string;
+  /**
+   * Optional point to rank nearby results higher. This is a *bias*, never a
+   * filter: a search always reaches the whole world, so a provider listing a
+   * property abroad still finds it.
+   */
+  biasLocation?: { lat: number; lng: number } | null;
   disabled?: boolean;
   className?: string;
 }
 
 const DEBOUNCE_MS = 250;
+/** Google caps the bias circle at 50 km. */
+const BIAS_RADIUS_M = 50_000;
 
 /**
  * Search-as-you-type over Google Places.
@@ -49,7 +55,7 @@ export function PlaceAutocomplete({
   label,
   placeholder = "Search for your property by name or address",
   error,
-  countryHint,
+  biasLocation,
   disabled,
   className,
 }: Props) {
@@ -100,8 +106,13 @@ export function PlaceAutocomplete({
           await places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
             input,
             sessionToken: sessionRef.current,
-            ...(countryHint
-              ? { includedRegionCodes: [countryHint.toLowerCase()] }
+            ...(biasLocation
+              ? {
+                  locationBias: {
+                    center: { lat: biasLocation.lat, lng: biasLocation.lng },
+                    radius: BIAS_RADIUS_M,
+                  },
+                }
               : {}),
           });
 
@@ -127,7 +138,7 @@ export function PlaceAutocomplete({
         if (seq === requestSeq.current) setLoading(false);
       }
     },
-    [countryHint]
+    [biasLocation?.lat, biasLocation?.lng]
   );
 
   const handleChange = (next: string) => {

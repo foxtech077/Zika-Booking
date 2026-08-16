@@ -69,6 +69,8 @@ export function extractAddressParts(
 
 const PLACES_BASE = "https://places.googleapis.com/v1";
 const GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json";
+/** Google caps the bias circle at 50 km. */
+const BIAS_RADIUS_M = 50_000;
 
 /**
  * Search-as-you-type over Google Places.
@@ -79,7 +81,15 @@ const GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json";
  */
 export async function fetchPlaceSuggestions(
   input: string,
-  opts: { sessionToken: string; countryHint?: string; signal?: AbortSignal }
+  opts: {
+    sessionToken: string;
+    /**
+     * Ranks results near this point higher. A *bias*, never a filter — the
+     * search always reaches the whole world.
+     */
+    biasLocation?: { lat: number; lng: number } | null;
+    signal?: AbortSignal;
+  }
 ): Promise<PlaceSuggestion[]> {
   if (!isGoogleMapsConfigured()) throw new Error("Google Maps key is not configured");
 
@@ -92,8 +102,18 @@ export async function fetchPlaceSuggestions(
     body: JSON.stringify({
       input,
       sessionToken: opts.sessionToken,
-      ...(opts.countryHint
-        ? { includedRegionCodes: [opts.countryHint.toLowerCase()] }
+      ...(opts.biasLocation
+        ? {
+            locationBias: {
+              circle: {
+                center: {
+                  latitude: opts.biasLocation.lat,
+                  longitude: opts.biasLocation.lng,
+                },
+                radius: BIAS_RADIUS_M,
+              },
+            },
+          }
         : {}),
     }),
     ...(opts.signal ? { signal: opts.signal } : {}),
