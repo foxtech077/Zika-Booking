@@ -93,7 +93,11 @@ listingApi.interceptors.response.use(
       if (!refreshing) {
         refreshing = (async () => {
           try {
-            const res = await axios.post(`${AUTH_BASE_URL}/auth/refresh`, {}, { withCredentials: true });
+            // AUTH_BASE_URL ends with "/" — a leading slash here produced
+            // ".../auth//auth/refresh", which the gateway 404s. That made every
+            // expired token unrecoverable: refresh failed, clearAuth() logged
+            // the user out, and the original request surfaced as a save error.
+            const res = await axios.post(`${AUTH_BASE_URL}auth/refresh`, {}, { withCredentials: true });
             const token = (res.data as any).data.tokens.accessToken;
             // Prefer the refreshed user object; reusing the cached one keeps
             // server-side changes (hostStatus especially) out of the store.
