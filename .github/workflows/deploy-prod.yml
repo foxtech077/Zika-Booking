@@ -81,6 +81,7 @@ jobs:
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
           build-args: ${{ matrix.build_args }}
   deploy-prod:
+    name: "Deploy to Production"
     needs: build-and-push-prod
     runs-on: ubuntu-latest
     permissions:
