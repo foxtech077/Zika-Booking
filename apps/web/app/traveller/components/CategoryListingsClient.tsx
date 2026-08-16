@@ -14,6 +14,7 @@ import PriceRangeFields from "./PriceRangeFields";
 import type { PublicListingDetail } from "@/types";
 import { ActivityPromoBanner } from "./PromoBanner";
 import { isPromotionValid, type ActivePromotion } from "../utils/promo-utils";
+import { geocodePlaceText, getSearchOrigin } from "@/lib/geo";
 
 /* ── lazy-loaded map ──────────────────────────────────────────── */
 const MapView = dynamic(() => import("./MapView"), { ssr: false });
@@ -120,8 +121,9 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function geocodeDestination(q: string): Promise<{ lat: number; lng: number }> {
+async function geocodeDestination(q: string): Promise<{ lat: number; lng: number } | null> {
   const lower = q.toLowerCase();
+  // Fast-path for common cities — avoids a network round-trip.
   if (lower.includes("nairobi") || lower.includes("kenya")) return { lat: -1.2921, lng: 36.8219 };
   if (lower.includes("mombasa")) return { lat: -3.982, lng: 39.726 };
   if (lower.includes("dubai")) return { lat: 25.2048, lng: 55.2708 };
@@ -132,15 +134,12 @@ async function geocodeDestination(q: string): Promise<{ lat: number; lng: number
   if (lower.includes("dar es salaam")) return { lat: -6.7924, lng: 39.2083 };
   if (lower.includes("lagos")) return { lat: 6.5244, lng: 3.3792 };
   if (lower.includes("accra")) return { lat: 5.6037, lng: -0.1870 };
-  try {
-    const r = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
-      { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } }
-    );
-    const d = await r.json();
-    if (d?.[0]) return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
-  } catch { /* fall through */ }
-  return { lat: -1.2921, lng: 36.8219 };
+  // Accept only place-shaped geocodes (cities, towns, regions). A hotel or
+  // business name that happens to geocode somewhere must NOT become the search
+  // anchor — that is how a query for "abacus" got pinned to California. Null
+  // here means "search by text alone".
+  const place = await geocodePlaceText(q);
+  return place ? { lat: place.lat, lng: place.lng } : null;
 }
 
 function mapListing(l: any): PublicListingDetail {
@@ -842,6 +841,9 @@ export default function CategoryListingsClient({ category }: Props) {
   /* ── results state ────────────────────────────────────────── */
   const [listings, setListings] = useState<PublicListingDetail[]>([]);
   const [totalCount, setTotalCount] = useState(0);
+  // Airbnb-style area note: set when the backend had to widen the search
+  // radius because the local area was too sparse.
+  const [areaExpanded, setAreaExpanded] = useState(false);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -915,9 +917,11 @@ export default function CategoryListingsClient({ category }: Props) {
     // Use destOverride when provided (e.g. Load More must stay scoped to the active query)
     const dest = typeof destOverride === "string" ? destOverride : destination.trim();
 
-    const { lat, lng } = dest
-      ? await geocodeDestination(dest)
-      : { lat: -1.2921, lng: 36.8219 };
+    // Destination typed → anchor on it only when it geocodes to a real place.
+    // Otherwise (and for plain browsing) rank from the visitor's own origin:
+    // browser location → timezone city → Nairobi.
+    const destPlace = dest ? await geocodeDestination(dest) : null;
+    const { lat, lng } = destPlace ?? (await getSearchOrigin());
 
     // Fetch a large batch for destination-based searches.
     const effectiveLimit = dest ? 100 : PAGE_SIZE;
@@ -928,9 +932,8 @@ export default function CategoryListingsClient({ category }: Props) {
       cursor: newOffset,
       lat,
       lng,
-      // Use global radius for ALL text searches so results are not constrained by geography.
-      // Browse (no text) uses global radius too for a full category inventory view.
-      radius_km: 20000,
+      // No radius: the backend widens the search area adaptively and reports
+      // the reach back via `searchArea` (rendered as a notice when expanded).
       sort: sortBy,
     };
 
@@ -938,7 +941,12 @@ export default function CategoryListingsClient({ category }: Props) {
     // geocoded into lat/lng, and since every text search uses a global radius
     // the coordinates had no narrowing effect — so the full category came back
     // regardless of what was typed.
-    if (dest) params.q = dest;
+    if (dest) {
+      params.q = dest;
+      // Unlocks the backend's nearby-fallback around the place; without it a
+      // text query is matched by text alone (correct for business names).
+      params.place_resolved = destPlace ? "true" : "false";
+    }
 
     if (guests > 1) params.guests = guests;
     if (filters.priceMin > 0) params.price_min = filters.priceMin;
@@ -990,6 +998,7 @@ export default function CategoryListingsClient({ category }: Props) {
 
       const total = data.totalCount ?? data.availableCount ?? mapped.length + newOffset;
       setTotalCount(total);
+      setAreaExpanded(!!data.searchArea?.expanded);
       setListings((prev) => (append ? [...prev, ...mapped] : mapped));
       setOffset(newOffset);
     } catch (err: any) {
@@ -1498,6 +1507,13 @@ export default function CategoryListingsClient({ category }: Props) {
                   ? "Loading…"
                   : `${totalCount > 0 ? totalCount.toLocaleString() : listings.length} ${meta.label} Found`}
               </h1>
+              {!loading && areaExpanded && listings.length > 0 && (
+                <p className="mt-1 text-sm text-slate-500">
+                  {destination.trim()
+                    ? `Not many places right in ${destination.trim()} — showing the nearest options further out.`
+                    : "Not many places nearby — showing the nearest options further out."}
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-3">
@@ -1690,8 +1706,8 @@ export default function CategoryListingsClient({ category }: Props) {
             </div>
             <div className="p-5 flex-1">
               <FilterPanel
-              priceCurrency={priceFilterCurrency}
-              priceBounds={priceBounds}
+                priceCurrency={priceFilterCurrency}
+                priceBounds={priceBounds}
                 category={category}
                 filters={filters}
                 onChange={(patch) => setFilters((prev) => ({ ...prev, ...patch }))}

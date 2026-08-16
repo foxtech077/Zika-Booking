@@ -5,6 +5,7 @@ import { ChevronDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCurrencyStore } from "@/stores/currency";
 import { ALL_CURRENCIES } from "@/lib/currency";
+import { detectLocalCurrency } from "@/lib/local-currency";
 
 // Lets a guest or signed-in traveller override the currency listing prices
 // are shown in. Selecting a currency updates stores/currency.ts, which
@@ -13,9 +14,19 @@ import { ALL_CURRENCIES } from "@/lib/currency";
 export function CurrencyDropdown() {
   const currency = useCurrencyStore((s) => s.currency);
   const setCurrency = useCurrencyStore((s) => s.setCurrency);
+  const explicit = useCurrencyStore((s) => s.explicit);
+  const suggestCurrency = useCurrencyStore((s) => s.suggestCurrency);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+
+  // Default the display currency from the browser's timezone country
+  // (Asia/Kolkata → INR) until the visitor picks one by hand; EUR when the
+  // country cannot be determined. suggestCurrency is a no-op once `explicit`
+  // is set, so a manual pick is never overridden.
+  useEffect(() => {
+    if (!explicit) suggestCurrency(detectLocalCurrency());
+  }, [explicit, suggestCurrency]);
 
   useEffect(() => {
     if (!open) return;

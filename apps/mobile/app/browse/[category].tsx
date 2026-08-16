@@ -321,7 +321,6 @@ export default function BrowseCategoryScreen() {
         category: apiCategory,
         lat: "0",
         lng: "0",
-        radius_km: "20000",
         sort,
         limit: "50",  // Max allowed — gets all listings in one page for small datasets
       });

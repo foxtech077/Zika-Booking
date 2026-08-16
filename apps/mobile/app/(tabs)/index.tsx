@@ -848,7 +848,7 @@ export default function HomeScreen() {
     queryKey: ["home-hotels", homeLat, homeLng, localCurrency],
     queryFn: async () => {
       const res = await listingApi.get<SearchResponse>(
-        `/search?category=hotel&lat=${homeLat}&lng=${homeLng}&radius_km=20000&sort=recommended&limit=20`
+        `/search?category=hotel&lat=${homeLat}&lng=${homeLng}&sort=recommended&limit=20`
       );
       return res.data.data.results ?? [];
     },
@@ -859,7 +859,7 @@ export default function HomeScreen() {
     queryKey: ["home-apartments", homeLat, homeLng, localCurrency],
     queryFn: async () => {
       const res = await listingApi.get<SearchResponse>(
-        `/search?category=apartment&lat=${homeLat}&lng=${homeLng}&radius_km=20000&sort=recommended&limit=10`
+        `/search?category=apartment&lat=${homeLat}&lng=${homeLng}&sort=recommended&limit=10`
       );
       return res.data.data.results ?? [];
     },
@@ -870,7 +870,7 @@ export default function HomeScreen() {
     queryKey: ["home-cars", homeLat, homeLng, localCurrency],
     queryFn: async () => {
       const res = await listingApi.get<SearchResponse>(
-        `/search?category=car&lat=${homeLat}&lng=${homeLng}&radius_km=20000&sort=recommended&limit=10`
+        `/search?category=car&lat=${homeLat}&lng=${homeLng}00&sort=recommended&limit=10`
       );
       return res.data.data.results ?? [];
     },
