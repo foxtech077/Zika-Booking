@@ -11,7 +11,7 @@ interface MapViewProps {
   searchDestination?: string;
 }
 
-// Leaflet requires window — load only on the client, never on the server
+// The Google Maps JS API needs `window`, so keep this off the server render.
 const MapViewInner = dynamic(() => import("./MapViewInner"), {
   ssr: false,
   loading: () => (

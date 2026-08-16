@@ -18,15 +18,9 @@
 
 import * as SecureStore from "expo-secure-store";
 
-// Resolved locally rather than imported from ./api. The auth store imports this
-// module, and ./api imports the auth store — taking BASE_URL from there would
-// close that loop into a require cycle, which Metro resolves unpredictably at
-// module-init time. Same pattern listing-api.ts already uses for its auth base.
-const AUTH_BASE_URL = (() => {
-  const envUrl = process.env["EXPO_PUBLIC_API_URL"];
-  const base = envUrl ?? "https://api.kainook.com/auth";
-  return base.endsWith("/") ? base : `${base}/`;
-})();
+import { getAuthBaseUrl } from "./config";
+
+const AUTH_BASE_URL = getAuthBaseUrl();
 
 const ANON_TOKEN_KEY = "zika:anon_token";
 const ANON_DEVICE_ID_KEY = "zika:anon_device_id";

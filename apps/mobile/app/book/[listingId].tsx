@@ -1561,24 +1561,24 @@ export default function BookingFlowScreen() {
 
             {/* Terms acceptance — shown once, on the guest's first booking. */}
             {needsTermsAcceptance && (
-            <TouchableOpacity
-              style={styles.termsRow}
-              onPress={() => setTermsChecked((prev) => !prev)}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.checkbox, termsChecked && styles.checkboxChecked]}>
-                {termsChecked && <Ionicons name="checkmark" size={13} color="#fff" />}
-              </View>
-              <Text style={styles.termsText}>
-                I have read and agree to the{" "}
-                <Text
-                  style={styles.termsLink}
-                  onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "terms" } } as any)}
-                >
-                  Terms of Use
-                </Text>.
-              </Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.termsRow}
+                onPress={() => setTermsChecked((prev) => !prev)}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.checkbox, termsChecked && styles.checkboxChecked]}>
+                  {termsChecked && <Ionicons name="checkmark" size={13} color="#fff" />}
+                </View>
+                <Text style={styles.termsText}>
+                  I have read and agree to the{" "}
+                  <Text
+                    style={styles.termsLink}
+                    onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "terms" } } as any)}
+                  >
+                    Terms of Use
+                  </Text>.
+                </Text>
+              </TouchableOpacity>
             )}
 
             <TouchableOpacity

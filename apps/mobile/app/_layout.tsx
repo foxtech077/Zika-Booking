@@ -23,6 +23,7 @@ import { useAuthStore } from "../store/auth";
 import { useLocationBootstrap } from "../hooks/useLocation";
 import { queryClient } from "../lib/query-client";
 import { useFcmNotifications } from "../hooks/useFcmNotifications";
+import { getAuthBaseUrl } from "../lib/config";
 
 const screenOptionsByName: Record<string, object> = {
   "pending-approval": { headerShown: false },
@@ -128,8 +129,7 @@ async function verifySession(): Promise<"ok" | "revoked" | "network_error"> {
     return "ok";
   }
 
-  const apiUrl =
-    process.env["EXPO_PUBLIC_API_URL"] ?? "https://api.kainook.com/auth";
+  const apiUrl = getAuthBaseUrl().replace(/\/$/, "");
   try {
     const res = await axios.post(
       `${apiUrl}/auth/refresh`,
@@ -187,7 +187,7 @@ function RootLayoutContent() {
     }
 
     // Check on mount
-    checkSession().catch(() => {});
+    checkSession().catch(() => { });
 
     // Check when app resumes from background
     const sub = AppState.addEventListener(
@@ -197,7 +197,7 @@ function RootLayoutContent() {
         appStateRef.current = nextState;
 
         if (nextState === "active" && prev !== "active") {
-          checkSession().catch(() => {});
+          checkSession().catch(() => { });
         }
       },
     );

@@ -3,6 +3,7 @@
     "name": "Kainook",
     "slug": "kainook",
     "version": "1.0.0",
+    "runtimeVersion": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "kainook",
@@ -22,7 +23,8 @@
         "UIBackgroundModes": [
           "fetch",
           "remote-notification"
-        ]
+        ],
+        "NSLocationWhenInUseUsageDescription": "Kainook uses your location to place your listing's map pin accurately when you are at the property."
       },
       "entitlements": {
         "aps-environment": "development",
@@ -42,11 +44,18 @@
       },
       "package": "com.kainook.app",
       "googleServicesFile": "./google-services.json",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBtITwwJXuiQsjNusLT4CKheR5g_cd4QPA"
+        }
+      },
       "permissions": [
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
-        "android.permission.WAKE_LOCK"
+        "android.permission.WAKE_LOCK",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ],
       "intentFilters": [
         {
@@ -102,10 +111,16 @@
         {
           "merchantIdentifier": "merchant.com.kainook.app"
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Kainook uses your location to place your listing's map pin accurately when you are at the property."
+        }
       ]
     ],
     "updates": {
-      "enabled": false
+      "url": "https://u.expo.dev/eb02914a-9afa-4816-8d96-31d713f19022"
     },
     "experiments": {
       "typedRoutes": true
@@ -114,7 +129,8 @@
       "router": {},
       "eas": {
         "projectId": "eb02914a-9afa-4816-8d96-31d713f19022"
-      }
+      },
+      "googleMapsApiKey": "AIzaSyBtITwwJXuiQsjNusLT4CKheR5g_cd4QPA"
     },
     "owner": "kainook.it"
   }
