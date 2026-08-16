@@ -40,6 +40,7 @@ import {
   WizardHeader,
   WizardFooter,
 } from "./_components";
+import { LocationPicker } from "../../components/maps/LocationPicker";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -72,6 +73,9 @@ type ApartmentForm = {
   currencySymbol: string;
   description: string;
   address: string;
+  neighborhood: string;
+  lat: number | null;
+  lng: number | null;
   town: string;
   country: string;
   checkinTime: string;
@@ -116,6 +120,9 @@ export default function ApartmentListingScreen() {
     currencySymbol: "$",
     description: "",
     address: "",
+    neighborhood: "",
+    lat: null,
+    lng: null,
     town: "",
     country: "",
     checkinTime: "15:00",
@@ -157,6 +164,9 @@ export default function ApartmentListingScreen() {
       currencySymbol: cur.symbol,
       description: listing.description ?? "",
       address: listing.address ?? "",
+      neighborhood: listing.neighborhood ?? "",
+      lat: (listing as any).lat ?? null,
+      lng: (listing as any).lng ?? null,
       town: listing.town ?? "",
       country: listing.country ?? "",
       checkinTime: listing.checkinTime ?? "15:00",
@@ -248,6 +258,9 @@ export default function ApartmentListingScreen() {
         return {
           address: form.address,
           town: form.town,
+          neighborhood: form.neighborhood || null,
+          lat: form.lat,
+          lng: form.lng,
         };
       case 2:
         return {
@@ -583,8 +596,28 @@ export default function ApartmentListingScreen() {
           <View>
             <SectionHeader
               title="Property Location"
-              subtitle="Enter your apartment's full address below."
+              subtitle="Search for your building, then drag the pin to its exact entrance."
               icon="map-pin"
+            />
+
+            <LocationPicker
+              label="Find your apartment"
+              value={{ lat: form.lat, lng: form.lng, address: form.address }}
+              onChange={(place) => {
+                setForm((p) => ({
+                  ...p,
+                  address: place.address || p.address,
+                  town: place.town || p.town,
+                  neighborhood: place.neighborhood || p.neighborhood,
+                  country: place.country || p.country,
+                  lat: place.lat,
+                  lng: place.lng,
+                }));
+                setErrors((e) => ({ ...e, address: undefined }));
+              }}
+              onCoordinatesChange={(lat, lng) => setForm((p) => ({ ...p, lat, lng }))}
+              countryHint={form.country || undefined}
+              error={errors.address}
             />
 
             <FormField

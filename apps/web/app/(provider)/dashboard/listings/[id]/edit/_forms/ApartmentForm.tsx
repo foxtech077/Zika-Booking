@@ -466,6 +466,8 @@ export function ApartmentForm({ listingId, listing }: Props) {
                   town={s.town}
                   neighborhood={s.neighborhood}
                   country={s.country}
+                  lat={s.lat}
+                  lng={s.lng}
                   onChange={(f, v) => {
                     const normalized = f === "country" ? v.toUpperCase().slice(0, 2) : v;
                     set(f, normalized);
