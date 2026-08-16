@@ -37,6 +37,7 @@ import {
   WizardHeader,
   WizardFooter,
 } from "./_components";
+import { LocationPicker } from "../../components/maps/LocationPicker";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -154,6 +155,9 @@ type CarForm = {
   deliveryFee: string;
   // location
   address: string;
+  neighborhood: string;
+  lat: number | null;
+  lng: number | null;
   town: string;
   country: string;
   pickupHours: string;
@@ -309,6 +313,9 @@ export default function CarListingScreen() {
     deliveryRadiusKm: "",
     deliveryFee: "",
     address: "",
+    neighborhood: "",
+    lat: null,
+    lng: null,
     town: "",
     country: "",
     pickupHours: "08:00 – 18:00",
@@ -372,6 +379,9 @@ export default function CarListingScreen() {
       deliveryRadiusKm: String(listing.deliveryRadiusKm ?? ""),
       deliveryFee: String(listing.deliveryFee ?? ""),
       address: listing.address ?? "",
+      neighborhood: listing.neighborhood ?? "",
+      lat: (listing as any).lat ?? null,
+      lng: (listing as any).lng ?? null,
       town: listing.town ?? "",
       country: listing.country ?? "",
       pickupHours: listing.pickupHours ?? "08:00 – 18:00",
@@ -510,6 +520,9 @@ export default function CarListingScreen() {
         return {
           address: form.address,
           town: form.town,
+          neighborhood: form.neighborhood || null,
+          lat: form.lat,
+          lng: form.lng,
           pickupHours: form.pickupHours,
         };
       case 5: // Photos & Docs — uploaded via presign/confirm, no PATCH needed
@@ -1159,8 +1172,28 @@ export default function CarListingScreen() {
           <View>
             <SectionHeader
               title="Pickup Location"
-              subtitle="Enter the vehicle's pickup address below."
+              subtitle="Search for the pickup point, then drag the pin to the exact spot."
               icon="map-pin"
+            />
+
+            <LocationPicker
+              label="Find the pickup point"
+              value={{ lat: form.lat, lng: form.lng, address: form.address }}
+              onChange={(place) => {
+                setForm((p) => ({
+                  ...p,
+                  address: place.address || p.address,
+                  town: place.town || p.town,
+                  neighborhood: place.neighborhood || p.neighborhood,
+                  country: place.country || p.country,
+                  lat: place.lat,
+                  lng: place.lng,
+                }));
+                setErrors((e) => ({ ...e, address: undefined }));
+              }}
+              onCoordinatesChange={(lat, lng) => setForm((p) => ({ ...p, lat, lng }))}
+              countryHint={form.country || undefined}
+              error={errors.address}
             />
 
             <FormField

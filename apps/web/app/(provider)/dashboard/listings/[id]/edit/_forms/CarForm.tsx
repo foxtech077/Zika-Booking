@@ -704,6 +704,8 @@ export function CarForm({ listingId, listing }: Props) {
                     town={s.town}
                     neighborhood={s.neighborhood}
                     country={s.country}
+                    lat={s.lat}
+                    lng={s.lng}
                     addressLabel="Pickup Address"
                     onChange={(f, v) => {
                       const normalized = f === "country" ? v.toUpperCase().slice(0, 2) : v;
