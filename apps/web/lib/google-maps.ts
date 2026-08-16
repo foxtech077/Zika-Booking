@@ -11,8 +11,6 @@
 
 export const GOOGLE_MAPS_API_KEY =
   process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
-console.log("Google API Key ENV : ", GOOGLE_MAPS_API_KEY)
-console.log('ENV VARIABLES:', process.env);
 /** True when a key is configured. Callers should degrade, not crash, when false. */
 export const isGoogleMapsConfigured = () => GOOGLE_MAPS_API_KEY.length > 0;
 
