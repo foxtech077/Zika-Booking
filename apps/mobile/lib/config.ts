@@ -4,7 +4,7 @@
  * To point the app to a different backend host environment (e.g. dev vs production),
  * update DEFAULT_DOMAIN below, or provide EXPO_PUBLIC_* environment variables.
  */
-export const DEFAULT_DOMAIN = "https://api.kainook.com";
+export const DEFAULT_DOMAIN = "https://dev.api.kainook.com";
 
 /** Base URL for Auth Service */
 export const getAuthBaseUrl = (): string => {

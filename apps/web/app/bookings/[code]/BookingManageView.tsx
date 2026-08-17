@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { listingApi } from "@/lib/listing-api";
+import { useAuthStore } from "@/stores/auth";
 import ListingImage from "../../traveller/components/ListingImage";
+import { MessageProviderButton } from "../../traveller/components/MessageProviderButton";
 
 interface ManageListing {
   id: string;
@@ -107,6 +109,7 @@ export default function BookingManageView() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const code = typeof params?.code === "string" ? params.code : undefined;
   const token = searchParams.get("token");
 
@@ -386,6 +389,17 @@ export default function BookingManageView() {
             </div>
           </div>
         </div>
+
+        {/* Contact host — available after payment, not just before booking */}
+        {isAuthenticated && !isCancelled && booking.listing?.id && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+            <h2 className="font-bold text-slate-800 text-sm">Need to reach your host?</h2>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              Message your host about check-in, directions, or any special requests.
+            </p>
+            <MessageProviderButton listingId={booking.listing.id} />
+          </div>
+        )}
 
         {/* Cancellation policy */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">

@@ -334,7 +334,13 @@ export default function BookingFlowScreen() {
   }, [timerState, pulseAnim]);
 
   useEffect(() => {
-    if (isExpired && step < 2) {
+    // Once the booking exists the lock has been consumed, so its countdown is
+    // meaningless. This screen is reached with router.push and stays mounted
+    // underneath /pay and the confirmation screen, and a React Native Modal
+    // renders above everything regardless of stack position — without this
+    // guard the timer popped "Booking Expired" over a booking the guest had
+    // already successfully paid for.
+    if (isExpired && step < 2 && !bookingCreatedRef.current) {
       setExpiredModal(true);
     }
   }, [isExpired, step]);

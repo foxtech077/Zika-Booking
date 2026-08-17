@@ -2629,7 +2629,12 @@ export default function TravellerDashboard() {
                       )}
 
                       <div className="mb-4 space-y-3">
-                        {detailListing.allowPreBooking && (
+                        {/* Messaging the host is not a pre-booking-only feature —
+                            gating it on allowPreBooking hid it on most listings,
+                            while mobile offers it on every listing you don't own.
+                            Every /conversations route is behind requireUser, so
+                            anonymous visitors get no button rather than a 401. */}
+                        {isAuthenticated && detailListing.providerId !== user?.id && (
                           <MessageProviderButton listingId={detailListing.id} />
                         )}
                         <GiveReviewEntry listingId={detailListing.id} listingName={detailListing.name} />

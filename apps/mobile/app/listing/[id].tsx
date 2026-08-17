@@ -1370,39 +1370,16 @@ export default function ListingDetailScreen() {
               <Ionicons name="person" size={24} color={GREEN} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.hostName}>Verified Property Partner</Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-                  <Ionicons name="star" size={12} color="#F59E0B" />
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: TEXT }}>4.9</Text>
-                </View>
-                <Text style={{ fontSize: 12, color: MUTED }}>· Response within 1h</Text>
-              </View>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
-                <View style={s.verifiedBadge}>
-                  <Ionicons name="shield-checkmark" size={10} color={GREEN} />
-                  <Text style={s.verifiedText}>Verified</Text>
-                </View>
-              </View>
+              <Text style={s.hostName}>Property Host</Text>
+              <Text style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>
+                Message the host with any questions about this listing.
+              </Text>
             </View>
           </View>
-          {!isOwnListing && listing.providerId && (
+          {user && !isOwnListing && listing.providerId && (
             <TouchableOpacity
               style={s.msgHostBtn}
-              onPress={() => {
-                if (!user) {
-                  Alert.alert(
-                    "Sign in required",
-                    "Please sign in to message the host.",
-                    [
-                      { text: "Cancel", style: "cancel" },
-                      { text: "Sign In", onPress: () => router.push("/(auth)/login" as any) },
-                    ]
-                  );
-                  return;
-                }
-                setShowMsgModal(true);
-              }}
+              onPress={() => setShowMsgModal(true)}
               activeOpacity={0.82}
             >
               <Ionicons name="chatbubble-ellipses-outline" size={18} color={GREEN} />
@@ -1724,8 +1701,6 @@ const s = StyleSheet.create({
   hostCard: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: BG, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: BORDER },
   hostAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: GREEN_LIGHT, alignItems: "center", justifyContent: "center" },
   hostName: { fontSize: 15, fontWeight: "700", color: TEXT },
-  verifiedBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: GREEN_LIGHT, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  verifiedText: { fontSize: 11, fontWeight: "700", color: GREEN },
 
   cancelCard: { backgroundColor: BG, borderRadius: 14, padding: 16, borderLeftWidth: 4, borderWidth: 1, borderColor: BORDER },
   cancelDot: { width: 10, height: 10, borderRadius: 5 },
