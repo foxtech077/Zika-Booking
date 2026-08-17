@@ -5,7 +5,6 @@ import {
   FlatList,
   RefreshControl,
   StyleSheet,
-  Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { AppLayout } from "../../components/layout/AppLayout";
@@ -56,14 +55,6 @@ function isToday(iso: string) {
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
 
-function showMessageStub() {
-  Alert.alert(
-    "Messaging Coming Soon",
-    "In-app guest messaging is not yet available. Please use the contact details provided at check-in to communicate with your guest.",
-    [{ text: "OK" }]
-  );
-}
-
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function ProviderBookingsScreen() {
@@ -96,7 +87,7 @@ export default function ProviderBookingsScreen() {
         item={item}
         net={netPayout(item)}
         onPress={() => router.push(`/provider/booking/${item.id}` as any)}
-        onMessage={showMessageStub}
+        onMessage={() => router.push("/(provider)/messages" as any)}
       />
     ),
     []

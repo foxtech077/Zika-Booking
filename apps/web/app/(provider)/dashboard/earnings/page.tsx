@@ -21,8 +21,6 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
-  Download,
-  FileDown,
   Printer,
   ReceiptText,
   RefreshCw,
@@ -236,7 +234,7 @@ function normalizeEarnings(payload: unknown): EarningsData {
       pendingAmount: readNumber(payout.pendingAmount, pendingPayouts),
       lastPayoutDate: readString(payout.lastPayoutDate ?? payout.lastPaidAt),
       nextPayoutDate: readString(payout.nextPayoutDate ?? payout.estimatedNextPayout),
-      paymentMethodStatus: readString(payout.paymentMethodStatus ?? payout.bankStatus, "Verified"),
+      paymentMethodStatus: readString(payout.paymentMethodStatus ?? payout.bankStatus, "Not connected"),
     },
   };
 }
@@ -400,10 +398,6 @@ export default function EarningsPage() {
     });
     return Array.from(groups.values()).sort((a, b) => b.payout - a.payout).slice(0, 6);
   }, [data.transactions]);
-
-  const handleExport = (label: string) => {
-    setNotice({ type: "success", text: `${label} export is ready when the backend export endpoint is connected.` });
-  };
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -571,11 +565,9 @@ export default function EarningsPage() {
           <Card>
             <div className="mb-4">
               <h3 className="font-semibold text-slate-900">Export Reports</h3>
-              <p className="text-xs text-slate-500">Frontend placeholders until export APIs are connected.</p>
+              <p className="text-xs text-slate-500">Print or save this summary as a PDF from the print dialog.</p>
             </div>
             <div className="grid gap-2">
-              <Button variant="outline" icon={<FileDown />} onClick={() => handleExport("CSV")}>Download CSV</Button>
-              <Button variant="outline" icon={<Download />} onClick={() => handleExport("PDF")}>Download PDF</Button>
               <Button variant="outline" icon={<Printer />} onClick={() => window.print()}>Print Summary</Button>
             </div>
           </Card>
