@@ -830,8 +830,11 @@ export default function HomeScreen() {
 
   // Detected location (IP-based, cached 24 h)
   const { lat: detectedLat, lng: detectedLng, city: detectedCity } = useLocation();
-  const homeLat = detectedLat ?? 0;
-  const homeLng = detectedLng ?? 0;
+  // Omit the anchor when undetected — lat=0,lng=0 anchored the rails to a
+  // point in the Gulf of Guinea and ranked everything by distance from it.
+  const homeAnchor = detectedLat != null && detectedLng != null
+    ? `&lat=${detectedLat}&lng=${detectedLng}`
+    : "";
 
   const [location, setLocation] = useState("");
   const [checkIn, setCheckIn] = useState<Date | null>(null);
@@ -845,10 +848,10 @@ export default function HomeScreen() {
     // Prices are localized per currency by the API, so the currency is part of
     // the cache identity — without it a currency change serves cached amounts
     // still labelled with the previous currency.
-    queryKey: ["home-hotels", homeLat, homeLng, localCurrency],
+    queryKey: ["home-hotels", homeAnchor, localCurrency],
     queryFn: async () => {
       const res = await listingApi.get<SearchResponse>(
-        `/search?category=hotel&lat=${homeLat}&lng=${homeLng}&sort=recommended&limit=20`
+        `/search?category=hotel${homeAnchor}&sort=recommended&limit=20`
       );
       return res.data.data.results ?? [];
     },
@@ -856,10 +859,10 @@ export default function HomeScreen() {
   });
 
   const { data: apartmentsData, isLoading: aptsLoading, refetch: refetchApts } = useQuery<SearchResult[]>({
-    queryKey: ["home-apartments", homeLat, homeLng, localCurrency],
+    queryKey: ["home-apartments", homeAnchor, localCurrency],
     queryFn: async () => {
       const res = await listingApi.get<SearchResponse>(
-        `/search?category=apartment&lat=${homeLat}&lng=${homeLng}&sort=recommended&limit=10`
+        `/search?category=apartment${homeAnchor}&sort=recommended&limit=10`
       );
       return res.data.data.results ?? [];
     },
@@ -867,10 +870,10 @@ export default function HomeScreen() {
   });
 
   const { data: carsData, refetch: refetchCars } = useQuery<SearchResult[]>({
-    queryKey: ["home-cars", homeLat, homeLng, localCurrency],
+    queryKey: ["home-cars", homeAnchor, localCurrency],
     queryFn: async () => {
       const res = await listingApi.get<SearchResponse>(
-        `/search?category=car&lat=${homeLat}&lng=${homeLng}00&sort=recommended&limit=10`
+        `/search?category=car${homeAnchor}&sort=recommended&limit=10`
       );
       return res.data.data.results ?? [];
     },

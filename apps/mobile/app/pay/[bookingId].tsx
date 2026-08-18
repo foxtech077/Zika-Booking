@@ -174,6 +174,16 @@ interface StripePaymentSession {
   publishableKey?: string;
 }
 
+const NON_PAYABLE_STATUSES = [
+  "confirmed",
+  "cancelled_by_guest",
+  "cancelled_by_provider",
+  "cancelled_by_system",
+  "refunded",
+  "completed",
+  "active",
+];
+
 function getPaymentErrorMessage(err: unknown): string {
   const res = (err as { response?: { data?: { message?: string } } })?.response;
   const message = res?.data?.message ?? (err as Error)?.message ?? "";
@@ -373,8 +383,7 @@ export default function PaymentScreen() {
   // ── Guard: redirect away if booking is already confirmed or cancelled ──────
   useEffect(() => {
     if (!bookingLoading && booking) {
-      const nonPayableStatuses = ["confirmed", "cancelled_by_guest", "cancelled_by_provider", "cancelled_by_system", "refunded", "completed", "active"];
-      if (nonPayableStatuses.includes(booking.status)) {
+      if (NON_PAYABLE_STATUSES.includes(booking.status)) {
         router.replace({
           pathname: "/booking/[id]" as any,
           params: { id: bookingId },
@@ -442,11 +451,15 @@ export default function PaymentScreen() {
   const isExpired = booking !== null && msLeft === 0;
   const isProcessing = isInitiating || view === "stripe_polling" || view === "tara_waiting";
 
+  const alreadySettled = !!booking && NON_PAYABLE_STATUSES.includes(booking.status);
+
   useEffect(() => {
-    if (isExpired && !isProcessing) {
+    // A settled booking has consumed its lock; the countdown must not raise an
+    // expiry modal over it (the redirect above is already navigating away).
+    if (isExpired && !isProcessing && !alreadySettled) {
       setExpiredModal(true);
     }
-  }, [isExpired, isProcessing]);
+  }, [isExpired, isProcessing, alreadySettled]);
 
   // Block back navigation when processing
   useEffect(() => {

@@ -315,6 +315,7 @@ export default function BookingDetailScreen() {
   // Auto-refresh until backend confirms the booking (webhook delay). Stops after 3 minutes.
   const [autoRefresh, setAutoRefresh] = useState(() => fromPayment === "true");
   const [pollingTimedOut, setPollingTimedOut] = useState(false);
+  const [openingChat, setOpeningChat] = useState(false);
 
   useEffect(() => {
     if (!justPaid) return;
@@ -329,6 +330,26 @@ export default function BookingDetailScreen() {
 
     return () => subscription.remove();
   }, [justPaid]);
+
+  // Guests need to reach their host after paying, not just before booking.
+  // Same POST /conversations flow the listing page's "Message Host" uses.
+  async function openHostChat(listingId: string, bookingId: string) {
+    if (openingChat) return;
+    setOpeningChat(true);
+    try {
+      const res = await listingApi.post<{ data: { conversationId: string } }>("/conversations", {
+        listingId,
+        bookingId,
+      });
+      router.push(`/conversation/${res.data.data.conversationId}` as any);
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error?.message ?? "Could not open the conversation. Please try again.";
+      Alert.alert("Error", message);
+    } finally {
+      setOpeningChat(false);
+    }
+  }
 
   const { data: booking, isLoading, isError, refetch } = useQuery<BookingDetail>({
     queryKey: ["booking", id],
@@ -750,6 +771,24 @@ export default function BookingDetailScreen() {
               )
             )}
 
+            {/* Message host — available at every stage, including after payment */}
+            {user && booking.listing?.id && !cancelled && (
+              <TouchableOpacity
+                style={styles.messageHostBtn}
+                onPress={() => void openHostChat(booking.listing.id, booking.id)}
+                disabled={openingChat}
+              >
+                {openingChat ? (
+                  <ActivityIndicator size="small" color="#16a34a" />
+                ) : (
+                  <>
+                    <Ionicons name="chatbubble-ellipses-outline" size={16} color="#16a34a" style={{ marginRight: 6 }} />
+                    <Text style={styles.messageHostBtnText}>Message Host</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
             {/* Share voucher (text) */}
             <TouchableOpacity
               style={styles.shareVoucherBtn}
@@ -1065,6 +1104,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#eff6ff",
   },
   reviewBtnText: { fontSize: 15, fontWeight: "700", color: "#16a34a" },
+
+  messageHostBtn: {
+    borderWidth: 2,
+    borderColor: "#16a34a",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    backgroundColor: "#f0fdf4",
+  },
+  messageHostBtnText: { fontSize: 15, fontWeight: "700", color: "#16a34a" },
 
   reviewSubmittedBox: {
     borderWidth: 1,

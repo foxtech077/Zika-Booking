@@ -3,16 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Clock3, Gift, Lock, RefreshCw, Tag, Unlock } from "lucide-react";
+import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Clock3, ExternalLink, RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { listingApi } from "@/lib/listing-api";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Card";
-import { Input, Select } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Input";
 import { cn, formatDate } from "@/lib/utils";
 
 type ListingCategory = "hotel" | "apartment" | "car";
-type DiscountType = "percentage" | "fixed";
 
 interface Listing {
   id: string;
@@ -47,29 +47,6 @@ interface FeedStatus {
   lastError: string | null;
   consecutiveFailures: number;
   nextRetryAt: string | null;
-}
-
-interface ManualBlock {
-  id: string;
-  start: string;
-  end: string;
-  reason: string;
-}
-
-interface ProviderOffer {
-  id: string;
-  start: string;
-  end: string;
-  discountType: DiscountType;
-  discountValue: number;
-  label: string;
-}
-
-interface ActivityPromotion {
-  id: string;
-  start: string;
-  end: string;
-  label: string;
 }
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -219,25 +196,11 @@ function LegendItem({ className, label, detail }: { className: string; label: st
   );
 }
 
-function isoRange(from: string, to: string) {
-  if (!from || !to) return "Select a date range";
-  return `${formatDate(from)} to ${formatDate(to)}`;
-}
-
 export default function CalendarPage() {
   const searchParams = useSearchParams();
   const initialListing = searchParams.get("listing") ?? "";
   const [cursor, setCursor] = useState(new Date());
   const [selectedListing, setSelectedListing] = useState(initialListing);
-  const [rangeStart, setRangeStart] = useState("");
-  const [rangeEnd, setRangeEnd] = useState("");
-  const [blockReason, setBlockReason] = useState("Provider block");
-  const [discountType, setDiscountType] = useState<DiscountType>("percentage");
-  const [discountValue, setDiscountValue] = useState("20");
-  const [offerLabel, setOfferLabel] = useState("20%");
-  const [manualBlocks, setManualBlocks] = useState<ManualBlock[]>([]);
-  const [providerOffers, setProviderOffers] = useState<ProviderOffer[]>([]);
-  const [activityPromotions] = useState<ActivityPromotion[]>([]);
 
   const dateRange = useMemo(() => monthRange(cursor), [cursor]);
   const visibleDays = useMemo(() => visibleMonthDays(cursor), [cursor]);
@@ -266,77 +229,20 @@ export default function CalendarPage() {
     enabled: Boolean(selectedListing),
   });
 
-  const selectedBlocks = manualBlocks.filter((block) => block.id.startsWith(`${selectedListing}:`));
-  const selectedOffers = providerOffers.filter((offer) => offer.id.startsWith(`${selectedListing}:`));
   const loading = listingsLoading || availabilityLoading;
-
-  function normalizedSelectedRange() {
-    if (!rangeStart || !rangeEnd) return null;
-    return rangeStart <= rangeEnd ? { start: rangeStart, end: rangeEnd } : { start: rangeEnd, end: rangeStart };
-  }
-
-  function handleDayClick(day: string) {
-    if (!rangeStart || (rangeStart && rangeEnd)) {
-      setRangeStart(day);
-      setRangeEnd("");
-      return;
-    }
-    setRangeEnd(day);
-  }
-
-  function blockDates() {
-    const range = normalizedSelectedRange();
-    if (!selectedListing || !range) return;
-    setManualBlocks((items) => [
-      ...items.filter((item) => !(item.id.startsWith(`${selectedListing}:`) && item.start === range.start && item.end === range.end)),
-      { id: `${selectedListing}:block:${range.start}:${range.end}`, ...range, reason: blockReason || "Provider block" },
-    ]);
-  }
-
-  function unblockDates() {
-    const range = normalizedSelectedRange();
-    if (!selectedListing || !range) return;
-    setManualBlocks((items) => items.filter((item) => !(item.id.startsWith(`${selectedListing}:`) && item.start <= range.end && item.end >= range.start)));
-  }
-
-  function activateOffer() {
-    const range = normalizedSelectedRange();
-    const value = Number(discountValue);
-    if (!selectedListing || !range || !Number.isFinite(value) || value <= 0) return;
-    setProviderOffers((items) => [
-      ...items.filter((item) => !(item.id.startsWith(`${selectedListing}:`) && item.start === range.start && item.end === range.end)),
-      {
-        id: `${selectedListing}:offer:${range.start}:${range.end}`,
-        ...range,
-        discountType,
-        discountValue: value,
-        label: offerLabel.slice(0, 6) || `${value}${discountType === "percentage" ? "%" : ""}`.slice(0, 6),
-      },
-    ]);
-  }
-
-  function removeOffer() {
-    const range = normalizedSelectedRange();
-    if (!selectedListing || !range) return;
-    setProviderOffers((items) => items.filter((item) => !(item.id.startsWith(`${selectedListing}:`) && item.start <= range.end && item.end >= range.start)));
-  }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-950">Calendar</h1>
-          <p className="mt-1 text-sm text-slate-500">Activate and deactivate availability or provider offers by date for one listing.</p>
+          <p className="mt-1 text-sm text-slate-500">Confirmed bookings, payment holds, and imported iCal busy periods for one listing.</p>
         </div>
         <div className="w-full lg:w-80">
           <Select
             label="Listing"
             value={selectedListing}
-            onChange={(event) => {
-              setSelectedListing(event.target.value);
-              setRangeStart("");
-              setRangeEnd("");
-            }}
+            onChange={(event) => setSelectedListing(event.target.value)}
             placeholder={listingsLoading ? "Loading listings..." : "Select listing"}
             options={listings.map((listing) => ({ value: listing.id, label: `${listing.name} (${listing.category})` }))}
           />
@@ -353,10 +259,7 @@ export default function CalendarPage() {
           <LegendItem className="bg-white" label="Available" detail="Unit open to book" />
           <LegendItem className="bg-emerald-600" label="Booked" detail="Confirmed booking occupying date" />
           <LegendItem className="bg-amber-400" label="Held" detail="Active 5-minute reservation lock" />
-          <LegendItem className="bg-slate-700" label="Blocked" detail="Manually blocked by provider" />
           <LegendItem className="bg-[repeating-linear-gradient(45deg,#e5e7eb,#e5e7eb_6px,#f8fafc_6px,#f8fafc_12px)]" label="External hold" detail="Imported iCal feed block" />
-          <LegendItem className="bg-white" label="Promotion active" detail="Red badge on date" />
-          <LegendItem className="bg-white" label="Provider offer" detail="Orange badge on date" />
         </div>
       </Card>
 
@@ -370,9 +273,6 @@ export default function CalendarPage() {
                 <p className="text-xs text-slate-500">{dateRange.from} to {dateRange.to}</p>
               </div>
               <Button variant="ghost" icon={<ChevronRight />} onClick={() => setCursor((value) => addMonths(value, 1))} />
-            </div>
-            <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
-              Selected: {isoRange(rangeStart, rangeEnd)}
             </div>
           </div>
 
@@ -401,45 +301,31 @@ export default function CalendarPage() {
                     const holds = bookings.filter(activeLock);
                     const confirmed = bookings.filter((booking) => booking.status === "confirmed");
                     const externalHolds = overlaps(day, availability.externalHolds);
-                    const blocks = overlaps(day, selectedBlocks);
-                    const offers = overlaps(day, selectedOffers);
-                    const promotions = overlaps(day, activityPromotions);
-                    const selectedRange = normalizedSelectedRange();
-                    const isSelected = selectedRange ? day >= selectedRange.start && day <= selectedRange.end : day === rangeStart;
                     const outsideMonth = date.getMonth() !== cursor.getMonth();
 
                     let stateClass = "bg-white text-slate-800";
                     if (externalHolds.length) stateClass = "bg-[repeating-linear-gradient(45deg,#e5e7eb,#e5e7eb_8px,#f8fafc_8px,#f8fafc_16px)] text-slate-700";
-                    if (blocks.length) stateClass = "bg-slate-700 text-white";
                     if (holds.length) stateClass = "bg-amber-400 text-slate-950";
                     if (confirmed.length) stateClass = "bg-emerald-600 text-white";
 
                     return (
-                      <button
+                      <div
                         key={day}
-                        type="button"
-                        onClick={() => handleDayClick(day)}
                         className={cn(
-                          "relative min-h-[116px] border-b border-r border-slate-200 p-2 text-left transition hover:ring-2 hover:ring-green-300",
+                          "relative min-h-[116px] border-b border-r border-slate-200 p-2 text-left",
                           stateClass,
-                          outsideMonth && "opacity-40",
-                          isSelected && "ring-2 ring-green-800"
+                          outsideMonth && "opacity-40"
                         )}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-sm font-bold text-slate-950">{date.getDate()}</span>
-                          <div className="flex flex-wrap justify-end gap-1">
-                            {promotions[0] && <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{promotions[0].label}</span>}
-                            {offers[0] && <span className="rounded bg-orange-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{offers[0].label}</span>}
-                          </div>
                         </div>
                         <div className="mt-2 space-y-1">
                           {confirmed.slice(0, 2).map((booking) => <p key={booking.id} className="truncate rounded bg-white/20 px-2 py-0.5 text-[10px] font-semibold">{booking.reference}</p>)}
                           {holds.slice(0, 1).map((booking) => <p key={booking.id} className="truncate rounded bg-white/40 px-2 py-0.5 text-[10px] font-semibold">Held {booking.reference}</p>)}
-                          {blocks[0] && <p className="truncate rounded bg-black/20 px-2 py-0.5 text-[10px] font-semibold">{blocks[0].reason}</p>}
                           {externalHolds[0] && <p className="truncate rounded bg-white/80 px-2 py-0.5 text-[10px] font-semibold text-slate-700">{externalHolds[0].platform}</p>}
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -450,42 +336,32 @@ export default function CalendarPage() {
 
         <div className="space-y-5">
           <Card>
-            <SectionHeader title="Calendar Actions" subtitle="Select a date range, then choose an action." />
-            <div className="grid gap-3">
-              <Input label="Start Date" type="date" value={rangeStart} onChange={(event) => setRangeStart(event.target.value)} />
-              <Input label="End Date" type="date" value={rangeEnd} onChange={(event) => setRangeEnd(event.target.value)} />
-              <Input label="Block Reason" value={blockReason} onChange={(event) => setBlockReason(event.target.value)} />
-              <div className="grid grid-cols-2 gap-2">
-                <Button icon={<Lock />} onClick={blockDates} disabled={!normalizedSelectedRange()}>Block Dates</Button>
-                <Button variant="outline" icon={<Unlock />} onClick={unblockDates} disabled={!normalizedSelectedRange()}>Unblock Dates</Button>
-              </div>
-              <p className="rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">
-                Blocking dates marks them unavailable in this calendar. The live iCal export endpoint publishes confirmed busy periods; manual busy-block persistence is not present in the current API schema.
+            <SectionHeader title="Managing Availability" subtitle="Where to change what this calendar shows." />
+            <div className="grid gap-3 text-sm text-slate-600">
+              <p>
+                This calendar is read-only. It reflects confirmed bookings, active payment holds,
+                and busy periods imported from connected iCal feeds.
               </p>
-            </div>
-          </Card>
-
-          <Card>
-            <SectionHeader title="Provider Offer" subtitle="Custom date-range discount for this listing." />
-            <div className="grid gap-3">
-              <Select
-                label="Discount Type"
-                value={discountType}
-                onChange={(event) => setDiscountType(event.target.value as DiscountType)}
-                options={[
-                  { value: "percentage", label: "Percentage" },
-                  { value: "fixed", label: "Fixed" },
-                ]}
-              />
-              <Input label="Discount Value" type="number" min="0" value={discountValue} onChange={(event) => setDiscountValue(event.target.value)} />
-              <Input label="Label Text" maxLength={6} value={offerLabel} onChange={(event) => setOfferLabel(event.target.value.slice(0, 6))} />
-              <div className="grid grid-cols-2 gap-2">
-                <Button icon={<Tag />} onClick={activateOffer} disabled={!normalizedSelectedRange()}>Activate Offer</Button>
-                <Button variant="outline" icon={<Gift />} onClick={removeOffer} disabled={!normalizedSelectedRange()}>Remove Offer</Button>
-              </div>
-              <p className="rounded-xl bg-orange-50 p-3 text-xs leading-5 text-orange-800">
-                Provider offers are shown as orange badges and are separate from admin activity promotions.
-              </p>
+              <Link
+                href="/dashboard/channel"
+                className="flex items-center justify-between gap-3 rounded-xl border border-border p-3 transition hover:border-primary hover:bg-primary-50/40"
+              >
+                <span>
+                  <span className="block font-semibold text-slate-900">Block dates via iCal</span>
+                  <span className="text-xs text-slate-500">Connect or sync an external calendar feed</span>
+                </span>
+                <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
+              </Link>
+              <Link
+                href="/dashboard/listings"
+                className="flex items-center justify-between gap-3 rounded-xl border border-border p-3 transition hover:border-primary hover:bg-primary-50/40"
+              >
+                <span>
+                  <span className="block font-semibold text-slate-900">Date-range discounts</span>
+                  <span className="text-xs text-slate-500">Set seasonal pricing on the listing itself</span>
+                </span>
+                <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
+              </Link>
             </div>
           </Card>
 

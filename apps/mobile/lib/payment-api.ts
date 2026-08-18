@@ -2,10 +2,10 @@ import axios from "axios";
 import { useAuthStore } from "../store/auth";
 import { getCachedAnonymousToken } from "./anonymous";
 import { payLog } from "./payment-logger";
-import { getPaymentBaseUrl, getAuthBaseUrl } from "./config";
+import { getPaymentBaseUrl } from "./config";
+import { refreshAccessToken } from "./token-refresh";
 
 const PAYMENT_BASE_URL = getPaymentBaseUrl();
-const AUTH_BASE_URL = getAuthBaseUrl();
 
 export const paymentApi = axios.create({
   baseURL: PAYMENT_BASE_URL,
@@ -42,7 +42,6 @@ function isAccountRevoked(error: unknown): boolean {
   return res.status === 403 && ACCOUNT_CODES.includes(code);
 }
 
-let refreshing: Promise<void> | null = null;
 
 paymentApi.interceptors.response.use(
   (res) => {
@@ -82,30 +81,16 @@ paymentApi.interceptors.response.use(
       if (original._anon) return Promise.reject(error);
       original._retry = true;
       payLog("warn", "PAYMENT-API", "401 received — attempting token refresh");
-      if (!refreshing) {
-        refreshing = (async () => {
-          try {
-            const res = await axios.post(`${AUTH_BASE_URL}/auth/refresh`, {}, { withCredentials: true });
-            const token = (res.data as any).data.tokens.accessToken;
-            // Prefer the refreshed user object; reusing the cached one keeps
-            // server-side changes (hostStatus especially) out of the store.
-            const refreshedUser = (res.data as any).data.user;
-            const nextUser = refreshedUser ?? useAuthStore.getState().user;
-            if (nextUser) await useAuthStore.getState().setAuth(nextUser, token);
-            payLog("success", "PAYMENT-API", "Token refresh succeeded — retrying original request");
-          } catch {
-            payLog("error", "PAYMENT-API", "Token refresh FAILED — clearing auth");
-            await useAuthStore.getState().clearAuth();
-          } finally {
-            refreshing = null;
-          }
-        })();
+      // Shared singleton: a 401 arriving here and on listing-api at the same
+      // moment must not fire two refreshes, because refresh rotates and the
+      // loser's revoked token used to trigger clearAuth().
+      const newToken = await refreshAccessToken();
+      if (!newToken) {
+        payLog("error", "PAYMENT-API", "Token refresh did not yield a token — propagating 401");
+        return Promise.reject(error);
       }
-      await refreshing;
-      const newToken = useAuthStore.getState().accessToken;
-      if (newToken) {
-        original.headers.Authorization = `Bearer ${newToken}`;
-      }
+      payLog("success", "PAYMENT-API", "Token refresh succeeded — retrying original request");
+      original.headers.Authorization = `Bearer ${newToken}`;
       return paymentApi(original);
     }
 

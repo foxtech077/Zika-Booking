@@ -4,44 +4,22 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import {
-  Bell,
-  Building2,
-  CalendarDays,
   CheckCircle2,
-  CreditCard,
-  Eye,
-  Globe,
   KeyRound,
-  Languages,
-  Link2,
-  Lock,
-  MessageSquare,
-  RefreshCw,
   Search,
   Shield,
-  Smartphone,
   Wallet,
   XCircle,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Card";
-import { Input, Select } from "@/components/ui/Input";
-import { CurrencyCombobox } from "@/components/ui/CurrencyCombobox";
+import { Input } from "@/components/ui/Input";
 import { PaymentSettingsForm } from "@/components/payments/PaymentSettingsForm";
 import { cn } from "@/lib/utils";
 
-type SettingsTab =
-  | "account"
-  | "notifications"
-  | "security"
-  | "payments"
-  | "preferences"
-  | "integrations"
-  | "channel"
-  | "privacy";
+type SettingsTab = "security" | "payments";
 
 interface Notice {
   type: "success" | "error";
@@ -53,63 +31,10 @@ interface SectionFeedback {
   text: string;
 }
 
-
-
 const tabs: Array<{ key: SettingsTab; label: string; icon: ReactNode; keywords: string }> = [
-  { key: "account", label: "Account", icon: <Globe />, keywords: "timezone language currency format dashboard" },
-  { key: "notifications", label: "Notifications", icon: <Bell />, keywords: "booking messages reviews payouts email sms push" },
-  { key: "security", label: "Security", icon: <Shield />, keywords: "password two factor sessions devices privacy" },
-  { key: "payments", label: "Payments", icon: <Wallet />, keywords: "bank payout billing tax payment method" },
-  { key: "preferences", label: "Preferences", icon: <CalendarDays />, keywords: "booking availability instant cancellation minimum stay pricing" },
-  { key: "integrations", label: "Integrations", icon: <Link2 />, keywords: "connected services channels external accounts" },
-  { key: "channel", label: "Channel Sync", icon: <RefreshCw />, keywords: "ical airbnb booking google calendar sync" },
-  { key: "privacy", label: "Privacy", icon: <Lock />, keywords: "visibility data sharing communication activity" },
+  { key: "security", label: "Security", icon: <Shield />, keywords: "password credentials sign in account" },
+  { key: "payments", label: "Payments", icon: <Wallet />, keywords: "bank payout billing tax payment method stripe mobile money" },
 ];
-
-const languageOptions = [
-  { value: "en", label: "English" },
-  { value: "fr", label: "French" },
-  { value: "sw", label: "Swahili" },
-  { value: "hi", label: "Hindi" },
-];
-
-
-const timezoneOptions = [
-  { value: "Asia/Kolkata", label: "Asia/Kolkata" },
-  { value: "Asia/Dubai", label: "Asia/Dubai" },
-  { value: "Africa/Nairobi", label: "Africa/Nairobi" },
-  { value: "Africa/Lagos", label: "Africa/Lagos" },
-  { value: "Europe/London", label: "Europe/London" },
-  { value: "America/New_York", label: "America/New_York" },
-];
-
-function Toggle({ checked, onChange, label, hint }: { checked: boolean; onChange: (value: boolean) => void; label: string; hint?: string }) {
-  return (
-    <div className="flex min-h-[82px] items-center justify-between gap-4 rounded-xl border border-border bg-white p-4">
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-slate-900">{label}</p>
-        {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={cn(
-          "relative h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
-          checked ? "bg-primary" : "bg-slate-200"
-        )}
-      >
-        <span
-          className={cn(
-            "absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform",
-            checked ? "translate-x-5" : "translate-x-0"
-          )}
-        />
-      </button>
-    </div>
-  );
-}
 
 function SettingsCard({
   title,
@@ -179,62 +104,15 @@ function PasswordStrength({ password }: { password: string }) {
 export default function SettingsPage() {
   const router = useRouter();
   const { clearSession } = useAuthStore();
-  const [tab, setTab] = useState<SettingsTab>("account");
+  const [tab, setTab] = useState<SettingsTab>("security");
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [sectionFeedback, setSectionFeedback] = useState<Record<string, SectionFeedback | null>>({});
-
-  const [accountForm, setAccountForm] = useState({
-    timezone: "Asia/Kolkata",
-    language: "en",
-    currency: "USD",
-    dateFormat: "MM/DD/YYYY",
-    compactDashboard: false,
-  });
-
-  const [notifications, setNotifications] = useState({
-    bookingUpdates: true,
-    newReservations: true,
-    cancellations: true,
-    guestMessages: true,
-    reviews: true,
-    payouts: true,
-    promotions: false,
-    email: true,
-    sms: false,
-    push: true,
-  });
 
   const [pwdForm, setPwdForm] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
-    twoFactor: false,
-  });
-
-  const [payments, setPayments] = useState({
-    bankName: "",
-    accountHolder: "",
-    accountLast4: "",
-    payoutSchedule: "weekly",
-    taxId: "",
-    billingAddress: "",
-  });
-
-  const [preferences, setPreferences] = useState({
-    instantBooking: true,
-    autoApprove: false,
-    minStay: "1",
-    cancellationPolicy: "flexible",
-    availabilityWindow: "12",
-    pricingMode: "manual",
-  });
-
-  const [privacy, setPrivacy] = useState({
-    publicProfile: true,
-    dataSharing: false,
-    communicationInsights: true,
-    activityVisibility: false,
   });
 
   const filteredTabs = useMemo(() => {
@@ -252,7 +130,7 @@ export default function SettingsPage() {
         confirmPassword: pwdForm.confirmPassword,
       }),
     onSuccess: () => {
-      setPwdForm((form) => ({ ...form, currentPassword: "", newPassword: "", confirmPassword: "" }));
+      setPwdForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
       setNotice({ type: "success", text: "Password updated successfully. Logging out..." });
       setSectionFeedback((current) => ({ ...current, security: { type: "success", text: "Password updated successfully. Logging out..." } }));
       setTimeout(() => {
@@ -266,21 +144,10 @@ export default function SettingsPage() {
     },
   });
 
-  const fakeSaveMutation = useMutation({
-    mutationFn: async (section: string) => {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      return section;
-    },
-    onSuccess: (section) => {
-      const text = `${section} settings saved.`;
-      setNotice({ type: "success", text });
-      setSectionFeedback((current) => ({ ...current, [tab]: { type: "success", text } }));
-    },
-  });
-
-  const resetSection = () => {
-    setNotice({ type: "success", text: "Section changes reset." });
-    setSectionFeedback((current) => ({ ...current, [tab]: { type: "success", text: "Section changes reset." } }));
+  const clearPasswordForm = () => {
+    setPwdForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    setSectionFeedback((current) => ({ ...current, security: null }));
+    setNotice(null);
   };
 
   const savePassword = () => {
@@ -297,24 +164,11 @@ export default function SettingsPage() {
     passwordMutation.mutate();
   };
 
-  const notificationItems: Array<{ key: keyof typeof notifications; label: string; hint: string }> = [
-    { key: "bookingUpdates", label: "Booking updates", hint: "Changes to existing bookings." },
-    { key: "newReservations", label: "New reservations", hint: "New confirmed or pending bookings." },
-    { key: "cancellations", label: "Cancellation alerts", hint: "Guest or provider cancellations." },
-    { key: "guestMessages", label: "Guest messages", hint: "New inbox messages." },
-    { key: "reviews", label: "Reviews", hint: "New guest reviews and ratings." },
-    { key: "payouts", label: "Earnings / payouts", hint: "Payout processing and earnings summaries." },
-    { key: "promotions", label: "Promotional notifications", hint: "Product updates and offers." },
-    { key: "email", label: "Email notifications", hint: "Receive alerts via email." },
-    { key: "sms", label: "SMS notifications", hint: "Receive urgent alerts by SMS." },
-    { key: "push", label: "Push notifications", hint: "Browser and app push alerts." },
-  ];
-
   return (
     <div className="space-y-5 animate-fade-in">
       <SectionHeader
         title="Settings"
-        subtitle="Manage profile, preferences, security, payouts, integrations, and privacy."
+        subtitle="Manage your account security and payout details."
       />
 
       {notice && (
@@ -371,153 +225,31 @@ export default function SettingsPage() {
         </Card>
 
         <div className="space-y-5">
-          {tab === "account" && (
-            <SettingsCard title="Account Preferences" subtitle="Set dashboard defaults, locale, and display preferences." icon={<Globe />} feedback={sectionFeedback.account} footer={<SectionActions loading={fakeSaveMutation.isPending} onSave={() => fakeSaveMutation.mutate("Account preference")} onReset={resetSection} />}>
-              <div className="grid gap-4 md:grid-cols-2">
-                <Select label="Timezone" value={accountForm.timezone} onChange={(e) => setAccountForm((f) => ({ ...f, timezone: e.target.value }))} options={timezoneOptions} />
-                <Select label="Language" value={accountForm.language} onChange={(e) => setAccountForm((f) => ({ ...f, language: e.target.value }))} options={languageOptions} />
-                <CurrencyCombobox label="Currency" value={accountForm.currency} onChange={(val) => setAccountForm((f) => ({ ...f, currency: val }))} />
-                <Select label="Date format" value={accountForm.dateFormat} onChange={(e) => setAccountForm((f) => ({ ...f, dateFormat: e.target.value }))} options={[{ value: "MM/DD/YYYY", label: "MM/DD/YYYY" }, { value: "DD/MM/YYYY", label: "DD/MM/YYYY" }, { value: "YYYY-MM-DD", label: "YYYY-MM-DD" }]} />
-              </div>
-              <div className="mt-4">
-                <Toggle checked={accountForm.compactDashboard} onChange={(value) => setAccountForm((f) => ({ ...f, compactDashboard: value }))} label="Compact dashboard mode" hint="Show denser tables and controls across provider pages." />
-              </div>
-            </SettingsCard>
-          )}
-
-          {tab === "notifications" && (
-            <SettingsCard title="Notification Settings" subtitle="Choose how and when Kainook contacts you." icon={<Bell />} feedback={sectionFeedback.notifications} footer={<SectionActions loading={fakeSaveMutation.isPending} onSave={() => fakeSaveMutation.mutate("Notification")} onReset={resetSection} />}>
-              <div className="grid gap-3 md:grid-cols-2">
-                {notificationItems.map(({ key, label, hint }) => (
-                  <Toggle key={key} checked={notifications[key]} onChange={(value) => setNotifications((f) => ({ ...f, [key]: value }))} label={label} hint={hint} />
-                ))}
-              </div>
-            </SettingsCard>
-          )}
-
           {tab === "security" && (
-            <div className="space-y-5">
-              <SettingsCard title="Password Management" subtitle="Use a strong, unique password for your provider account." icon={<KeyRound />} feedback={sectionFeedback.security} footer={<><Button loading={passwordMutation.isPending} onClick={savePassword}>Update Password</Button><Button variant="outline" onClick={resetSection}>Cancel</Button></>}>
-                <div className="grid gap-4">
-                  <Input label="Current password" type="password" autoComplete="new-password" value={pwdForm.currentPassword} onChange={(e) => setPwdForm((f) => ({ ...f, currentPassword: e.target.value }))} />
-                  <Input label="New password" type="password" autoComplete="new-password" value={pwdForm.newPassword} onChange={(e) => setPwdForm((f) => ({ ...f, newPassword: e.target.value }))} />
-                  <PasswordStrength password={pwdForm.newPassword} />
-                  <Input label="Confirm new password" type="password" autoComplete="new-password" value={pwdForm.confirmPassword} onChange={(e) => setPwdForm((f) => ({ ...f, confirmPassword: e.target.value }))} error={pwdForm.confirmPassword && pwdForm.confirmPassword !== pwdForm.newPassword ? "Passwords do not match" : undefined} />
-                </div>
-              </SettingsCard>
-              <SettingsCard title="Login & Security" subtitle="Manage account protection and active sessions." icon={<Shield />} feedback={sectionFeedback.security} footer={<SectionActions loading={fakeSaveMutation.isPending} onSave={() => fakeSaveMutation.mutate("Security")} onReset={resetSection} />}>
-                <div className="space-y-3">
-                  <Toggle checked={pwdForm.twoFactor} onChange={(value) => setPwdForm((f) => ({ ...f, twoFactor: value }))} label="Two-factor authentication" hint="Require a second verification step during login." />
-                  <SessionRow device="Windows · Chrome" location="Current session" status="Active" />
-                  <SessionRow device="Mobile browser" location="Recently active" status="Review" />
-                </div>
-              </SettingsCard>
-            </div>
-          )}
-
-          {tab === "payments" && (
-            <PaymentSettingsForm />
-          )}
-
-          {tab === "preferences" && (
-            <SettingsCard title="Property / Business Preferences" subtitle="Set default booking, availability, cancellation, and pricing behavior." icon={<Building2 />} feedback={sectionFeedback.preferences} footer={<SectionActions loading={fakeSaveMutation.isPending} onSave={() => fakeSaveMutation.mutate("Business preference")} onReset={resetSection} />}>
-              <div className="grid gap-4 md:grid-cols-2">
-                <Toggle checked={preferences.instantBooking} onChange={(value) => setPreferences((f) => ({ ...f, instantBooking: value }))} label="Instant booking" hint="Allow eligible guests to book without manual approval." />
-                <Toggle checked={preferences.autoApprove} onChange={(value) => setPreferences((f) => ({ ...f, autoApprove: value }))} label="Auto-approve requests" hint="Automatically approve low-risk booking requests." />
-                <Input label="Minimum stay" type="number" min="1" value={preferences.minStay} onChange={(e) => setPreferences((f) => ({ ...f, minStay: e.target.value }))} />
-                <Select label="Cancellation policy" value={preferences.cancellationPolicy} onChange={(e) => setPreferences((f) => ({ ...f, cancellationPolicy: e.target.value }))} options={[{ value: "flexible", label: "Flexible" }, { value: "moderate", label: "Moderate" }, { value: "strict", label: "Strict" }]} />
-                <Select label="Availability window" value={preferences.availabilityWindow} onChange={(e) => setPreferences((f) => ({ ...f, availabilityWindow: e.target.value }))} options={[{ value: "3", label: "3 months" }, { value: "6", label: "6 months" }, { value: "12", label: "12 months" }, { value: "18", label: "18 months" }]} />
-                <Select label="Pricing preference" value={preferences.pricingMode} onChange={(e) => setPreferences((f) => ({ ...f, pricingMode: e.target.value }))} options={[{ value: "manual", label: "Manual pricing" }, { value: "smart", label: "Smart pricing" }]} />
+            <SettingsCard
+              title="Password Management"
+              subtitle="Use a strong, unique password for your provider account."
+              icon={<KeyRound />}
+              feedback={sectionFeedback.security}
+              footer={
+                <>
+                  <Button loading={passwordMutation.isPending} onClick={savePassword}>Update Password</Button>
+                  <Button variant="outline" onClick={clearPasswordForm}>Cancel</Button>
+                </>
+              }
+            >
+              <div className="grid gap-4">
+                <Input label="Current password" type="password" autoComplete="new-password" value={pwdForm.currentPassword} onChange={(e) => setPwdForm((f) => ({ ...f, currentPassword: e.target.value }))} />
+                <Input label="New password" type="password" autoComplete="new-password" value={pwdForm.newPassword} onChange={(e) => setPwdForm((f) => ({ ...f, newPassword: e.target.value }))} />
+                <PasswordStrength password={pwdForm.newPassword} />
+                <Input label="Confirm new password" type="password" autoComplete="new-password" value={pwdForm.confirmPassword} onChange={(e) => setPwdForm((f) => ({ ...f, confirmPassword: e.target.value }))} error={pwdForm.confirmPassword && pwdForm.confirmPassword !== pwdForm.newPassword ? "Passwords do not match" : undefined} />
               </div>
             </SettingsCard>
           )}
 
-          {tab === "integrations" && (
-            <SettingsCard title="Connected Integrations" subtitle="Manage external services and connected provider tools." icon={<Link2 />} feedback={sectionFeedback.integrations} footer={<SectionActions loading={fakeSaveMutation.isPending} onSave={() => fakeSaveMutation.mutate("Integration")} onReset={resetSection} />}>
-              <div className="grid gap-3 md:grid-cols-2">
-                <IntegrationCard name="Airbnb" status="Connected" detail="Calendar sync enabled" />
-                <IntegrationCard name="Booking.com" status="Disconnected" detail="Connect to import reservations" />
-                <IntegrationCard name="Google Calendar" status="Connected" detail="External calendar linked" />
-                <IntegrationCard name="Custom iCal" status="Ready" detail="Add feeds in Channel Sync" />
-              </div>
-            </SettingsCard>
-          )}
-
-          {tab === "channel" && (
-            <SettingsCard title="Channel Sync Preferences" subtitle="Control external calendar sync defaults and indicators." icon={<RefreshCw />} feedback={sectionFeedback.channel} footer={<SectionActions loading={fakeSaveMutation.isPending} onSave={() => fakeSaveMutation.mutate("Channel sync")} onReset={resetSection} />}>
-              <div className="grid gap-3 md:grid-cols-2">
-                <Toggle checked={true} onChange={() => undefined} label="Automatic iCal sync" hint="Sync external feeds on a recurring schedule." />
-                <Toggle checked={true} onChange={() => undefined} label="Conflict detection" hint="Flag availability conflicts from imported calendars." />
-                <StatusTile label="Airbnb feed" value="Healthy" tone="success" />
-                <StatusTile label="Booking.com feed" value="Needs setup" tone="warning" />
-              </div>
-            </SettingsCard>
-          )}
-
-          {tab === "privacy" && (
-            <SettingsCard title="Privacy Settings" subtitle="Control visibility, data sharing, and communication preferences." icon={<Lock />} feedback={sectionFeedback.privacy} footer={<SectionActions loading={fakeSaveMutation.isPending} onSave={() => fakeSaveMutation.mutate("Privacy")} onReset={resetSection} />}>
-              <div className="grid gap-3 md:grid-cols-2">
-                <Toggle checked={privacy.publicProfile} onChange={(value) => setPrivacy((f) => ({ ...f, publicProfile: value }))} label="Public profile visibility" hint="Show provider profile to guests." />
-                <Toggle checked={privacy.dataSharing} onChange={(value) => setPrivacy((f) => ({ ...f, dataSharing: value }))} label="Data sharing" hint="Share anonymized performance data for insights." />
-                <Toggle checked={privacy.communicationInsights} onChange={(value) => setPrivacy((f) => ({ ...f, communicationInsights: value }))} label="Communication preferences" hint="Use message metadata to improve guest support." />
-                <Toggle checked={privacy.activityVisibility} onChange={(value) => setPrivacy((f) => ({ ...f, activityVisibility: value }))} label="Account activity visibility" hint="Show activity status across provider tools." />
-              </div>
-            </SettingsCard>
-          )}
+          {tab === "payments" && <PaymentSettingsForm />}
         </div>
       </div>
-    </div>
-  );
-}
-
-function SectionActions({ loading, onSave, onReset }: { loading: boolean; onSave: () => void; onReset: () => void }) {
-  return (
-    <>
-      <Button loading={loading} onClick={onSave}>Save Changes</Button>
-      <Button variant="outline" onClick={onReset}>Cancel</Button>
-    </>
-  );
-}
-
-function StatusTile({ label, value, tone }: { label: string; value: string; tone: "success" | "warning" }) {
-  return (
-    <div className={cn("rounded-xl border p-4", tone === "success" ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50")}>
-      <p className="text-xs font-medium text-slate-600">{label}</p>
-      <p className={cn("mt-2 font-bold", tone === "success" ? "text-emerald-800" : "text-amber-800")}>{value}</p>
-    </div>
-  );
-}
-
-function SessionRow({ device, location, status }: { device: string; location: string; status: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-4">
-      <div className="flex items-center gap-3">
-        <Smartphone className="h-4 w-4 text-slate-400" />
-        <div>
-          <p className="text-sm font-semibold text-slate-900">{device}</p>
-          <p className="text-xs text-slate-500">{location}</p>
-        </div>
-      </div>
-      <Badge label={status} status={status === "Active" ? "confirmed" : "pending"} />
-    </div>
-  );
-}
-
-function IntegrationCard({ name, status, detail }: { name: string; status: string; detail: string }) {
-  const connected = status === "Connected";
-  return (
-    <div className="rounded-xl border border-border p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Globe className="h-4 w-4 text-primary" />
-          <p className="font-semibold text-slate-900">{name}</p>
-        </div>
-        <Badge label={status} status={connected ? "confirmed" : "pending"} />
-      </div>
-      <p className="text-sm text-slate-500">{detail}</p>
-      <Button className="mt-4" size="sm" variant={connected ? "outline" : "primary"}>
-        {connected ? "Manage" : "Connect"}
-      </Button>
     </div>
   );
 }

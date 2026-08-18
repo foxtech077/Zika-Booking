@@ -191,6 +191,8 @@ interface SearchResponse {
     totalCount: number;
     nextCursor: string | null;
     results: SearchResult[];
+    /** How far the backend actually reached (Airbnb-style adaptive area). */
+    searchArea?: { effectiveRadiusKm: number | null; expanded: boolean };
   };
 }
 
@@ -1513,6 +1515,8 @@ export default function SearchScreen() {
   const isLoadingMore = searchFetching && effectiveResults.length > 0;
   const hasNextPage = !!searchData?.nextCursor;
   const totalCount = searchData?.totalCount ?? 0;
+  // True when the local area was too sparse and the backend widened the search.
+  const areaExpanded = !!searchData?.searchArea?.expanded;
 
   // Active promotion for the current search category
   const { data: categoryPromotions } = useQuery<Promotion[]>({
@@ -1736,6 +1740,16 @@ export default function SearchScreen() {
             {totalCount > 0
               ? `${effectiveResults.length.toLocaleString()} listing${effectiveResults.length !== 1 ? "s" : ""} ${geo ? `near ${geo.town}` : placeName ? `matching "${placeName}"` : "found"}`
               : `No listings found${geo ? ` near ${geo.town}` : placeName ? ` for "${placeName}"` : ""}`}
+          </Text>
+        </View>
+      )}
+
+      {/* Airbnb-style area note: results reach further than the searched area */}
+      {!isFirstLoad && !searchFetching && !searchError && areaExpanded && effectiveResults.length > 0 && (
+        <View style={styles.areaNote}>
+          <Ionicons name="navigate-outline" size={12} color={MUTED} />
+          <Text style={styles.areaNoteText}>
+            Not many places {geo ? `right in ${geo.town}` : "nearby"} — showing the nearest options further out.
           </Text>
         </View>
       )}
@@ -2851,6 +2865,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   resultCountText: { fontSize: 13, color: MUTED },
+  areaNote: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+  },
+  areaNoteText: { fontSize: 12, color: MUTED, flexShrink: 1 },
 
   // Active filter badges
   badgesScroll: { maxHeight: 44 },

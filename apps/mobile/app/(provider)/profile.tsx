@@ -62,10 +62,6 @@ const mc = StyleSheet.create({
   },
 });
 
-function comingSoon(feature: string) {
-  Alert.alert(feature, "This feature is coming soon. We're working on it!", [{ text: "Got it" }]);
-}
-
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function ProfileScreen() {
@@ -104,10 +100,6 @@ export default function ProfileScreen() {
           {user?.businessName ? (
             <Text style={s.businessName}>{user.businessName}</Text>
           ) : null}
-          <View style={s.providerBadge}>
-            <Ionicons name="shield-checkmark" size={11} color="#34d399" />
-            <Text style={s.providerBadgeText}>Verified Provider</Text>
-          </View>
         </View>
 
         {/* Mirrors web's "Back to Kainook" (TopBar.tsx) — the way out of the
@@ -135,14 +127,10 @@ export default function ProfileScreen() {
           <MenuRow iconName="card-outline"    iconBg="#f0fdf4" label="Payout Setup"    sub="Bank, mobile money, or Stripe payouts" onPress={() => router.push("/(provider)/stripe-connect" as any)} />
           <MenuDivider />
           <MenuRow iconName="wallet-outline"  iconBg="#f0fdf4" label="Payout History"  sub="Scheduled & processed payouts" onPress={() => router.push("/(provider)/payouts" as any)} />
-          <MenuDivider />
-          <MenuRow iconName="receipt-outline" iconBg="#fffbeb" label="Tax Information" sub="Tax ID & certificates"         onPress={() => comingSoon("Tax Information")} />
         </MenuCard>
 
         <Text style={s.sectionLabel}>ACCOUNT</Text>
         <MenuCard>
-          <MenuRow iconName="document-text-outline" iconBg="#eff6ff" label="Verification Docs" sub="Upload required documents" onPress={() => comingSoon("Verification Documents")} />
-          <MenuDivider />
           <MenuRow iconName="notifications-outline" iconBg="#f5f3ff" label="Notifications"      sub="Push & email preferences"  onPress={() => router.push("/notifications" as any)} />
           <MenuDivider />
           <MenuRow iconName="help-circle-outline"   iconBg="#f0fdf4" label="Help & Support"     sub="FAQs, contact us"          onPress={() => router.push("/help" as any)} />
@@ -191,19 +179,6 @@ const s = StyleSheet.create({
   avatarInitials:    { fontSize: 32, fontWeight: "900", color: "#fff" },
   userName:          { fontSize: 20, fontWeight: "800", color: "#fff", marginBottom: 3, letterSpacing: -0.3 },
   businessName:      { fontSize: 13, color: "rgba(255,255,255,0.7)", marginBottom: 8 },
-  providerBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
-  },
-  providerBadgeText: { fontSize: 11, color: "#34d399", fontWeight: "700" },
-
   content:      { padding: 16, paddingBottom: 48, gap: 12 },
   sectionLabel: { fontSize: 10, fontWeight: "800", color: K.colors.textMuted, letterSpacing: 1.0, marginTop: 4, marginBottom: 8 },
   versionText:  { textAlign: "center", fontSize: 11, color: K.colors.textMuted, marginTop: 8 },

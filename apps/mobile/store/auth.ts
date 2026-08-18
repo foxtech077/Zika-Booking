@@ -2,7 +2,7 @@ import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import type { PublicUser } from "@zika/types";
-import { getCurrencyForCountry } from "../lib/currency";
+import { getCurrencyForCountry, COUNTRY_CURRENCY_MAP } from "../lib/currency";
 import { clearAnonymousToken, hydrateAnonymousToken } from "../lib/anonymous";
 
 const ACCESS_TOKEN_KEY = "zika_access_token";
@@ -15,16 +15,24 @@ interface AuthState {
   isHydrated: boolean;
   hasCompletedOnboarding: boolean;
   localCurrency: string | null;
+  /** True once the user has picked a currency by hand — nothing overrides it. */
+  currencyExplicit: boolean;
   setAuth: (user: PublicUser, accessToken: string) => Promise<void>;
   updateUser: (patch: Partial<PublicUser>) => Promise<void>;
   clearAuth: () => Promise<void>;
   hydrate: () => Promise<void>;
   setCompletedOnboarding: (completed: boolean) => Promise<void>;
   setLocalCurrency: (currency: string) => Promise<void>;
+  /**
+   * Derived default (IP-geolocation). Applied only when the user has neither
+   * picked a currency by hand nor has a profile country that maps to one.
+   */
+  suggestLocalCurrency: (currency: string) => Promise<void>;
 }
 
 const ONBOARDING_COMPLETED_KEY = "zika_onboarding_completed";
 const LOCAL_CURRENCY_KEY = "zika_local_currency";
+const CURRENCY_EXPLICIT_KEY = "zika_currency_explicit";
 
 // photoUrl is excluded from anything written to SecureStore: /auth/profile and
 // PATCH /auth/profile/:id now return a presigned S3 URL valid for ~15 minutes,
@@ -42,17 +50,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   isHydrated: false,
   hasCompletedOnboarding: false,
-  localCurrency: "USD", // default fallback
+  // Fallback until something better is known; the chain is
+  // manual pick > profile country > IP-geolocated country > EUR.
+  localCurrency: "EUR",
+  currencyExplicit: false,
 
   setAuth: async (user, accessToken) => {
     // A real session supersedes any anonymous one. Clearing it here stops a
     // leftover anonymous token from being picked up as a fallback later.
     await clearAnonymousToken();
-    const currency = getCurrencyForCountry(user.country).code;
     await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
     await SecureStore.setItemAsync(USER_KEY, JSON.stringify(stripPersistedFields(user)));
-    await SecureStore.setItemAsync(LOCAL_CURRENCY_KEY, currency);
-    set({ user, accessToken, localCurrency: currency });
+    // Profile country sets the currency only when it actually maps to one and
+    // the user has never picked a currency by hand. getCurrencyForCountry's
+    // USD fallback must not masquerade as a real profile-derived value.
+    const mapped = user.country ? COUNTRY_CURRENCY_MAP[user.country.toUpperCase()] : undefined;
+    if (!get().currencyExplicit && mapped) {
+      await SecureStore.setItemAsync(LOCAL_CURRENCY_KEY, mapped.code);
+      set({ user, accessToken, localCurrency: mapped.code });
+    } else {
+      set({ user, accessToken });
+    }
   },
 
   // Merges a partial update (e.g. after editing the profile or changing the
@@ -99,27 +117,50 @@ clearAuth: async () => {
 
   setLocalCurrency: async (currency: string) => {
     await SecureStore.setItemAsync(LOCAL_CURRENCY_KEY, currency);
-    set({ localCurrency: currency });
+    await SecureStore.setItemAsync(CURRENCY_EXPLICIT_KEY, "true");
+    set({ localCurrency: currency, currencyExplicit: true });
+  },
+
+  suggestLocalCurrency: async (currency: string) => {
+    const state = get();
+    if (state.currencyExplicit) return;
+    const profileMapped = state.user?.country
+      ? COUNTRY_CURRENCY_MAP[state.user.country.toUpperCase()]
+      : undefined;
+    if (profileMapped) return; // profile country outranks a geolocated guess
+    const code = currency.toUpperCase();
+    if (code.length !== 3 || code === state.localCurrency) return;
+    await SecureStore.setItemAsync(LOCAL_CURRENCY_KEY, code);
+    set({ localCurrency: code });
   },
 
   hydrate: async () => {
     try {
-      const [token, userJson, onboardingCompletedVal, currencyVal] = await Promise.all([
+      const [token, userJson, onboardingCompletedVal, currencyVal, explicitVal] = await Promise.all([
         SecureStore.getItemAsync(ACCESS_TOKEN_KEY).catch(() => null),
         SecureStore.getItemAsync(USER_KEY).catch(() => null),
         SecureStore.getItemAsync(ONBOARDING_COMPLETED_KEY).catch(() => null),
         SecureStore.getItemAsync(LOCAL_CURRENCY_KEY).catch(() => null),
+        SecureStore.getItemAsync(CURRENCY_EXPLICIT_KEY).catch(() => null),
       ]);
       // Interceptors read the anonymous token synchronously, so warm its cache
       // during hydration alongside the account session.
       await hydrateAnonymousToken().catch(() => {});
       const user = userJson ? (JSON.parse(userJson) as PublicUser) : null;
-      const localCurrency = currencyVal || (user ? getCurrencyForCountry(user.country).code : "USD");
+      const currencyExplicit = explicitVal === "true";
+      const profileMapped = user?.country
+        ? COUNTRY_CURRENCY_MAP[user.country.toUpperCase()]
+        : undefined;
+      // manual pick > profile country > previously stored suggestion > EUR
+      const localCurrency = currencyExplicit && currencyVal
+        ? currencyVal
+        : profileMapped?.code ?? currencyVal ?? "EUR";
       set({
         user,
         accessToken: token,
         hasCompletedOnboarding: onboardingCompletedVal === "true",
         localCurrency,
+        currencyExplicit,
       });
     } catch (e) {
       console.warn("Auth hydration warning:", e);
