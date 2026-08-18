@@ -172,10 +172,12 @@ export async function fxRoutes(app: FastifyInstance) {
         return sendError(reply, 503, "TEMPORARILY_UNAVAILABLE", "EUR conversion is temporarily unavailable. Please try again shortly.");
       }
 
-      const converted = ceilingForCurrency(n * rate, "EUR");
+      const rawConverted = n * rate;
+      const converted = ceilingForCurrency(rawConverted, "EUR");
       return sendSuccess(reply, 200, {
         amount: n,
         converted,
+        rawConverted: Number(rawConverted.toFixed(8)),
         rate: Number(rate.toFixed(6)),
         from,
         to: "EUR",

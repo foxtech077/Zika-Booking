@@ -3,6 +3,8 @@
 // Symbols are always rendered together with the ISO 4217 code so currencies
 // that share a symbol (e.g. FCFA XAF vs XOF) cannot be confused.
 
+import { ZERO_DECIMAL_CURRENCIES as ZERO_DEC } from "@zika/types";
+
 const CURRENCY_SYMBOLS: Record<string, string> = {
   EUR: "€",
   USD: "$",
@@ -25,18 +27,13 @@ export function currencySymbol(currency: string): string {
   return CURRENCY_SYMBOLS[code] ?? code;
 }
 
-const ZERO_DECIMAL_CURRENCIES = new Set([
-  "BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW",
-  "MGA", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF",
-]);
-
 /**
  * Format a number with thousands separators and the currency's natural
  * precision (2 decimals for most currencies, 0 for zero-decimal ones). A
  * missing currency keeps the historical whole-number behaviour.
  */
 export function fmtMoney(n: number, currency?: string): string {
-  const zeroDecimal = currency != null && ZERO_DECIMAL_CURRENCIES.has(currency.toUpperCase());
+  const zeroDecimal = currency != null && ZERO_DEC.has(currency.toUpperCase());
   const fractionDigits = zeroDecimal ? 0 : 2;
   return Number(n || 0).toLocaleString(undefined, {
     minimumFractionDigits: fractionDigits,

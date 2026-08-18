@@ -12,6 +12,7 @@ import { storeLatestReviewContext } from "@/services/traveller";
 import { useAuthStore } from "@/stores/auth";
 import { capitalize } from "@/lib/utils";
 import { derivePlatform, fmtMoney } from "@/lib/platform-currency";
+import { ZERO_DECIMAL_CURRENCIES } from "@zika/types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -128,9 +129,11 @@ const CARD_LOGOS = ["Visa", "Mastercard", "Amex", "UnionPay", "Apple Pay", "Goog
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmt(n: number) {
+function fmt(n: number, currency?: string) {
   if (typeof n !== "number" || isNaN(n)) return "0";
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const zeroDecimal = currency != null && ZERO_DECIMAL_CURRENCIES.has(currency.toUpperCase());
+  const fractionDigits = zeroDecimal ? 0 : 2;
+  return n.toLocaleString(undefined, { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
 }
 
 function getPricing(ctx: CheckoutCtx) {
@@ -835,11 +838,11 @@ export default function BookingReviewPage() {
                     disabled={submitting}
                     className="mt-5 w-full py-3.5 bg-[#0B1E3F] hover:bg-[#07152B] disabled:opacity-50 text-white font-bold rounded-xl transition text-sm"
                   >
-                    {submitting ? "Processing…" : `Pay ${pricing!.platformCurrency} ${fmt(pricing!.platformAmount)}`}
+                    {submitting ? "Processing…" : `Pay ${pricing!.platformCurrency} ${fmt(pricing!.platformAmount, pricing!.platformCurrency)}`}
                   </button>
                   {pricing!.platformCurrency !== ctx.currency && (
                     <p className="text-xs text-slate-400 mt-2">
-                      Billed as approx. {ctx.currency} {fmt(pricing!.total)} · charged in {pricing!.platformCurrency}
+                      Billed as approx. {ctx.currency} {fmt(pricing!.total, ctx.currency)} · charged in {pricing!.platformCurrency}
                     </p>
                   )}
                 </SectionCard>
@@ -907,7 +910,7 @@ export default function BookingReviewPage() {
                     /* ── Voucher applied ── */
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-semibold text-emerald-700">
-                        ✓ {ctx.voucherCode} — saves {ctx.currency} {fmt(ctx.voucherDiscount ?? 0)}
+                        ✓ {ctx.voucherCode} — saves {ctx.currency} {fmt(ctx.voucherDiscount ?? 0, ctx.currency)}
                       </span>
                       <button
                         type="button"
@@ -927,7 +930,7 @@ export default function BookingReviewPage() {
                     <div className="space-y-3">
                       <p className="text-sm text-emerald-700 font-semibold flex items-center gap-1.5">
                         <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                        Promotion applied — saves {ctx.currency} {fmt(pricing?.discount ?? 0)}
+                        Promotion applied — saves {ctx.currency} {fmt(pricing?.discount ?? 0, ctx.currency)}
                       </p>
                       <p className="text-xs text-slate-500">Have a voucher that saves more? Select or enter it below:</p>
 
@@ -1152,11 +1155,11 @@ export default function BookingReviewPage() {
                   disabled={submitting || (needsTermsAcceptance && !payTermsAccepted)}
                   className="w-full py-3.5 bg-[#0B1E3F] hover:bg-[#07152B] disabled:opacity-50 text-white font-bold rounded-xl transition text-sm"
                 >
-                  {submitting ? "Please wait…" : provider === "tara" ? "Send Payment Request" : `Pay ${pricing!.platformCurrency} ${fmt(pricing!.platformAmount)}`}
+                  {submitting ? "Please wait…" : provider === "tara" ? "Send Payment Request" : `Pay ${pricing!.platformCurrency} ${fmt(pricing!.platformAmount, pricing!.platformCurrency)}`}
                 </button>
                 {provider === "stripe" && pricing!.platformCurrency !== ctx.currency && (
                   <p className="text-xs text-slate-400 mt-2 text-center">
-                    Billed as approx. {ctx.currency} {fmt(pricing!.total)} · charged in {pricing!.platformCurrency}
+                    Billed as approx. {ctx.currency} {fmt(pricing!.total, ctx.currency)} · charged in {pricing!.platformCurrency}
                   </p>
                 )}
               </div>
@@ -1298,46 +1301,46 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
             otherwise the listing's own. The amount charged is always the platform total. */}
         <div className="space-y-2.5 text-sm">
           <div className="flex justify-between text-slate-600">
-            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedNightlyRate, ctx.pricingPreview?.nightlyRate ?? ctx.pricePerNight))} × {ctx.pricingPreview?.units ?? ctx.nightsOrDays} {isCar ? "day" : "night"}{(ctx.pricingPreview?.units ?? ctx.nightsOrDays) !== 1 ? "s" : ""}</span>
-            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedBaseAmount, pricing.base))}</span>
+            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedNightlyRate, ctx.pricingPreview?.nightlyRate ?? ctx.pricePerNight), pricing.dispCurrency)} × {ctx.pricingPreview?.units ?? ctx.nightsOrDays} {isCar ? "day" : "night"}{(ctx.pricingPreview?.units ?? ctx.nightsOrDays) !== 1 ? "s" : ""}</span>
+            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedBaseAmount, pricing.base), pricing.dispCurrency)}</span>
           </div>
           {pricing.discount > 0 && (
             <div className="flex justify-between text-emerald-600">
               <span>{ctx.discountSource === "promotion" ? "Promotional discount" : "Voucher discount"}</span>
-              <span>{pricing.dispPrefix}−{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedPromotionDiscount, pricing.discount))}</span>
+              <span>{pricing.dispPrefix}−{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedPromotionDiscount, pricing.discount), pricing.dispCurrency)}</span>
             </div>
           )}
           <div className="flex justify-between text-slate-600 border-t border-slate-100 pt-2">
             <span>Subtotal</span>
-            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispSubtotal)}</span>
+            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispSubtotal, pricing.dispCurrency)}</span>
           </div>
           <div className="flex justify-between text-slate-600">
             <span>Service fee{ctx.pricingPreview?.serviceFeeRate ? ` (${Math.round(ctx.pricingPreview.serviceFeeRate * 100)}%)` : ''}</span>
-            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedServiceFee, pricing.serviceFee))}</span>
+            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedServiceFee, pricing.serviceFee), pricing.dispCurrency)}</span>
           </div>
           {pricing.taxes > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Taxes{ctx.pricingPreview?.taxRate ? ` (${Math.round(ctx.pricingPreview.taxRate * 100)}%)` : ''}</span>
-              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedTaxAmount, pricing.taxes))}</span>
+              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedTaxAmount, pricing.taxes), pricing.dispCurrency)}</span>
             </div>
           )}
           {pricing.deliveryFee > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Delivery fee</span>
-              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedDeliveryFee, pricing.deliveryFee))}</span>
+              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedDeliveryFee, pricing.deliveryFee), pricing.dispCurrency)}</span>
             </div>
           )}
           {isCar && securityDeposit > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Security deposit</span>
-              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedSecurityDeposit, securityDeposit))}</span>
+              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedSecurityDeposit, securityDeposit), pricing.dispCurrency)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
             <span>Total</span>
             {pricing.showLocalized ? (
               <span className="text-right">
-                <div>~{pricing.dispCurrency} {fmt(pricing.dispTotal)}</div>
+                <div>~{pricing.dispCurrency} {fmt(pricing.dispTotal, pricing.dispCurrency)}</div>
                 <div className="text-xs font-medium text-slate-500 mt-0.5">Exact {fmtMoney(pricing.total, pricing.listingCurrency)}</div>
                 <div className="text-xs font-semibold text-slate-700">Charged {fmtMoney(pricing.platformAmount, pricing.platformCurrency)}</div>
               </span>
@@ -1444,34 +1447,34 @@ function ConfirmedView({
         <div className="space-y-2 text-sm">
           <div className="flex justify-between text-slate-600">
             <span>Base amount</span>
-            <span>{confirmed.currency} {fmt(confirmed.baseAmount)}</span>
+            <span>{confirmed.currency} {fmt(confirmed.baseAmount, confirmed.currency)}</span>
           </div>
           {confirmed.discount > 0 && (
             <div className="flex justify-between text-emerald-600">
               <span>{ctx.discountSource === "promotion" ? "Promotional discount" : "Voucher discount"}</span>
-              <span>−{confirmed.currency} {fmt(confirmed.discount)}</span>
+              <span>−{confirmed.currency} {fmt(confirmed.discount, confirmed.currency)}</span>
             </div>
           )}
           <div className="flex justify-between text-slate-600">
             <span>Service fee{confirmed.serviceFeeRate ? ` (${Math.round(confirmed.serviceFeeRate * 100)}%)` : ''}</span>
-            <span>{confirmed.currency} {fmt(confirmed.serviceFee)}</span>
+            <span>{confirmed.currency} {fmt(confirmed.serviceFee, confirmed.currency)}</span>
           </div>
           {confirmed.taxes > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Taxes{confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}</span>
-              <span>{confirmed.currency} {fmt(confirmed.taxes)}</span>
+              <span>{confirmed.currency} {fmt(confirmed.taxes, confirmed.currency)}</span>
             </div>
           )}
           {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Security deposit</span>
-              <span>{confirmed.currency} {fmt(confirmed.securityDeposit)}</span>
+              <span>{confirmed.currency} {fmt(confirmed.securityDeposit, confirmed.currency)}</span>
             </div>
           )}
           {confirmed.deliveryFee != null && confirmed.deliveryFee > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Delivery fee</span>
-              <span>{confirmed.currency} {fmt(confirmed.deliveryFee)}</span>
+              <span>{confirmed.currency} {fmt(confirmed.deliveryFee, confirmed.currency)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
@@ -1540,7 +1543,7 @@ function VoucherLayout({
   const info = derivePlatform(ctx.pricingPreview, confirmed.currency, confirmed.totalAmount);
   const platformCurrency = info.platformCurrency;
   const platformAmount = info.platformAmount;
-  const lv = (value: number) => `${confirmed.currency} ${fmt(value)}`;
+  const lv = (value: number) => `${confirmed.currency} ${fmt(value, confirmed.currency)}`;
   const totalDisplay = platformCurrency === confirmed.currency
     ? lv(platformAmount)
     : `${fmtMoney(platformAmount, platformCurrency)}  (Billed as approx. ${lv(confirmed.totalAmount)})`;

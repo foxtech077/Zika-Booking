@@ -64,6 +64,7 @@ export async function resolveEurCharge(
     }
 
     const converted = json?.data?.converted;
+    const rawConverted = json?.data?.rawConverted;
     const rate = json?.data?.rate;
     if (
       converted == null ||
@@ -76,11 +77,17 @@ export async function resolveEurCharge(
       );
     }
 
-    // raw = ceil(listing × rate); buffered = ceil(raw × (1 + buffer)).
-    // This mirrors the booking snapshot so the charged amount matches the
-    // amount the guest saw when booking.
+    // Match the local getPlatformQuote path exactly:
+    //   raw = listing × rate (unrounded)
+    //   buffered = ceil(ceil(raw, EUR) × buffer, EUR)
+    // The endpoint returns `converted` = ceil(raw, EUR) and now also
+    // `rawConverted` = raw (unrounded) so the buffer is applied to the
+    // unrounded intermediate, avoiding a double-ceiling discrepancy.
+    const baseForBuffer = rawConverted != null && applyBuffer
+      ? Number(rawConverted)
+      : Number(converted);
     const amountEur = applyBuffer
-      ? Math.ceil(Number(converted) * bufferApplied * 100) / 100
+      ? Math.ceil(baseForBuffer * bufferApplied * 100) / 100
       : Number(converted);
 
     return { amountEur, rate: Number(rate ?? 1), bufferApplied };

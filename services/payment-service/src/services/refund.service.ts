@@ -424,17 +424,25 @@ export async function handleConfirmFailure(
   // XAF for Tara). The booking service is notified with the listing-currency
   // total (payment.amount), since booking refundAmount is tracked in the
   // booking's own currency.
-  const amount = Number(payment.chargedAmount ?? payment.amount);
+  const chargeAmount = Number(payment.chargedAmount ?? payment.amount);
+  const listingAmount = Number(payment.amount);
   try {
     const refund = await issueRefund(payment, {
-      amount,
+      amount: chargeAmount,
       reason: `Payment captured but booking could not be confirmed (${code})`,
       idempotencyKey: `refund:${payment.id}:confirm-failure`,
     });
 
+    // Notify booking service with the proportional listing-currency amount.
+    // For a full refund this equals payment.amount; for partial refunds,
+    // scale proportionally by the ratio of charged to original amount.
+    const ratio = chargeAmount > 0 && listingAmount > 0
+      ? listingAmount / chargeAmount
+      : 1;
+    const refundListingAmount = Math.round(chargeAmount * ratio * 100) / 100;
     await notifyBookingServiceOfRefund(payment.bookingId, {
       refundId: refund.id,
-      refundAmount: Number(payment.amount),
+      refundAmount: refundListingAmount,
       provider: payment.paymentProvider,
       refundedAt: new Date(),
     });

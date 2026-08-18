@@ -1,5 +1,5 @@
 import { prisma } from "../lib/prisma.js";
-import { EUR_CHARGE_BUFFER_MULTIPLIER, isTaraCountry } from "@zika/types";
+import { EUR_CHARGE_BUFFER_MULTIPLIER, TARA_CHARGE_BUFFER_MULTIPLIER, isTaraCountry, ZERO_DECIMAL_CURRENCIES } from "@zika/types";
 
 const STALENESS_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
 const BASE_CURRENCY = "USD";
@@ -111,12 +111,9 @@ export async function fetchRatesWithFallback(): Promise<{ source: string; date: 
   throw new Error("All exchange-rate sources failed.");
 }
 
-// Currencies with 0 decimal places (no cents/subunits)
-export const ZERO_DECIMAL_CURRENCIES = new Set([
-  "BIF", "CLP", "DJF", "GNF", "ISK", "KMF", "KRW", "KZT",
-  "MGA", "PYG", "RWF", "UGX", "VND", "VUV",
-  "XAF", "XOF", "XPF", "JPY",
-]);
+// Re-export from shared types for backward compatibility.
+// Prefer importing from @zika/types directly in new code.
+export { ZERO_DECIMAL_CURRENCIES } from "@zika/types";
 
 /**
  * Round UP (ceiling) a converted price to the correct precision for the target currency.
@@ -415,7 +412,11 @@ export async function getPlatformQuote(
     };
   }
 
-  const bufferApplied = to === "EUR" ? EUR_CHARGE_BUFFER_MULTIPLIER : 1;
+  const bufferApplied = to === "EUR"
+    ? EUR_CHARGE_BUFFER_MULTIPLIER
+    : to === "XAF"
+      ? TARA_CHARGE_BUFFER_MULTIPLIER
+      : 1;
   const rate = await getExchangeRate(from, to);
   if (rate === null) {
     return { platformCurrency: to, rate: null, rawAmount: null, amount: null, bufferApplied };

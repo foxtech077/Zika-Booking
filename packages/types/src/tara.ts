@@ -51,3 +51,8 @@ export const TARA_PHONE_PREFIXES: ReadonlySet<string> = new Set(
 export function isTaraCountry(countryCode: string | null | undefined): boolean {
   return typeof countryCode === "string" && TARA_COUNTRIES.has(countryCode.toUpperCase().trim());
 }
+
+/** True when the phone prefix belongs to a Tara-supported country. */
+export function isTaraPhonePrefix(prefix: string): boolean {
+  return TARA_PHONE_PREFIXES.has(prefix);
+}
