@@ -390,6 +390,7 @@ export default function BookingsPage() {
         <div className="text-right">
           <p className="font-semibold text-sm tabular">{formatCurrency(Number(b.totalAmount), b.currency)}</p>
           <p className="text-xs text-slate-500">Commission: {formatCurrency(Number(b.commissionAmount), b.currency)}</p>
+          <p className="text-xs text-emerald-600">Payout: {formatCurrency(Number(b.providerPayout), b.currency)}</p>
         </div>
       ),
     },
@@ -831,6 +832,8 @@ export default function BookingsPage() {
               {[
                 ["Subtotal", formatCurrency(Number(detailData.subtotal), detailData.currency)],
                 ["Voucher Discount", `- ${formatCurrency(Number(detailData.voucherDiscount), detailData.currency)}`],
+                ["Service Fee", formatCurrency(Number(detailData.serviceFee), detailData.currency)],
+                ["Taxes", formatCurrency(Number(detailData.taxAmount), detailData.currency)],
                 ["Delivery Fee", formatCurrency(Number(detailData.deliveryFee), detailData.currency)],
                 ["Total", formatCurrency(Number(detailData.totalAmount), detailData.currency)],
                 ["Commission", formatCurrency(Number(detailData.commissionAmount), detailData.currency)],
