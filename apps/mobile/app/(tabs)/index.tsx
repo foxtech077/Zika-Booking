@@ -832,7 +832,7 @@ export default function HomeScreen() {
   const { lat: detectedLat, lng: detectedLng, city: detectedCity } = useLocation();
   // Omit the anchor when undetected — lat=0,lng=0 anchored the rails to a
   // point in the Gulf of Guinea and ranked everything by distance from it.
-  const homeAnchor = detectedLat != null && detectedLng != null
+  const homeAnchor = detectedLat != null && detectedLng != null && (detectedLat !== 0 || detectedLng !== 0)
     ? `&lat=${detectedLat}&lng=${detectedLng}`
     : "";
 

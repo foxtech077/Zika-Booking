@@ -13,6 +13,7 @@ import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
 import { useActivePromotion, ActivePromotion, applyPromotion } from "../../lib/promotions";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
+import { useLocation } from "../../hooks/useLocation";
 import { approxPrefix } from "../../lib/currency";
 import { useResponsive, padToColumns } from "../../lib/responsive";
 
@@ -302,6 +303,7 @@ export default function BrowseCategoryScreen() {
   const icon = category === "cars" ? "🚗" : category === "apartments" ? "🏠" : "🏨";
 
   const browsePromo = useActivePromotion(apiCategory);
+  const { lat: userLat, lng: userLng } = useLocation();
 
   const [keyword, setKeyword] = useState("");
   // Tablet grid: 2–4 listing cards per row instead of one stretched card.
@@ -311,19 +313,23 @@ export default function BrowseCategoryScreen() {
   const [allResults, setAllResults] = useState<Listing[]>([]);
   const [favouriteLoading, setFavouriteLoading] = useState<string | null>(null);
 
+  const hasLocation = userLat != null && userLng != null && Number.isFinite(userLat) && Number.isFinite(userLng) && (userLat !== 0 || userLng !== 0);
+
   const { data, isLoading, isFetching, isError, isPlaceholderData, refetch } = useQuery({
     // Prices are localized per currency by the API, so the currency is part of
     // the cache identity — without it a currency change serves cached amounts
     // still labelled with the previous currency.
-    queryKey: ["browse", apiCategory, sort, cursor, localCurrency],
+    queryKey: ["browse", apiCategory, sort, cursor, localCurrency, userLat, userLng],
     queryFn: async () => {
       const qp = new URLSearchParams({
         category: apiCategory,
-        lat: "0",
-        lng: "0",
         sort,
         limit: "50",  // Max allowed — gets all listings in one page for small datasets
       });
+      if (hasLocation) {
+        qp.set("lat", String(userLat));
+        qp.set("lng", String(userLng));
+      }
       if (cursor > 0) qp.set("cursor", String(cursor));
 
       const res = await listingApi.get(`/search?${qp.toString()}`);

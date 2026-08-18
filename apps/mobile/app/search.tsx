@@ -1132,7 +1132,8 @@ export default function SearchScreen() {
         anchorLat != null &&
         anchorLng != null &&
         Number.isFinite(anchorLat) &&
-        Number.isFinite(anchorLng)
+        Number.isFinite(anchorLng) &&
+        (anchorLat !== 0 || anchorLng !== 0)
       ) {
         qp.set("lat", String(anchorLat));
         qp.set("lng", String(anchorLng));
