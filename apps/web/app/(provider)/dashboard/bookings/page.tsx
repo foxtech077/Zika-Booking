@@ -298,7 +298,7 @@ const MobileBookingCard = ({ booking, onViewDetails }: any) => (
             <div>
                 <span className="text-xs text-gray-500">Net Payout</span>
                 <div className="text-sm font-semibold text-gray-900">
-                    <NetCurrency amount={booking.providerPayout || booking.totalAmount * 0.95} currency={booking.currency} />
+                    <NetCurrency amount={booking.providerPayout || 0} currency={booking.currency} />
                 </div>
             </div>
             <button
@@ -1021,7 +1021,7 @@ export default function BookingsPage() {
             {renderBookingField(
                 "Amount",
                 <div className="text-sm font-semibold text-slate-950">
-                    <NetCurrency amount={booking.providerPayout || booking.totalAmount * 0.95} currency={booking.currency} />
+                    <NetCurrency amount={booking.providerPayout || 0} currency={booking.currency} />
                 </div>
             )}
             {renderBookingField(
@@ -1394,7 +1394,7 @@ export default function BookingsPage() {
                                             <div className="border-t border-green-200 pt-3 flex items-center justify-between">
                                                 <span className="text-sm font-bold text-gray-900">Net Payout</span>
                                                 <span className="text-lg font-bold text-green-600">
-                                                    <NetCurrency amount={selectedBooking.providerPayout || selectedBooking.totalAmount * 0.95} currency={selectedBooking.currency} />
+                                                    <NetCurrency amount={selectedBooking.providerPayout || 0} currency={selectedBooking.currency} />
                                                 </span>
                                             </div>
                                             {(selectedBooking.displayId || selectedBooking.transactionId) && (

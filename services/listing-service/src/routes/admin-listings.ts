@@ -2439,6 +2439,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
                   commissionAmount: { type: "number" },
                   providerPayout: { type: "number" },
                   voucherDiscount: { type: "number", nullable: true },
+                  serviceFee: { type: "number", nullable: true },
+                  taxAmount: { type: "number", nullable: true },
                   cancelledAt: { type: "string", format: "date-time", nullable: true },
                   confirmedAt: { type: "string", format: "date-time", nullable: true },
                   createdAt: { type: "string", format: "date-time" },
@@ -2505,7 +2507,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             pickupDatetime: true, returnDatetime: true, nightsOrDays: true,
             guestFirstName: true, guestLastName: true, guestEmail: true,
             totalAmount: true, currency: true, commissionAmount: true,
-            providerPayout: true, voucherDiscount: true,
+            providerPayout: true, voucherDiscount: true, serviceFee: true, taxAmount: true,
             cancelledAt: true, confirmedAt: true, createdAt: true,
             listing: { select: { name: true } },
           },
@@ -2824,14 +2826,21 @@ export async function adminListingRoutes(app: FastifyInstance) {
         });
       }
 
-
-      // Build pricing preview for the admin
-      const nights = Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000);
-      const pricePerNight = Number(listing.pricePerNight ?? listing.pricePerDay ?? 0);
-      const subtotal = pricePerNight * nights;
+      // Use calculateBilling() to get consistent pricing with web flow
       const commissionRate = await getCommissionRate(listing.country ?? null);
-      const commissionAmount = Math.round(subtotal * commissionRate * 100) / 100;
-      const totalAmount = Math.round((subtotal + commissionAmount) * 100) / 100;
+      const pricePerNight = Number(listing.pricePerNight ?? listing.pricePerDay ?? 0);
+
+      const billing = calculateBilling({
+        listingCategory: listing.category,
+        checkIn,
+        checkOut,
+        rate: pricePerNight,
+        deliveryFee: 0,
+        promotionDiscount: 0,
+        voucherAmount: 0,
+        taxRate: getTaxRate(listing.country),
+        commissionRate,
+      });
 
       return sendSuccess(reply, 200, {
         available: true,
@@ -2840,12 +2849,16 @@ export async function adminListingRoutes(app: FastifyInstance) {
         listingType: listing.category,
         checkIn,
         checkOut,
-        nights,
-        pricePerNight,
-        subtotal,
+        nights: billing.units,
+        pricePerNight: billing.baseAmount / billing.units, // Commission-inclusive rate for display
+        baseAmount: billing.baseAmount,
+        subtotal: billing.subtotal,
+        serviceFee: billing.serviceFee,
+        taxAmount: billing.taxAmount,
         commissionRate,
-        commissionAmount,
-        totalAmount,
+        commissionAmount: billing.commissionAmount,
+        providerPayout: billing.providerPayout,
+        totalAmount: billing.totalAmount,
         currency: listing.currency ?? "USD",
       });
     } catch (err: any) {
@@ -2885,6 +2898,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
             subtotal: { type: "number" },
             voucherDiscount: { type: "number" },
             deliveryFee: { type: "number" },
+            serviceFee: { type: "number" },
+            taxAmount: { type: "number" },
             commissionAmount: { type: "number" },
             providerPayout: { type: "number" },
 
