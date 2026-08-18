@@ -73,11 +73,9 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
   const subtotalAfterDiscount = Math.max(0, originalSubtotal - longStayDiscountAmount);
 
   // Service fee — flat rate served by GET /listings/:id/public (serviceFeeRate,
-  // currently 0.04). This is NOT the provider commission: calculateBilling bakes
-  // commission into the base price (rate × (1 + commissionRate), already applied
-  // to the rates this endpoint returns) and then charges a flat 4% on top, so
-  // using commissionRate here quoted a country-specific rate the guest is never
-  // actually charged.
+  // currently 0.04). This is a pass-through transaction fee that covers payment
+  // gateway costs. The nightly/daily rate is the raw list price (commission is
+  // deducted from the provider's payout, never baked into the guest price).
   const serviceFeeRate = listing.serviceFeeRate ?? 0.04;
   const serviceFeePercent = Math.round(serviceFeeRate * 1000) / 10;
   const serviceFee = days > 0 ? Math.ceil(subtotalAfterDiscount * serviceFeeRate * 100) / 100 : 0;

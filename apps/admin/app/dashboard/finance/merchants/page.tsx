@@ -26,7 +26,8 @@ import { Button } from "@/components/ui/Button";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ConfirmModal } from "@/components/modals/Modals";
 import { useAuthStore } from "@/stores/auth";
-import { formatDate, formatCurrency } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
+import { useEurRates, EurValue } from "@/lib/eur";
 import { roleHasPermission, roleScopePolicy, AdminPermission, AdminScope } from "@/permissions/rbac";
 import type { AdminRole } from "@/types/admin";
 
@@ -115,6 +116,8 @@ function MerchantDetailDrawer({
   });
 
   const merchant: Merchant | null = data ?? null;
+
+  const eurRates = useEurRates(merchant?.payouts?.map((p) => p.currency));
 
   return (
     <SlideDrawer
@@ -265,7 +268,7 @@ function MerchantDetailDrawer({
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-sm text-slate-900">
-                        {formatCurrency(Number(p.amount), p.currency)}
+                        <EurValue amount={p.amount} currency={p.currency} rates={eurRates} />
                       </span>
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize ${payoutStatusColor(p.status)}`}>
                         {p.status}

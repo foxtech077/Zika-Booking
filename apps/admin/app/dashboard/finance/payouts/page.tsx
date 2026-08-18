@@ -16,6 +16,7 @@ import { ConfirmModal } from "@/components/modals/Modals";
 import { Input } from "@/components/ui/Input";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { useEurRates, EurValue, formatEur } from "@/lib/eur";
 import { SYSTEM_COUNTRIES } from "@/lib/countries";
 import { roleHasPermission, roleScopePolicy, AdminPermission, AdminScope } from "@/permissions/rbac";
 import type { AdminRole } from "@/types/admin";
@@ -88,6 +89,8 @@ export default function PayoutManagementPage() {
   });
 
   const payouts: Payout[] = Array.isArray(data) ? data : [];
+
+  const eurRates = useEurRates(payouts.map((p) => p.currency));
 
   const isCountryScoped = roleScopePolicy(user?.role as AdminRole) === AdminScope.CountryScoped;
 
@@ -226,7 +229,7 @@ export default function PayoutManagementPage() {
       key: "amount",
       label: "Amount",
       align: "right",
-      render: (p) => <span className="font-bold text-sm tabular">{formatCurrency(Number(p.amount), p.currency)}</span>,
+      render: (p) => <span className="font-bold text-sm tabular"><EurValue amount={p.amount} currency={p.currency} rates={eurRates} /></span>,
     },
     {
       key: "date",
@@ -415,7 +418,7 @@ export default function PayoutManagementPage() {
               <div>
                 <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block">Payout Amount</span>
                 <span className="text-xl font-bold text-slate-900 tracking-tight mt-0.5">
-                  {formatCurrency(Number(selectedPayout.amount), selectedPayout.currency)}
+                  <EurValue amount={selectedPayout.amount} currency={selectedPayout.currency} rates={eurRates} />
                 </span>
               </div>
               <Badge 
@@ -574,7 +577,7 @@ export default function PayoutManagementPage() {
           onConfirm={() => markPaidMut.mutate({ id: markPaidConfirm.id, providerPayoutId: providerPayoutIdInput })}
           loading={markPaidMut.isPending}
           title="Mark Payout as Paid"
-          description={`Are you sure you want to manually mark this payout of ${formatCurrency(Number(markPaidConfirm.amount), markPaidConfirm.currency)} to ${markPaidConfirm.merchant?.businessName || "this provider"} as paid? This should be done after executing offline transfers.`}
+          description={`Are you sure you want to manually mark this payout of ${formatEur(markPaidConfirm.amount, markPaidConfirm.currency, eurRates) ?? formatCurrency(Number(markPaidConfirm.amount), markPaidConfirm.currency)} to ${markPaidConfirm.merchant?.businessName || "this provider"} as paid? This should be done after executing offline transfers.`}
           confirmLabel="Mark Paid"
           variant="info"
         >
@@ -598,7 +601,7 @@ export default function PayoutManagementPage() {
           onConfirm={() => cancelMut.mutate(cancelConfirm.id)}
           loading={cancelMut.isPending}
           title="Cancel Scheduled Payout"
-          description={`Are you sure you want to cancel this scheduled payout of ${formatCurrency(Number(cancelConfirm.amount), cancelConfirm.currency)}? Cancelled payouts cannot be automatically processed.`}
+          description={`Are you sure you want to cancel this scheduled payout of ${formatEur(cancelConfirm.amount, cancelConfirm.currency, eurRates) ?? formatCurrency(Number(cancelConfirm.amount), cancelConfirm.currency)}? Cancelled payouts cannot be automatically processed.`}
           confirmLabel="Cancel Payout"
           variant="danger"
         />
@@ -612,7 +615,7 @@ export default function PayoutManagementPage() {
           onConfirm={() => retryMut.mutate(retryConfirm.id)}
           loading={retryMut.isPending}
           title="Retry Failed Settlement"
-          description={`Do you want to retry processing payout ${retryConfirm.id} for ${formatCurrency(Number(retryConfirm.amount), retryConfirm.currency)}? The payout will revert to a scheduled state.`}
+          description={`Do you want to retry processing payout ${retryConfirm.id} for ${formatEur(retryConfirm.amount, retryConfirm.currency, eurRates) ?? formatCurrency(Number(retryConfirm.amount), retryConfirm.currency)}? The payout will revert to a scheduled state.`}
           confirmLabel="Retry Transfer"
           variant="warning"
         />

@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { useAuthStore } from "@/stores/auth";
-import { formatDate, formatCurrency } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
+import { useEurRates, EurValue } from "@/lib/eur";
 import { useQuery } from "@tanstack/react-query";
 import { paymentPayoutApi } from "@/lib/payment-api";
 import { roleScopePolicy, AdminScope } from "@/permissions/rbac";
@@ -62,6 +63,8 @@ export default function BookingPaymentsPage() {
   });
 
   const payments = data?.data ?? [];
+
+  const eurRates = useEurRates(payments.map((p: any) => p.currency));
 
   // Country scope (country_manager / sales): only show records in assigned countries.
   const isCountryScoped = roleScopePolicy(user?.role as AdminRole) === AdminScope.CountryScoped;
@@ -137,7 +140,7 @@ export default function BookingPaymentsPage() {
       align: "right",
       render: (t) => (
         <div className="text-right">
-          <p className="font-bold text-sm tabular">{formatCurrency(Number(t.amount), t.currency)}</p>
+          <p className="font-bold text-sm tabular"><EurValue amount={t.amount} currency={t.currency} rates={eurRates} /></p>
         </div>
       ),
     },
@@ -344,7 +347,7 @@ export default function BookingPaymentsPage() {
               <p className="font-semibold text-slate-900 text-sm">Financial Capture</p>
               <div className="flex justify-between">
                 <span className="text-slate-500">Gross Paid By Guest</span>
-                <span className="font-bold text-slate-900 tabular">{formatCurrency(Number(selectedTx.amount), selectedTx.currency)}</span>
+                <span className="font-bold text-slate-900 tabular"><EurValue amount={selectedTx.amount} currency={selectedTx.currency} rates={eurRates} /></span>
               </div>
             </div>
           </div>

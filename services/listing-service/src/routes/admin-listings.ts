@@ -2850,7 +2850,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
         checkIn,
         checkOut,
         nights: billing.units,
-        pricePerNight: billing.baseAmount / billing.units, // Commission-inclusive rate for display
+        pricePerNight: billing.baseAmount / billing.units, // Raw list rate for display
         baseAmount: billing.baseAmount,
         subtotal: billing.subtotal,
         serviceFee: billing.serviceFee,

@@ -9,7 +9,8 @@ import { Card, SectionHeader, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { StatCard, RevenueBarChart } from "@/components/charts/Charts";
-import { formatDate, formatCurrency, formatNumber } from "@/lib/utils";
+import { formatDate, formatNumber } from "@/lib/utils";
+import { useEurRates, EurValue, toEur } from "@/lib/eur";
 import { SYSTEM_COUNTRIES } from "@/lib/countries";
 import type { Booking } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
@@ -17,7 +18,7 @@ import { useAuthStore } from "@/stores/auth";
 const fetchBookings = (params: Record<string, string>) =>
   listingApi.get(`/admin/bookings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
 
-function buildRevenueChart(bookings: Booking[]) {
+function buildRevenueChart(bookings: Booking[], rates: ReturnType<typeof useEurRates>) {
   const byMonth: Record<string, { revenue: number; bookings: number }> = {};
   const now = new Date();
   for (let i = 5; i >= 0; i--) {
@@ -31,10 +32,8 @@ function buildRevenueChart(bookings: Booking[]) {
       if (isNaN(d.getTime())) continue;
       const key = d.toLocaleString("default", { month: "short" });
       if (byMonth[key]) {
-        const amt = Number(b?.totalAmount || 0);
-        if (!isNaN(amt)) {
-          byMonth[key].revenue += amt;
-        }
+        const eur = toEur(b?.totalAmount, b?.currency, rates);
+        if (eur != null) byMonth[key].revenue += eur;
         byMonth[key].bookings += 1;
       }
     }
@@ -77,20 +76,24 @@ export default function FinancePage() {
   const allBookings: Booking[] = Array.isArray(allBookingsQuery.data?.bookings) ? allBookingsQuery.data.bookings : [];
   const confirmed = allBookings.filter((b) => ["confirmed", "completed"].includes(b?.status));
 
+  // EUR-converted display rates — every transaction settles in EUR (Stripe) or
+  // XAF (Tara, pegged to EUR), so financial aggregates are shown in EUR.
+  const eurRates = useEurRates([...bookings, ...allBookings].map((b) => b?.currency));
+
   const totalRevenue = confirmed.reduce((s, b) => {
-    const val = Number(b?.totalAmount || 0);
-    return s + (isNaN(val) ? 0 : val);
+    const eur = toEur(b?.totalAmount, b?.currency, eurRates);
+    return s + (eur ?? 0);
   }, 0);
   const totalCommission = confirmed.reduce((s, b) => {
-    const val = Number(b?.commissionAmount || 0);
-    return s + (isNaN(val) ? 0 : val);
+    const eur = toEur(b?.commissionAmount, b?.currency, eurRates);
+    return s + (eur ?? 0);
   }, 0);
   const totalPayout = confirmed.reduce((s, b) => {
-    const val = Number(b?.providerPayout || 0);
-    return s + (isNaN(val) ? 0 : val);
+    const eur = toEur(b?.providerPayout, b?.currency, eurRates);
+    return s + (eur ?? 0);
   }, 0);
   const avgBookingValue = confirmed.length ? totalRevenue / confirmed.length : 0;
-  const revenueChart = buildRevenueChart(allBookings);
+  const revenueChart = buildRevenueChart(allBookings, eurRates);
 
   const exportCsv = () => {
     const headers = ["Reference", "Guest", "Listing", "Type", "Status", "Amount", "Commission", "Payout", "Currency", "Date"];
@@ -147,7 +150,7 @@ export default function FinancePage() {
       label: "Total",
       align: "right",
       render: (b) => (
-        <span className="font-semibold text-sm tabular">{formatCurrency(Number(b?.totalAmount || 0), b?.currency || "USD")}</span>
+        <span className="font-semibold text-sm tabular"><EurValue amount={b?.totalAmount} currency={b?.currency} rates={eurRates} /></span>
       ),
     },
     {
@@ -155,7 +158,7 @@ export default function FinancePage() {
       label: "Commission",
       align: "right",
       render: (b) => (
-        <span className="text-sm tabular text-info-dark">{formatCurrency(Number(b?.commissionAmount || 0), b?.currency || "USD")}</span>
+        <span className="text-sm tabular text-info-dark"><EurValue amount={b?.commissionAmount} currency={b?.currency} rates={eurRates} /></span>
       ),
     },
     {
@@ -163,7 +166,7 @@ export default function FinancePage() {
       label: "Provider Payout",
       align: "right",
       render: (b) => (
-        <span className="text-sm tabular text-success-dark">{formatCurrency(Number(b?.providerPayout || 0), b?.currency || "USD")}</span>
+        <span className="text-sm tabular text-success-dark"><EurValue amount={b?.providerPayout} currency={b?.currency} rates={eurRates} /></span>
       ),
     },
     {
@@ -197,7 +200,7 @@ export default function FinancePage() {
         <StatCard
           title="Total Revenue"
           value={totalRevenue}
-          currency="USD"
+          currency="EUR"
           icon={<DollarSign className="h-4 w-4 text-success" />}
           iconBg="bg-success/10"
           loading={allBookingsQuery.isLoading}
@@ -205,7 +208,7 @@ export default function FinancePage() {
         <StatCard
           title="Platform Commission"
           value={totalCommission}
-          currency="USD"
+          currency="EUR"
           icon={<TrendingUp className="h-4 w-4 text-info" />}
           iconBg="bg-info/10"
           loading={allBookingsQuery.isLoading}
@@ -213,7 +216,7 @@ export default function FinancePage() {
         <StatCard
           title="Provider Payouts"
           value={totalPayout}
-          currency="USD"
+          currency="EUR"
           icon={<DollarSign className="h-4 w-4 text-warning" />}
           iconBg="bg-warning/10"
           loading={allBookingsQuery.isLoading}
@@ -221,7 +224,7 @@ export default function FinancePage() {
         <StatCard
           title="Avg. Booking Value"
           value={avgBookingValue}
-          currency="USD"
+          currency="EUR"
           subValue={`across ${formatNumber(confirmed.length)} bookings`}
           icon={<TrendingUp className="h-4 w-4 text-purple-600" />}
           iconBg="bg-purple-100"
@@ -235,7 +238,7 @@ export default function FinancePage() {
           <CardHeader title="Monthly Revenue Trend" description="Last 6 months" />
         </div>
         <div className="p-5">
-          <RevenueBarChart data={revenueChart} height={240} />
+          <RevenueBarChart data={revenueChart} height={240} currency="EUR" />
         </div>
       </Card>
 

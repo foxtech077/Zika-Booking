@@ -69,9 +69,9 @@ interface PublicListing {
   localizedDeliveryFee?: number | null; localizedSecurityDeposit?: number | null;
   cancellationPolicy: string | null; minStayNights: number | null;
   /** Flat service-fee rate charged to guests (0.04 = 4%). Served by GET /listings/:id/public.
-   *  The provider commission is *not* part of this — the backend bakes it into the
-   *  nightly/daily rate this endpoint returns (rate × (1 + commissionRate)), so the
-   *  rates below are already commission-inclusive and the fee sits on top at 4%. */
+   *  This is a pass-through transaction fee covering payment-gateway costs — the
+   *  provider commission is deducted from the provider's payout and is NOT baked
+   *  into the nightly/daily rate, so the rates below are the raw list prices. */
   serviceFeeRate?: number | null;
   checkinTime: string | null; checkoutTime: string | null;
   smokingAllowed: boolean | null; petsAllowed: boolean | null;
