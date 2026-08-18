@@ -22,10 +22,19 @@ export function buildInvoice(booking: any, charge?: InvoiceCharge | null) {
   // commission-inclusive base and the full discount from the price snapshot
   // (what was actually charged); fall back to reconstructing the gross from the
   // booking columns for older bookings without a snapshot.
-  const discount =
-    breakdown.discountAmount != null
+  // The breakdown snapshot may or may not include voucher discounts in its
+  // discountAmount. Use the booking-level fields (which are always split) as
+  // the authoritative source for the total discount amount. The fallback to
+  // the snapshot only applies when BOTH booking-level fields are zero/missing
+  // (e.g. very old bookings).
+  const bookingDiscount = Number(booking.discountAmount || 0);
+  const voucherDiscount = Number(booking.voucherDiscount || 0);
+  const hasBookingDiscount = bookingDiscount > 0 || voucherDiscount > 0;
+  const discount = hasBookingDiscount
+    ? bookingDiscount + voucherDiscount
+    : breakdown.discountAmount != null
       ? Number(breakdown.discountAmount)
-      : Number(booking.discountAmount || 0) + Number(booking.voucherDiscount || 0);
+      : 0;
   const grossBase =
     breakdown.baseAmount != null
       ? Number(breakdown.baseAmount)
