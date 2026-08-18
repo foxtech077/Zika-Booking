@@ -18,6 +18,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireAuth, requireUser, requireAdmin, type AuthRequest } from "../middleware/auth.js";
+import { getCommissionRate, getGlobalCommissionRate } from "./bookings.js";
 
 const errSchema = {
   type: "object",
@@ -597,6 +598,23 @@ export async function voucherRoutes(app: FastifyInstance) {
       if (body.discountType === "percentage" && body.discountValue > 100)
         return sendError(reply, 400, "VALIDATION_ERROR", "Percentage discount cannot exceed 100.");
 
+      // Admin vouchers are funded from the platform's commission — a percentage
+      // discount above the commission rate would make the platform lose money.
+      // (Fixed discounts are validated against the per-booking commission at checkout.)
+      if (body.discountType === "percentage") {
+        const voucherCommissionRate = body.countryScope
+          ? await getCommissionRate(body.countryScope)
+          : await getGlobalCommissionRate();
+        if (body.discountValue / 100 > voucherCommissionRate) {
+          return sendError(
+            reply,
+            400,
+            "DISCOUNT_EXCEEDS_COMMISSION",
+            `Percentage discount (${body.discountValue}%) cannot exceed the commission rate (${(voucherCommissionRate * 100).toFixed(1)}%).`,
+          );
+        }
+      }
+
       const validFrom  = new Date(body.validFrom);
       const validUntil = new Date(body.validUntil);
       if (isNaN(validFrom.getTime()) || isNaN(validUntil.getTime()))
@@ -706,6 +724,26 @@ export async function voucherRoutes(app: FastifyInstance) {
           return sendError(reply, 400, "VALIDATION_ERROR", "validUntil must be after validFrom.");
         if ((body.discountType === "percentage" || body.discountType === "fixed") && !body.discountValue)
           return sendError(reply, 400, "VALIDATION_ERROR", "discountValue is required when discountType is percentage or fixed.");
+
+        // Admin discounts are funded from the platform's commission (guest pays
+        // the discounted list price, the provider is still paid out on the full
+        // list price). A percentage discount above the commission rate would make
+        // the platform lose money, so it is rejected here and re-checked per
+        // booking (a fixed discount is validated against the per-booking
+        // commission amount at checkout).
+        if (body.discountType === "percentage" && body.discountValue) {
+          const commissionRate = body.countryScope
+            ? await getCommissionRate(body.countryScope)
+            : await getGlobalCommissionRate();
+          if (Number(body.discountValue) / 100 > commissionRate) {
+            return sendError(
+              reply,
+              400,
+              "DISCOUNT_EXCEEDS_COMMISSION",
+              `Percentage discount (${body.discountValue}%) cannot exceed the commission rate (${(commissionRate * 100).toFixed(1)}%).`,
+            );
+          }
+        }
 
         const status = body.status ?? "active";
 
@@ -889,6 +927,25 @@ async function updatePromotionStatuses(prisma: any): Promise<void> {
 
         const existing = await (prisma as any).activityPromotion.findUnique({ where: { id } });
         if (!existing) return sendError(reply, 404, "NOT_FOUND", "Promotion not found.");
+
+        // Percentage promotions must never exceed the commission rate — the
+        // discount is funded from the platform's commission.
+        const effectivePromoType = body.discountType ?? existing.discountType;
+        const effectivePromoValue = body.discountValue ?? Number(existing.discountValue ?? 0);
+        if (effectivePromoType === "percentage" && effectivePromoValue > 0) {
+          const promoScope = body.countryScope ?? existing.countryScope;
+          const promoCommissionRate = promoScope
+            ? await getCommissionRate(promoScope)
+            : await getGlobalCommissionRate();
+          if (effectivePromoValue / 100 > promoCommissionRate) {
+            return sendError(
+              reply,
+              400,
+              "DISCOUNT_EXCEEDS_COMMISSION",
+              `Percentage discount (${effectivePromoValue}%) cannot exceed the commission rate (${(promoCommissionRate * 100).toFixed(1)}%).`,
+            );
+          }
+        }
 
         // If activating, supersede other active/scheduled promotions for same activity
         if (body.status === "active") {
@@ -1083,6 +1140,23 @@ async function updatePromotionStatuses(prisma: any): Promise<void> {
         const effectiveDiscountValue = body.discountValue ?? Number((existing as any).discountValue);
         if (effectiveDiscountType === "percentage" && effectiveDiscountValue > 100)
           return sendError(reply, 400, "VALIDATION_ERROR", "Percentage discount cannot exceed 100.");
+
+        // Admin vouchers are funded from the platform's commission — a percentage
+        // discount above the commission rate would make the platform lose money.
+        if (effectiveDiscountType === "percentage" && effectiveDiscountValue > 0) {
+          const voucherScope = body.countryScope ?? (existing as any).countryScope;
+          const voucherCommissionRate = voucherScope
+            ? await getCommissionRate(voucherScope)
+            : await getGlobalCommissionRate();
+          if (effectiveDiscountValue / 100 > voucherCommissionRate) {
+            return sendError(
+              reply,
+              400,
+              "DISCOUNT_EXCEEDS_COMMISSION",
+              `Percentage discount (${effectiveDiscountValue}%) cannot exceed the commission rate (${(voucherCommissionRate * 100).toFixed(1)}%).`,
+            );
+          }
+        }
 
         let validFrom: Date | undefined;
         let validUntil: Date | undefined;

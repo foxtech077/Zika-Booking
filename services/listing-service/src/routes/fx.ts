@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { convertCurrency } from "../services/fx.services.js";
-import { ceilingForCurrency, getEurRateOrNull } from "../services/exchangeRate.services.js";
+import { ceilingForCurrency, getEurRateOrNull, getRatesBatch } from "../services/exchangeRate.services.js";
+import { requireAdmin } from "../middleware/auth.js";
 import { enqueueExchangeRateRefresh } from "../jobs.js";
 
 const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
@@ -209,6 +210,59 @@ export async function fxRoutes(app: FastifyInstance) {
       }
       await enqueueExchangeRateRefresh();
       return sendSuccess(reply, 200, { message: "Exchange-rate refresh scheduled." });
+    },
+  );
+
+  // ── POST /admin/fx/to-eur — batch conversion to EUR for admin display ───────
+  // Every transaction moves money as EUR (Stripe) or XAF (Tara mobile money,
+  // pegged to EUR), so the admin portal shows all amounts in EUR. This endpoint
+  // converts a batch of { currency → amount } pairs to EUR using the DB rate
+  // table (identity for EUR, cross-rate for XAF and everything else).
+  app.post(
+    "/admin/fx/to-eur",
+    {
+      schema: {
+        tags: ["Admin FX"],
+        summary: "Convert a batch of amounts into EUR for admin display (admin-only)",
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: "object",
+          required: ["amounts"],
+          properties: {
+            amounts: {
+              type: "object",
+              additionalProperties: { type: "number" },
+              description: "Map of currency → amount, e.g. { \"KES\": 13000, \"XAF\": 50000, \"EUR\": 300 }",
+            },
+          },
+        },
+      },
+      preHandler: [requireAdmin],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const { amounts } = req.body as { amounts?: Record<string, number> };
+      const entries = Object.entries(amounts ?? {});
+      if (entries.length === 0) {
+        return sendSuccess(reply, 200, { baseCurrency: "EUR", rates: {}, converted: {} });
+      }
+
+      const currencies = entries.map(([c]) => c);
+      const rates = await getRatesBatch(currencies, "EUR");
+
+      const ratesOut: Record<string, number> = {};
+      const converted: Record<string, number | null> = {};
+      for (const [currency, amount] of entries) {
+        const upper = currency.toUpperCase();
+        const rate = rates.get(upper);
+        if (rate == null) {
+          converted[currency] = null; // rate unavailable — never fabricate a number
+          continue;
+        }
+        ratesOut[upper] = rate;
+        converted[currency] = Number((Number(amount) * rate).toFixed(2));
+      }
+
+      return sendSuccess(reply, 200, { baseCurrency: "EUR", rates: ratesOut, converted });
     },
   );
 }
