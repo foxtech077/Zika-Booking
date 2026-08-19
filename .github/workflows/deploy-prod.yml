@@ -42,6 +42,7 @@ jobs:
               NEXT_PUBLIC_AUTH_API_URL=https://api.kainook.com/auth
               NEXT_PUBLIC_LISTING_API_URL=https://api.kainook.com/listings
               NEXT_PUBLIC_PAYMENT_API_URL=https://api.kainook.com/payments
+              NEXT_PUBLIC_PAYMENT_ADMIN_API_URL=https://api.kainook.com/payments
               NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=${{vars.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}}
     steps:
       - name: Checkout code
