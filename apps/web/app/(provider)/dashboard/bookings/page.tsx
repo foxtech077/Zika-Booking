@@ -11,12 +11,12 @@ import {
     TrendingUp, TrendingDown, MoreVertical
 } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
+import { getPaymentSummary, type PaymentSummaryMap } from "@/lib/payment-api";
 import { cn } from "@/lib/utils";
 import type { ProviderBooking } from "@/types/provider";
 
 // Types
 type Booking = ProviderBooking & {
-    paymentStatus: string;
     transactionId?: string;
     displayId?: string;
     paymentMethod?: string;
@@ -64,6 +64,8 @@ const paymentStatusConfig: Record<string, { label: string; color: string }> = {
     pending: { label: "Pending", color: "#eab308" },
     failed: { label: "Failed", color: "#ef4444" },
     refunded: { label: "Refunded", color: "#6b7280" },
+    partially_refunded: { label: "Partially Refunded", color: "#f97316" },
+    no_payment: { label: "No Payment", color: "#94a3b8" },
 };
 
 const bookingStatusOptions: SelectOption[] = [
@@ -82,6 +84,7 @@ const paymentStatusOptions: SelectOption[] = [
     { value: "paid", label: "Paid" },
     { value: "pending", label: "Pending" },
     { value: "failed", label: "Failed" },
+    { value: "refunded", label: "Refunded" },
 ];
 
 const dateFilterOptions: SelectOption[] = [
@@ -151,17 +154,65 @@ function toDateOnly(date: Date) {
     return date.toISOString().slice(0, 10);
 }
 
-function inferPaymentStatus(status: string) {
-    if (status === "confirmed" || status === "completed") return "paid";
-    if (status.includes("cancelled")) return "refunded";
-    if (status === "failed") return "failed";
+// Real payment-status mapping derived from the payment record (not the booking
+// status). `paymentBucket` drives the status FILTER; `paymentBadgeValue` drives
+// the badge label so a cancelled booking with no captured payment no longer
+// shows a fake "Refunded".
+function paymentBucket(rawStatus: string | null | undefined): string {
+    switch (rawStatus) {
+        case "captured":
+            return "paid";
+        case "refunded":
+        case "partially_refunded":
+            return "refunded";
+        case "failed":
+        case "timed_out":
+            return "failed";
+        case "initiated":
+        case "pending":
+            return "pending";
+        default:
+            return ""; // no payment record — excluded from specific payment filters
+    }
+}
+
+function paymentBadgeValue(booking: Pick<Booking, "status">, rawStatus: string | null | undefined): string {
+    switch (rawStatus) {
+        case "pending":
+        case "initiated":
+            return "pending";
+        case "captured":
+            return "paid";
+        case "failed":
+        case "timed_out":
+            return "failed";
+        case "refunded":
+            return "refunded";
+        case "partially_refunded":
+            return "partially_refunded";
+    }
+    // No payment record — fall back to the booking status.
+    if (booking.status === "confirmed" || booking.status === "completed") {
+        return "paid"; // legacy safety — a confirmed stay implies captured funds
+    }
+    if (booking.status.startsWith("cancelled")) return "no_payment";
     return "pending";
+}
+
+function paymentMethodLabel(payment?: PaymentSummaryMap[string]["payment"] | null): string {
+    if (!payment) return "";
+    if (payment.paymentMethodType === "mobile_money" || payment.paymentMethodType === "tara") {
+        return payment.mobileNumberMasked ? `Mobile Money •••• ${payment.mobileNumberMasked}` : "Mobile Money";
+    }
+    if (payment.cardBrand || payment.cardLast4) {
+        return `Card •••• ${payment.cardLast4 ?? ""}`;
+    }
+    return payment.paymentMethodType ?? "";
 }
 
 function normalizeBooking(booking: ProviderBooking): Booking {
     return {
         ...booking,
-        paymentStatus: inferPaymentStatus(booking.status),
         guestCount: (booking.adults ?? 0) + (booking.children ?? 0),
     };
 }
@@ -730,9 +781,23 @@ export default function BookingsPage() {
     };
 
     const allBookings: Booking[] = data?.bookings || [];
+
+    // Real payment/payout status for the displayed bookings (keyed by bookingId).
+    const bookingIds = allBookings.map((b) => b.id);
+    const paymentSummaryQuery = useQuery({
+        queryKey: ["provider-payment-summary", bookingIds.join(",")],
+        queryFn: () => getPaymentSummary(bookingIds),
+        enabled: bookingIds.length > 0,
+        staleTime: 30_000,
+        retry: false,
+    });
+    const paymentSummary: PaymentSummaryMap = paymentSummaryQuery.data ?? {};
+
     const filteredBookings = allBookings.filter((booking) => {
         if (bookingStatus === "cancelled" && !booking.status.includes("cancelled")) return false;
-        if (paymentStatus && booking.paymentStatus !== paymentStatus) return false;
+        const summary = paymentSummary[booking.id];
+        const bucket = paymentBucket(summary?.payment?.status ?? null);
+        if (paymentStatus && bucket && bucket !== paymentStatus) return false;
 
         const bookingDate = (booking.checkIn || booking.pickupDatetime || booking.createdAt).slice(0, 10);
         if (filterStartDate && bookingDate < filterStartDate) return false;
@@ -1026,7 +1091,10 @@ export default function BookingsPage() {
             )}
             {renderBookingField(
                 "Payment",
-                <StatusBadge status={booking.paymentStatus || 'pending'} type="payment" />
+                <StatusBadge
+                    status={paymentBadgeValue(booking, paymentSummary[booking.id]?.payment?.status ?? null)}
+                    type="payment"
+                />
             )}
             {renderBookingField(
                 "Status",
@@ -1383,26 +1451,120 @@ export default function BookingsPage() {
                                         <div className="space-y-3">
                                             <div className="flex items-center justify-between">
                                                 <span className="text-sm font-medium text-gray-700">Payment Status</span>
-                                                <StatusBadge status={selectedBooking.paymentStatus || 'pending'} type="payment" />
+                                                <StatusBadge
+                                                    status={paymentBadgeValue(selectedBooking, paymentSummary[selectedBooking.id]?.payment?.status ?? null)}
+                                                    type="payment"
+                                                />
                                             </div>
-                                            {selectedBooking.paymentMethod && (
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-sm font-medium text-gray-700">Payment Method</span>
-                                                    <span className="text-sm font-semibold text-gray-900">{selectedBooking.paymentMethod}</span>
-                                                </div>
-                                            )}
+                                            {(() => {
+                                                const pm = paymentSummary[selectedBooking.id]?.payment;
+                                                const method = paymentMethodLabel(pm) || selectedBooking.paymentMethod;
+                                                return (
+                                                    <>
+                                                        {method && (
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-sm font-medium text-gray-700">Payment Method</span>
+                                                                <span className="text-sm font-semibold text-gray-900">{method}</span>
+                                                            </div>
+                                                        )}
+                                                        {pm?.displayId && (
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-sm font-medium text-gray-700">Transaction ID</span>
+                                                                <span className="text-sm font-mono font-semibold text-gray-900">{pm.displayId}</span>
+                                                            </div>
+                                                        )}
+                                                        {pm?.capturedAt && (
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-sm font-medium text-gray-700">Paid On</span>
+                                                                <span className="text-sm font-semibold text-gray-900">{formatDateTime(pm.capturedAt)}</span>
+                                                            </div>
+                                                        )}
+                                                        {(pm?.chargedAmount != null || pm?.amount != null) && (
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-sm font-medium text-gray-700">Amount Charged</span>
+                                                                <span className="text-sm font-semibold text-gray-900">
+                                                                    {formatCurrency(
+                                                                        pm?.chargedAmount ?? pm?.amount ?? 0,
+                                                                        pm?.chargedCurrency ?? pm?.currency ?? selectedBooking.currency,
+                                                                    )}
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                        {pm?.failureMessage && (
+                                                            <div className="flex items-start justify-between gap-3">
+                                                                <span className="text-sm font-medium text-gray-700">Failure Reason</span>
+                                                                <span className="text-sm text-right text-gray-600">{pm.failureMessage}</span>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
+
+                                            {(() => {
+                                                const payout = paymentSummary[selectedBooking.id]?.payout;
+                                                if (!payout) return null;
+                                                const statusLabel = payout.status === "processing"
+                                                    ? "Processing"
+                                                    : payout.status.charAt(0).toUpperCase() + payout.status.slice(1);
+                                                return (
+                                                    <>
+                                                        <div className="border-t border-green-200 pt-3 flex items-center justify-between">
+                                                            <span className="text-sm font-medium text-gray-700">Payout</span>
+                                                            <span className="text-sm font-semibold text-gray-900">{statusLabel}</span>
+                                                        </div>
+                                                        {payout.processedAt && (
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-sm font-medium text-gray-700">Paid Out On</span>
+                                                                <span className="text-sm font-semibold text-gray-900">{formatDateTime(payout.processedAt)}</span>
+                                                            </div>
+                                                        )}
+                                                        {payout.scheduledAt && !payout.processedAt && (
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-sm font-medium text-gray-700">Disburses</span>
+                                                                <span className="text-sm font-semibold text-gray-900">{formatDateTime(payout.scheduledAt)}</span>
+                                                            </div>
+                                                        )}
+                                                        {payout.failureReason && (
+                                                            <div className="flex items-start justify-between gap-3">
+                                                                <span className="text-sm font-medium text-gray-700">Payout Note</span>
+                                                                <span className="text-sm text-right text-gray-600">{payout.failureReason}</span>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
+
+                                            {(() => {
+                                                const refunds = paymentSummary[selectedBooking.id]?.refunds ?? [];
+                                                if (refunds.length === 0) return null;
+                                                return (
+                                                    <>
+                                                        <div className="border-t border-green-200 pt-3">
+                                                            <p className="text-sm font-bold text-gray-900 mb-2">Refunds</p>
+                                                            <div className="space-y-2">
+                                                                {refunds.map((r) => (
+                                                                    <div key={r.id} className="flex items-center justify-between text-sm">
+                                                                        <span className="text-gray-700">
+                                                                            {r.status}
+                                                                            {r.refundedAt ? ` · ${formatDate(r.refundedAt)}` : ""}
+                                                                        </span>
+                                                                        <span className="font-semibold text-gray-900">
+                                                                            {formatCurrency(r.amount ?? 0, r.currency)}
+                                                                        </span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                );
+                                            })()}
+
                                             <div className="border-t border-green-200 pt-3 flex items-center justify-between">
                                                 <span className="text-sm font-bold text-gray-900">Net Payout</span>
                                                 <span className="text-lg font-bold text-green-600">
                                                     <NetCurrency amount={selectedBooking.providerPayout || 0} currency={selectedBooking.currency} />
                                                 </span>
                                             </div>
-                                            {(selectedBooking.displayId || selectedBooking.transactionId) && (
-                                                <div className="text-xs text-gray-600 pt-2">
-                                                    <span className="font-medium">Transaction ID: </span>
-                                                    <span className="font-mono text-gray-500">{selectedBooking.displayId ?? selectedBooking.transactionId}</span>
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
 

@@ -25,6 +25,7 @@ const CARD_W = (width - 48) / 2;
 interface CommissionRate { rate: number; country: string }
 interface MonthlyRevenue { month: string; revenue: number; bookings: number }
 interface EarningsData {
+  currency?: string;
   totalEarnings: number;
   thisMonthEarnings: number;
   lastMonthEarnings: number;
@@ -179,7 +180,6 @@ const tb = StyleSheet.create({
 export default function AnalyticsScreen() {
   const router   = useRouter();
   const user     = useAuthStore((s) => s.user);
-  const currency = getCurrencyForCountry(user?.country).code;
 
   const commissionQ = useQuery<CommissionRate>({
     queryKey: ["commissionRate", user?.country],
@@ -205,6 +205,7 @@ export default function AnalyticsScreen() {
       const totalBookings = monthly.reduce((sum: number, m: any) => sum + (m.bookings || 0), 0);
 
       return {
+        currency:           raw.currency || "EUR",
         totalEarnings:       Number(allTime.revenue || 0),
         thisMonthEarnings:   Number(thisMonthData.revenue || 0),
         lastMonthEarnings:   Number(lastMonthData.revenue || 0),
@@ -225,6 +226,9 @@ export default function AnalyticsScreen() {
 
   const momChange = data ? pct(data.thisMonthEarnings, data.lastMonthEarnings) : "—";
   const momUp     = data ? data.thisMonthEarnings >= data.lastMonthEarnings : undefined;
+  // Aggregates are returned in EUR by the API (the money of record); fall back
+  // to the guest's browsing currency only when the API omits it.
+  const currency = data?.currency ?? getCurrencyForCountry(user?.country).code;
 
   return (
     <AppLayout>

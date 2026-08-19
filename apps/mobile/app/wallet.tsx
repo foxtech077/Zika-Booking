@@ -35,6 +35,7 @@ interface RecentPayout {
 }
 
 interface EarningsData {
+  currency?: string;
   allTime: { revenue: number; commission: number; payout: number };
   monthly: MonthlyEntry[];
   recentPayouts: RecentPayout[];
@@ -85,15 +86,12 @@ export default function WalletScreen() {
     },
   });
 
-  // allTime/monthly totals carry no currency of their own — the API only
-  // states it per-payout (RecentPayout.currency). localCurrency is the
-  // guest's arbitrary browsing-display preference (picked from Profile), not
-  // this host's real payout currency, so it must never label real earnings.
-  // Falling back to a real payout's currency is an approximation too if a
-  // provider is ever paid out in more than one currency, but it's still tied
-  // to actual money instead of an unrelated setting.
+  // Aggregates (allTime/monthly) are returned in EUR by the API (the money of
+  // record). localCurrency is the guest's arbitrary browsing-display preference
+  // (picked from Profile), not this host's real payout currency, so it must
+  // never label real earnings. Per-payout rows below keep their native currency.
   const recentPayouts = data?.recentPayouts ?? [];
-  const currency = recentPayouts[0]?.currency ?? "USD";
+  const currency = data?.currency ?? recentPayouts[0]?.currency ?? "EUR";
 
   // Current month earnings
   const monthly = data?.monthly ?? [];

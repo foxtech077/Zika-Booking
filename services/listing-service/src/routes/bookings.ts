@@ -467,6 +467,47 @@ export async function bookingRoutes(app: FastifyInstance) {
     }
   });
 
+  // ── POST /bookings/internal/verify-ownership ─────────────────────────────────
+  // Internal: verify which of the given booking ids belong to a provider.
+  // Used by the payment service's provider payment-summary endpoint so it can
+  // scope payment/refund lookups to the caller's own bookings.
+  app.post("/bookings/internal/verify-ownership", {
+    schema: {
+      tags: ["Bookings"],
+      summary: "Internal: verify booking ownership for a provider (service-to-service only)",
+      body: {
+        type: "object",
+        required: ["bookingIds", "providerId"],
+        properties: {
+          bookingIds: { type: "array", items: { type: "string" } },
+          providerId: { type: "string" },
+        },
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!validateServiceToken(req, reply)) return;
+
+    const { bookingIds, providerId } = req.body as { bookingIds: string[]; providerId: string };
+    const ids = [...new Set((bookingIds ?? []).filter(Boolean).slice(0, 200))];
+    if (ids.length === 0) {
+      return sendSuccess(reply, 200, { data: { owned: [], notFound: [] } });
+    }
+
+    try {
+      const rows = await prisma.booking.findMany({
+        where: { id: { in: ids }, providerId },
+        select: { id: true },
+      });
+      const owned = new Set(rows.map((r) => r.id));
+      const ownedList = ids.filter((id) => owned.has(id));
+      const notFound = ids.filter((id) => !owned.has(id));
+      return sendSuccess(reply, 200, { data: { owned: ownedList, notFound } });
+    } catch (err) {
+      req.log.error({ err }, "Failed to verify booking ownership");
+      return sendError(reply, 500, "INTERNAL_ERROR", "Failed to verify booking ownership.");
+    }
+  });
+
   // ── PATCH /bookings/internal/:id/status ────────────────────────────────────
   app.patch("/bookings/internal/:id/status", {
     schema: {
