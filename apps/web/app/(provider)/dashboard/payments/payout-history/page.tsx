@@ -17,6 +17,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { getAllPayouts, type Payout, type PayoutStatus } from "@/lib/payment-api";
+import { useEurRates, toEur, type EurRates } from "@/lib/eurRates";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -59,11 +60,10 @@ function extractErrorMessage(error: unknown, fallback: string): string {
   return err?.response?.data?.message ?? (error instanceof Error ? error.message : fallback);
 }
 
-function buildSummary(payouts: Payout[]): PayoutHistorySummary {
-  const currency = payouts[0]?.currency ?? "USD";
+function buildSummary(payouts: Payout[], rates: EurRates): PayoutHistorySummary {
   const emptyBucket = (): PayoutSummaryBucket => ({ amount: 0, count: 0 });
   const summary: PayoutHistorySummary = {
-    currency,
+    currency: "EUR",
     total: emptyBucket(),
     paid: emptyBucket(),
     upcoming: emptyBucket(),
@@ -73,7 +73,8 @@ function buildSummary(payouts: Payout[]): PayoutHistorySummary {
   };
 
   for (const payout of payouts) {
-    const amount = payoutAmount(payout);
+    // Convert each payout to EUR before summing — never mix currencies.
+    const amount = toEur(payoutAmount(payout), payout.currency, rates) ?? 0;
     summary.total.amount += amount;
     summary.total.count += 1;
 
@@ -273,6 +274,8 @@ export default function PayoutHistoryPage() {
     refetchOnWindowFocus: false,
   });
 
+  const eurRates = useEurRates(payouts.map((p) => p.currency));
+
   const filtered = useMemo(() => {
     const text = search.trim().toLowerCase();
 
@@ -335,7 +338,7 @@ export default function PayoutHistoryPage() {
       });
   }, [payouts, search, statusFilter, dateRange, sortKey, sortDir]);
 
-  const summary = useMemo(() => buildSummary(filtered), [filtered]);
+  const summary = useMemo(() => buildSummary(filtered, eurRates), [filtered, eurRates]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);

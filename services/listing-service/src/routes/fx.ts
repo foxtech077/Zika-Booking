@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { convertCurrency } from "../services/fx.services.js";
-import { ceilingForCurrency, getEurRateOrNull, getRatesBatch } from "../services/exchangeRate.services.js";
+import { ceilingForCurrency, getEurRateOrNull, getEurRatesMap, convertToEur } from "../services/exchangeRate.services.js";
 import { requireAdmin } from "../middleware/auth.js";
 import { enqueueExchangeRateRefresh } from "../jobs.js";
 
@@ -247,19 +247,22 @@ export async function fxRoutes(app: FastifyInstance) {
       }
 
       const currencies = entries.map(([c]) => c);
-      const rates = await getRatesBatch(currencies, "EUR");
+      const eurRates = await getEurRatesMap(currencies);
 
       const ratesOut: Record<string, number> = {};
       const converted: Record<string, number | null> = {};
       for (const [currency, amount] of entries) {
         const upper = currency.toUpperCase();
-        const rate = rates.get(upper);
-        if (rate == null) {
+        const eur = convertToEur(Number(amount), upper, eurRates);
+        if (eur == null) {
           converted[currency] = null; // rate unavailable — never fabricate a number
           continue;
         }
-        ratesOut[upper] = rate;
-        converted[currency] = Number((Number(amount) * rate).toFixed(2));
+        // Rate map keyed by currency = EUR per 1 unit of that currency (XAF uses
+        // the fixed parity peg).
+        const unit = convertToEur(1, upper, eurRates);
+        ratesOut[upper] = unit ?? 0;
+        converted[currency] = Number(eur.toFixed(2));
       }
 
       return sendSuccess(reply, 200, { baseCurrency: "EUR", rates: ratesOut, converted });

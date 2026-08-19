@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { requireAdminSession } from "./admin-auth.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
+import { computePaymentRevenueEur, aggregateBookingFinance } from "../services/eur.summary.js";
 
 export async function adminDashboardRoutes(app: FastifyInstance) {
   // ── GET /admin/dashboard/super-admin/summary ──────────────────────────────────
@@ -63,8 +64,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
       let listingCount = 0;
       let bookingCount = 0;
       let reportCount = 0;
-      let paymentTotal = 0;
-      let paymentCount = 0;
 
       if (hasDateFilter) {
         const start = new Date(q.startDate || "1970-01-01");
@@ -78,10 +77,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
 
         const [reportData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.reports WHERE created_at >= ${start} AND created_at <= ${end}`;
         reportCount = Number(reportData?.count || 0);
-
-        const [revenueData] = await prisma.$queryRaw<[{ total: number | null, count: bigint }]>`SELECT SUM(amount) as total, COUNT(*) as count FROM payments."Payment" WHERE status = 'captured' AND "createdAt" >= ${start} AND "createdAt" <= ${end}`;
-        paymentTotal = Number(revenueData?.total || 0);
-        paymentCount = Number(revenueData?.count || 0);
       } else {
         const [listingData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.listings`;
         listingCount = Number(listingData?.count || 0);
@@ -91,11 +86,18 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
 
         const [reportData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.reports`;
         reportCount = Number(reportData?.count || 0);
-
-        const [revenueData] = await prisma.$queryRaw<[{ total: number | null, count: bigint }]>`SELECT SUM(amount) as total, COUNT(*) as count FROM payments."Payment" WHERE status = 'captured'`;
-        paymentTotal = Number(revenueData?.total || 0);
-        paymentCount = Number(revenueData?.count || 0);
       }
+
+      // Revenue is aggregated in EUR (money of record) using each payment's
+      // charge snapshot, with refunds deducted — never a raw SUM across
+      // currencies.
+      const paymentAgg = await computePaymentRevenueEur(
+        hasDateFilter
+          ? { start: new Date(q.startDate || "1970-01-01"), end: new Date(q.endDate || "2999-12-31") }
+          : {},
+      );
+      const paymentTotal = Number((paymentAgg.revenueEur - paymentAgg.refundsEur).toFixed(2));
+      const paymentCount = paymentAgg.paymentsCount;
 
       return sendSuccess(reply, 200, {
         totalListings: listingCount,
@@ -351,15 +353,11 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
       `;
       const totalBookings = Number(bookingData?.count || 0);
 
-      const [revenueData] = await prisma.$queryRaw<[{ total: number | null, count: bigint }]>`
-        SELECT SUM(p.amount) as total, COUNT(*) as count 
-        FROM payments."Payment" p
-        JOIN listing.bookings b ON p."bookingId" = b.id
-        JOIN listing.listings l ON b.listing_id = l.id
-        WHERE p.status = 'captured' AND l.country = ANY(${countryScope})
-      `;
-      const totalRevenue = Number(revenueData?.total || 0);
-      const totalPayments = Number(revenueData?.count || 0);
+      // Revenue aggregated in EUR with refunds deducted, scoped to the
+      // manager's countries (see the eur.summary helper for the rule).
+      const paymentAgg = await computePaymentRevenueEur({ countryScope });
+      const totalRevenue = Number((paymentAgg.revenueEur - paymentAgg.refundsEur).toFixed(2));
+      const totalPayments = paymentAgg.paymentsCount;
 
       const totalUsers = await prisma.user.count({
         where: {
@@ -538,32 +536,46 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
       if (q.endDate) dateFilter.lte = new Date(q.endDate);
       const hasDateFilter = Object.keys(dateFilter).length > 0;
 
-      // Query from bookings instead of payments for accurate financial data
-      // This includes voucher discounts in the totals
-      const [revenueData] = await prisma.$queryRaw<[{ 
-        total_revenue: number | null, 
-        total_voucher_discounts: number | null,
-        total_commission: number | null,
-        total_payout: number | null,
-        count: bigint 
-      }]>`
-        SELECT 
-          SUM("totalAmount") as total_revenue,
-          SUM("voucherDiscount") as total_voucher_discounts,
-          SUM("commissionAmount") as total_commission,
-          SUM("providerPayout") as total_payout,
-          COUNT(*) as count
+      // Financial totals are aggregated in EUR (the money of record) from confirmed
+      // + completed bookings. Each booking's money fields are converted using
+      // its charge-time snapshot (priceBreakdownJson.charged*) when present,
+      // else the current DB rate; refunds are deducted from revenue.
+      const finParams: (string | Date)[] = [];
+      let finDateClause = "";
+      if (hasDateFilter) {
+        if (dateFilter.gte) {
+          finParams.push(dateFilter.gte);
+          finDateClause += ` AND "createdAt" >= $${finParams.length}`;
+        }
+        if (dateFilter.lte) {
+          finParams.push(dateFilter.lte);
+          finDateClause += ` AND "createdAt" <= $${finParams.length}`;
+        }
+      }
+
+      const bookingRows = await prisma.$queryRawUnsafe<{
+        currency: string;
+        totalAmount: unknown;
+        commissionAmount: unknown;
+        providerPayout: unknown;
+        voucherDiscount: unknown;
+        refundAmount: unknown;
+        priceBreakdownJson: unknown;
+      }[]>(`
+        SELECT currency, "totalAmount", "commissionAmount", "providerPayout",
+               "voucherDiscount", "refundAmount", "priceBreakdownJson"
         FROM listing.bookings
-        WHERE status IN ('confirmed', 'completed')
-        ${hasDateFilter ? prisma.$queryRaw`AND "createdAt" >= ${dateFilter.gte} AND "createdAt" <= ${dateFilter.lte}` : prisma.$queryRaw``}
-      `;
-      
-      const totalRevenue = Number(revenueData?.total_revenue || 0);
-      const totalVoucherDiscounts = Number(revenueData?.total_voucher_discounts || 0);
-      const netRevenue = totalRevenue; // totalAmount already has voucher discounts applied
-      const totalCommission = Number(revenueData?.total_commission || 0);
-      const totalPayout = Number(revenueData?.total_payout || 0);
-      const totalBookings = Number(revenueData?.count || 0);
+        WHERE status IN ('confirmed', 'completed')${finDateClause}
+      `, ...finParams);
+
+      const fin = await aggregateBookingFinance(bookingRows);
+
+      const totalRevenue = Number(fin.revenueEur.toFixed(2));
+      const totalVoucherDiscounts = Number(fin.voucherDiscountsEur.toFixed(2));
+      const netRevenue = Number((fin.revenueEur - fin.refundsEur).toFixed(2)); // refunds now deducted
+      const totalCommission = Number(fin.commissionEur.toFixed(2));
+      const totalPayout = Number(fin.payoutEur.toFixed(2));
+      const totalBookings = fin.bookingsCount;
 
       const [reportData] = await prisma.$queryRaw<[{ count: bigint }]>`
         SELECT COUNT(*) as count FROM listing.reports
@@ -578,6 +590,7 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
         totalPayout,
         totalBookings,
         totalReports,
+        currency: "EUR",
       });
     } catch (err: any) {
       req.log.error({ err }, "Failed to fetch Finance Agent summary");
@@ -642,8 +655,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
       let listingCount = 0;
       let bookingCount = 0;
       let reportCount = 0;
-      let paymentTotal = 0;
-      let paymentCount = 0;
 
       if (hasDateFilter) {
         const start = new Date(q.startDate || "1970-01-01");
@@ -657,10 +668,6 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
 
         const [reportData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.reports WHERE created_at >= ${start} AND created_at <= ${end}`;
         reportCount = Number(reportData?.count || 0);
-
-        const [revenueData] = await prisma.$queryRaw<[{ total: number | null, count: bigint }]>`SELECT SUM(amount) as total, COUNT(*) as count FROM payments."Payment" WHERE status = 'captured' AND "createdAt" >= ${start} AND "createdAt" <= ${end}`;
-        paymentTotal = Number(revenueData?.total || 0);
-        paymentCount = Number(revenueData?.count || 0);
       } else {
         const [listingData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.listings`;
         listingCount = Number(listingData?.count || 0);
@@ -670,11 +677,16 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
 
         const [reportData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.reports`;
         reportCount = Number(reportData?.count || 0);
-
-        const [revenueData] = await prisma.$queryRaw<[{ total: number | null, count: bigint }]>`SELECT SUM(amount) as total, COUNT(*) as count FROM payments."Payment" WHERE status = 'captured'`;
-        paymentTotal = Number(revenueData?.total || 0);
-        paymentCount = Number(revenueData?.count || 0);
       }
+
+      // Revenue aggregated in EUR with refunds deducted (see super-admin summary).
+      const paymentAgg = await computePaymentRevenueEur(
+        hasDateFilter
+          ? { start: new Date(q.startDate || "1970-01-01"), end: new Date(q.endDate || "2999-12-31") }
+          : {},
+      );
+      const paymentTotal = Number((paymentAgg.revenueEur - paymentAgg.refundsEur).toFixed(2));
+      const paymentCount = paymentAgg.paymentsCount;
 
       return sendSuccess(reply, 200, {
         totalListings: listingCount,

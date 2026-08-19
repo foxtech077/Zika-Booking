@@ -1,5 +1,5 @@
 import { prisma } from "../lib/prisma.js";
-import { EUR_CHARGE_BUFFER_MULTIPLIER, TARA_CHARGE_BUFFER_MULTIPLIER, isTaraCountry, ZERO_DECIMAL_CURRENCIES } from "@zika/types";
+import { EUR_CHARGE_BUFFER_MULTIPLIER, TARA_CHARGE_BUFFER_MULTIPLIER, isTaraCountry, ZERO_DECIMAL_CURRENCIES, xafToEur } from "@zika/types";
 
 const STALENESS_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
 const BASE_CURRENCY = "USD";
@@ -361,6 +361,84 @@ export async function getRatesBatch(
   }
 
   return rateMap;
+}
+
+/**
+ * Convert an amount into EUR for dashboard aggregation.
+ *
+ * Rule: aggregates are expressed in EUR (the money of record).
+ *  - EUR → identity
+ *  - XAF → fixed parity peg (1 EUR = 655.957 XAF)
+ *  - everything else → current DB cross-rate (USD→EUR / USD→X)
+ * Returns null when the rate is unavailable — callers omit the record rather
+ * than fabricate a number.
+ */
+export function convertToEur(
+  amount: number | null | undefined,
+  currency: string | null | undefined,
+  eurRates: Map<string, number>,
+): number | null {
+  if (amount == null || !Number.isFinite(Number(amount))) return null;
+  const up = (currency ?? "").toUpperCase();
+  if (!up) return null;
+  if (up === "EUR") return Number(amount);
+  if (up === "XAF") return xafToEur(Number(amount));
+  const rate = eurRates.get(up);
+  if (rate == null) return null;
+  return Number(amount) * rate;
+}
+
+/**
+ * Fetch the EUR-per-unit rate map for a set of currencies (one batched query,
+ * XAF handled by the fixed peg so it never depends on API rounding).
+ */
+export async function getEurRatesMap(
+  currencies: (string | null | undefined)[],
+): Promise<Map<string, number>> {
+  const unique = [...new Set((currencies ?? []).filter(Boolean).map((c) => c!.toUpperCase()))];
+  const map = new Map<string, number>();
+  const nonPegged = unique.filter((c) => c !== "EUR" && c !== "XAF");
+  if (nonPegged.length > 0) {
+    const batch = await getRatesBatch(nonPegged, "EUR");
+    for (const c of nonPegged) {
+      const r = batch.get(c);
+      if (r != null) map.set(c, r);
+    }
+  }
+  return map;
+}
+
+/**
+ * Convert a booking money field (expressed in the listing/base currency) to
+ * EUR. Prefers the charge-time snapshot (chargedCurrency + chargedRate recorded
+ * at confirmation) because that reproduces what actually moved; falls back to
+ * the current DB rate for legacy rows without a snapshot.
+ */
+export function bookingAmountToEur(
+  amount: number | null | undefined,
+  bookingCurrency: string | null | undefined,
+  eurRates: Map<string, number>,
+  snapshot?: { chargedCurrency?: string | null; chargedRate?: number | null } | null,
+): number | null {
+  if (amount == null || !Number.isFinite(Number(amount))) return null;
+  const chargeCur = snapshot?.chargedCurrency?.toUpperCase() ?? null;
+  const chargeRate = snapshot?.chargedRate != null ? Number(snapshot.chargedRate) : null;
+  if (chargeCur && chargeRate != null && chargeRate > 0) {
+    return convertToEur(Number(amount) * chargeRate, chargeCur, eurRates);
+  }
+  return convertToEur(Number(amount), bookingCurrency, eurRates);
+}
+
+/**
+ * Convert a refund/charge amount (already expressed in the charge currency —
+ * EUR for Stripe, XAF for Tara) to EUR.
+ */
+export function chargeAmountToEur(
+  amount: number | null | undefined,
+  chargeCurrency: string | null | undefined,
+  eurRates: Map<string, number>,
+): number | null {
+  return convertToEur(Number(amount ?? 0), chargeCurrency, eurRates);
 }
 
 /**

@@ -18,6 +18,17 @@ export const TARA_CHARGE_BUFFER = 0.005;
 export const TARA_CHARGE_BUFFER_MULTIPLIER = 1 + TARA_CHARGE_BUFFER;
 
 /**
+ * XAF (Central African CFA franc) is pegged to the euro at a fixed rate.
+ * Used for converting Tara charges/disbursements to EUR in dashboards.
+ */
+export const XAF_PER_EUR = 655.957;
+
+/** Convert XAF to EUR using the fixed parity peg. */
+export function xafToEur(amountXaf: number): number {
+  return Number(amountXaf) / XAF_PER_EUR;
+}
+
+/**
  * Currencies with 0 decimal places (no cents/subunits).
  * Single source of truth — import from here instead of maintaining
  * per-service copies.

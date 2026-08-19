@@ -67,7 +67,19 @@ export default function FinancePage() {
 
   const allBookingsQuery = useQuery({
     queryKey: ["admin-finance-all", country],
-    queryFn: () => fetchBookings({ limit: "100", ...(country ? { country } : {}) }),
+    queryFn: async () => {
+      // Fetch ALL bookings (paginated) so the KPI aggregates are complete —
+      // a fixed 100-row cap previously made the numbers silently wrong.
+      const limit = 100;
+      const first = await fetchBookings({ limit: String(limit), ...(country ? { country } : {}) });
+      const all = [...(first.bookings ?? [])];
+      const total = Number(first.total ?? all.length);
+      for (let offset = limit; offset < total; offset += limit) {
+        const page = await fetchBookings({ limit: String(limit), offset: String(offset), ...(country ? { country } : {}) });
+        all.push(...(page.bookings ?? []));
+      }
+      return { bookings: all, total };
+    },
   });
 
   const bookings: Booking[] = Array.isArray(data?.bookings) ? data.bookings : [];
