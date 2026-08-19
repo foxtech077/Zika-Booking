@@ -1,7 +1,8 @@
 /**
  * Flat transaction fee charged to guests, as a decimal fraction (0.04 = 4%).
- * This is a pass-through that covers payment-gateway / processor costs — it is
- * NOT platform revenue and it is NOT part of the provider's payout basis.
+ * This is the payment-processing fee — it covers payment-gateway / processor
+ * costs. It is collected from the guest and retained on the platform side; it
+ * is NOT part of the provider's payout.
  */
 export const SERVICE_FEE_RATE = 0.04;
 
@@ -13,15 +14,18 @@ export type BillingInput = {
   returnDatetime?: string;
   /** Raw list rate per night/day — commission-exclusive (what the guest sees on the listing). */
   rate: number;
+  /** Delivery fee — passed through to the provider on payout. */
   deliveryFee?: number;
   /** Admin promotion discount (absolute value, pre-computed from the ActivityPromotion). */
   promotionDiscount: number;
-  /** Admin voucher discount (absolute value). */
+  /** Admin voucher discount (absolute value) — absorbed by the platform, never reduces the provider payout. */
   voucherAmount: number;
   /** Guest loyalty-points redemption (absolute value). */
   pointsDiscount?: number;
+  /** Tax rate charged to the guest; tax is retained on the platform side (no remittance is performed in code). */
   taxRate: number;
   commissionRate: number;
+  /** Refundable security deposit collected from the guest — passed through to the provider on payout. */
   securityDeposit?: number;
   driverProvided?: boolean;
 };
@@ -37,15 +41,19 @@ export type BillingResult = {
   pointsDiscount: number;
   /** Guest subtotal after discounts (clamped at 0). */
   subtotal: number;
+  /** Payment-processing fee (SERVICE_FEE_RATE) — collected from the guest and retained on the platform side. */
   serviceFee: number;
+  /** Tax charged to the guest — retained on the platform side. */
   taxAmount: number;
+  /** Delivery fee — passed through to the provider on payout. */
   deliveryFee: number;
+  /** Refundable security deposit — passed through to the provider on payout so the provider holds and returns it. */
   securityDeposit: number;
   /** Guest-facing total: subtotal + serviceFee + tax + delivery + deposit. */
   totalAmount: number;
   /** Platform commission on the list price only: baseAmount × commissionRate. */
   commissionAmount: number;
-  /** Provider payout: baseAmount − commissionAmount (never reduced by guest discounts). */
+  /** Provider payout: everything the guest pays except tax, commission and the service fee (base + delivery + deposit − commission). Never reduced by guest discounts. */
   providerPayout: number;
 };
 
@@ -57,18 +65,22 @@ function calcDays(from?: string, to?: string): number {
 /**
  * Pricing model (see design doc):
  *
- *   Guest bill   = listPrice − discount + 4% transaction fee + tax + delivery + deposit
+ *   Guest bill   = listPrice − discount + payment-processing fee + tax + delivery + deposit
  *   Commission   = listPrice × commissionRate     (list price only, pre-discount)
- *   Payout       = listPrice − commission          (provider is never touched by the discount)
+ *   Payout       = listPrice + delivery + deposit − commission
  *
+ * What the platform keeps (revenue): commission + payment-processing fee + tax.
  * Discounts (admin promotions / admin vouchers) are funded from the platform's
- * commission: guest pays less, the provider still gets paid on the full list
- * price, and the platform absorbs the discount from its commission. Discounts
- * must therefore never exceed the commission (validated by callers).
+ * commission: the guest pays less, the provider still gets paid on the full
+ * list price, and the platform absorbs the discount from its commission.
+ * Discounts must therefore never exceed the commission (validated by callers).
  *
- * The 4% service/transaction fee, tax and delivery are pass-throughs — they are
- * collected from the guest but never flow into the provider's payout basis or
- * into the commission base.
+ * What passes through to the provider on payout: the full list price (never
+ * reduced by discounts) plus the delivery fee and the security deposit. The
+ * security deposit is a refundable hold collected from the guest; it is passed
+ * to the provider at payout so the provider holds and returns it. The
+ * payment-processing fee and tax are collected from the guest but never flow
+ * into the provider's payout basis or into the commission base.
  */
 export function calculateBilling(input: BillingInput): BillingResult {
   const units =
@@ -95,11 +107,13 @@ export function calculateBilling(input: BillingInput): BillingResult {
     : 0;
   const deliveryFee = Number((input.deliveryFee ?? 0).toFixed(2));
 
-  // Commission and payout are computed on the list price only (pre-discount,
-  // excluding the pass-throughs), so the provider keeps a constant share and
-  // the platform's commission is the single funder of guest discounts.
+  // Commission is computed on the list price only (pre-discount). The provider
+  // receives everything else the guest pays except tax, commission and the
+  // payment-processing fee — i.e. the full list price plus the delivery fee and
+  // security deposit, minus commission. Discounts are absorbed by the
+  // platform's commission and never reduce this payout.
   const commissionAmount = Number((baseAmount * input.commissionRate).toFixed(2));
-  const providerPayout = Number(Math.max(0, baseAmount - commissionAmount).toFixed(2));
+  const providerPayout = Number(Math.max(0, baseAmount + deliveryFee + securityDeposit - commissionAmount).toFixed(2));
 
   const totalAmount = Number(Math.max(0, subtotal + serviceFee + taxAmount + deliveryFee + securityDeposit).toFixed(2));
 

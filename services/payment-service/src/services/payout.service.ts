@@ -358,6 +358,13 @@ async function processSinglePayout(payout: any): Promise<void> {
       // pending so it retries once the scheduled re-sync lands. Payouts use
       // the raw market rate (no charge buffer — that is only applied to guest
       // charges).
+      //
+      // The payout amount (booking.providerPayout) is the guest total minus the
+      // platform's retained commission, payment-processing fee and tax; it
+      // already includes the delivery fee and security deposit passed through
+      // to the provider (see billing.service.ts). The security deposit is a
+      // refundable hold — the provider receives it at payout and returns it to
+      // the guest.
       let eur;
       try {
         eur = await resolveEurCharge(Number(payout.amount), payout.currency, { applyBuffer: false });

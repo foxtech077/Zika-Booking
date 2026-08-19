@@ -78,6 +78,58 @@ export function toEur(
   return Number((Number(amount) * rate).toFixed(2));
 }
 
+/** XAF (Central African CFA franc) is pegged to the euro at a fixed rate. */
+const XAF_PER_EUR = 655.957;
+
+/**
+ * Convert an actual charge amount (already expressed in the charge currency —
+ * EUR for Stripe, XAF for Tara) to the money-of-record EUR, reproducing what
+ * actually moved at charge time rather than a current-rate approximation.
+ */
+export function chargedToEur(
+  chargedAmount: number | string | null | undefined,
+  chargedCurrency: string | null | undefined,
+  rates: EurRates,
+): number | null {
+  const num = Number(chargedAmount);
+  if (chargedAmount == null || isNaN(num)) return null;
+  const c = (chargedCurrency ?? "").toUpperCase();
+  if (c === "EUR") return Number(num.toFixed(2));
+  if (c === "XAF") return Number((num / XAF_PER_EUR).toFixed(2));
+  const r = rates?.[c];
+  if (r != null) return Number((num * r).toFixed(2));
+  return null;
+}
+
+/**
+ * Convert a per-component amount (expressed in the booking's listing/base
+ * currency) to EUR using the charge-time snapshot rate (chargedCurrency +
+ * chargedRate captured at confirmation). This reproduces the actual money moved
+ * at charge time for components like payouts / commission, which are only
+ * stored in the listing currency. Falls back to the current-rate conversion
+ * when no snapshot is available.
+ */
+export function toEurAtCharge(
+  amount: number | string | null | undefined,
+  currency: string | null | undefined,
+  chargedCurrency: string | null | undefined,
+  chargedRate: number | string | null | undefined,
+  rates: EurRates,
+): number | null {
+  const num = Number(amount);
+  if (amount == null || isNaN(num)) return null;
+  const c = (chargedCurrency ?? "").toUpperCase();
+  const rate = chargedRate != null ? Number(chargedRate) : null;
+  if (c && rate != null && rate > 0) {
+    const inChargeCurrency = num * rate;
+    if (c === "EUR") return Number(inChargeCurrency.toFixed(2));
+    if (c === "XAF") return Number((inChargeCurrency / XAF_PER_EUR).toFixed(2));
+    const r = rates?.[c];
+    if (r != null) return Number((inChargeCurrency * r).toFixed(2));
+  }
+  return toEur(num, currency, rates);
+}
+
 /**
  * Format an amount as EUR. Returns null when the conversion is unavailable so
  * callers can fall back to the native currency instead of mislabeling.

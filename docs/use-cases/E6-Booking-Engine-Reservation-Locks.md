@@ -746,7 +746,7 @@ CREATE INDEX idx_status_log_booking ON booking_status_log(booking_id, created_at
 ### AC-6.3 — Pricing Integrity
 - [ ] The server-side computed `total_amount` stored on the booking matches the formula in BR-6.11 / BR-6.12 for all test cases (standard stay, long-stay discount applied, car with delivery).
 - [ ] A change to `listings.nightly_rate` after a booking is `confirmed` does not alter `bookings.total_amount`.
-- [ ] `commission_amount + provider_payout = total_amount` (within rounding tolerance of ±0.01).
+- [ ] `commission_amount + provider_payout = total_amount − tax_amount − service_fee` (within rounding tolerance of ±0.01). The provider payout is the guest total minus the platform's retained commission, payment-processing fee and tax, and includes the delivery fee and security deposit passed through to the provider. Discounts are absorbed by the platform's commission and never reduce the payout.
 
 ### AC-6.4 — Status Transitions
 - [ ] A booking cannot be transitioned directly from `pending_payment` to `completed`.

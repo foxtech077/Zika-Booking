@@ -2181,18 +2181,33 @@ export async function bookingRoutes(app: FastifyInstance) {
               // charge time). Falls back to the booking-time snapshot when the
               // payment service did not supply charge values.
               const existingBreakdown = ((booking as any).priceBreakdownJson ?? {}) as Record<string, unknown>;
+              const resolvedChargedCurrency = chargedCurrency?.toUpperCase() ?? existingBreakdown.chargedCurrency ?? null;
+              const resolvedChargedAmount = chargedAmount != null ? Number(chargedAmount) : existingBreakdown.chargedAmount ?? null;
+              const resolvedChargedRate = chargedRate != null ? Number(chargedRate) : existingBreakdown.chargedRate ?? null;
+              const chargedAt = new Date();
               const mergedBreakdown = {
                 ...existingBreakdown,
-                chargedCurrency: chargedCurrency?.toUpperCase() ?? existingBreakdown.chargedCurrency ?? null,
-                chargedAmount: chargedAmount != null ? Number(chargedAmount) : existingBreakdown.chargedAmount ?? null,
-                chargedRate: chargedRate != null ? Number(chargedRate) : existingBreakdown.chargedRate ?? null,
-                chargedAt: new Date().toISOString(),
+                chargedCurrency: resolvedChargedCurrency,
+                chargedAmount: resolvedChargedAmount,
+                chargedRate: resolvedChargedRate,
+                chargedAt: chargedAt.toISOString(),
                 source: "booking_confirm",
               };
 
               await tx.booking.update({
                 where: { id },
-                data: { status: "confirmed", confirmedAt, paymentId, priceBreakdownJson: mergedBreakdown },
+                data: {
+                  status: "confirmed",
+                  confirmedAt,
+                  paymentId,
+                  // Persist the actual charge snapshot as first-class columns
+                  // (historical auditing) in addition to the jsonb snapshot.
+                  chargedCurrency: resolvedChargedCurrency,
+                  chargedAmount: resolvedChargedAmount,
+                  chargedRate: resolvedChargedRate,
+                  chargedAt,
+                  priceBreakdownJson: mergedBreakdown,
+                },
               });
 
               await tx.bookingStatusLog.create({

@@ -89,7 +89,7 @@ test("car bookings use rental days, apply the deposit, and only charge delivery 
   assert.equal(b.deliveryFee, 25);
   assert.equal(b.securityDeposit, 200);
   assert.equal(b.commissionAmount, 22.5);    // 150 × 15%
-  assert.equal(b.providerPayout, 127.5);     // 150 − 22.5
+  assert.equal(b.providerPayout, 352.5);     // 150 base + 25 delivery + 200 deposit − 22.5 commission
   assert.equal(b.totalAmount, 381);          // 150 + 6 + 0 + 25 + 200
 });
 
@@ -108,6 +108,8 @@ test("a driver-provided car waives the security deposit", () => {
     driverProvided: true,
   });
   assert.equal(b.securityDeposit, 0);
+  // No deposit collected, no delivery charged → payout is base minus commission (2 days × 50 = 100 − 15).
+  assert.equal(b.providerPayout, 85);        // 100 + 0 + 0 − 15
 });
 
 test("discount is clamped so the guest subtotal never goes negative", () => {

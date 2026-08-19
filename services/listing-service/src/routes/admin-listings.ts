@@ -2554,13 +2554,22 @@ export async function adminListingRoutes(app: FastifyInstance) {
                   travellerEmail: { type: "string" },
                   providerId: { type: "string" },
                   subtotal: { type: "number" },
+                  discount: { type: "number" },
                   voucherCode: { type: "string", nullable: true },
                   voucherDiscount: { type: "number" },
                   amount: { type: "number" },
                   currency: { type: "string" },
+                  serviceFee: { type: "number" },
+                  taxAmount: { type: "number" },
+                  deliveryFee: { type: "number" },
+                  securityDeposit: { type: "number" },
                   commissionRate: { type: "number" },
                   commissionAmount: { type: "number" },
                   providerPayout: { type: "number" },
+                  chargedAmount: { type: "number", nullable: true },
+                  chargedCurrency: { type: "string", nullable: true, maxLength: 3 },
+                  chargedRate: { type: "number", nullable: true },
+                  chargedAt: { type: "string", format: "date-time", nullable: true },
                   paymentStatus: { type: "string", nullable: true },
                   paymentGateway: { type: "string", nullable: true },
                   date: { type: "string" },
@@ -2635,13 +2644,22 @@ export async function adminListingRoutes(app: FastifyInstance) {
             guestEmail: true,
             providerId: true,
             subtotal: true,
+            discountAmount: true,
             voucherCode: true,
             voucherDiscount: true,
             totalAmount: true,
             currency: true,
+            serviceFee: true,
+            taxAmount: true,
+            deliveryFee: true,
+            securityDeposit: true,
             commissionRate: true,
             commissionAmount: true,
             providerPayout: true,
+            chargedAmount: true,
+            chargedCurrency: true,
+            chargedRate: true,
+            chargedAt: true,
             createdAt: true,
             paymentId: true,
             listing: { select: { name: true, country: true } },
@@ -2694,13 +2712,23 @@ export async function adminListingRoutes(app: FastifyInstance) {
           travellerEmail: b.guestEmail,
           providerId: b.providerId,
           subtotal: Number(b.subtotal),
+          discount: Number(b.discountAmount),
           voucherCode: b.voucherCode ?? null,
           voucherDiscount: Number(b.voucherDiscount),
           amount: Number(b.totalAmount),
           currency: b.currency,
+          serviceFee: Number(b.serviceFee),
+          taxAmount: Number(b.taxAmount),
+          deliveryFee: Number(b.deliveryFee),
+          securityDeposit: Number(b.securityDeposit),
           commissionRate: Number(b.commissionRate) * 100, // Convert to percentage
           commissionAmount: Number(b.commissionAmount),
           providerPayout: Number(b.providerPayout),
+          // Actual money moved at charge time (mirrors payments.charged*).
+          chargedAmount: b.chargedAmount != null ? Number(b.chargedAmount) : null,
+          chargedCurrency: b.chargedCurrency ?? null,
+          chargedRate: b.chargedRate != null ? Number(b.chargedRate) : null,
+          chargedAt: b.chargedAt?.toISOString() ?? null,
           paymentStatus: payment?.status ?? null,
           paymentGateway: payment?.paymentProvider ?? null,
           date: b.createdAt.toISOString(),
@@ -2708,13 +2736,63 @@ export async function adminListingRoutes(app: FastifyInstance) {
         };
       });
 
-      // Calculate summary
+      // Actual-money-moved conversion for the summary.
+      // The guest was charged chargedAmount in chargedCurrency (EUR for Stripe,
+      // XAF for Tara). Convert to the money-of-record EUR: identity for EUR,
+      // fixed parity peg for XAF. Per-component amounts (payout, commission)
+      // are stored in the listing currency, so scale them by the charge-time
+      // rate first to reproduce what actually moved (see billing.service.ts).
+      const XAF_PER_EUR = 655.957;
+      const chargedToEur = (
+        chargedAmount: number | null,
+        chargedCurrency?: string | null,
+      ): number | null => {
+        if (chargedAmount == null) return null;
+        const c = (chargedCurrency ?? "").toUpperCase();
+        if (c === "EUR") return Number(chargedAmount.toFixed(2));
+        if (c === "XAF") return Number((chargedAmount / XAF_PER_EUR).toFixed(2));
+        return null;
+      };
+      const listingToEurAtCharge = (
+        amount: number,
+        currency: string,
+        chargedCurrency?: string | null,
+        chargedRate?: number | null,
+      ): number | null => {
+        const c = (chargedCurrency ?? "").toUpperCase();
+        const rate = chargedRate != null ? Number(chargedRate) : null;
+        if (c && rate != null && rate > 0) {
+          const inChargeCurrency = Number(amount) * rate;
+          if (c === "EUR") return Number(inChargeCurrency.toFixed(2));
+          if (c === "XAF") return Number((inChargeCurrency / XAF_PER_EUR).toFixed(2));
+        }
+        return null;
+      };
+
+      // Calculate summary on ACTUAL money moved.
+      //   gross = the charge actually captured (EUR/XAF → EUR)
+      //   payout = provider share scaled by the charge-time snapshot rate
+      //   net (platform) = gross − payout (includes the FX buffer/platform take)
+      // Rows without a charge snapshot fall back to their listing-currency
+      // amount so legacy bookings still contribute.
+      const grossRevenue = transactions.reduce(
+        (sum, t) => sum + (chargedToEur(t.chargedAmount, t.chargedCurrency) ?? t.amount),
+        0,
+      );
+      const totalPayout = transactions.reduce(
+        (sum, t) => sum + (listingToEurAtCharge(t.providerPayout, t.currency, t.chargedCurrency, t.chargedRate) ?? t.providerPayout),
+        0,
+      );
+      const totalCommission = transactions.reduce(
+        (sum, t) => sum + (listingToEurAtCharge(t.commissionAmount, t.currency, t.chargedCurrency, t.chargedRate) ?? t.commissionAmount),
+        0,
+      );
       const summary = {
-        grossRevenue: transactions.reduce((sum, t) => sum + t.subtotal, 0),
-        totalVoucherDiscounts: transactions.reduce((sum, t) => sum + t.voucherDiscount, 0),
-        netRevenue: transactions.reduce((sum, t) => sum + t.amount, 0),
-        totalCommission: transactions.reduce((sum, t) => sum + t.commissionAmount, 0),
-        totalPayout: transactions.reduce((sum, t) => sum + t.providerPayout, 0),
+        grossRevenue: Number(grossRevenue.toFixed(2)),
+        totalVoucherDiscounts: transactions.reduce((sum, t) => sum + Number(t.voucherDiscount ?? 0), 0),
+        netRevenue: Number((grossRevenue - totalPayout).toFixed(2)),
+        totalCommission: Number(totalCommission.toFixed(2)),
+        totalPayout: Number(totalPayout.toFixed(2)),
         totalBookings: transactions.length,
       };
 

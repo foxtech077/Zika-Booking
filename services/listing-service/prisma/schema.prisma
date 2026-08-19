@@ -511,6 +511,15 @@ enum BookingStatus {
     // Display (listing/base + localized) and EUR charged equivalents.
     priceBreakdownJson Json?  @map("price_breakdown_json")
 
+    // Charge-time snapshot — the ACTUAL money moved at the moment the guest was
+    // charged (amount, currency and rate). Mirrors payments.charged* so the
+    // real charge is queryable for historical auditing instead of living only
+    // in priceBreakdownJson. Set at confirmation.
+    chargedAmount   Decimal?  @map("charged_amount")    @db.Decimal(12, 2)
+    chargedCurrency String?   @map("charged_currency")  @db.Char(3)
+    chargedRate     Decimal?  @map("charged_rate")      @db.Decimal(16, 8)
+    chargedAt       DateTime? @map("charged_at")
+
     commissionRate   Decimal @map("commission_rate") @db.Decimal(6, 4)
     commissionAmount Decimal @map("commission_amount") @db.Decimal(12, 2)
     providerPayout   Decimal @map("provider_payout") @db.Decimal(12, 2)
