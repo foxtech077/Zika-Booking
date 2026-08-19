@@ -87,6 +87,7 @@ model Payment {
   capturedAt          DateTime?
   voucherGenerated    Boolean         @default(false)
   confirmationEmailsSent Boolean      @default(false)
+  hostEmailSent       Boolean         @default(false)
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
   refunds             Refund[]
