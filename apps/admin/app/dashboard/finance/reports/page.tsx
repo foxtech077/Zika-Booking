@@ -5,7 +5,7 @@ import {
   BarChart3, Calendar, Globe, DollarSign, TrendingUp, 
   Download, Printer, FileSpreadsheet, Eye, Info,
   BadgeCheck, Clock, RotateCcw, Landmark, Percent,
-  CreditCard, XCircle, Tag
+  CreditCard, XCircle, Tag, Euro
 } from "lucide-react";
 import { Card, SectionHeader, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -14,7 +14,7 @@ import { StatCard, RevenueBarChart, DonutChart } from "@/components/charts/Chart
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency, slugToLabel } from "@/lib/utils";
-import { useEurRates, EurValue, toEur, formatEur } from "@/lib/eur";
+import { useEurRates, EurValue, toEur, formatEur, chargedToEur, toEurAtCharge } from "@/lib/eur";
 import { useQuery } from "@tanstack/react-query";
 import { paymentPayoutApi } from "@/lib/payment-api";
 import { listingApi } from "@/lib/listing-api";
@@ -204,12 +204,17 @@ export default function FinancialReportsPage() {
   const reportTableData = useMemo(() => {
     switch (activeReport) {
       case "revenue":
-        // Group by Month
+        // Group by Month. Money flow: gross is the ACTUAL charge captured at
+        // booking time (chargedAmount in EUR/XAF, converted to EUR via the
+        // charge-time snapshot — see billing.service.ts). Platform net revenue
+        // is gross minus the provider payout (which includes the full base +
+        // delivery + deposit passed through to the provider).
         const revMap: Record<string, { 
           id: string; 
           period: string; 
           gross: number; 
           voucherDiscounts: number;
+          payout: number;
           netRevenue: number;
           bookingsCount: number; 
           avgValue: number; 
@@ -224,20 +229,28 @@ export default function FinancialReportsPage() {
               period: key, 
               gross: 0, 
               voucherDiscounts: 0,
+              payout: 0,
               netRevenue: 0,
               bookingsCount: 0, 
               avgValue: 0, 
               country: countryFilter || "All" 
             };
           }
-          revMap[key].gross += eur(tx.subtotal, tx.currency);
+          // Money flow: gross = the actual charge captured at booking time
+          // (chargedAmount in EUR/XAF → EUR). The platform keeps the difference
+          // between gross and the provider payout; everything else passes
+          // through to the provider (see billing.service.ts).
+          revMap[key].gross += chargedToEur(tx.chargedAmount, tx.chargedCurrency, eurRates)
+            ?? eur(tx.amount, tx.currency);
           revMap[key].voucherDiscounts += eur(tx.voucherDiscount, tx.currency);
-          revMap[key].netRevenue += eur(tx.amount, tx.currency);
+          revMap[key].payout += toEurAtCharge(tx.providerPayout, tx.currency, tx.chargedCurrency, tx.chargedRate, eurRates) ?? 0;
+          revMap[key].netRevenue += (chargedToEur(tx.chargedAmount, tx.chargedCurrency, eurRates) ?? eur(tx.amount, tx.currency))
+            - (toEurAtCharge(tx.providerPayout, tx.currency, tx.chargedCurrency, tx.chargedRate, eurRates) ?? 0);
           revMap[key].bookingsCount += 1;
         });
         return Object.values(revMap).map((m) => ({
           ...m,
-          avgValue: m.bookingsCount ? m.netRevenue / m.bookingsCount : 0,
+          avgValue: m.bookingsCount ? m.gross / m.bookingsCount : 0,
         })).sort((a, b) => b.period.localeCompare(a.period));
 
       case "payment":
@@ -325,7 +338,8 @@ export default function FinancialReportsPage() {
               {r.voucherDiscounts > 0 ? `- ${formatCurrency(r.voucherDiscounts, "EUR")}` : "—"}
             </span>
           )},
-          { key: "netRevenue", label: "Net Revenue", align: "right", render: (r) => <span className="tabular font-bold text-slate-900">{formatCurrency(r.netRevenue, "EUR")}</span> },
+          { key: "payout", label: "Provider Payouts", align: "right", render: (r) => <span className="tabular font-medium text-blue-600">{formatCurrency(r.payout, "EUR")}</span> },
+          { key: "netRevenue", label: "Platform Net Revenue", align: "right", render: (r) => <span className="tabular font-bold text-slate-900">{formatCurrency(r.netRevenue, "EUR")}</span> },
           { key: "avgValue", label: "Avg Booking Value", align: "right", render: (r) => <span className="tabular font-medium">{formatCurrency(r.avgValue, "EUR")}</span> },
         ];
       case "payment":
@@ -389,8 +403,8 @@ export default function FinancialReportsPage() {
     const fileName = `financial-${activeReport}-report-${new Date().toISOString().split("T")[0]}`;
 
     if (activeReport === "revenue") {
-      headers = ["Period", "Bookings", "Gross Revenue", "Voucher Discounts", "Net Revenue", "Avg Booking Value"];
-      rows = reportTableData.map((r: any) => [r.period, r.bookingsCount, r.gross, r.voucherDiscounts, r.netRevenue, r.avgValue]);
+      headers = ["Period", "Bookings", "Gross Revenue", "Voucher Discounts", "Provider Payout", "Platform Net Revenue", "Avg Booking Value"];
+      rows = reportTableData.map((r: any) => [r.period, r.bookingsCount, r.gross, r.voucherDiscounts, r.payout, r.netRevenue, r.avgValue]);
     } else if (activeReport === "payment") {
       headers = ["Booking Ref", "Traveller", "Gateway", "Voucher Code", "Discount", "Amount", "Currency", "Date", "Status"];
       rows = reportTableData.map((r: any) => [r.reference, r.traveller, r.gateway, r.voucherCode ?? "", r.voucherDiscount, r.amount, r.currency, r.date, r.status]);
@@ -435,14 +449,24 @@ export default function FinancialReportsPage() {
   const currentSummaryCards = useMemo(() => {
     switch (activeReport) {
       case "revenue":
-        const grossRevenue = filteredTxs.reduce((s, t) => s + eur(t.subtotal, t.currency), 0);
-        const voucherDiscountsTotal = filteredTxs.reduce((s, t) => s + eur(t.voucherDiscount, t.currency), 0);
-        const netRevenue = filteredTxs.reduce((s, t) => s + eur(t.amount, t.currency), 0);
+        // Money flow: gross is the ACTUAL charge captured at booking time
+        // (chargedAmount in EUR/XAF → EUR). Platform net revenue is gross minus
+        // the provider payout (which includes full base + delivery + deposit
+        // passed through to the provider). See billing.service.ts.
+        const grossRevenue = filteredTxs.reduce(
+          (s, t) => s + (chargedToEur(t.chargedAmount, t.chargedCurrency, eurRates) ?? eur(t.amount, t.currency)),
+          0,
+        );
+        const totalPayout = filteredTxs.reduce(
+          (s, t) => s + (toEurAtCharge(t.providerPayout, t.currency, t.chargedCurrency, t.chargedRate, eurRates) ?? 0),
+          0,
+        );
+        const netRevenue = grossRevenue - totalPayout;
         return (
           <>
-            <StatCard title="Gross Revenue" value={grossRevenue} currency="EUR" icon={<DollarSign className="text-emerald-600 h-4 w-4" />} iconBg="bg-emerald-100" />
-            <StatCard title="Total Voucher Discounts" value={voucherDiscountsTotal} currency="EUR" icon={<Tag className="text-amber-600 h-4 w-4" />} iconBg="bg-amber-100" />
-            <StatCard title="Net Revenue" value={netRevenue} currency="EUR" icon={<TrendingUp className="text-blue-600 h-4 w-4" />} iconBg="bg-blue-100" />
+            <StatCard title="Gross Revenue" value={grossRevenue} currency="EUR" icon={<Euro className="text-emerald-600 h-4 w-4" />} iconBg="bg-emerald-100" />
+            <StatCard title="Provider Payouts" value={totalPayout} currency="EUR" icon={<Landmark className="text-blue-600 h-4 w-4" />} iconBg="bg-blue-100" />
+            <StatCard title="Platform Net Revenue" value={netRevenue} currency="EUR" icon={<TrendingUp className="text-emerald-600 h-4 w-4" />} iconBg="bg-emerald-100" />
           </>
         );
 
