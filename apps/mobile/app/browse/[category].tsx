@@ -1,12 +1,12 @@
 "use no memo";
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, TextInput, Dimensions, Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
@@ -372,28 +372,9 @@ export default function BrowseCategoryScreen() {
   const isLoadingMore = isFetching && cursor > 0;
   const isFirstLoad = (isLoading || isFetching) && allResults.length === 0;
 
-  // Fetch signed photo URLs for all loaded listings via /listings/:id/public
-  const listingIds = useMemo(() => allResults.map((r) => r.id), [allResults]);
-  const signedPhotoQueries = useQueries({
-    queries: listingIds.map((id) => ({
-      queryKey: ["public-photo", id],
-      queryFn: async (): Promise<string | null> => {
-        try {
-          const res = await listingApi.get<{
-            data: { primaryPhotoUrl?: string | null; photos?: Array<{ cdnUrl: string }> };
-          }>(`/listings/${id}/public`);
-          return res.data.data?.primaryPhotoUrl ?? res.data.data?.photos?.[0]?.cdnUrl ?? null;
-        } catch { return null; }
-      },
-      staleTime: 5 * 60_000,
-      gcTime: 10 * 60_000,
-      retry: false,
-    })),
-  });
-  const signedPhotoMap = useMemo<Record<string, string | null>>(
-    () => Object.fromEntries(listingIds.map((id, i) => [id, signedPhotoQueries[i]?.data ?? null])),
-    [listingIds, signedPhotoQueries],
-  );
+  // /search already returns primaryPhotoUrl on every result — this used to
+  // re-fetch it per listing via GET /listings/:id/public (up to 50 parallel
+  // requests on this screen, one per loaded card) for data already in hand.
 
   function handleSortChange(newSort: string) {
     if (newSort === sort) return;
@@ -517,7 +498,7 @@ export default function BrowseCategoryScreen() {
               item={item}
               apiCategory={apiCategory}
               onPress={() => navToListing(item.id)}
-              signedPhotoUrl={signedPhotoMap[item.id] ?? null}
+              signedPhotoUrl={item.primaryPhotoUrl}
               promotion={browsePromo}
               columns={columns}
             />

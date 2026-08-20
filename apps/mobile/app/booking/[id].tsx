@@ -368,21 +368,11 @@ export default function BookingDetailScreen() {
   // anonymous sessions skip the lookup.
   const reviewedBookingIds = useReviewedBookingIds(!!user);
 
-  // Fetch signed cover photo via /listings/:id/public (listing.primaryPhotoUrl may be an unsigned S3 URL)
-  const { data: signedCoverPhoto } = useQuery<string | null>({
-    queryKey: ["public-photo", booking?.listing?.id],
-    queryFn: async () => {
-      try {
-        const res = await listingApi.get<{
-          data: { primaryPhotoUrl?: string | null; photos?: Array<{ cdnUrl: string }> };
-        }>(`/listings/${booking!.listing.id}/public`);
-        return res.data.data?.primaryPhotoUrl ?? res.data.data?.photos?.[0]?.cdnUrl ?? null;
-      } catch { return null; }
-    },
-    enabled: !!booking?.listing?.id,
-    staleTime: 5 * 60_000,
-    retry: false,
-  });
+  // GET /guests/me/bookings/:id already returns listing.primaryPhotoUrl (the
+  // same stable, permanent listing_photos.cdn_url — not a signed/expiring
+  // URL) — this used to re-fetch it via GET /listings/:id/public for data
+  // already in hand.
+  const signedCoverPhoto = booking?.listing?.primaryPhotoUrl ?? null;
 
   // Stop auto-refresh once the status moves away from pending_payment
   useEffect(() => {

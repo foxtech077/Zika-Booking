@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useQuery, useMutation, useQueryClient, useQueries } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
@@ -195,28 +195,9 @@ export default function SavedScreen() {
   const [allFavourites, setAllFavourites] = useState<Favourite[]>([]);
   const [loadingMore,  setLoadingMore]  = useState(false);
 
-  // Fetch signed photo URLs for each favourite listing — must be before early returns
-  const favouriteIds = useMemo(() => allFavourites.map((f) => f.listing.id), [allFavourites]);
-  const signedPhotoQueries = useQueries({
-    queries: favouriteIds.map((id) => ({
-      queryKey: ["public-photo", id],
-      queryFn: async (): Promise<string | null> => {
-        try {
-          const res = await listingApi.get<{
-            data: { primaryPhotoUrl?: string | null; photos?: Array<{ cdnUrl: string }> };
-          }>(`/listings/${id}/public`);
-          return res.data.data?.primaryPhotoUrl ?? res.data.data?.photos?.[0]?.cdnUrl ?? null;
-        } catch { return null; }
-      },
-      staleTime: 5 * 60_000,
-      gcTime: 10 * 60_000,
-      retry: false,
-    })),
-  });
-  const signedPhotoMap = useMemo<Record<string, string | null>>(
-    () => Object.fromEntries(favouriteIds.map((id, i) => [id, signedPhotoQueries[i]?.data ?? null])),
-    [favouriteIds, signedPhotoQueries],
-  );
+  // /guests/me/favourites already returns primaryPhotoUrl on every item — this
+  // used to re-fetch it per listing via GET /listings/:id/public for data
+  // already in hand.
 
   // No account-type guard: everyone can save listings. This early return also
   // sat above the useQuery below, so it silently changed the hook count between
@@ -303,7 +284,7 @@ export default function SavedScreen() {
             item={item}
             onRemove={handleRemove}
             removePending={removeMutation.isPending}
-            signedPhotoUrl={signedPhotoMap[item.listing.id] ?? null}
+            signedPhotoUrl={item.listing.primaryPhotoUrl}
             promotion={
               item.listing.category === "hotel" ? hotelPromo
               : item.listing.category === "apartment" ? aptPromo
