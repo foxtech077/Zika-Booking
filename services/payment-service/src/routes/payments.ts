@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { stripe, toStripeAmount } from "../lib/stripe.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
-import { requireUser, requireAdminPermission, requireInternalService, type GuestRequest } from "../middleware/auth.js";
+import { requireUser, requireAdminPermission, requireInternalService, requireAccount, type GuestRequest } from "../middleware/auth.js";
 import { AdminPermission } from "@zika/types";
 import { cancelPayout } from "../services/payout.service.js";
 import { issueRefund, RefundLimitExceededError, InvalidPaymentStatusError, handleConfirmFailure } from "../services/refund.service.js";
@@ -1050,5 +1050,151 @@ export async function paymentRoutes(app: FastifyInstance) {
     } catch (err: any) {
       return sendError(reply, 500, "DATABASE_ERROR", err.message);
     }
+  });
+
+  // ── GET /provider/me/bookings/payment-summary ──────────────────────────────
+  // Provider-facing payment + payout status keyed by bookingId. Lives in the
+  // payment service (which owns the payments schema) so the provider app can
+  // render real payment/payout state without a cross-schema join.
+  app.get("/provider/me/bookings/payment-summary", {
+    schema: {
+      tags: ["Provider Payments"],
+      summary: "Get payment/payout summary for the provider's bookings",
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: "object",
+        required: ["bookingIds"],
+        properties: {
+          bookingIds: { type: "string", description: "Comma-separated booking UUIDs (max 200)" },
+        },
+      },
+    },
+    preHandler: [requireAccount],
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { userId } = req as GuestRequest;
+    const { bookingIds } = req.query as { bookingIds?: string };
+    const ids = [...new Set((bookingIds ?? "").split(",").map((s) => s.trim()).filter(Boolean))].slice(0, 200);
+
+    if (ids.length === 0) {
+      return sendSuccess(reply, 200, { data: {} });
+    }
+
+    // Authorization: only return payment/refund/payout state for bookings the
+    // caller actually owns. Ownership lives in the listing schema, so the
+    // booking service verifies it; on failure we fail closed for security.
+    let ownedIds: string[];
+    try {
+      const res = await fetch(`${BOOKING_SERVICE_URL}/bookings/internal/verify-ownership`, {
+        method: "POST",
+        headers: internalHeaders(),
+        body: JSON.stringify({ bookingIds: ids, providerId: userId }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) {
+        req.log.error({ status: res.status }, "[payment-summary] Ownership verification failed (non-2xx)");
+        return sendError(reply, 503, "SERVICE_UNAVAILABLE", "Could not verify booking ownership. Please try again shortly.");
+      }
+      const json = (await res.json()) as { data?: { owned?: string[] } };
+      ownedIds = json?.data?.owned ?? [];
+    } catch (err) {
+      req.log.error({ err }, "[payment-summary] Ownership verification errored");
+      return sendError(reply, 503, "SERVICE_UNAVAILABLE", "Could not verify booking ownership. Please try again shortly.");
+    }
+
+    if (ownedIds.length === 0) {
+      return sendSuccess(reply, 200, { data: {} });
+    }
+
+    // Pick the payment that best reflects the current state: captured first,
+    // then partially_refunded/refunded, then the latest pending/initiated
+    // attempt, then the latest failed/timed_out attempt (so an old failed
+    // attempt never masks a newer in-flight one).
+    const STATUS_PRIORITY: Record<string, number> = {
+      captured: 0,
+      partially_refunded: 1,
+      refunded: 2,
+      pending: 3,
+      initiated: 4,
+      timed_out: 5,
+      failed: 6,
+    };
+
+    const payments = await prisma.payment.findMany({
+      where: { bookingId: { in: ownedIds } },
+    });
+    const payouts = await prisma.payout.findMany({
+      where: { providerId: userId, bookingId: { in: ownedIds } },
+    });
+    const refunds = await prisma.refund.findMany({
+      where: { bookingId: { in: ownedIds } },
+    });
+
+    const toNum = (v: unknown): number | null => (v == null ? null : Number(v));
+
+    const data: Record<string, unknown> = {};
+    for (const id of ownedIds) {
+      const bookingPayments = payments
+        .filter((p) => p.bookingId === id)
+        .sort((a, b) => {
+          const pa = STATUS_PRIORITY[a.status] ?? 9;
+          const pb = STATUS_PRIORITY[b.status] ?? 9;
+          if (pa !== pb) return pa - pb;
+          return b.createdAt.getTime() - a.createdAt.getTime();
+        });
+      const payment = bookingPayments[0] ?? null;
+      const payout = payouts.find((p) => p.bookingId === id) ?? null;
+      const bookingRefunds = refunds
+        .filter((r) => r.bookingId === id)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+      data[id] = {
+        payment: payment
+          ? {
+              id: payment.id,
+              displayId: payment.displayId,
+              status: payment.status,
+              amount: toNum(payment.amount),
+              currency: payment.currency,
+              chargedAmount: toNum(payment.chargedAmount),
+              chargedCurrency: payment.chargedCurrency,
+              chargedRate: toNum(payment.chargedRate),
+              paymentMethodType: payment.paymentMethodType,
+              cardBrand: payment.cardBrand,
+              cardLast4: payment.cardLast4,
+              mobileNumberMasked: payment.mobileNumberMasked,
+              providerPaymentId: payment.providerPaymentId,
+              failureCode: payment.failureCode,
+              failureMessage: payment.failureMessage,
+              capturedAt: payment.capturedAt?.toISOString() ?? null,
+              createdAt: payment.createdAt.toISOString(),
+            }
+          : null,
+        refunds: bookingRefunds.map((r) => ({
+          id: r.id,
+          amount: toNum(r.amount),
+          currency: r.currency,
+          status: r.status,
+          reason: r.reason,
+          providerRefundId: r.providerRefundId,
+          failureReason: r.failureReason,
+          refundedAt: r.refundedAt?.toISOString() ?? null,
+        })),
+        payout: payout
+          ? {
+              id: payout.id,
+              status: payout.status,
+              amount: toNum(payout.amount),
+              currency: payout.currency,
+              scheduledAt: payout.scheduledAt?.toISOString() ?? null,
+              processedAt: payout.processedAt?.toISOString() ?? null,
+              providerPayoutId: payout.providerPayoutId,
+              failureReason: payout.failureReason,
+              priceBreakdownJson: payout.priceBreakdownJson,
+            }
+          : null,
+      };
+    }
+
+    return sendSuccess(reply, 200, data);
   });
 }

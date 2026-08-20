@@ -23,7 +23,8 @@ import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ActionModal } from "@/components/modals/Modals";
-import { formatDate, formatRelativeTime, formatCurrency, slugToLabel } from "@/lib/utils";
+import { formatDate, formatRelativeTime, slugToLabel } from "@/lib/utils";
+import { useEurRates, EurValue, formatEur } from "@/lib/eur";
 import type { Booking } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 import { canAccess } from "@/permissions/rbac";
@@ -152,6 +153,9 @@ export default function BookingsPage() {
 
   const bookings: Booking[] = data?.bookings ?? [];
   const total: number = data?.total ?? 0;
+
+  // EUR-converted display rates for the money columns on this page.
+  const eurRates = useEurRates(bookings.map((b) => b.currency));
 
   // Query: Fetch pending requests (only if user has permission)
   const pendingParams = { page: String(page), limit: String(limit) };
@@ -388,8 +392,9 @@ export default function BookingsPage() {
       align: "right",
       render: (b) => (
         <div className="text-right">
-          <p className="font-semibold text-sm tabular">{formatCurrency(Number(b.totalAmount), b.currency)}</p>
-          <p className="text-xs text-slate-500">Commission: {formatCurrency(Number(b.commissionAmount), b.currency)}</p>
+          <p className="font-semibold text-sm tabular"><EurValue amount={b.totalAmount} currency={b.currency} rates={eurRates} /></p>
+          <p className="text-xs text-slate-500">Commission: <EurValue amount={b.commissionAmount} currency={b.currency} rates={eurRates} /></p>
+          <p className="text-xs text-emerald-600">Payout: <EurValue amount={b.providerPayout} currency={b.currency} rates={eurRates} /></p>
         </div>
       ),
     },
@@ -470,7 +475,7 @@ export default function BookingsPage() {
       label: "Amount",
       align: "right",
       render: (b) => (
-        <p className="font-semibold text-sm tabular text-right">{formatCurrency(Number(b.totalAmount), b.currency)}</p>
+        <p className="font-semibold text-sm tabular text-right"><EurValue amount={b.totalAmount} currency={b.currency} rates={eurRates} /></p>
       ),
     },
     {
@@ -828,17 +833,18 @@ export default function BookingsPage() {
             {/* Financials */}
             <div className="bg-surface-subtle rounded-xl p-4 space-y-2 text-sm border border-border">
               <p className="font-semibold text-slate-900 mb-2">Financial Breakdown</p>
-              {[
-                ["Subtotal", formatCurrency(Number(detailData.subtotal), detailData.currency)],
-                ["Voucher Discount", `- ${formatCurrency(Number(detailData.voucherDiscount), detailData.currency)}`],
-                ["Delivery Fee", formatCurrency(Number(detailData.deliveryFee), detailData.currency)],
-                ["Total", formatCurrency(Number(detailData.totalAmount), detailData.currency)],
-                ["Commission", formatCurrency(Number(detailData.commissionAmount), detailData.currency)],
-                ["Provider Payout", formatCurrency(Number(detailData.providerPayout), detailData.currency)],
+              {[["Subtotal", <EurValue key="s" amount={detailData.subtotal} currency={detailData.currency} rates={eurRates} />],
+                ["Voucher Discount", <span key="v" className="text-danger">- <EurValue amount={detailData.voucherDiscount} currency={detailData.currency} rates={eurRates} /></span>],
+                ["Service Fee", <EurValue key="f" amount={detailData.serviceFee} currency={detailData.currency} rates={eurRates} />],
+                ["Taxes", <EurValue key="t" amount={detailData.taxAmount} currency={detailData.currency} rates={eurRates} />],
+                ["Delivery Fee", <EurValue key="d" amount={detailData.deliveryFee} currency={detailData.currency} rates={eurRates} />],
+                ["Total", <EurValue key="T" amount={detailData.totalAmount} currency={detailData.currency} rates={eurRates} />],
+                ["Commission", <EurValue key="c" amount={detailData.commissionAmount} currency={detailData.currency} rates={eurRates} />],
+                ["Provider Payout", <EurValue key="p" amount={detailData.providerPayout} currency={detailData.currency} rates={eurRates} />],
               ].map(([k, v]) => (
                 <div key={String(k)} className="flex justify-between">
                   <span className={k === "Total" ? "font-semibold text-slate-900" : "text-slate-500"}>{k}</span>
-                  <span className={k === "Total" ? "font-bold text-slate-900 tabular" : "tabular text-slate-700"}>{String(v)}</span>
+                  <span className={k === "Total" ? "font-bold text-slate-900 tabular" : "tabular text-slate-700"}>{v}</span>
                 </div>
               ))}
             </div>

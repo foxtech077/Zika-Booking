@@ -2,8 +2,8 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireUser, optionalAuth, type AuthRequest } from "../middleware/auth.js";
-import { getCommissionRate, getCommissionRateBatch, getGlobalCommissionRate } from "./bookings.js";
-import { commissionInclusiveRate, SERVICE_FEE_RATE } from "../services/billing.service.js";
+import { getCommissionRate, getCommissionRateBatch } from "./bookings.js";
+import { SERVICE_FEE_RATE } from "../services/billing.service.js";
 import { getRatesBatch, getExchangeRate, ceilingForCurrency, getConvertedAmounts, getLocalizedContext } from "../services/exchangeRate.services.js";
 import { buildPriceFilter, buildGuestPriceExpr } from "../lib/priceFilter.js";
 import { buildUserRatingFilterClause, userRatingsOrderExpr } from "../lib/searchFilters.js";
@@ -109,7 +109,7 @@ export async function searchRoutes(app: FastifyInstance) {
     push(`l.status::text = ANY(${next()})`, validStatuses);
 
     // Category-aware price filtering — applied to the guest-payable price
-    // (commission-inclusive, converted to the requested currency, ceiling-
+    // (raw list price, converted to the requested currency, ceiling-
     // rounded), i.e. the exact `localizedNightlyRate`/`localizedDailyRate`
     // values the response exposes, minus the client-side promo badge (a
     // category-wide label, not a per-booking guarantee). This prevents a
@@ -118,7 +118,6 @@ export async function searchRoutes(app: FastifyInstance) {
     // commission returned as $1.33 USD under price_max=1).
     let priceJoins = "";
     if (priceMin !== undefined || priceMax !== undefined) {
-      const globalCommissionRate = await getGlobalCommissionRate();
       const usdToTargetRate = targetCurrency ? await getExchangeRate("USD", targetCurrency) : null;
       const priceFilter = buildPriceFilter({
         category,
@@ -126,7 +125,6 @@ export async function searchRoutes(app: FastifyInstance) {
         priceMax,
         targetCurrency,
         usdToTargetRate,
-        globalCommissionRate,
         next,
       });
       priceJoins = priceFilter.joins;
@@ -299,7 +297,7 @@ export async function searchRoutes(app: FastifyInstance) {
     const selectExprs = ["l.id", textRankExpr, distanceExpr, latExpr, lngExpr].join(",\n      ");
 
     // Price sort — order by the SAME guest-payable price the response displays
-    // (min active room-type price for hotels, commission-inclusive, converted to
+    // (min active room-type price for hotels / raw listing price, converted to
     // the requested currency and ceiling-rounded), not the raw listing column.
     // The expression's placeholders are allocated after all WHERE params, and
     // their values are pushed after `paginationStart` is captured, so the COUNT
@@ -308,9 +306,8 @@ export async function searchRoutes(app: FastifyInstance) {
     let priceOrderParams: unknown[] = [];
     const priceSorting = sort === "price_asc" || sort === "price_desc";
     if (priceSorting) {
-      const globalCommissionRate = await getGlobalCommissionRate();
       const usdToTargetRate = targetCurrency ? await getExchangeRate("USD", targetCurrency) : null;
-      const price = buildGuestPriceExpr({ category, targetCurrency, usdToTargetRate, globalCommissionRate, next });
+      const price = buildGuestPriceExpr({ category, targetCurrency, usdToTargetRate, next });
       priceOrderExpr = price.expr;
       priceOrderParams = price.params;
       if (!priceJoins) priceJoins = price.joins;
@@ -454,18 +451,20 @@ export async function searchRoutes(app: FastifyInstance) {
     const results = page.map((l) => {
       const commissionRate = commissionRates.get(l.country ?? null) ?? 0;
 
-      // Calculate nightly rate: use minimum room type price for hotels with room types.
-      // The commission is baked into the guest-facing price (rate × (1 + commissionRate)).
+      // Calculate the guest-facing rate: use the minimum room-type price for
+      // hotels, otherwise the raw list price. The commission is no longer baked
+      // into the guest price — guests pay listPrice + service fee, and commission
+      // is deducted from the provider's payout instead.
       let nightlyRate: number | null = null;
       if (l.category !== "car") {
         if (l.category === "hotel" && l.hotelRoomTypes.length > 0) {
           // Use the minimum pricePerNight across active room types
-          nightlyRate = commissionInclusiveRate(Math.min(...l.hotelRoomTypes.map((rt) => Number(rt.pricePerNight))), commissionRate);
+          nightlyRate = Math.min(...l.hotelRoomTypes.map((rt) => Number(rt.pricePerNight)));
         } else if (l.pricePerNight) {
-          nightlyRate = commissionInclusiveRate(Number(l.pricePerNight), commissionRate);
+          nightlyRate = Number(l.pricePerNight);
         }
       }
-      const dailyRate = l.category === "car" && l.pricePerDay ? commissionInclusiveRate(Number(l.pricePerDay), commissionRate) : null;
+      const dailyRate = l.category === "car" && l.pricePerDay ? Number(l.pricePerDay) : null;
 
       const baseCurrency = l.currency ?? "USD";
       const wantLocalized = !!targetCurrency && targetCurrency !== baseCurrency;
@@ -477,7 +476,7 @@ export async function searchRoutes(app: FastifyInstance) {
       let localizedDailyRate: number | null = conversionUnavailable ? null : dailyRate;
       let localizedRoomTypes = l.category === "hotel"
         ? l.hotelRoomTypes.map((rt) => {
-            const pricePerNight = commissionInclusiveRate(Number(rt.pricePerNight), commissionRate);
+            const pricePerNight = Number(rt.pricePerNight);
             return {
               id: rt.id,
               name: rt.name,
@@ -713,17 +712,15 @@ export async function searchRoutes(app: FastifyInstance) {
       const baseCurrency = listing.currency ?? "USD";
       const target = targetCurrency?.toUpperCase() || null;
       const ctx = await getLocalizedContext(baseCurrency, target);
-      // Commission is baked into the guest-facing price: rate × (1 + commissionRate).
+      // Guest-facing rates are the raw list prices — no commission baked in.
       const baseNightlyRate: number | null = listing.category !== "car"
         ? (listing.category === "hotel" && listing.hotelRoomTypes.length > 0
             ? Math.min(...listing.hotelRoomTypes.map((rt) => Number(rt.pricePerNight)))
             : (listing.pricePerNight ? Number(listing.pricePerNight) : null))
         : null;
-      const nightlyRate: number | null =
-        baseNightlyRate != null ? commissionInclusiveRate(baseNightlyRate, commissionRate) : null;
+      const nightlyRate: number | null = baseNightlyRate;
       const baseDailyRate: number | null = listing.category === "car" && listing.pricePerDay ? Number(listing.pricePerDay) : null;
-      const dailyRate: number | null =
-        baseDailyRate != null ? commissionInclusiveRate(baseDailyRate, commissionRate) : null;
+      const dailyRate: number | null = baseDailyRate;
       const localizedNightlyRate: number | null =
         ctx.currency === null ? null
         : (ctx.rate !== null && nightlyRate !== null ? ceilingForCurrency(nightlyRate * ctx.rate, ctx.currency) : nightlyRate);
@@ -732,7 +729,7 @@ export async function searchRoutes(app: FastifyInstance) {
         : (ctx.rate !== null && dailyRate !== null ? ceilingForCurrency(dailyRate * ctx.rate, ctx.currency) : dailyRate);
       let localizedRoomTypes = listing.category === "hotel"
         ? listing.hotelRoomTypes.map((rt) => {
-            const pricePerNight = commissionInclusiveRate(Number(rt.pricePerNight), commissionRate);
+            const pricePerNight = Number(rt.pricePerNight);
             return {
               id: rt.id,
               name: rt.name,
@@ -785,7 +782,7 @@ export async function searchRoutes(app: FastifyInstance) {
         primaryPhotoUrl: listingPhotos[0]?.cdnUrl ?? null,
         lat: coords[0]?.lat ?? null,
         lng: coords[0]?.lng ?? null,
-        // Commission-inclusive prices (rate × (1 + commissionRate))
+        // Raw list-price rates (guests pay listPrice + service fee).
         nightlyRate,
         dailyRate,
         pricePerNight: listing.category !== "car" ? nightlyRate : (listing.pricePerNight ? Number(listing.pricePerNight) : null),
@@ -794,9 +791,9 @@ export async function searchRoutes(app: FastifyInstance) {
         localizedDailyRate,
         localizedCurrency: ctx.currency,
         // Override the raw `hotelRoomTypes` from the listing spread with the
-        // commission-inclusive prices — consumers prefer `hotelRoomTypes` over
-        // `roomTypes`, so leaving the raw row here would leak the un-inflated
-        // base price (and mislabel it when a display currency is set).
+        // localized room-type prices — consumers prefer `hotelRoomTypes` over
+        // `roomTypes`, so leaving the raw row here would mislabel them when a
+        // display currency is set.
         hotelRoomTypes: localizedRoomTypes,
         roomTypes: localizedRoomTypes,
         isAccredited: !!listing.approvedAt,
@@ -1098,7 +1095,7 @@ export async function searchRoutes(app: FastifyInstance) {
         const commissionRate = commissionRates.get(l.country ?? null) ?? 0;
         const baseCurrency = l.currency ?? "USD";
         const rawNightlyRate = l.pricePerNight ? Number(l.pricePerNight) : null;
-        const nightlyRate = rawNightlyRate != null ? commissionInclusiveRate(rawNightlyRate, commissionRate) : null;
+        const nightlyRate = rawNightlyRate;
         const ctx = await getLocalizedContext(baseCurrency, target);
         const localizedNightlyRate =
           ctx.currency === null ? null
@@ -1242,7 +1239,7 @@ export async function searchRoutes(app: FastifyInstance) {
           const commissionRate = commissionRates.get(f.listing.country ?? null) ?? 0;
           const baseCurrency = f.listing.currency ?? "USD";
           const rawNightlyRate = f.listing.pricePerNight ? Number(f.listing.pricePerNight) : null;
-          const nightlyRate = rawNightlyRate != null ? commissionInclusiveRate(rawNightlyRate, commissionRate) : null;
+          const nightlyRate = rawNightlyRate;
           const ctx = await getLocalizedContext(baseCurrency, target);
           const localizedNightlyRate =
             ctx.currency === null ? null
@@ -1366,7 +1363,7 @@ export async function searchRoutes(app: FastifyInstance) {
           const commissionRate = commissionRates.get(v.listing.country ?? null) ?? 0;
           const baseCurrency = v.listing.currency ?? "USD";
           const rawNightlyRate = v.listing.pricePerNight ? Number(v.listing.pricePerNight) : null;
-          const nightlyRate = rawNightlyRate != null ? commissionInclusiveRate(rawNightlyRate, commissionRate) : null;
+          const nightlyRate = rawNightlyRate;
           const ctx = await getLocalizedContext(baseCurrency, target);
           const localizedNightlyRate =
             ctx.currency === null ? null

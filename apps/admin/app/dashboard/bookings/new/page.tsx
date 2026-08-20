@@ -698,10 +698,10 @@ export default function ManualBookingPage() {
     const discount = Math.max(promotionDiscount, voucherDiscount);
     const subtotal = Math.max(0, baseAmount - discount);
 
-    // Recalculate service fee based on discounted subtotal
-    const commRate = price.commissionRate ?? (price.baseAmount > 0 ? price.serviceFee / price.baseAmount : 0);
-    const serviceFee = Math.ceil(subtotal * commRate * 100) / 100;
-
+    // Use commissionRate from API response (matches web flow)
+    const commRate = price.commissionRate ?? 0.10;
+    // Recalculate service fee based on discounted subtotal (4% flat rate)
+    const serviceFee = Math.ceil(subtotal * 0.04 * 100) / 100;
     // Recalculate tax based on discounted subtotal
     const tRate = price.baseAmount > 0 ? price.tax / price.baseAmount : 0;
     const tax = Math.round(subtotal * tRate * 100) / 100;
@@ -808,36 +808,21 @@ export default function ManualBookingPage() {
       const res = await listingApi.get("/admin/bookings/availability", { params });
       const d = res.data?.data ?? res.data;
       setAvailStatus(d.available ? "available" : "unavailable");
-      if (d.available && (d.pricing || d.subtotal !== undefined)) {
-        if (d.pricing) {
-          setPrice({
-            baseAmount: d.pricing.baseAmount ?? 0,
-            discount: d.pricing.discount ?? 0,
-            voucherDiscount: d.pricing.voucherDiscount,
-            promotionDiscount: d.pricing.promotionDiscount,
-            serviceFee: d.pricing.serviceFee ?? 0,
-            tax: d.pricing.tax ?? 0,
-            total: d.pricing.total ?? 0,
-            currency: d.pricing.currency ?? getCurrencyForCountry(country),
-            nights: d.nights ?? 0,
-            pricePerNight: d.pricePerNight ?? 0,
-            commissionRate: d.commissionRate ?? 0,
-          });
-        } else {
-          setPrice({
-            baseAmount: d.subtotal ?? 0,
-            discount: 0,
-            voucherDiscount: undefined,
-            promotionDiscount: undefined,
-            serviceFee: d.commissionAmount ?? 0,
-            tax: 0,
-            total: d.totalAmount ?? 0,
-            currency: d.currency ?? getCurrencyForCountry(country),
-            nights: d.nights ?? 0,
-            pricePerNight: d.pricePerNight ?? 0,
-            commissionRate: d.commissionRate ?? 0,
-          });
-        }
+      if (d.available) {
+        // The backend now returns calculateBilling() fields directly
+        setPrice({
+          baseAmount: d.baseAmount ?? d.subtotal ?? 0,
+          discount: 0,
+          voucherDiscount: undefined,
+          promotionDiscount: undefined,
+          serviceFee: d.serviceFee ?? 0,
+          tax: d.taxAmount ?? 0,
+          total: d.totalAmount ?? 0,
+          currency: d.currency ?? getCurrencyForCountry(country),
+          nights: d.nights ?? 0,
+          pricePerNight: d.pricePerNight ?? 0,
+          commissionRate: d.commissionRate ?? 0,
+        });
       }
       // The admin endpoint never returns bookedRanges/lockedRanges directly.
       // If it found conflicts (available: false), refresh the calendar from

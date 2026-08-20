@@ -66,6 +66,7 @@ interface Transaction {
 }
 
 interface EarningsData {
+  currency: string;
   allTime: {
     revenue: number;
     commission: number;
@@ -181,6 +182,7 @@ function normalizeTransaction(raw: unknown): Transaction {
 
 function emptyData(): EarningsData {
   return {
+    currency: "EUR",
     allTime: {
       revenue: 0,
       commission: 0,
@@ -218,6 +220,7 @@ function normalizeEarnings(payload: unknown): EarningsData {
   const pendingPayouts = normalizedTransactions.filter((item) => item.status === "pending" || item.status === "processing").reduce((sum, item) => sum + item.payout, 0);
 
   return {
+    currency: readString(data.currency, "EUR"),
     allTime: {
       revenue,
       commission,
@@ -446,12 +449,12 @@ export default function EarningsPage() {
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <StatCard label="Total Earnings" value={formatCurrency(data.allTime.payout)} icon={<Wallet />} trend={payoutTrend} loading={isLoading} tone="bg-green-700 text-white" />
-        <StatCard label="This Month Earnings" value={formatCurrency(chartData.at(-1)?.payout ?? 0)} icon={<CalendarDays />} trend={payoutTrend} loading={isLoading} tone="bg-green-700 text-white" />
-        <StatCard label="Pending Payouts" value={formatCurrency(data.allTime.pendingPayouts)} icon={<CreditCard />} trend={0} loading={isLoading} tone="bg-green-700 text-white" />
-        <StatCard label="Completed Payouts" value={formatCurrency(data.allTime.completedPayouts)} icon={<Banknote />} trend={payoutTrend} loading={isLoading} tone="bg-green-700 text-white" />
-        <StatCard label="Total Bookings Revenue" value={formatCurrency(data.allTime.bookingsRevenue)} icon={<ReceiptText />} trend={revenueTrend} loading={isLoading} tone="bg-green-700 text-white" />
-        <StatCard label="Average Booking Value" value={formatCurrency(data.allTime.averageBookingValue)} icon={<TrendingUp />} trend={revenueTrend} loading={isLoading} tone="bg-green-700 text-white" />
+        <StatCard label="Total Earnings" value={formatCurrency(data.allTime.payout, data.currency)} icon={<Wallet />} trend={payoutTrend} loading={isLoading} tone="bg-green-700 text-white" />
+        <StatCard label="This Month Earnings" value={formatCurrency(chartData.at(-1)?.payout ?? 0, data.currency)} icon={<CalendarDays />} trend={payoutTrend} loading={isLoading} tone="bg-green-700 text-white" />
+        <StatCard label="Pending Payouts" value={formatCurrency(data.allTime.pendingPayouts, data.currency)} icon={<CreditCard />} trend={0} loading={isLoading} tone="bg-green-700 text-white" />
+        <StatCard label="Completed Payouts" value={formatCurrency(data.allTime.completedPayouts, data.currency)} icon={<Banknote />} trend={payoutTrend} loading={isLoading} tone="bg-green-700 text-white" />
+        <StatCard label="Total Bookings Revenue" value={formatCurrency(data.allTime.bookingsRevenue, data.currency)} icon={<ReceiptText />} trend={revenueTrend} loading={isLoading} tone="bg-green-700 text-white" />
+        <StatCard label="Average Booking Value" value={formatCurrency(data.allTime.averageBookingValue, data.currency)} icon={<TrendingUp />} trend={revenueTrend} loading={isLoading} tone="bg-green-700 text-white" />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
@@ -461,7 +464,7 @@ export default function EarningsPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="label" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+              <Tooltip formatter={(value) => formatCurrency(Number(value), data.currency)} />
               <Area type="monotone" dataKey="revenue" stroke="#16a34a" fill="#bbf7d0" name="Revenue" />
               <Area type="monotone" dataKey="payout" stroke="#10b981" fill="#bbf7d0" name="Payout" />
             </AreaChart>
@@ -474,7 +477,7 @@ export default function EarningsPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="label" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+              <Tooltip formatter={(value) => formatCurrency(Number(value), data.currency)} />
               <Bar dataKey="revenue" fill="#16a34a" radius={[6, 6, 0, 0]} name="Revenue" />
             </BarChart>
           </ResponsiveContainer>
@@ -498,7 +501,7 @@ export default function EarningsPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="label" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+              <Tooltip formatter={(value) => formatCurrency(Number(value), data.currency)} />
               <Bar dataKey="revenue" fill="#16a34a" radius={[6, 6, 0, 0]} name="Earnings" />
               <Bar dataKey="payout" fill="#34d399" radius={[6, 6, 0, 0]} name="Payouts" />
             </BarChart>

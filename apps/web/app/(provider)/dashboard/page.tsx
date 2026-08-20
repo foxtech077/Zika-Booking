@@ -5,6 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowRight, Banknote, CalendarDays, RefreshCw, Star } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
+import { useEurRates, sumToEur } from "@/lib/eurRates";
+import { getAllPayouts, type Payout } from "@/lib/payment-api";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -59,6 +61,7 @@ interface ReviewSummary {
 
 interface DashboardData {
   bookings: Booking[];
+  payouts: Payout[];
   listings: ListingSummary[];
   reviews: ReviewSummary;
   hasError: boolean;
@@ -189,10 +192,11 @@ async function fetchAllBookings() {
 }
 
 async function fetchDashboardData(): Promise<DashboardData> {
-  const [listingsRes, reviewsRes, bookingsResult] = await Promise.all([
+  const [listingsRes, reviewsRes, bookingsResult, payoutsResult] = await Promise.all([
     safeGet("/provider/listings/summary"),
     safeGet("/provider/reviews", { limit: 1 }),
     fetchAllBookings().then((data) => ({ data, failed: false })).catch(() => ({ data: [] as Booking[], failed: true })),
+    getAllPayouts().then((data) => ({ data, failed: false })).catch(() => ({ data: [] as Payout[], failed: true })),
   ]);
 
   const listingRows = unwrapList(listingsRes.data, ["listings", "items", "results"]);
@@ -208,12 +212,13 @@ async function fetchDashboardData(): Promise<DashboardData> {
   const reviewData = unwrap(reviewsRes.data);
   return {
     bookings: bookingsResult.data,
+    payouts: payoutsResult.data,
     listings,
     reviews: {
       averageRating: readNumber(reviewData.averageRating),
       totalReviews: readNumber(reviewData.totalReviews ?? reviewData.total),
     },
-    hasError: listingsRes.failed || reviewsRes.failed || bookingsResult.failed,
+    hasError: listingsRes.failed || reviewsRes.failed || bookingsResult.failed || payoutsResult.failed,
   };
 }
 
@@ -255,7 +260,7 @@ export default function ProviderDashboardPage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
-  const { data = { bookings: [], listings: [], reviews: { averageRating: 0, totalReviews: 0 }, hasError: false }, isLoading, isFetching, refetch } = useQuery({
+  const { data = { bookings: [], payouts: [], listings: [], reviews: { averageRating: 0, totalReviews: 0 }, hasError: false }, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["provider-dashboard-prd"],
     queryFn: fetchDashboardData,
   });
@@ -268,17 +273,30 @@ export default function ProviderDashboardPage() {
   const lastMonthEnd = endOfMonth(lastMonth);
   const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
+  // Aggregate financial figures in EUR (the money of record) so bookings in
+  // different currencies are never summed raw under one label.
+  const eurRates = useEurRates(data.bookings.map((b) => b.currency));
+
   const confirmedStatuses = new Set<BookingStatus>(["confirmed", "completed"]);
   const cancelledStatuses = new Set<BookingStatus>(["cancelled_by_guest", "cancelled_by_provider", "cancelled_by_system"]);
   const completedBookings = data.bookings.filter((booking) => booking.status === "completed");
   const confirmedBookings = data.bookings.filter((booking) => confirmedStatuses.has(booking.status));
+  const completedThisMonth = completedBookings.filter((booking) => isWithin(booking.confirmedAt ?? booking.createdAt, currentMonthStart, currentMonthEnd));
+  const completedLastMonth = completedBookings.filter((booking) => isWithin(booking.confirmedAt ?? booking.createdAt, lastMonthStart, lastMonthEnd));
+  // Pending payout = recorded payouts that are due (stay completed) but not
+  // yet disbursed. Pending rows are created at confirmation, so they must be
+  // filtered by the booking status — otherwise future stays inflate the figure.
+  const bookingStatusById = new Map(data.bookings.map((b) => [b.id, b.status]));
+  const pendingPayoutEntries = data.payouts.filter((p) => {
+    if (p.status !== "pending" && p.status !== "scheduled" && p.status !== "processing") return false;
+    return bookingStatusById.get(p.bookingId) === "completed";
+  });
 
-  const primaryCurrency = data.bookings.find((booking) => booking.currency)?.currency ?? data.listings.find((listing) => listing.currency)?.currency ?? "USD";
   const metrics = {
-    netAllTime: completedBookings.reduce((sum, booking) => sum + booking.netPayout, 0),
-    netThisMonth: completedBookings.filter((booking) => isWithin(booking.confirmedAt ?? booking.createdAt, currentMonthStart, currentMonthEnd)).reduce((sum, booking) => sum + booking.netPayout, 0),
-    netLastMonth: completedBookings.filter((booking) => isWithin(booking.confirmedAt ?? booking.createdAt, lastMonthStart, lastMonthEnd)).reduce((sum, booking) => sum + booking.netPayout, 0),
-    pendingPayout: data.bookings.filter((booking) => booking.status === "confirmed" && new Date(booking.checkIn) <= now).reduce((sum, booking) => sum + booking.netPayout, 0),
+    netAllTime: sumToEur(completedBookings, eurRates),
+    netThisMonth: sumToEur(completedThisMonth, eurRates),
+    netLastMonth: sumToEur(completedLastMonth, eurRates),
+    pendingPayout: sumToEur(pendingPayoutEntries, eurRates),
     totalBookings: confirmedBookings.length,
     bookingsThisMonth: confirmedBookings.filter((booking) => isWithin(booking.confirmedAt ?? booking.createdAt, currentMonthStart, currentMonthEnd)).length,
     cancellationRate: (() => {
@@ -354,10 +372,10 @@ export default function ProviderDashboardPage() {
       <section className="space-y-4">
         <SectionHeader title="Financial Summary" subtitle="Provider-scoped earnings and booking performance." />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="Net revenue - all time" financial value={<NetCurrency amount={metrics.netAllTime} currency={primaryCurrency} />} hint="Sum of completed payouts received, after commission and taxes." />
-          <MetricCard label="Net revenue - this month" financial value={<NetCurrency amount={metrics.netThisMonth} currency={primaryCurrency} />} hint="Current calendar month earnings, net of commission." />
-          <MetricCard label="Net revenue - last month" financial value={<NetCurrency amount={metrics.netLastMonth} currency={primaryCurrency} />} hint="Prior calendar month earnings for comparison." />
-          <MetricCard label="Pending payout" financial value={<NetCurrency amount={metrics.pendingPayout} currency={primaryCurrency} />} hint="Check-in has occurred, but payout has not yet been disbursed." />
+          <MetricCard label="Net revenue - all time" financial value={<NetCurrency amount={metrics.netAllTime} currency="EUR" />} hint="Sum of completed payouts received, after commission and taxes (EUR)." />
+          <MetricCard label="Net revenue - this month" financial value={<NetCurrency amount={metrics.netThisMonth} currency="EUR" />} hint="Current calendar month earnings, net of commission (EUR)." />
+          <MetricCard label="Net revenue - last month" financial value={<NetCurrency amount={metrics.netLastMonth} currency="EUR" />} hint="Prior calendar month earnings for comparison (EUR)." />
+          <MetricCard label="Pending payout" financial value={<NetCurrency amount={metrics.pendingPayout} currency="EUR" />} hint="Payouts recorded but not yet disbursed (EUR)." />
           <MetricCard label="Total bookings - all time" value={metrics.totalBookings.toLocaleString()} hint="All confirmed bookings across your listings." />
           <MetricCard label="Bookings - this month" value={metrics.bookingsThisMonth.toLocaleString()} hint="Confirmed bookings in the current calendar month." />
           <MetricCard label="Cancellation rate" value={`${metrics.cancellationRate.toFixed(1)}%`} hint="Cancelled bookings as a percentage of bookings in the last 90 days." />

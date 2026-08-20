@@ -14,6 +14,7 @@ import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { useEurRates, EurValue, formatEur } from "@/lib/eur";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { paymentPayoutApi } from "@/lib/payment-api";
 import { roleHasPermission, roleScopePolicy, AdminPermission, AdminScope } from "@/permissions/rbac";
@@ -67,6 +68,8 @@ export default function RefundManagementPage() {
   });
 
   const refunds = data?.data ?? [];
+
+  const eurRates = useEurRates(refunds.map((r: any) => r.currency));
 
   // Filter refunds based on scope & parameters
   const filteredRefunds = useMemo(() => {
@@ -163,7 +166,7 @@ export default function RefundManagementPage() {
       key: "original",
       label: "Paid Total",
       align: "right",
-      render: (r) => <span className="text-xs text-slate-500 tabular">{formatCurrency(Number(r.payment?.amount ?? 0), r.currency)}</span>,
+      render: (r) => <span className="text-xs text-slate-500 tabular"><EurValue amount={r.payment?.amount ?? 0} currency={r.currency} rates={eurRates} /></span>,
     },
     {
       key: "amount",
@@ -171,7 +174,7 @@ export default function RefundManagementPage() {
       align: "right",
       render: (r) => (
         <div className="text-right">
-          <span className="font-bold text-sm text-danger tabular">{formatCurrency(Number(r.amount), r.currency)}</span>
+          <span className="font-bold text-sm text-danger tabular"><EurValue amount={r.amount} currency={r.currency} rates={eurRates} /></span>
           <span className="text-[10px] block text-slate-400 font-semibold uppercase">Refund</span>
         </div>
       ),
@@ -298,7 +301,7 @@ export default function RefundManagementPage() {
               <div>
                 <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block">Refund Amount</span>
                 <span className="text-xl font-bold text-danger tracking-tight mt-0.5">
-                  {formatCurrency(Number(selectedRefund.amount), selectedRefund.currency)}
+                  <EurValue amount={selectedRefund.amount} currency={selectedRefund.currency} rates={eurRates} />
                 </span>
               </div>
               <Badge
@@ -324,7 +327,7 @@ export default function RefundManagementPage() {
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Original Total</dt>
-                <dd className="font-medium text-slate-800 mt-0.5">{formatCurrency(Number(selectedRefund.payment?.amount ?? 0), selectedRefund.currency)}</dd>
+                <dd className="font-medium text-slate-800 mt-0.5"><EurValue amount={selectedRefund.payment?.amount ?? 0} currency={selectedRefund.currency} rates={eurRates} /></dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Requested Date</dt>
@@ -399,7 +402,7 @@ export default function RefundManagementPage() {
         onConfirm={handleApprove}
         loading={actionLoading}
         title="Approve Refund Request"
-        description={`Do you want to approve this refund request for ${formatCurrency(Number(approveConfirm?.amount || 0), approveConfirm?.currency)}? This authorizes the gateway capture release.`}
+        description={`Do you want to approve this refund request for ${formatEur(approveConfirm?.amount, approveConfirm?.currency, eurRates) ?? formatCurrency(Number(approveConfirm?.amount || 0), approveConfirm?.currency)}? This authorizes the gateway capture release.`}
         confirmLabel="Approve Request"
         variant="info"
       />
@@ -411,7 +414,7 @@ export default function RefundManagementPage() {
         onConfirm={handleProcess}
         loading={actionLoading}
         title="Clear Credit to Gateway"
-        description={`Are you sure you want to process this refund transaction? This will issue an API capture credit of ${formatCurrency(Number(processConfirm?.amount || 0), processConfirm?.currency)} to the guest's credit card.`}
+        description={`Are you sure you want to process this refund transaction? This will issue an API capture credit of ${formatEur(processConfirm?.amount, processConfirm?.currency, eurRates) ?? formatCurrency(Number(processConfirm?.amount || 0), processConfirm?.currency)} to the guest's credit card.`}
         confirmLabel="Process Refund"
         variant="info"
       />
@@ -421,7 +424,7 @@ export default function RefundManagementPage() {
         open={!!rejectConfirm}
         onClose={() => { setRejectConfirm(null); setRejectionReason(""); }}
         title="Reject Refund Claim"
-        description={`Rejecting refund request ${rejectConfirm?.id} for ${formatCurrency(Number(rejectConfirm?.amount || 0), rejectConfirm?.currency)}.`}
+        description={`Rejecting refund request ${rejectConfirm?.id} for ${formatEur(rejectConfirm?.amount, rejectConfirm?.currency, eurRates) ?? formatCurrency(Number(rejectConfirm?.amount || 0), rejectConfirm?.currency)}.`}
         size="sm"
         footer={
           <>

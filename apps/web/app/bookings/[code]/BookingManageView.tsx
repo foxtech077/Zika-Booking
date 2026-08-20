@@ -249,7 +249,12 @@ export default function BookingManageView() {
   const discount = Number(booking.discountAmount) + Number(booking.voucherDiscount);
   // booking.subtotal is the post-discount subtotal; the gross commission-inclusive
   // base is read from the price snapshot so the receipt lines reconcile.
-  const grossBase = Number(booking.priceBreakdownJson?.breakdown?.baseAmount ?? booking.subtotal);
+  // Fallback: reconstruct gross base from post-discount subtotal + discount
+  // (not booking.subtotal alone, which is post-discount).
+  const grossBase = Number(
+    booking.priceBreakdownJson?.breakdown?.baseAmount
+    ?? (Number(booking.subtotal) + discount)
+  );
   const currency = booking.currency;
   const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 

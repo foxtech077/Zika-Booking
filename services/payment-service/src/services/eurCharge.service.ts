@@ -5,13 +5,6 @@
 // DB exchange-rate table with NO live-API fallback, so a stale/missing EUR rate
 // surfaces as TEMPORARILY_UNAVAILABLE and schedules an immediate BullMQ re-sync
 // rather than charging a wrong amount.
-//
-// A small +buffer is applied on top of the raw converted amount for customer
-// charges to absorb exchange-rate fluctuation between quote and charge time.
-// The buffer is NOT applied to provider payouts (they receive the market-rate
-// conversion), so `applyBuffer` can be disabled for transfer paths.
-
-import { EUR_CHARGE_BUFFER_MULTIPLIER } from "@zika/types";
 
 export class EurQuoteUnavailableError extends Error {
   code: string;
@@ -28,19 +21,16 @@ const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
 export interface EurChargeResult {
   amountEur: number;
   rate: number;
-  /** Buffer multiplier applied (1.015 for customer charges, 1 otherwise). */
+  /** Buffer multiplier applied (1 for EUR charges, 1 otherwise). */
   bufferApplied: number;
 }
 
 export async function resolveEurCharge(
   amount: number,
   currency: string,
-  opts?: { applyBuffer?: boolean }
 ): Promise<EurChargeResult> {
-  const applyBuffer = opts?.applyBuffer !== false;
-  const bufferApplied = applyBuffer ? EUR_CHARGE_BUFFER_MULTIPLIER : 1;
   const from = (currency ?? "").toUpperCase();
-  // No conversion needed when the booking is already in EUR — no FX risk, no buffer.
+  // No conversion needed when the booking is already in EUR.
   if (from === "EUR") return { amountEur: Number(amount), rate: 1, bufferApplied: 1 };
 
   try {
@@ -76,14 +66,9 @@ export async function resolveEurCharge(
       );
     }
 
-    // raw = ceil(listing × rate); buffered = ceil(raw × (1 + buffer)).
-    // This mirrors the booking snapshot so the charged amount matches the
-    // amount the guest saw when booking.
-    const amountEur = applyBuffer
-      ? Math.ceil(Number(converted) * bufferApplied * 100) / 100
-      : Number(converted);
-
-    return { amountEur, rate: Number(rate ?? 1), bufferApplied };
+    // `converted` is the raw conversion, ceiling-rounded to EUR cents — the
+    // exact amount charged. No buffer is applied.
+    return { amountEur: Number(converted), rate: Number(rate ?? 1), bufferApplied: 1 };
   } catch (err) {
     if (err instanceof EurQuoteUnavailableError) throw err;
     void triggerFxRefresh();

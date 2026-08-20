@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { convertCurrency } from "../services/fx.services.js";
-import { ceilingForCurrency, getEurRateOrNull } from "../services/exchangeRate.services.js";
+import { ceilingForCurrency, getEurRateOrNull, getEurRatesMap, convertToEur } from "../services/exchangeRate.services.js";
+import { requireAdmin } from "../middleware/auth.js";
 import { enqueueExchangeRateRefresh } from "../jobs.js";
 
 const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
@@ -172,10 +173,12 @@ export async function fxRoutes(app: FastifyInstance) {
         return sendError(reply, 503, "TEMPORARILY_UNAVAILABLE", "EUR conversion is temporarily unavailable. Please try again shortly.");
       }
 
-      const converted = ceilingForCurrency(n * rate, "EUR");
+      const rawConverted = n * rate;
+      const converted = ceilingForCurrency(rawConverted, "EUR");
       return sendSuccess(reply, 200, {
         amount: n,
         converted,
+        rawConverted: Number(rawConverted.toFixed(8)),
         rate: Number(rate.toFixed(6)),
         from,
         to: "EUR",
@@ -207,6 +210,62 @@ export async function fxRoutes(app: FastifyInstance) {
       }
       await enqueueExchangeRateRefresh();
       return sendSuccess(reply, 200, { message: "Exchange-rate refresh scheduled." });
+    },
+  );
+
+  // ── POST /admin/fx/to-eur — batch conversion to EUR for admin display ───────
+  // Every transaction moves money as EUR (Stripe) or XAF (Tara mobile money,
+  // pegged to EUR), so the admin portal shows all amounts in EUR. This endpoint
+  // converts a batch of { currency → amount } pairs to EUR using the DB rate
+  // table (identity for EUR, cross-rate for XAF and everything else).
+  app.post(
+    "/admin/fx/to-eur",
+    {
+      schema: {
+        tags: ["Admin FX"],
+        summary: "Convert a batch of amounts into EUR for admin display (admin-only)",
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: "object",
+          required: ["amounts"],
+          properties: {
+            amounts: {
+              type: "object",
+              additionalProperties: { type: "number" },
+              description: "Map of currency → amount, e.g. { \"KES\": 13000, \"XAF\": 50000, \"EUR\": 300 }",
+            },
+          },
+        },
+      },
+      preHandler: [requireAdmin],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const { amounts } = req.body as { amounts?: Record<string, number> };
+      const entries = Object.entries(amounts ?? {});
+      if (entries.length === 0) {
+        return sendSuccess(reply, 200, { baseCurrency: "EUR", rates: {}, converted: {} });
+      }
+
+      const currencies = entries.map(([c]) => c);
+      const eurRates = await getEurRatesMap(currencies);
+
+      const ratesOut: Record<string, number> = {};
+      const converted: Record<string, number | null> = {};
+      for (const [currency, amount] of entries) {
+        const upper = currency.toUpperCase();
+        const eur = convertToEur(Number(amount), upper, eurRates);
+        if (eur == null) {
+          converted[currency] = null; // rate unavailable — never fabricate a number
+          continue;
+        }
+        // Rate map keyed by currency = EUR per 1 unit of that currency (XAF uses
+        // the fixed parity peg).
+        const unit = convertToEur(1, upper, eurRates);
+        ratesOut[upper] = unit ?? 0;
+        converted[currency] = Number(eur.toFixed(2));
+      }
+
+      return sendSuccess(reply, 200, { baseCurrency: "EUR", rates: ratesOut, converted });
     },
   );
 }

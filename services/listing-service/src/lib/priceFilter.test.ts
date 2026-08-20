@@ -11,7 +11,6 @@ function makeNext() {
 function build(overrides: Record<string, unknown> = {}) {
   const base = {
     category: "hotel",
-    globalCommissionRate: 0.05,
     next: makeNext(),
   };
   return buildPriceFilter({ ...base, ...overrides } as any);
@@ -20,7 +19,6 @@ function build(overrides: Record<string, unknown> = {}) {
 function buildExpr(overrides: Record<string, unknown> = {}) {
   const base = {
     category: "hotel",
-    globalCommissionRate: 0.05,
     next: makeNext(),
   };
   return buildGuestPriceExpr({ ...base, ...overrides } as any);
@@ -33,7 +31,7 @@ test("returns no clause/joins/params when no price filter is present", () => {
   assert.deepEqual(r.params, []);
 });
 
-test("price_max filters on the commission-inclusive, FX-converted price (the reported bug)", () => {
+test("price_max filters on the raw list price, FX-converted (guest pays listPrice, not listPrice × (1+commission))", () => {
   const r = build({ priceMax: 1, targetCurrency: "USD", usdToTargetRate: 1 });
   assert.ok(r.clause, "clause expected");
   // Uses the guest-facing localized price, not the raw listing price:
@@ -45,28 +43,27 @@ test("price_max filters on the commission-inclusive, FX-converted price (the rep
     r.clause!.includes("CASE WHEN l.currency IS NULL OR l.currency = 'USD' THEN 1 ELSE er.rate END"),
     "base-currency fx rate (er.rate) must be divided out",
   );
-  // Commission baked in with country-row override and global fallback:
-  assert.ok(r.clause!.includes("cr.pending_rate"), "country commission pending-rate rule");
-  assert.ok(r.joins.includes("commission_rates cr"), "commission join");
+  // No commission anywhere — the guest price is the raw list price.
+  assert.ok(!r.clause!.includes("commission_rates cr"), "no commission in clause");
+  assert.ok(!r.joins.includes("commission_rates cr"), "no commission join");
   assert.ok(r.joins.includes("exchange_rates er"), "fx join");
   assert.ok(
     r.joins.includes('er."fromCurrency" = \'USD\'') && r.joins.includes('er."toCurrency" = l.currency'),
     "fx join must use the actual quoted camelCase column names",
   );
   // Same-currency listings must not be converted (matches localizedNightlyRate semantics):
-  assert.ok(r.clause!.includes("COALESCE(l.currency, 'USD') = $2"), "same-currency branch");
-  assert.ok(r.clause!.includes("<= $4"), "bound must be bound as a parameter");
-  assert.deepEqual(r.params, [0.05, "USD", 1, 1]);
+  assert.ok(r.clause!.includes("COALESCE(l.currency, 'USD') = $1"), "same-currency branch");
+  assert.ok(r.clause!.includes("<= $3"), "bound must be bound as a parameter");
+  assert.deepEqual(r.params, ["USD", 1, 1]);
 });
 
-test("without a target currency the filter only bakes in commission (no FX, no ceiling)", () => {
+test("without a target currency the filter uses the raw list price (no FX, no ceiling)", () => {
   const r = build({ category: "apartment", priceMax: 1, targetCurrency: null, usdToTargetRate: null });
-  assert.ok(r.clause!.includes("ROUND(l.price_per_night * (1 + "), "commission-inclusive rounding");
-  assert.ok(r.clause!.includes(", 2)"), "2-decimal rounding");
+  assert.ok(r.clause!.includes("ROUND(l.price_per_night, 2)"), "raw-price rounding");
   assert.ok(!r.clause!.includes("exchange_rates er"), "no fx join without target currency");
   assert.ok(!r.clause!.includes("CEIL("), "no ceiling without conversion");
   assert.ok(!r.joins.includes("exchange_rates er"), "no fx join in FROM");
-  assert.deepEqual(r.params, [0.05, 1]);
+  assert.deepEqual(r.params, [1]);
 });
 
 test("hotels price from the min active room type, falling back to the listing column", () => {
@@ -102,9 +99,9 @@ test("car listings filter on price_per_day", () => {
 
 test("price_min and price_max both emit their own bound parameter", () => {
   const r = build({ priceMin: 0.5, priceMax: 1, targetCurrency: "USD", usdToTargetRate: 1 });
-  assert.ok(r.clause!.includes(">= $4"), "price_min bound");
-  assert.ok(r.clause!.includes("<= $5"), "price_max bound");
-  assert.deepEqual(r.params, [0.05, "USD", 1, 0.5, 1]);
+  assert.ok(r.clause!.includes(">= $3"), "price_min bound");
+  assert.ok(r.clause!.includes("<= $4"), "price_max bound");
+  assert.deepEqual(r.params, ["USD", 1, 0.5, 1]);
 });
 
 test("when the target currency has no rate, nothing can be verified in it — exclude all", () => {
@@ -114,13 +111,12 @@ test("when the target currency has no rate, nothing can be verified in it — ex
   assert.deepEqual(r.params, []);
 });
 
-test("guest price expression without a target currency bakes in commission only", () => {
+test("guest price expression without a target currency is the raw list price", () => {
   const r = buildExpr({ category: "apartment", targetCurrency: null, usdToTargetRate: null });
-  assert.ok(r.expr.includes("ROUND(l.price_per_night * (1 + "), "commission-inclusive rounding");
-  assert.ok(r.expr.includes(", 2)"), "2-decimal rounding");
+  assert.ok(r.expr.includes("ROUND(l.price_per_night, 2)"), "raw-price rounding");
   assert.ok(!r.expr.includes("exchange_rates er"), "no fx in expr");
   assert.ok(!r.joins.includes("exchange_rates er"), "no fx join");
-  assert.deepEqual(r.params, [0.05]);
+  assert.deepEqual(r.params, []);
 });
 
 test("guest price expression converts to the target currency with ceiling rounding", () => {
@@ -129,16 +125,16 @@ test("guest price expression converts to the target currency with ceiling roundi
   assert.ok(r.expr.includes("/ 100"), "2-decimal ceiling");
   assert.ok(r.expr.includes("CASE WHEN l.currency IS NULL OR l.currency = 'USD' THEN 1 ELSE er.rate END"), "fx divide-out");
   assert.ok(r.joins.includes("exchange_rates er"), "fx join present");
-  assert.deepEqual(r.params, [0.05, "USD", 1], "comm, target, usdTarget in placeholder order");
+  assert.deepEqual(r.params, ["USD", 1], "target, usdTarget in placeholder order");
 });
 
 test("guest price expression falls back to base price when the target currency has no rate", () => {
   const r = buildExpr({ targetCurrency: "XXX", usdToTargetRate: null });
   // Display shows no localized price in that case, so sort by the base price.
-  assert.ok(r.expr.includes("ROUND("), "base-currency commission-inclusive price");
+  assert.ok(r.expr.includes("ROUND("), "base-currency raw price");
   assert.ok(!r.expr.includes("CEIL("), "no conversion ceiling");
   assert.ok(!r.joins.includes("exchange_rates er"), "no fx join without a rate");
-  assert.deepEqual(r.params, [0.05]);
+  assert.deepEqual(r.params, []);
 });
 
 test("guest price expression for hotels uses the min active room type", () => {
@@ -159,10 +155,10 @@ test("guest price expression for cars uses price_per_day", () => {
 
 test("price bound clause appends bound placeholders after the expression params", () => {
   const next = makeNext();
-  const price = buildGuestPriceExpr({ category: "hotel", targetCurrency: "USD", usdToTargetRate: 1, globalCommissionRate: 0.05, next });
+  const price = buildGuestPriceExpr({ category: "hotel", targetCurrency: "USD", usdToTargetRate: 1, next });
   const bounds = buildPriceBoundClause(price, { priceMin: 0.5, priceMax: 1, next });
-  assert.ok(bounds.clause!.includes(">= $4"), "price_min bound after comm/target/usdTarget");
-  assert.ok(bounds.clause!.includes("<= $5"), "price_max bound");
+  assert.ok(bounds.clause!.includes(">= $3"), "price_min bound after target/usdTarget");
+  assert.ok(bounds.clause!.includes("<= $4"), "price_max bound");
   assert.deepEqual(bounds.params, [0.5, 1]);
 });
 
@@ -181,21 +177,21 @@ test("sort-only guest-price params stay out of the COUNT slice yet align in the 
   where.push(`l.category::text = ${next()}`); params.push("hotel");
   where.push(`l.status::text = ANY(${next()})`); params.push(["approved"]);
 
-  // Price-sort block (no filter): allocates $3, $4, $5 for comm/target/usdTarget.
-  const price = buildGuestPriceExpr({ category: "hotel", targetCurrency: "USD", usdToTargetRate: 1, globalCommissionRate: 0.05, next });
-  assert.ok(price.expr.includes("$3") && price.expr.includes("$4") && price.expr.includes("$5"), "expr references its placeholders");
+  // Price-sort block (no filter): allocates $3, $4 for target/usdTarget.
+  const price = buildGuestPriceExpr({ category: "hotel", targetCurrency: "USD", usdToTargetRate: 1, next });
+  assert.ok(price.expr.includes("$3") && price.expr.includes("$4"), "expr references its placeholders");
 
   const paginationStart = params.length; // 2
   params.push(...price.params); // appended AFTER the count slice
-  const limitRef = next(); // $6
-  const offsetRef = next(); // $7
+  const limitRef = next(); // $5
+  const offsetRef = next(); // $6
   params.push(20, 0); // LIMIT/OFFSET values
 
   // The COUNT query receives only the WHERE params.
   assert.deepEqual(params.slice(0, paginationStart), ["hotel", ["approved"]]);
-  // The page query receives everything in $N order: $1, $2 (WHERE), $3, $4, $5
-  // (price expr), $6 (LIMIT), $7 (OFFSET).
-  assert.deepEqual(params, ["hotel", ["approved"], 0.05, "USD", 1, 20, 0]);
-  assert.equal(limitRef, "$6");
-  assert.equal(offsetRef, "$7");
+  // The page query receives everything in $N order: $1, $2 (WHERE), $3, $4
+  // (price expr), $5 (LIMIT), $6 (OFFSET).
+  assert.deepEqual(params, ["hotel", ["approved"], "USD", 1, 20, 0]);
+  assert.equal(limitRef, "$5");
+  assert.equal(offsetRef, "$6");
 });

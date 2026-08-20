@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireUser, type AuthRequest } from "../middleware/auth.js";
+import { getEurRatesMap, convertToEur } from "../services/exchangeRate.services.js";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -438,76 +439,110 @@ export async function providerRoutes(app: FastifyInstance) {
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
         const providerId = (req as AuthRequest).authId;
-        const now        = new Date();
+        const now = new Date();
 
-      // Last 12 months monthly breakdown
-      const monthly: { month: string; revenue: number; commission: number; payout: number; bookings: number }[] = [];
-      for (let i = 11; i >= 0; i--) {
-        const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const end   = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999);
-        const label = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`;
+        // Aggregate in EUR (the money of record) directly in the database.
+        // Each booking's money fields are converted using its charge-time
+        // snapshot (priceBreakdownJson.chargedCurrency/chargedRate) when present,
+        // else the current DB rate; XAF uses the fixed euro peg. This avoids
+        // loading every confirmed/completed booking into memory to sum a few
+        // numbers. Per-row record lists keep their native currency.
+        const rateJoin = `
+          LEFT JOIN listing.exchange_rates fx  ON fx."fromCurrency" = 'USD' AND fx."toCurrency" = b.currency AND fx."expiresAt" >= NOW()
+          LEFT JOIN listing.exchange_rates fxe ON fxe."fromCurrency" = 'USD' AND fxe."toCurrency" = 'EUR' AND fxe."expiresAt" >= NOW()`;
+        // Convert a money column to EUR:
+        //  - charge snapshot present -> amount × chargedRate (EUR) or ÷655.957 (XAF)
+        //  - else current DB rate -> amount × (EUR-per-USD ÷ currency-per-USD)
+        const convert = (col: string) => `
+          CASE
+            WHEN b.price_breakdown_json->>'chargedCurrency' = 'EUR'
+                 AND COALESCE((b.price_breakdown_json->>'chargedRate')::numeric, 0) > 0
+              THEN b.${col} * (b.price_breakdown_json->>'chargedRate')::numeric
+            WHEN b.price_breakdown_json->>'chargedCurrency' = 'XAF'
+                 AND COALESCE((b.price_breakdown_json->>'chargedRate')::numeric, 0) > 0
+              THEN (b.${col} * (b.price_breakdown_json->>'chargedRate')::numeric) / 655.957
+            WHEN fxe.rate IS NOT NULL AND fx.rate IS NOT NULL
+              THEN b.${col} * (fxe.rate / fx.rate)
+            ELSE 0
+          END`;
+        const baseFrom = `FROM listing.bookings b ${rateJoin}
+          WHERE b.provider_id = $1 AND b.status IN ('confirmed','completed') AND b.confirmed_at IS NOT NULL`;
 
-        const [agg, cnt] = await Promise.all([
-          prisma.booking.aggregate({
-            where: {
-              providerId,
-              status: { in: ["confirmed", "completed"] },
-              confirmedAt: { gte: start, lte: end },
-            },
-            _sum: { totalAmount: true, commissionAmount: true, providerPayout: true },
-          }),
-          prisma.booking.count({
-            where: {
-              providerId,
-              status: { in: ["confirmed", "completed"] },
-              confirmedAt: { gte: start, lte: end },
-            },
-          }),
-        ]);
+        const monthStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-        monthly.push({
-          month:      label,
-          revenue:    Number(agg._sum.totalAmount ?? 0),
-          commission: Number(agg._sum.commissionAmount ?? 0),
-          payout:     Number(agg._sum.providerPayout ?? 0),
-          bookings:   cnt,
+        const monthlyRows = await prisma.$queryRawUnsafe<{ month: string; bookings: bigint; revenue: string; commission: string; payout: string }[]>(`
+          SELECT
+            to_char(b.confirmed_at AT TIME ZONE 'UTC', 'YYYY-MM') AS month,
+            COUNT(*)::bigint AS bookings,
+            SUM(${convert("total_amount")})::text AS revenue,
+            SUM(${convert("commission_amount")})::text AS commission,
+            SUM(${convert("provider_payout")})::text AS payout
+          ${baseFrom}
+            AND b.confirmed_at >= $2 AND b.confirmed_at <= $3
+          GROUP BY 1
+          ORDER BY 1
+        `, providerId, monthStart, monthEnd);
+
+        const allTimeRows = await prisma.$queryRawUnsafe<{ bookings: bigint; revenue: string; commission: string; payout: string }[]>(`
+          SELECT
+            COUNT(*)::bigint AS bookings,
+            SUM(${convert("total_amount")})::text AS revenue,
+            SUM(${convert("commission_amount")})::text AS commission,
+            SUM(${convert("provider_payout")})::text AS payout
+          ${baseFrom}
+        `, providerId);
+
+        // Last 12 months buckets — always 12 entries, zero-filled when empty.
+        const byMonth = new Map(monthlyRows.map((r) => [r.month, r]));
+        const monthly: { month: string; revenue: number; commission: number; payout: number; bookings: number }[] = [];
+        for (let i = 11; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const label = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          const row = byMonth.get(label);
+          monthly.push({
+            month: label,
+            revenue: row ? Number(row.revenue) : 0,
+            commission: row ? Number(row.commission) : 0,
+            payout: row ? Number(row.payout) : 0,
+            bookings: row ? Number(row.bookings) : 0,
+          });
+        }
+
+        const allTime = {
+          revenue: Number(allTimeRows[0]?.revenue ?? 0),
+          commission: Number(allTimeRows[0]?.commission ?? 0),
+          payout: Number(allTimeRows[0]?.payout ?? 0),
+        };
+
+        const recentPayouts = await prisma.booking.findMany({
+          where: { providerId, status: { in: ["confirmed", "completed"] } },
+          orderBy: { confirmedAt: "desc" },
+          take: 20,
+          include: { listing: { select: { name: true, category: true } } },
         });
-      }
 
-      // All-time totals
-      const allTime = await prisma.booking.aggregate({
-        where: { providerId, status: { in: ["confirmed", "completed"] } },
-        _sum: { totalAmount: true, commissionAmount: true, providerPayout: true },
-      });
-
-      // Recent completed bookings as "payout records"
-      const recentPayouts = await prisma.booking.findMany({
-        where: { providerId, status: { in: ["confirmed", "completed"] } },
-        orderBy: { confirmedAt: "desc" },
-        take: 20,
-        include: { listing: { select: { name: true, category: true } } },
-      });
-
-      return sendSuccess(reply, 200, {
-        allTime: {
-          revenue:    Number(allTime._sum.totalAmount ?? 0),
-          commission: Number(allTime._sum.commissionAmount ?? 0),
-          payout:     Number(allTime._sum.providerPayout ?? 0),
-        },
-        monthly,
-        recentPayouts: recentPayouts.map((b) => ({
-          id:          b.id,
-          reference:   b.reference,
-          listingName: b.listing.name,
-          category:    b.listing.category,
-          totalAmount: Number(b.totalAmount),
-          commission:  Number(b.commissionAmount),
-          payout:      Number(b.providerPayout),
-          currency:    b.currency,
-          status:      b.status,
-          confirmedAt: b.confirmedAt?.toISOString() ?? null,
-        })),
-      });
+        return sendSuccess(reply, 200, {
+          currency: "EUR",
+          allTime: {
+            revenue: Number(allTime.revenue.toFixed(2)),
+            commission: Number(allTime.commission.toFixed(2)),
+            payout: Number(allTime.payout.toFixed(2)),
+          },
+          monthly,
+          recentPayouts: recentPayouts.map((b) => ({
+            id:          b.id,
+            reference:   b.reference,
+            listingName: b.listing.name,
+            category:    b.listing.category,
+            totalAmount: Number(b.totalAmount),
+            commission:  Number(b.commissionAmount),
+            payout:      Number(b.providerPayout),
+            currency:    b.currency,
+            status:      b.status,
+            confirmedAt: b.confirmedAt?.toISOString() ?? null,
+          })),
+        });
       } catch (err) {
         req.log.error({ err }, "Failed to fetch provider earnings summary");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching earnings summary.");
@@ -667,5 +702,59 @@ export async function providerRoutes(app: FastifyInstance) {
         return sendError(reply, 502, "BAD_GATEWAY", "Failed to communicate with payment service.");
       }
     }
+  );
+
+  // ── GET /provider/fx/to-eur — batch EUR rates for provider dashboards ──────
+  // Providers cannot use the admin FX endpoint (requireAdmin). This is the
+  // provider-scoped equivalent so dashboards can convert per-booking/per-payout
+  // amounts into the money-of-record (EUR) before aggregating across currencies.
+  app.get(
+    "/provider/fx/to-eur",
+    {
+      schema: {
+        tags: ["Provider FX"],
+        summary: "Get EUR conversion rates for a batch of currencies (provider-scoped)",
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: "object",
+          required: ["currencies"],
+          properties: {
+            currencies: {
+              type: "string",
+              description: "Comma-separated ISO 4217 codes, e.g. KES,NGN,XAF",
+            },
+          },
+        },
+      },
+      preHandler: [requireUser],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { currencies } = req.query as { currencies?: string };
+        const codes = [
+          ...new Set(
+            (currencies ?? "")
+              .split(",")
+              .map((c) => c.trim().toUpperCase())
+              .filter((c) => /^[A-Z]{3}$/.test(c)),
+          ),
+        ];
+        if (codes.length === 0) {
+          return sendSuccess(reply, 200, { baseCurrency: "EUR", rates: {} });
+        }
+
+        const rates = await getEurRatesMap(codes);
+        const ratesOut: Record<string, number> = {};
+        for (const c of codes) {
+          const r = convertToEur(1, c, rates);
+          if (r != null) ratesOut[c] = r; // omit currencies with no rate
+        }
+
+        return sendSuccess(reply, 200, { baseCurrency: "EUR", rates: ratesOut });
+      } catch (err) {
+        req.log.error({ err }, "Failed to resolve provider EUR rates");
+        return sendError(reply, 502, "FX_UNAVAILABLE", "Exchange rate unavailable. Please try again later.");
+      }
+    },
   );
 }

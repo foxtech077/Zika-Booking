@@ -23,4 +23,6 @@ export enum PaymentJob {
   PayoutJob = "payout-job",
   RefundRetryJob = "refund-retry-job",
   StalePaymentCanceller = "stale-payment-canceller",
+  EmailRetryJob = "email-retry-job",
+  EmailReconciliationJob = "email-reconciliation-job",
 }

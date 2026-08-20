@@ -9,7 +9,7 @@ import { fireNotification } from "../lib/notifications.js";
 import { ipDetect } from "../middleware/ipDetect.js";
 import { getPricing } from "../services/pricing.services.js";
 import { getPaymentProvider, triggerPaymentRefund, generateRefundIdempotencyKey } from "../services/payment.services.js";
-import { calculateBilling, commissionInclusiveRate, SERVICE_FEE_RATE } from "../services/billing.service.js";
+import { calculateBilling, SERVICE_FEE_RATE } from "../services/billing.service.js";
 import { getTaxRate } from "../services/getTaxRate.services.js";
 import { VoucherDiscountType } from "../generated/index.js";
 import { logLoyaltyTransaction } from "./loyalty.js";
@@ -467,6 +467,47 @@ export async function bookingRoutes(app: FastifyInstance) {
     }
   });
 
+  // ── POST /bookings/internal/verify-ownership ─────────────────────────────────
+  // Internal: verify which of the given booking ids belong to a provider.
+  // Used by the payment service's provider payment-summary endpoint so it can
+  // scope payment/refund lookups to the caller's own bookings.
+  app.post("/bookings/internal/verify-ownership", {
+    schema: {
+      tags: ["Bookings"],
+      summary: "Internal: verify booking ownership for a provider (service-to-service only)",
+      body: {
+        type: "object",
+        required: ["bookingIds", "providerId"],
+        properties: {
+          bookingIds: { type: "array", items: { type: "string" } },
+          providerId: { type: "string" },
+        },
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!validateServiceToken(req, reply)) return;
+
+    const { bookingIds, providerId } = req.body as { bookingIds: string[]; providerId: string };
+    const ids = [...new Set((bookingIds ?? []).filter(Boolean).slice(0, 200))];
+    if (ids.length === 0) {
+      return sendSuccess(reply, 200, { data: { owned: [], notFound: [] } });
+    }
+
+    try {
+      const rows = await prisma.booking.findMany({
+        where: { id: { in: ids }, providerId },
+        select: { id: true },
+      });
+      const owned = new Set(rows.map((r) => r.id));
+      const ownedList = ids.filter((id) => owned.has(id));
+      const notFound = ids.filter((id) => !owned.has(id));
+      return sendSuccess(reply, 200, { data: { owned: ownedList, notFound } });
+    } catch (err) {
+      req.log.error({ err }, "Failed to verify booking ownership");
+      return sendError(reply, 500, "INTERNAL_ERROR", "Failed to verify booking ownership.");
+    }
+  });
+
   // ── PATCH /bookings/internal/:id/status ────────────────────────────────────
   app.patch("/bookings/internal/:id/status", {
     schema: {
@@ -666,10 +707,10 @@ export async function bookingRoutes(app: FastifyInstance) {
       units = Math.max(1, Math.ceil((new Date(body.checkOut).getTime() - new Date(body.checkIn).getTime()) / 86_400_000));
     }
     const commissionRate = await getCommissionRate(listing.country ?? null);
-    // Commission-inclusive base for percentage promos so the discount matches
-    // the inflated base the guest actually sees.
-    const baseAmount = Number((baseRate * units * (1 + commissionRate)).toFixed(2));
-    const displayedNightlyRate = commissionInclusiveRate(baseRate, commissionRate);
+    // List-price base (commission-exclusive) — percentage promos apply to the
+    // price the guest actually sees, which is now just the raw list price.
+    const baseAmount = Number((baseRate * units).toFixed(2));
+    const displayedNightlyRate = baseRate;
 
     const now = new Date();
     const activePromo = await (prisma as any).activityPromotion.findFirst({
@@ -913,10 +954,11 @@ export async function bookingRoutes(app: FastifyInstance) {
         } else if (body.checkIn && body.checkOut) {
           units = Math.max(1, Math.ceil((new Date(body.checkOut).getTime() - new Date(body.checkIn).getTime()) / 86_400_000));
         }
-        // Commission-inclusive base for percentage promos so the discount matches
-        // the inflated base the guest actually sees.
+        // List-price base for percentage promos so the discount matches the base
+        // the guest actually sees.
         const commissionRateForPromo = await getCommissionRate(listing.country ?? null);
-        const baseAmount = Number((baseRate * units * (1 + commissionRateForPromo)).toFixed(2));
+        // List-price base (commission-exclusive) — the base price the guest pays.
+        const baseAmount = Number((baseRate * units).toFixed(2));
 
         const now = new Date();
         const activePromo = await (prisma as any).activityPromotion.findFirst({
@@ -1154,7 +1196,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           body.currency,
           {
             baseAmount: billing.baseAmount,
-            nightlyRate: commissionInclusiveRate(baseRate, commissionRate),
+            nightlyRate: baseRate,
             promotionDiscount: billing.promotionDiscount,
             voucherDiscount: billing.voucherDiscount,
             serviceFee: billing.serviceFee,
@@ -1168,7 +1210,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         const pricingPreview = {
           units: billing.units,
           baseAmount: billing.baseAmount,
-          nightlyRate: commissionInclusiveRate(baseRate, commissionRate),
+          nightlyRate: baseRate,
           promotionDiscount: billing.promotionDiscount,
           voucherDiscount: billing.voucherDiscount,
           serviceFee: billing.serviceFee,
@@ -1744,6 +1786,33 @@ export async function bookingRoutes(app: FastifyInstance) {
           pointsDiscount = redeemPoints / ratio;
         }
 
+        // ── 2c. ADMIN DISCOUNT ≤ COMMISSION GUARD ──────────────────────────
+        // Admin discounts (category promotions + admin vouchers) are funded from
+        // the platform's commission: the guest pays less while the provider is
+        // still paid out on the full list price. A discount above the commission
+        // would make the platform lose money, so it is never allowed.
+        const adminCommissionRef = Number((baseBilling.baseAmount * commissionRate).toFixed(2));
+
+        // Explicitly-applied voucher: reject the booking so nothing wrong is charged.
+        if (appliedVoucher && voucherDiscount > adminCommissionRef) {
+          return sendError(
+            reply,
+            400,
+            "DISCOUNT_EXCEEDS_COMMISSION",
+            "This discount exceeds the allowable commission for this booking."
+          );
+        }
+
+        // Auto-applied category promotion: skip it for this booking (a promo-wide
+        // misconfiguration must not block guest bookings) and surface it in the logs.
+        if (promotionDiscount > adminCommissionRef) {
+          app.log.warn(
+            { listingId: listing.id, promotionDiscount, adminCommissionRef },
+            "[promo] Category promotion discount exceeds commission — skipped for this booking"
+          );
+          promotionDiscount = 0;
+        }
+
         // 3. FINAL RECALCULATION
 
         const finalBilling = calculateBilling({
@@ -1778,10 +1847,11 @@ export async function bookingRoutes(app: FastifyInstance) {
         // the actual platform-currency charge is captured on the payment at
         // charge time and recorded back here in `charged*` on confirmation).
         const breakdownBase: Record<string, number> = {
-          nightlyRate: listing.category !== "car" ? commissionInclusiveRate(rate, commissionRate) : 0,
-          dailyRate: listing.category === "car" ? commissionInclusiveRate(rate, commissionRate) : 0,
+          nightlyRate: listing.category !== "car" ? rate : 0,
+          dailyRate: listing.category === "car" ? rate : 0,
           units: finalBilling.units,
-          // Gross commission-inclusive base before discounts (rate × units).
+          // Gross list-price base before discounts (rate × units) — the payout
+          // and commission basis.
           baseAmount: finalBilling.baseAmount,
           subtotal,
           promotionDiscount,
@@ -2111,18 +2181,33 @@ export async function bookingRoutes(app: FastifyInstance) {
               // charge time). Falls back to the booking-time snapshot when the
               // payment service did not supply charge values.
               const existingBreakdown = ((booking as any).priceBreakdownJson ?? {}) as Record<string, unknown>;
+              const resolvedChargedCurrency = chargedCurrency?.toUpperCase() ?? existingBreakdown.chargedCurrency ?? null;
+              const resolvedChargedAmount = chargedAmount != null ? Number(chargedAmount) : existingBreakdown.chargedAmount ?? null;
+              const resolvedChargedRate = chargedRate != null ? Number(chargedRate) : existingBreakdown.chargedRate ?? null;
+              const chargedAt = new Date();
               const mergedBreakdown = {
                 ...existingBreakdown,
-                chargedCurrency: chargedCurrency?.toUpperCase() ?? existingBreakdown.chargedCurrency ?? null,
-                chargedAmount: chargedAmount != null ? Number(chargedAmount) : existingBreakdown.chargedAmount ?? null,
-                chargedRate: chargedRate != null ? Number(chargedRate) : existingBreakdown.chargedRate ?? null,
-                chargedAt: new Date().toISOString(),
+                chargedCurrency: resolvedChargedCurrency,
+                chargedAmount: resolvedChargedAmount,
+                chargedRate: resolvedChargedRate,
+                chargedAt: chargedAt.toISOString(),
                 source: "booking_confirm",
               };
 
               await tx.booking.update({
                 where: { id },
-                data: { status: "confirmed", confirmedAt, paymentId, priceBreakdownJson: mergedBreakdown },
+                data: {
+                  status: "confirmed",
+                  confirmedAt,
+                  paymentId,
+                  // Persist the actual charge snapshot as first-class columns
+                  // (historical auditing) in addition to the jsonb snapshot.
+                  chargedCurrency: resolvedChargedCurrency,
+                  chargedAmount: resolvedChargedAmount,
+                  chargedRate: resolvedChargedRate,
+                  chargedAt,
+                  priceBreakdownJson: mergedBreakdown,
+                },
               });
 
               await tx.bookingStatusLog.create({

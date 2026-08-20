@@ -1,5 +1,5 @@
 import { prisma } from "../lib/prisma.js";
-import { EUR_CHARGE_BUFFER_MULTIPLIER, isTaraCountry } from "@zika/types";
+import { isTaraCountry, ZERO_DECIMAL_CURRENCIES, xafToEur } from "@zika/types";
 
 const STALENESS_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
 const BASE_CURRENCY = "USD";
@@ -111,12 +111,9 @@ export async function fetchRatesWithFallback(): Promise<{ source: string; date: 
   throw new Error("All exchange-rate sources failed.");
 }
 
-// Currencies with 0 decimal places (no cents/subunits)
-export const ZERO_DECIMAL_CURRENCIES = new Set([
-  "BIF", "CLP", "DJF", "GNF", "ISK", "KMF", "KRW", "KZT",
-  "MGA", "PYG", "RWF", "UGX", "VND", "VUV",
-  "XAF", "XOF", "XPF", "JPY",
-]);
+// Re-export from shared types for backward compatibility.
+// Prefer importing from @zika/types directly in new code.
+export { ZERO_DECIMAL_CURRENCIES } from "@zika/types";
 
 /**
  * Round UP (ceiling) a converted price to the correct precision for the target currency.
@@ -367,6 +364,84 @@ export async function getRatesBatch(
 }
 
 /**
+ * Convert an amount into EUR for dashboard aggregation.
+ *
+ * Rule: aggregates are expressed in EUR (the money of record).
+ *  - EUR → identity
+ *  - XAF → fixed parity peg (1 EUR = 655.957 XAF)
+ *  - everything else → current DB cross-rate (USD→EUR / USD→X)
+ * Returns null when the rate is unavailable — callers omit the record rather
+ * than fabricate a number.
+ */
+export function convertToEur(
+  amount: number | null | undefined,
+  currency: string | null | undefined,
+  eurRates: Map<string, number>,
+): number | null {
+  if (amount == null || !Number.isFinite(Number(amount))) return null;
+  const up = (currency ?? "").toUpperCase();
+  if (!up) return null;
+  if (up === "EUR") return Number(amount);
+  if (up === "XAF") return xafToEur(Number(amount));
+  const rate = eurRates.get(up);
+  if (rate == null) return null;
+  return Number(amount) * rate;
+}
+
+/**
+ * Fetch the EUR-per-unit rate map for a set of currencies (one batched query,
+ * XAF handled by the fixed peg so it never depends on API rounding).
+ */
+export async function getEurRatesMap(
+  currencies: (string | null | undefined)[],
+): Promise<Map<string, number>> {
+  const unique = [...new Set((currencies ?? []).filter(Boolean).map((c) => c!.toUpperCase()))];
+  const map = new Map<string, number>();
+  const nonPegged = unique.filter((c) => c !== "EUR" && c !== "XAF");
+  if (nonPegged.length > 0) {
+    const batch = await getRatesBatch(nonPegged, "EUR");
+    for (const c of nonPegged) {
+      const r = batch.get(c);
+      if (r != null) map.set(c, r);
+    }
+  }
+  return map;
+}
+
+/**
+ * Convert a booking money field (expressed in the listing/base currency) to
+ * EUR. Prefers the charge-time snapshot (chargedCurrency + chargedRate recorded
+ * at confirmation) because that reproduces what actually moved; falls back to
+ * the current DB rate for legacy rows without a snapshot.
+ */
+export function bookingAmountToEur(
+  amount: number | null | undefined,
+  bookingCurrency: string | null | undefined,
+  eurRates: Map<string, number>,
+  snapshot?: { chargedCurrency?: string | null; chargedRate?: number | null } | null,
+): number | null {
+  if (amount == null || !Number.isFinite(Number(amount))) return null;
+  const chargeCur = snapshot?.chargedCurrency?.toUpperCase() ?? null;
+  const chargeRate = snapshot?.chargedRate != null ? Number(snapshot.chargedRate) : null;
+  if (chargeCur && chargeRate != null && chargeRate > 0) {
+    return convertToEur(Number(amount) * chargeRate, chargeCur, eurRates);
+  }
+  return convertToEur(Number(amount), bookingCurrency, eurRates);
+}
+
+/**
+ * Convert a refund/charge amount (already expressed in the charge currency —
+ * EUR for Stripe, XAF for Tara) to EUR.
+ */
+export function chargeAmountToEur(
+  amount: number | null | undefined,
+  chargeCurrency: string | null | undefined,
+  eurRates: Map<string, number>,
+): number | null {
+  return convertToEur(Number(amount ?? 0), chargeCurrency, eurRates);
+}
+
+/**
  * The platform (charge) currency for a listing. Tara-supported countries are
  * charged in XAF (mobile money is always XAF); everywhere else the platform
  * money-of-record is EUR (Stripe). Guests are always charged directly from the
@@ -382,19 +457,19 @@ export interface PlatformQuote {
   rate: number | null;
   /** Unbuffered converted amount (for reference / display math). */
   rawAmount: number | null;
-  /** Buffered converted amount: raw × bufferApplied, ceiling-rounded. */
+  /** Converted amount: raw converted, ceiling-rounded for the target. */
   amount: number | null;
-  /** Buffer multiplier applied (1.015 for EUR, 1 otherwise / identity). */
+  /** Buffer multiplier applied (always 1 — no buffer). */
   bufferApplied: number;
 }
 
 /**
  * Compute a platform-currency quote for a base-currency amount, using only the
- * DB exchange-rate table. The +buffer is applied only when the platform
- * currency is EUR to absorb FX fluctuation between quote and charge time.
+ * DB exchange-rate table. No buffer is applied to any conversion — the quote
+ * is the exact converted amount, ceiling-rounded to the target's decimals.
  *
  *   raw = baseAmount × rate
- *   buffered = raw × (1 + bufferPercentage)
+ *   converted = ceil(raw)
  */
 export async function getPlatformQuote(
   baseCurrency: string,
@@ -415,7 +490,7 @@ export async function getPlatformQuote(
     };
   }
 
-  const bufferApplied = to === "EUR" ? EUR_CHARGE_BUFFER_MULTIPLIER : 1;
+  const bufferApplied = 1;
   const rate = await getExchangeRate(from, to);
   if (rate === null) {
     return { platformCurrency: to, rate: null, rawAmount: null, amount: null, bufferApplied };
@@ -423,8 +498,8 @@ export async function getPlatformQuote(
 
   const rawAmount = amount * rate;
   // Match the charge path exactly: the platform service ceilings the raw
-  // conversion (via /internal/fx/eur-quote) and THEN applies the buffer, so
-  // the displayed/booked amount always equals the amount actually charged.
+  // conversion (via /internal/fx/eur-quote), so the displayed/booked amount
+  // always equals the amount actually charged.
   const buffered = ceilingForCurrency(ceilingForCurrency(rawAmount, to) * bufferApplied, to);
   return { platformCurrency: to, rate, rawAmount, amount: buffered, bufferApplied };
 }
@@ -460,7 +535,7 @@ export async function buildPlatformSnapshot(opts: {
 
   const quote = total != null
     ? await getPlatformQuote(from, platform, total)
-    : { platformCurrency: platform, rate: null, rawAmount: null, amount: null, bufferApplied: platform === "EUR" ? EUR_CHARGE_BUFFER_MULTIPLIER : 1 };
+    : { platformCurrency: platform, rate: null, rawAmount: null, amount: null, bufferApplied: 1 };
 
   const guestTarget = opts.guestCurrency?.toUpperCase() ?? null;
   const localized =

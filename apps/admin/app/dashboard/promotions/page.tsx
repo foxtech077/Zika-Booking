@@ -729,6 +729,12 @@ export default function PromotionsPage() {
               required={form.discountType !== "label_only"}
             />
 
+            {form.discountType !== "label_only" && parseFloat(form.discountValue || "0") > 0 && (
+              <div className="col-span-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-3 text-xs leading-relaxed">
+                ⚠️ <span className="font-semibold">Platform-funded discount</span> — this discount is absorbed by the platform's commission, not the provider. The host will still receive their full payout based on the listing price. Ensure the discount does not exceed the applicable commission rate.
+              </div>
+            )}
+
             <DatePicker
               id="promo-valid-from"
               label="Valid From"
