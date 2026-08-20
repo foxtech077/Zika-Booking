@@ -2,7 +2,6 @@ import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import type { PublicUser } from "@zika/types";
-import { getCurrencyForCountry, COUNTRY_CURRENCY_MAP } from "../lib/currency";
 import { clearAnonymousToken, hydrateAnonymousToken } from "../lib/anonymous";
 
 const ACCESS_TOKEN_KEY = "zika_access_token";
@@ -15,7 +14,7 @@ interface AuthState {
   isHydrated: boolean;
   hasCompletedOnboarding: boolean;
   localCurrency: string | null;
-  /** True once the user has picked a currency by hand — nothing overrides it. */
+  /** True once the user has picked a currency by hand via the header selector. */
   currencyExplicit: boolean;
   setAuth: (user: PublicUser, accessToken: string) => Promise<void>;
   updateUser: (patch: Partial<PublicUser>) => Promise<void>;
@@ -23,11 +22,6 @@ interface AuthState {
   hydrate: () => Promise<void>;
   setCompletedOnboarding: (completed: boolean) => Promise<void>;
   setLocalCurrency: (currency: string) => Promise<void>;
-  /**
-   * Derived default (IP-geolocation). Applied only when the user has neither
-   * picked a currency by hand nor has a profile country that maps to one.
-   */
-  suggestLocalCurrency: (currency: string) => Promise<void>;
 }
 
 const ONBOARDING_COMPLETED_KEY = "zika_onboarding_completed";
@@ -50,8 +44,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   isHydrated: false,
   hasCompletedOnboarding: false,
-  // Fallback until something better is known; the chain is
-  // manual pick > profile country > IP-geolocated country > EUR.
+  // EUR is the fixed default. There used to be an automatic country/IP-based
+  // suggestion here (a profile-country mapping in setAuth, and an
+  // IP-geolocation one in hooks/useLocation.ts) that silently replaced it —
+  // removed at the user's request so EUR stays the default until the traveller
+  // explicitly picks a currency from the header selector.
   localCurrency: "EUR",
   currencyExplicit: false,
 
@@ -61,16 +58,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await clearAnonymousToken();
     await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
     await SecureStore.setItemAsync(USER_KEY, JSON.stringify(stripPersistedFields(user)));
-    // Profile country sets the currency only when it actually maps to one and
-    // the user has never picked a currency by hand. getCurrencyForCountry's
-    // USD fallback must not masquerade as a real profile-derived value.
-    const mapped = user.country ? COUNTRY_CURRENCY_MAP[user.country.toUpperCase()] : undefined;
-    if (!get().currencyExplicit && mapped) {
-      await SecureStore.setItemAsync(LOCAL_CURRENCY_KEY, mapped.code);
-      set({ user, accessToken, localCurrency: mapped.code });
-    } else {
-      set({ user, accessToken });
-    }
+    set({ user, accessToken });
   },
 
   // Merges a partial update (e.g. after editing the profile or changing the
@@ -121,19 +109,6 @@ clearAuth: async () => {
     set({ localCurrency: currency, currencyExplicit: true });
   },
 
-  suggestLocalCurrency: async (currency: string) => {
-    const state = get();
-    if (state.currencyExplicit) return;
-    const profileMapped = state.user?.country
-      ? COUNTRY_CURRENCY_MAP[state.user.country.toUpperCase()]
-      : undefined;
-    if (profileMapped) return; // profile country outranks a geolocated guess
-    const code = currency.toUpperCase();
-    if (code.length !== 3 || code === state.localCurrency) return;
-    await SecureStore.setItemAsync(LOCAL_CURRENCY_KEY, code);
-    set({ localCurrency: code });
-  },
-
   hydrate: async () => {
     try {
       const [token, userJson, onboardingCompletedVal, currencyVal, explicitVal] = await Promise.all([
@@ -148,13 +123,10 @@ clearAuth: async () => {
       await hydrateAnonymousToken().catch(() => {});
       const user = userJson ? (JSON.parse(userJson) as PublicUser) : null;
       const currencyExplicit = explicitVal === "true";
-      const profileMapped = user?.country
-        ? COUNTRY_CURRENCY_MAP[user.country.toUpperCase()]
-        : undefined;
-      // manual pick > profile country > previously stored suggestion > EUR
-      const localCurrency = currencyExplicit && currencyVal
-        ? currencyVal
-        : profileMapped?.code ?? currencyVal ?? "EUR";
+      // Keep a currency the traveller picked by hand; a value that only ever
+      // came from the now-removed profile-country / IP-geolocation
+      // auto-detection resets to the fixed EUR default.
+      const localCurrency = currencyExplicit && currencyVal ? currencyVal : "EUR";
       set({
         user,
         accessToken: token,

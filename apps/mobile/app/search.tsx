@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 
 // Safely load MapView and Marker to prevent crashes in environments without the native module
@@ -1132,7 +1132,8 @@ export default function SearchScreen() {
         anchorLat != null &&
         anchorLng != null &&
         Number.isFinite(anchorLat) &&
-        Number.isFinite(anchorLng)
+        Number.isFinite(anchorLng) &&
+        (anchorLat !== 0 || anchorLng !== 0)
       ) {
         qp.set("lat", String(anchorLat));
         qp.set("lng", String(anchorLng));
@@ -1543,46 +1544,9 @@ export default function SearchScreen() {
     return categoryPromotions.find((p) => p && p.title && typeof p.title === "string" && p.title.trim().length > 0) ?? null;
   }, [categoryPromotions]);
 
-  // Fetch signed photo URLs for all search results via /listings/:id/public
-  const searchResultIds = useMemo(
-    () => effectiveResults.map((r) => r.id),
-    [effectiveResults],
-  );
-  const signedPhotoQueries = useQueries({
-    queries: searchResultIds.map((id) => ({
-      queryKey: ["public-photo", id],
-      queryFn: async (): Promise<string | null> => {
-        try {
-          const res = await listingApi.get<{
-            data: {
-              primaryPhotoUrl?: string | null;
-              photos?: Array<{ cdnUrl: string }>;
-            };
-          }>(`/listings/${id}/public`);
-          return (
-            res.data.data?.primaryPhotoUrl ??
-            res.data.data?.photos?.[0]?.cdnUrl ??
-            null
-          );
-        } catch {
-          return null;
-        }
-      },
-      staleTime: 5 * 60_000,
-      gcTime: 10 * 60_000,
-      retry: false,
-    })),
-  });
-  const signedPhotoMap = useMemo<Record<string, string | null>>(
-    () =>
-      Object.fromEntries(
-        searchResultIds.map((id, i) => [
-          id,
-          signedPhotoQueries[i]?.data ?? null,
-        ]),
-      ),
-    [searchResultIds, signedPhotoQueries],
-  );
+  // /search already returns primaryPhotoUrl on every result — this used to
+  // re-fetch it per listing via GET /listings/:id/public (one parallel request
+  // per card on screen) for data already in hand.
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
@@ -1623,7 +1587,7 @@ export default function SearchScreen() {
             style={styles.currencyHeaderBtn}
             activeOpacity={0.8}
           >
-            <Text style={styles.currencyHeaderBtnText}>{localCurrency ?? "USD"}</Text>
+            <Text style={styles.currencyHeaderBtnText}>{localCurrency ?? "EUR"}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1958,7 +1922,7 @@ export default function SearchScreen() {
                   returnDatetime={returnDatetime}
                   onFavouriteToggle={handleFavouriteToggle}
                   favouriteLoading={favouriteLoading}
-                  signedPhotoUrl={signedPhotoMap[selectedListing.id] ?? null}
+                  signedPhotoUrl={selectedListing.primaryPhotoUrl}
                   promotion={
                     activePromotion as unknown as ActivePromotion | null
                   }
@@ -2010,7 +1974,7 @@ export default function SearchScreen() {
                 returnDatetime={returnDatetime}
                 onFavouriteToggle={handleFavouriteToggle}
                 favouriteLoading={favouriteLoading}
-                signedPhotoUrl={signedPhotoMap[item.id] ?? null}
+                signedPhotoUrl={item.primaryPhotoUrl}
                 promotion={activePromotion as unknown as ActivePromotion | null}
                 columns={columns}
               />
@@ -2111,7 +2075,7 @@ export default function SearchScreen() {
       {/* ─── Currency Picker Modal ─── */}
       <CurrencyPickerModal
         visible={currencyModalVisible}
-        selected={localCurrency ?? "USD"}
+        selected={localCurrency ?? "EUR"}
         onSelect={async (code) => {
           await setLocalCurrency(code);
           setCurrencyModalVisible(false);

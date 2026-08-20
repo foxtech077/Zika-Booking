@@ -7,48 +7,32 @@ import { persist, createJSONStorage } from "zustand/middleware";
 // separate from stores/auth.ts: guests need this before (and without) ever
 // signing in, and it must survive clearSession() on logout.
 //
-// Two write paths with different authority:
-//  - setCurrency: the header dropdown. An explicit pick that detection must
-//    never override.
-//  - suggestCurrency: the timezone-derived default (lib/local-currency.ts).
-//    Applied only while the visitor has never picked a currency themselves.
+// EUR is the fixed default. There used to be a timezone-derived auto-suggestion
+// (lib/local-currency.ts, removed) that silently replaced it with the
+// visitor's detected country currency — pulled at the user's request so EUR
+// stays the default for everyone until they explicitly pick something else
+// from the header dropdown.
 interface CurrencyState {
   currency: string;
-  /** True once the visitor has picked a currency by hand. */
-  explicit: boolean;
   setCurrency: (code: string) => void;
-  suggestCurrency: (code: string) => void;
 }
 
 export const useCurrencyStore = create<CurrencyState>()(
   persist(
-    (set, get) => ({
-      // Pre-hydration placeholder only: on mount the dropdown immediately
-      // suggests the timezone-detected currency (EUR when undetectable), so
-      // this value is never what a visitor actually browses with.
+    (set) => ({
       currency: "EUR",
-      explicit: false,
-      setCurrency: (code) => set({ currency: code.toUpperCase(), explicit: true }),
-      suggestCurrency: (code) => {
-        if (get().explicit) return;
-        const next = code.toUpperCase();
-        if (next.length === 3 && next !== get().currency) set({ currency: next });
-      },
+      setCurrency: (code) => set({ currency: code.toUpperCase() }),
     }),
     {
       name: "zika:currency",
-      version: 2,
-      // Older persisted shapes predate the `explicit` flag, and a stored value
-      // from that era is indistinguishable from a never-touched default — so
-      // all of them re-enter detection. One re-default for anyone who chose a
-      // currency before this shipped; everyone picking from now on is
-      // remembered permanently.
+      version: 3,
+      // v2 tracked an `explicit` flag to protect a manual pick from the
+      // now-removed auto-suggestion. Keep a currency that was actually chosen
+      // by hand; a value that only ever came from auto-detection resets to
+      // the new fixed default.
       migrate: (persisted: unknown) => {
-        const prev = (persisted ?? {}) as Partial<CurrencyState>;
-        return {
-          currency: prev.currency ?? "EUR",
-          explicit: false,
-        } as CurrencyState;
+        const prev = (persisted ?? {}) as { currency?: string; explicit?: boolean };
+        return { currency: prev.explicit ? prev.currency ?? "EUR" : "EUR" } as CurrencyState;
       },
       storage: createJSONStorage(() =>
         typeof window !== "undefined"

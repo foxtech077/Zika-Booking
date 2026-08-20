@@ -5,7 +5,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/auth";
 import { listingApi } from "../../lib/listing-api";
@@ -832,7 +832,7 @@ export default function HomeScreen() {
   const { lat: detectedLat, lng: detectedLng, city: detectedCity } = useLocation();
   // Omit the anchor when undetected — lat=0,lng=0 anchored the rails to a
   // point in the Gulf of Guinea and ranked everything by distance from it.
-  const homeAnchor = detectedLat != null && detectedLng != null
+  const homeAnchor = detectedLat != null && detectedLng != null && (detectedLat !== 0 || detectedLng !== 0)
     ? `&lat=${detectedLat}&lng=${detectedLng}`
     : "";
 
@@ -932,8 +932,34 @@ export default function HomeScreen() {
     queryKey: ["recently-viewed", localCurrency],
     queryFn: async () => {
       try {
-        const res = await listingApi.get<{ data: { listings: SearchResult[] } }>("/guests/me/recently-viewed");
-        return res.data.data.listings ?? [];
+        // The response envelope is { data: { recentlyViewed: [{ listingId,
+        // viewedAt, listing: {...} }] } } — reading `data.listings` (a key that
+        // doesn't exist) always fell through to `[]`, so this section never
+        // rendered anything regardless of the photo fan-out fixed above.
+        const res = await listingApi.get<{
+          data: { recentlyViewed: Array<{ listing: Record<string, unknown> }> };
+        }>("/guests/me/recently-viewed");
+        return (res.data.data.recentlyViewed ?? []).map(({ listing: l }): SearchResult => ({
+          id: l.id as string,
+          listingType: l.category as string,
+          title: l.title as string,
+          city: (l.city as string | null) ?? "",
+          countryCode: "",
+          distanceKm: 0,
+          primaryPhotoUrl: (l.primaryPhotoUrl as string | null) ?? null,
+          nightlyRate: (l.nightlyRate as number | null) ?? null,
+          // Not returned by this endpoint yet — a car shows no price here
+          // rather than a wrong one borrowed from nightlyRate.
+          dailyRate: null,
+          currency: (l.currency as string | null) ?? "USD",
+          starRating: null,
+          localizedNightlyRate: (l.localizedNightlyRate as number | null) ?? null,
+          localizedDailyRate: null,
+          localizedCurrency: (l.localizedCurrency as string | null) ?? null,
+          isAccredited: false,
+          carMake: null, carModel: null, carYear: null,
+          transmission: null, seats: null,
+        }));
       } catch { return []; }
     },
     staleTime: 0,
@@ -999,41 +1025,11 @@ export default function HomeScreen() {
     return carPromo;
   }
 
-  // All IDs needed for signed photo fetch
-  const allListingIds = useMemo(() => {
-    const seen = new Set<string>();
-    for (const arr of [popularHotels, popularApts, popularCars, recentlyViewed ?? []]) {
-      for (const item of arr) seen.add(item.id);
-    }
-    return Array.from(seen);
-  }, [popularHotels, popularApts, popularCars, recentlyViewed]);
-
-  const publicPhotoQueries = useQueries({
-    queries: allListingIds.map(id => ({
-      queryKey: ["public-photo", id],
-      queryFn: async (): Promise<string | null> => {
-        try {
-          const res = await listingApi.get<{
-            data: { primaryPhotoUrl?: string | null; photos?: Array<{ cdnUrl: string }> };
-          }>(`/listings/${id}/public`);
-          return res.data.data?.primaryPhotoUrl ?? res.data.data?.photos?.[0]?.cdnUrl ?? null;
-        } catch { return null; }
-      },
-      staleTime: 5 * 60_000,
-      gcTime: 10 * 60_000,
-      retry: false,
-    })),
-  });
-
-  const signedPhotoMap = useMemo<Record<string, string | null>>(
-    () => Object.fromEntries(
-      allListingIds.map((id, i) => [id, publicPhotoQueries[i]?.data ?? null])
-    ),
-    [allListingIds, publicPhotoQueries]
-  );
-
+  // /search and /guests/me/recently-viewed already return primaryPhotoUrl —
+  // this used to re-fetch it per listing via GET /listings/:id/public, firing
+  // one request per card (30+ on this screen alone) for data already in hand.
   function photo(item: SearchResult): string | null {
-    return signedPhotoMap[item.id] ?? null;
+    return item.primaryPhotoUrl ?? null;
   }
 
   // ── Navigation ─────────────────────────────────────────────────────────────
@@ -1099,7 +1095,7 @@ export default function HomeScreen() {
               activeOpacity={0.8}
             >
               <Ionicons name="cash-outline" size={15} color="#fff" />
-              <Text style={s.currencyBtnText}>{localCurrency ?? "USD"}</Text>
+              <Text style={s.currencyBtnText}>{localCurrency ?? "EUR"}</Text>
               <Ionicons name="chevron-down" size={12} color="rgba(255,255,255,0.7)" />
             </TouchableOpacity>
 
@@ -1186,7 +1182,7 @@ export default function HomeScreen() {
         {/* Currency picker */}
         <CurrencyPickerModal
           visible={currencyModalVisible}
-          selected={localCurrency ?? "USD"}
+          selected={localCurrency ?? "EUR"}
           onSelect={async (code) => {
             await setLocalCurrency(code);
             setCurrencyModalVisible(false);

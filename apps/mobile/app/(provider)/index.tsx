@@ -420,7 +420,7 @@ const rv = StyleSheet.create({
 export default function ProviderHomeScreen() {
   const user          = useAuthStore(s => s.user);
   const localCurrency = useAuthStore(s => s.localCurrency);
-  const currency      = localCurrency ?? "USD";
+  const currency      = localCurrency ?? "EUR";
   const { data, isLoading, isError, refetch, isRefetching } = useQuery<DashboardData>({
     queryKey: ["providerDashboard"],
     queryFn:  async () => {

@@ -1,18 +1,19 @@
 "use no memo";
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, TextInput, Dimensions, Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
 import { useActivePromotion, ActivePromotion, applyPromotion } from "../../lib/promotions";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
+import { useLocation } from "../../hooks/useLocation";
 import { approxPrefix } from "../../lib/currency";
 import { useResponsive, padToColumns } from "../../lib/responsive";
 
@@ -302,6 +303,7 @@ export default function BrowseCategoryScreen() {
   const icon = category === "cars" ? "🚗" : category === "apartments" ? "🏠" : "🏨";
 
   const browsePromo = useActivePromotion(apiCategory);
+  const { lat: userLat, lng: userLng } = useLocation();
 
   const [keyword, setKeyword] = useState("");
   // Tablet grid: 2–4 listing cards per row instead of one stretched card.
@@ -311,19 +313,23 @@ export default function BrowseCategoryScreen() {
   const [allResults, setAllResults] = useState<Listing[]>([]);
   const [favouriteLoading, setFavouriteLoading] = useState<string | null>(null);
 
+  const hasLocation = userLat != null && userLng != null && Number.isFinite(userLat) && Number.isFinite(userLng) && (userLat !== 0 || userLng !== 0);
+
   const { data, isLoading, isFetching, isError, isPlaceholderData, refetch } = useQuery({
     // Prices are localized per currency by the API, so the currency is part of
     // the cache identity — without it a currency change serves cached amounts
     // still labelled with the previous currency.
-    queryKey: ["browse", apiCategory, sort, cursor, localCurrency],
+    queryKey: ["browse", apiCategory, sort, cursor, localCurrency, userLat, userLng],
     queryFn: async () => {
       const qp = new URLSearchParams({
         category: apiCategory,
-        lat: "0",
-        lng: "0",
         sort,
         limit: "50",  // Max allowed — gets all listings in one page for small datasets
       });
+      if (hasLocation) {
+        qp.set("lat", String(userLat));
+        qp.set("lng", String(userLng));
+      }
       if (cursor > 0) qp.set("cursor", String(cursor));
 
       const res = await listingApi.get(`/search?${qp.toString()}`);
@@ -366,28 +372,9 @@ export default function BrowseCategoryScreen() {
   const isLoadingMore = isFetching && cursor > 0;
   const isFirstLoad = (isLoading || isFetching) && allResults.length === 0;
 
-  // Fetch signed photo URLs for all loaded listings via /listings/:id/public
-  const listingIds = useMemo(() => allResults.map((r) => r.id), [allResults]);
-  const signedPhotoQueries = useQueries({
-    queries: listingIds.map((id) => ({
-      queryKey: ["public-photo", id],
-      queryFn: async (): Promise<string | null> => {
-        try {
-          const res = await listingApi.get<{
-            data: { primaryPhotoUrl?: string | null; photos?: Array<{ cdnUrl: string }> };
-          }>(`/listings/${id}/public`);
-          return res.data.data?.primaryPhotoUrl ?? res.data.data?.photos?.[0]?.cdnUrl ?? null;
-        } catch { return null; }
-      },
-      staleTime: 5 * 60_000,
-      gcTime: 10 * 60_000,
-      retry: false,
-    })),
-  });
-  const signedPhotoMap = useMemo<Record<string, string | null>>(
-    () => Object.fromEntries(listingIds.map((id, i) => [id, signedPhotoQueries[i]?.data ?? null])),
-    [listingIds, signedPhotoQueries],
-  );
+  // /search already returns primaryPhotoUrl on every result — this used to
+  // re-fetch it per listing via GET /listings/:id/public (up to 50 parallel
+  // requests on this screen, one per loaded card) for data already in hand.
 
   function handleSortChange(newSort: string) {
     if (newSort === sort) return;
@@ -511,7 +498,7 @@ export default function BrowseCategoryScreen() {
               item={item}
               apiCategory={apiCategory}
               onPress={() => navToListing(item.id)}
-              signedPhotoUrl={signedPhotoMap[item.id] ?? null}
+              signedPhotoUrl={item.primaryPhotoUrl}
               promotion={browsePromo}
               columns={columns}
             />

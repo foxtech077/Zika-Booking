@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { useLocationStore, isLocationExpired } from "../store/location";
-import { useAuthStore } from "../store/auth";
 import { listingApi } from "../lib/listing-api";
 
 // Module-level singleton: prevents parallel fetches across hook instances
@@ -61,17 +60,6 @@ export function useLocationBootstrap(): void {
       if (isLocationExpired(loc)) void fetchAndStoreLocation();
     };
     void run();
-
-    // Keep the display currency in step with the detected country. The store
-    // enforces priority (manual pick > profile country > this), so firing on
-    // every location update is safe.
-    const unsub = useLocationStore.subscribe((state) => {
-      const currency = state.location?.currency;
-      if (currency) void useAuthStore.getState().suggestLocalCurrency(currency);
-    });
-    const initial = useLocationStore.getState().location?.currency;
-    if (initial) void useAuthStore.getState().suggestLocalCurrency(initial);
-    return () => unsub();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }

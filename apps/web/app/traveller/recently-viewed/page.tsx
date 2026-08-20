@@ -108,6 +108,7 @@ export default function RecentlyViewedPage() {
                   <div className="aspect-[4/3] relative overflow-hidden bg-slate-100">
                     <ListingImage
                       listingId={l.id}
+                      src={l.primaryPhotoUrl ?? undefined}
                       alt={l.title}
                       className="w-full h-full object-cover hover:scale-105 transition duration-500"
                     />
