@@ -171,7 +171,7 @@ export default function ProfileScreen() {
 
             <SettingsSection title="Preferences">
               <MenuRow icon="notifications-outline" label="Notifications" sublabel="Push, email & SMS alerts" onPress={() => router.push("/notifications" as any)} />
-              <MenuRow icon="cash-outline" label="Currency" sublabel={`Prices shown in ${localCurrency ?? "USD"}`} onPress={() => setCurrencyModalVisible(true)} showBorder={false} />
+              <MenuRow icon="cash-outline" label="Currency" sublabel={`Prices shown in ${localCurrency ?? "EUR"}`} onPress={() => setCurrencyModalVisible(true)} showBorder={false} />
             </SettingsSection>
 
             <SettingsSection title="Support & Legal">
@@ -197,7 +197,7 @@ export default function ProfileScreen() {
 
       <CurrencyPickerModal
         visible={currencyModalVisible}
-        selected={localCurrency ?? "USD"}
+        selected={localCurrency ?? "EUR"}
         onSelect={(code) => {
           void setLocalCurrency(code);
           setCurrencyModalVisible(false);

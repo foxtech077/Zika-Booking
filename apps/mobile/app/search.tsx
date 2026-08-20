@@ -1587,7 +1587,7 @@ export default function SearchScreen() {
             style={styles.currencyHeaderBtn}
             activeOpacity={0.8}
           >
-            <Text style={styles.currencyHeaderBtnText}>{localCurrency ?? "USD"}</Text>
+            <Text style={styles.currencyHeaderBtnText}>{localCurrency ?? "EUR"}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -2075,7 +2075,7 @@ export default function SearchScreen() {
       {/* ─── Currency Picker Modal ─── */}
       <CurrencyPickerModal
         visible={currencyModalVisible}
-        selected={localCurrency ?? "USD"}
+        selected={localCurrency ?? "EUR"}
         onSelect={async (code) => {
           await setLocalCurrency(code);
           setCurrencyModalVisible(false);

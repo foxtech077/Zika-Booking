@@ -1095,7 +1095,7 @@ export default function HomeScreen() {
               activeOpacity={0.8}
             >
               <Ionicons name="cash-outline" size={15} color="#fff" />
-              <Text style={s.currencyBtnText}>{localCurrency ?? "USD"}</Text>
+              <Text style={s.currencyBtnText}>{localCurrency ?? "EUR"}</Text>
               <Ionicons name="chevron-down" size={12} color="rgba(255,255,255,0.7)" />
             </TouchableOpacity>
 
@@ -1182,7 +1182,7 @@ export default function HomeScreen() {
         {/* Currency picker */}
         <CurrencyPickerModal
           visible={currencyModalVisible}
-          selected={localCurrency ?? "USD"}
+          selected={localCurrency ?? "EUR"}
           onSelect={async (code) => {
             await setLocalCurrency(code);
             setCurrencyModalVisible(false);
