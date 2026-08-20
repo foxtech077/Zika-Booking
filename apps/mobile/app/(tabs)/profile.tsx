@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -12,7 +13,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
-import { useProfileScreenData } from "../../hooks/profile";
+import { useProfileScreenData, useDeleteAccount } from "../../hooks/profile";
 import { normalizeTier } from "../../constants/loyaltyTiers";
 import { K } from "../../constants/theme";
 import { SignInRequired } from "../../components/SignInRequired";
@@ -45,6 +46,35 @@ export default function ProfileScreen() {
       router.replace("/(auth)/login");
     },
   });
+
+  const deleteAccountMutation = useDeleteAccount();
+
+  function handleDeleteAccount() {
+    Alert.alert(
+      "Delete Account",
+      "Are you sure you want to delete your account? All your personal data, saved listings, and booking history will be permanently deleted. This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete Account",
+          style: "destructive",
+          onPress: () => {
+            deleteAccountMutation.mutate(undefined, {
+              onSuccess: () => {
+                Alert.alert("Account Deleted", "Your account and data have been permanently removed.", [
+                  { text: "OK", onPress: () => router.replace("/(auth)/login" as any) },
+                ]);
+              },
+              onError: (err: any) => {
+                const msg = err?.response?.data?.error?.message ?? err?.message ?? "Could not delete account. Please try again.";
+                Alert.alert("Delete Failed", msg);
+              },
+            });
+          },
+        },
+      ],
+    );
+  }
 
   // Show the store's cached user immediately (avoids a blank screen on first
   // paint) and swap in fresh /auth/me + /auth/profile data once it lands.
@@ -105,7 +135,8 @@ export default function ProfileScreen() {
             <View style={{ height: 4 }} />
 
             <SettingsSection title="Account">
-              <MenuRow icon="person-outline" label="Personal Information" sublabel="Name & contact details" onPress={() => router.push("/edit-profile" as any)} showBorder={false} />
+              <MenuRow icon="person-outline" label="Personal Information" sublabel="Name & contact details" onPress={() => router.push("/edit-profile" as any)} />
+              <MenuRow icon="trash-outline" label={deleteAccountMutation.isPending ? "Deleting Account…" : "Delete Account"} sublabel="Permanently remove your account" onPress={handleDeleteAccount} danger showBorder={false} />
             </SettingsSection>
 
             <SettingsSection title="Membership & Rewards">

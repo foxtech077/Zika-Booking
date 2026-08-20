@@ -229,3 +229,21 @@ export function useUpdateProfile() {
     },
   });
 }
+
+// ── DELETE /auth/delete-account ──────────────────────────────────────────────
+
+export function useDeleteAccount() {
+  const clearAuth = useAuthStore((s) => s.clearAuth);
+
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.delete<ApiResponse<{ message: string }>>("/auth/delete-account");
+      if (!res.data.success) throw res.data;
+      return res.data;
+    },
+    onSuccess: async () => {
+      await clearAuth();
+      globalQueryClient.clear();
+    },
+  });
+}

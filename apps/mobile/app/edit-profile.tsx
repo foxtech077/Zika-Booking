@@ -16,7 +16,7 @@ import { useKeyboard } from "../hooks/useKeyboard";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../store/auth";
-import { useUpdateProfile, useProfilePhoto, type UpdateProfilePayload } from "../hooks/profile";
+import { useUpdateProfile, useProfilePhoto, useDeleteAccount, type UpdateProfilePayload } from "../hooks/profile";
 import { ProfileAvatar } from "../components/profile/ProfileAvatar";
 import { normalizeTier } from "../constants/loyaltyTiers";
 import { K } from "../constants/theme";
@@ -80,6 +80,35 @@ export default function EditProfileScreen() {
     });
   }
 
+  const deleteAccountMutation = useDeleteAccount();
+
+  function handleDeleteAccount() {
+    Alert.alert(
+      "Delete Account",
+      "Are you sure you want to delete your account? All your personal data, saved listings, and booking history will be permanently deleted. This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete Account",
+          style: "destructive",
+          onPress: () => {
+            deleteAccountMutation.mutate(undefined, {
+              onSuccess: () => {
+                Alert.alert("Account Deleted", "Your account and data have been permanently removed.", [
+                  { text: "OK", onPress: () => router.replace("/") },
+                ]);
+              },
+              onError: (err: any) => {
+                const msg = err?.response?.data?.error?.message ?? err?.message ?? "Could not delete account. Please try again.";
+                Alert.alert("Delete Failed", msg);
+              },
+            });
+          },
+        },
+      ],
+    );
+  }
+
   return (
     <SafeAreaView style={s.safeArea} edges={["top", "bottom"]}>
       <KeyboardAvoidingView
@@ -138,6 +167,28 @@ export default function EditProfileScreen() {
           <TouchableOpacity style={s.cancelBtn} onPress={() => router.back()} disabled={mutation.isPending}>
             <Text style={s.cancelBtnText}>Cancel</Text>
           </TouchableOpacity>
+
+          <View style={s.dangerSection}>
+            <Text style={s.dangerTitle}>Danger Zone</Text>
+            <Text style={s.dangerDesc}>
+              Permanently delete your Kainook account and all associated personal data.
+            </Text>
+            <TouchableOpacity
+              style={s.deleteAccountBtn}
+              onPress={handleDeleteAccount}
+              disabled={deleteAccountMutation.isPending}
+              activeOpacity={0.8}
+            >
+              {deleteAccountMutation.isPending ? (
+                <ActivityIndicator color="#dc2626" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="trash-outline" size={18} color="#dc2626" style={{ marginRight: 6 }} />
+                  <Text style={s.deleteAccountText}>Delete Account</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -240,4 +291,26 @@ const s = StyleSheet.create({
     alignItems: "center",
   },
   cancelBtnText: { color: K.colors.textMid, fontWeight: "600", fontSize: 15 },
+
+  dangerSection: {
+    marginTop: 32,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: "#fef2f2",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+  },
+  dangerTitle: { fontSize: 14, fontWeight: "700", color: "#991b1b", marginBottom: 4 },
+  dangerDesc: { fontSize: 12, color: "#7f1d1d", marginBottom: 14, lineHeight: 17 },
+  deleteAccountBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#fca5a5",
+  },
+  deleteAccountText: { color: "#dc2626", fontWeight: "700", fontSize: 14 },
 });
