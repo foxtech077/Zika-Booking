@@ -3050,6 +3050,7 @@ export default function TravellerDashboard() {
                                 <div className="flex gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
                                   <ListingImage
                                     listingId={detailListing.id}
+                                    src={detailListing.primaryPhotoUrl || detailListing.photos?.[0]?.cdnUrl || undefined}
                                     alt={detailListing.name}
                                     className="w-16 h-16 rounded-lg object-cover shrink-0"
                                   />
@@ -3960,7 +3961,7 @@ export default function TravellerDashboard() {
                       className="group flex items-center gap-3 bg-white border border-slate-100 rounded-2xl p-3 hover:shadow-md hover:border-slate-200 transition text-left w-full"
                     >
                       <div className="w-16 h-16 bg-slate-100 rounded-xl overflow-hidden shrink-0">
-                        <ListingImage listingId={item.id} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                        <ListingImage listingId={item.id} src={item.primaryPhotoUrl || item.photos?.[0]?.cdnUrl || undefined} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-[#1D8D2B] uppercase tracking-wider">{item.category}</p>

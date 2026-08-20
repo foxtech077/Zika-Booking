@@ -104,6 +104,7 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ listingId, name = "", image
       <div className="h-[300px] md:h-[480px] rounded-2xl overflow-hidden bg-slate-100">
         <ListingImage
           listingId={listingId}
+          src={imageUrl ?? undefined}
           alt={name}
           className="w-full h-full object-cover"
           fallbackNode={
