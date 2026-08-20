@@ -1019,6 +1019,40 @@ export async function authRoutes(app: FastifyInstance) {
     }
   });
 
+  // ── DELETE /auth/delete-account — User account deletion (Apple Guideline 5.1.1(v)) ──
+  const handleDeleteAccount = async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const userId = (req as FastifyRequest & { userId: string }).userId;
+      if (!userId) {
+        return sendError(reply, 401, "UNAUTHORIZED", "Authentication required.");
+      }
+
+      await prisma.$transaction([
+        prisma.session.deleteMany({ where: { userId } }),
+        prisma.deviceToken.deleteMany({ where: { userId } }),
+        prisma.verificationToken.deleteMany({ where: { userId } }),
+        prisma.notification.deleteMany({ where: { userId } }),
+        prisma.loyaltyTransaction.deleteMany({ where: { userId } }),
+        prisma.emailLog.deleteMany({ where: { userId } }),
+        prisma.user.delete({ where: { id: userId } }),
+      ]);
+
+      reply.clearCookie("web_refresh_token", {
+        path: "/",
+        domain: process.env["COOKIE_DOMAIN"] ?? ".kainook.com",
+      });
+
+      return sendSuccess(reply, 200, { message: "Account and associated data deleted successfully." });
+    } catch (err) {
+      req.log.error({ err }, "Account deletion failed");
+      return sendError(reply, 500, "DELETE_ACCOUNT_FAILED", "Could not delete account. Please try again.");
+    }
+  };
+
+  app.delete("/auth/delete-account", { schema: { tags: ["User Auth"] }, preHandler: [requireAuth] }, handleDeleteAccount);
+  app.post("/auth/delete-account", { schema: { tags: ["User Auth"] }, preHandler: [requireAuth] }, handleDeleteAccount);
+  app.delete("/users/me", { schema: { tags: ["User Auth"] }, preHandler: [requireAuth] }, handleDeleteAccount);
+
   // ── POST /auth/refresh  (UC-1.5) ───────────────────────────────────────────
   app.post("/auth/refresh", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const refreshToken = req.cookies["web_refresh_token"];
