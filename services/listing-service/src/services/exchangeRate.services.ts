@@ -1,5 +1,5 @@
 import { prisma } from "../lib/prisma.js";
-import { EUR_CHARGE_BUFFER_MULTIPLIER, TARA_CHARGE_BUFFER_MULTIPLIER, isTaraCountry, ZERO_DECIMAL_CURRENCIES, xafToEur } from "@zika/types";
+import { isTaraCountry, ZERO_DECIMAL_CURRENCIES, xafToEur } from "@zika/types";
 
 const STALENESS_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
 const BASE_CURRENCY = "USD";
@@ -457,19 +457,19 @@ export interface PlatformQuote {
   rate: number | null;
   /** Unbuffered converted amount (for reference / display math). */
   rawAmount: number | null;
-  /** Buffered converted amount: raw × bufferApplied, ceiling-rounded. */
+  /** Converted amount: raw converted, ceiling-rounded for the target. */
   amount: number | null;
-  /** Buffer multiplier applied (1.015 for EUR, 1 otherwise / identity). */
+  /** Buffer multiplier applied (always 1 — no buffer). */
   bufferApplied: number;
 }
 
 /**
  * Compute a platform-currency quote for a base-currency amount, using only the
- * DB exchange-rate table. The +buffer is applied only when the platform
- * currency is EUR to absorb FX fluctuation between quote and charge time.
+ * DB exchange-rate table. No buffer is applied to any conversion — the quote
+ * is the exact converted amount, ceiling-rounded to the target's decimals.
  *
  *   raw = baseAmount × rate
- *   buffered = raw × (1 + bufferPercentage)
+ *   converted = ceil(raw)
  */
 export async function getPlatformQuote(
   baseCurrency: string,
@@ -490,11 +490,7 @@ export async function getPlatformQuote(
     };
   }
 
-  const bufferApplied = to === "EUR"
-    ? EUR_CHARGE_BUFFER_MULTIPLIER
-    : to === "XAF"
-      ? TARA_CHARGE_BUFFER_MULTIPLIER
-      : 1;
+  const bufferApplied = 1;
   const rate = await getExchangeRate(from, to);
   if (rate === null) {
     return { platformCurrency: to, rate: null, rawAmount: null, amount: null, bufferApplied };
@@ -502,8 +498,8 @@ export async function getPlatformQuote(
 
   const rawAmount = amount * rate;
   // Match the charge path exactly: the platform service ceilings the raw
-  // conversion (via /internal/fx/eur-quote) and THEN applies the buffer, so
-  // the displayed/booked amount always equals the amount actually charged.
+  // conversion (via /internal/fx/eur-quote), so the displayed/booked amount
+  // always equals the amount actually charged.
   const buffered = ceilingForCurrency(ceilingForCurrency(rawAmount, to) * bufferApplied, to);
   return { platformCurrency: to, rate, rawAmount, amount: buffered, bufferApplied };
 }
@@ -539,7 +535,7 @@ export async function buildPlatformSnapshot(opts: {
 
   const quote = total != null
     ? await getPlatformQuote(from, platform, total)
-    : { platformCurrency: platform, rate: null, rawAmount: null, amount: null, bufferApplied: platform === "EUR" ? EUR_CHARGE_BUFFER_MULTIPLIER : 1 };
+    : { platformCurrency: platform, rate: null, rawAmount: null, amount: null, bufferApplied: 1 };
 
   const guestTarget = opts.guestCurrency?.toUpperCase() ?? null;
   const localized =
