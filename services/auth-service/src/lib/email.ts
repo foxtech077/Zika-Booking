@@ -59,20 +59,8 @@ async function sendEmail(msg: sgMail.MailDataRequired): Promise<void> {
 }
 
 async function sendWithRetry(msg: sgMail.MailDataRequired, attempt = 1): Promise<void> {
-  const isProd = process.env["NODE_ENV"] === "production";
-
-  if (isProd) {
-    if (!cleanKey) {
-      throw new Error("[Email] SENDGRID_API_KEY is not configured in the production environment.");
-    }
-  } else {
-    // Sandbox mode for non-production environments
-    console.log("\n" + "=".repeat(60));
-    console.log("📧 [Email Sandbox] Email request prepared");
-    console.log(`To: ${Array.isArray(msg.to) ? msg.to.join(", ") : msg.to}`);
-    console.log(`Subject: ${msg.subject}`);
-    console.log("=".repeat(60) + "\n");
-    return;
+  if (!cleanKey) {
+    throw new Error("[Email] SENDGRID_API_KEY is not configured.");
   }
 
   try {
