@@ -1,20 +1,19 @@
 /**
  * Shared currency / FX constants used by the booking and payment services.
  *
- * EUR is the platform money-of-record for Stripe charges. A small buffer is
- * added to the converted amount to absorb exchange-rate fluctuation between
- * the moment a price is quoted and the moment the card is charged (a
- * minutes-long window, so a modest buffer suffices).
+ * EUR is the platform money-of-record for Stripe charges and XAF is the
+ * money-of-record for Tara mobile-money payments. No buffer is applied to
+ * either conversion — the guest is charged the exact converted amount.
  */
 
 /** Percentage buffer applied on top of the raw EUR-converted charge amount. */
-export const EUR_CHARGE_BUFFER = 0.005;
+export const EUR_CHARGE_BUFFER = 0;
 
 /** Multiplier derived from the buffer, i.e. rawAmount × (1 + buffer). */
 export const EUR_CHARGE_BUFFER_MULTIPLIER = 1 + EUR_CHARGE_BUFFER;
 
 /** Small buffer applied to Tara XAF conversions to absorb FX fluctuation. */
-export const TARA_CHARGE_BUFFER = 0.005;
+export const TARA_CHARGE_BUFFER = 0;
 export const TARA_CHARGE_BUFFER_MULTIPLIER = 1 + TARA_CHARGE_BUFFER;
 
 /**

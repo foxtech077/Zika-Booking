@@ -355,9 +355,8 @@ async function processSinglePayout(payout: any): Promise<void> {
     ) {
       // EUR is the money-of-record for host transfers. Resolve at the moment
       // the funds actually move; if the EUR rate is stale, leave the payout
-      // pending so it retries once the scheduled re-sync lands. Payouts use
-      // the raw market rate (no charge buffer — that is only applied to guest
-      // charges).
+      // pending so it retries once the scheduled re-sync lands. Payouts and
+      // guest charges both use the raw market conversion (no buffer).
       //
       // The payout amount (booking.providerPayout) is the guest total minus the
       // platform's retained commission, payment-processing fee and tax; it
@@ -367,7 +366,7 @@ async function processSinglePayout(payout: any): Promise<void> {
       // the guest.
       let eur;
       try {
-        eur = await resolveEurCharge(Number(payout.amount), payout.currency, { applyBuffer: false });
+        eur = await resolveEurCharge(Number(payout.amount), payout.currency);
       } catch (err) {
         if (err instanceof EurQuoteUnavailableError) {
           console.error(

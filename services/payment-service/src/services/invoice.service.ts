@@ -1,7 +1,7 @@
 export interface InvoiceCharge {
   /** Platform/charge currency — EUR for Stripe, XAF for Tara. */
   currency: string;
-  /** Actual amount charged in platform currency (buffered for EUR). */
+  /** Actual amount charged in platform currency (EUR for Stripe, XAF for Tara). */
   amount: number | null;
   /** Exchange rate listingCurrency → platformCurrency at charge time. */
   rate: number | null;

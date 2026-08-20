@@ -1,4 +1,4 @@
-import { isTaraCountry, TARA_CHARGE_BUFFER_MULTIPLIER } from "@zika/types";
+import { isTaraCountry } from "@zika/types";
 import { parsePhoneNumber } from "libphonenumber-js";
 
 const LISTING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
@@ -58,9 +58,8 @@ export async function computeTaraCharge(opts: {
   let rate = 1;
 
   if (currency === "XAF") {
-    // XAF is a 0-decimal currency — Tara expects a whole amount. Apply a
-    // small buffer to absorb FX fluctuation between quote and settlement.
-    amountXaf = Math.ceil(opts.totalAmount * TARA_CHARGE_BUFFER_MULTIPLIER);
+    // XAF is a 0-decimal currency — Tara expects a whole amount.
+    amountXaf = Math.ceil(opts.totalAmount);
   } else {
     const res = await fetch(`${LISTING_SERVICE_URL}/internal/fx/convert`, {
       method: "POST",
@@ -78,8 +77,9 @@ export async function computeTaraCharge(opts: {
         "Could not convert your booking total to XAF right now. Please use card payment instead.",
       );
     }
-    // Apply buffer: ceil(raw × 1.005) to absorb FX fluctuation, same as EUR.
-    amountXaf = Math.ceil(Number(json.data.converted) * TARA_CHARGE_BUFFER_MULTIPLIER);
+    // The converted amount is already ceiling-rounded to a whole XAF — charge
+    // it exactly, with no buffer.
+    amountXaf = Math.ceil(Number(json.data.converted));
     rate = json.data.rate != null ? Number(json.data.rate) : 1;
   }
 
