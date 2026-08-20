@@ -166,7 +166,7 @@ export const NAV_GROUPS: NavGroup[] = [
     group: "Operations",
     items: [
       { label: "Users", href: "/dashboard/users", icon: "Users", permission: "view_users" },
-      { label: "Listing Review", href: "/dashboard/accreditation", icon: "Building2", permission: "view_listings" },
+      { label: "Approval Queue", href: "/dashboard/accreditation", icon: "Building2", permission: "view_listings" },
       { label: "Moderation Queue", href: "/dashboard/moderation", icon: "ShieldAlert", permission: "view_reviews" },
       { label: "Listings", href: "/dashboard/listings", icon: "Building2", permission: "view_listings" },
       { label: "Bookings", href: "/dashboard/bookings", icon: "CalendarDays", permission: "view_bookings" },

@@ -164,13 +164,13 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
         const start = new Date(q.startDate || "1970-01-01");
         const end = new Date(q.endDate || "2999-12-31");
 
-        const [hotelData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.listing_review_tasks WHERE status = 'open' AND created_at >= ${start} AND created_at <= ${end}`;
+        const [hotelData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.listing_review_tasks t JOIN listing.listings l ON t.listing_id = l.id WHERE t.status = 'open' AND l.status = 'pending_review' AND l.category = 'hotel' AND t.created_at >= ${start} AND t.created_at <= ${end}`;
         hotelCount = Number(hotelData?.count || 0);
 
         const [refundData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM payments."Refund" WHERE status = 'pending' AND "created_at" >= ${start} AND "created_at" <= ${end}`;
         refundCount = Number(refundData?.count || 0);
       } else {
-        const [hotelData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.listing_review_tasks WHERE status = 'open'`;
+        const [hotelData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.listing_review_tasks t JOIN listing.listings l ON t.listing_id = l.id WHERE t.status = 'open' AND l.status = 'pending_review' AND l.category = 'hotel'`;
         hotelCount = Number(hotelData?.count || 0);
 
         const [refundData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM payments."Refund" WHERE status = 'pending'`;
@@ -753,13 +753,13 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
         const start = new Date(q.startDate || "1970-01-01");
         const end = new Date(q.endDate || "2999-12-31");
 
-        const [hotelData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.listing_review_tasks WHERE status = 'open' AND created_at >= ${start} AND created_at <= ${end}`;
+        const [hotelData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.listing_review_tasks t JOIN listing.listings l ON t.listing_id = l.id WHERE t.status = 'open' AND l.status = 'pending_review' AND l.category = 'hotel' AND t.created_at >= ${start} AND t.created_at <= ${end}`;
         hotelCount = Number(hotelData?.count || 0);
 
         const [refundData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM payments."Refund" WHERE status = 'pending' AND "created_at" >= ${start} AND "created_at" <= ${end}`;
         refundCount = Number(refundData?.count || 0);
       } else {
-        const [hotelData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.listing_review_tasks WHERE status = 'open'`;
+        const [hotelData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.listing_review_tasks t JOIN listing.listings l ON t.listing_id = l.id WHERE t.status = 'open' AND l.status = 'pending_review' AND l.category = 'hotel'`;
         hotelCount = Number(hotelData?.count || 0);
 
         const [refundData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM payments."Refund" WHERE status = 'pending'`;
@@ -997,7 +997,7 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
       const [hotelData] = await prisma.$queryRaw<[{ count: bigint }]>`
         SELECT COUNT(*) as count FROM listing.listing_review_tasks t
         JOIN listing.listings l ON t.listing_id = l.id
-        WHERE t.status = 'open' AND l.country = ANY(${countryScope})
+        WHERE t.status = 'open' AND l.status = 'pending_review' AND l.category = 'hotel' AND l.country = ANY(${countryScope})
       `;
       const hotelCount = Number(hotelData?.count || 0);
 

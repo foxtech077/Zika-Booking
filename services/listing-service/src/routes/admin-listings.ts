@@ -155,6 +155,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
         type: "object",
         properties: {
           country: { type: "string", description: "Filter by country code (ISO 3166-1 alpha-2)" },
+          queue: { type: "string", enum: ["approval", "moderation"], description: "Which queue to fetch: approval (listings pending review) or moderation (auto-suspended listings). Defaults to both." },
           taskStatus: { type: "string", enum: ["open", "escalated"] },
           starRating: { type: "string", description: "Filter by claimed star rating (1–5)" },
           slaStatus: { type: "string", enum: ["breached", "approaching", "ok"], description: "SLA breach status" },
@@ -180,6 +181,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
                     properties: {
                       id: { type: "string" },
                       name: { type: "string", nullable: true },
+                      category: { type: "string" },
+                      status: { type: "string" },
                       country: { type: "string", nullable: true },
                       town: { type: "string", nullable: true },
                       claimedStarRating: { type: "integer", nullable: true },
@@ -208,7 +211,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
     if (!checkAdminRole(req, reply)) return;
     const admin = req as AdminRequest;
 
-    const { country, starRating, taskStatus, slaStatus, page = "1", limit = "20", sortBy = "sla_deadline" } = req.query as Record<string, string>;
+    const { country, starRating, taskStatus, slaStatus, queue, page = "1", limit = "20", sortBy = "sla_deadline" } = req.query as Record<string, string>;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -235,9 +238,15 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const isCountryManager = admin.adminRole === "country_manager";
 
     const listingFilter: any = {
-      status: { in: ["pending_review", "auto_suspended"]
-    },
-  };
+      status: {
+        in:
+          queue === "approval"
+            ? ["pending_review"]
+            : queue === "moderation"
+              ? ["auto_suspended"]
+              : ["pending_review", "auto_suspended"],
+      },
+    };
     if (isCountryManager) {
       if (country) {
         if (admin.countryScope.includes(country)) {
