@@ -103,10 +103,10 @@ export function calculateBilling(input: BillingInput): BillingResult {
   const deliveryFee = Number((input.deliveryFee ?? 0).toFixed(2));
 
   // Commission is computed on the list price only (pre-discount). The provider
-  // receives the full list price plus the delivery fee and
-  // payment-processing fee — i.e. the full list price plus the delivery fee and
-  // security deposit, minus commission. Discounts are absorbed by the
-  // platform's commission and never reduce this payout.
+  // receives the full list price plus the delivery fee and security deposit,
+  // minus commission. The provider never receives the payment-processing fee.
+  // Discounts are absorbed by the platform's commission and never reduce this
+  // payout.
   const commissionAmount = Number((baseAmount * input.commissionRate).toFixed(2));
   const providerPayout = Number(Math.max(0, baseAmount + deliveryFee + securityDeposit - commissionAmount).toFixed(2));
 

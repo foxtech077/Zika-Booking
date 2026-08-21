@@ -20,7 +20,7 @@ CREATE TABLE "payments"."ManualRefund" (
     CONSTRAINT "ManualRefund_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "ManualRefund_payment_id_key" ON "payments"."ManualRefund"("payment_id");
+CREATE INDEX "ManualRefund_payment_id_idx" ON "payments"."ManualRefund"("payment_id");
 CREATE UNIQUE INDEX "ManualRefund_idempotency_key_key" ON "payments"."ManualRefund"("idempotency_key");
 CREATE INDEX "ManualRefund_status_created_at_idx" ON "payments"."ManualRefund"("status", "created_at" DESC);
 CREATE INDEX "ManualRefund_booking_id_idx" ON "payments"."ManualRefund"("booking_id");

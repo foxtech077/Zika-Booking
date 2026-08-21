@@ -307,6 +307,10 @@ export default function TravellerDashboard() {
   const [totalCount, setTotalCount] = useState(0);
   const [searchOffset, setSearchOffset] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Query params of the most recent search, minus the cursor. Load more
+  // replays them unchanged so page 2 runs the same query as page 1, even
+  // if the selected place or destination text changed since.
+  const lastSearchBaseRef = useRef<Record<string, any> | null>(null);
   const [mapHoveredId, setMapHoveredId] = useState<string | null>(null);
 
   // Details & Checkout context
@@ -1164,7 +1168,9 @@ export default function TravellerDashboard() {
         if (searchReturnDate) params.return_datetime = searchReturnDate;
       }
 
-      // Call listing search API
+      // Snapshot the params before the request so load more can replay
+      // this exact query with only the cursor advanced.
+      lastSearchBaseRef.current = { ...params };
       const res = await listingApi.get<any>("/search", { params });
       const data = res.data?.data ?? {};
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
@@ -1191,51 +1197,18 @@ export default function TravellerDashboard() {
     }
   }
 
-  // 3b. Load More — append next page of search results, always scoped to the active query
+  // 3b. Load More — append the next page by replaying the exact params of the
+  // active search with only the cursor advanced. Rebuilding params from live
+  // state here could silently switch search mode (place ↔ text) or drop
+  // filters mid-pagination, returning a different result population.
   async function loadMoreListings() {
     if (loadingMore) return;
-    if (!searchOffset) return;
+    if (!searchOffset || !lastSearchBaseRef.current) return;
     setLoadingMore(true);
-    const activeQuery = searchDestination.trim();
     try {
-      const isPlaceSearch = !!activeQuery && !!selectedSearchPlace && selectedSearchPlace.address === activeQuery;
-      const params: Record<string, any> = {
-        category: searchCategory,
-        limit: 20,
-        cursor: searchOffset,
-        search_mode: isPlaceSearch ? "place" : activeQuery ? "text" : "browse",
-      };
-      if (activeQuery) {
-        params.q = activeQuery;
-        if (isPlaceSearch) {
-          params.place_id = selectedSearchPlace.placeId;
-          params.lat = selectedSearchPlace.lat;
-          params.lng = selectedSearchPlace.lng;
-        }
-      } else {
-        const origin = await getSearchOrigin();
-        params.lat = origin.lat;
-        params.lng = origin.lng;
-      }
-      if (searchGuests > 1) params.guests = searchGuests;
-      if (priceMin > 0) params.price_min = priceMin;
-      if (priceMax < PRICE_NO_CAP) params.price_max = priceMax;
-      if (selectedRating) params.rating_min = selectedRating;
-      if (searchCategory === "hotel" && filterStarRating.length) params.star_rating = filterStarRating.join(",");
-      if (searchCategory === "apartment" && filterMaxGuests) params.max_guests_min = filterMaxGuests;
-      if (selectedCancellation) params.cancellation_policy = selectedCancellation;
-      if (showInstantOnly) params.instant_booking = true;
-      if (searchCategory === "car" && filterAirportPickup) params.airport_pickup = true;
-      params.sort = sortBy;
-      if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.flatMap(k => AMENITY_CATEGORY[k] ? [`${AMENITY_CATEGORY[k]}:${k}`, k] : [k]).join(",");
-      if (searchCategory !== "car") {
-        if (searchCheckIn) params.check_in = searchCheckIn;
-        if (searchCheckOut) params.check_out = searchCheckOut;
-      } else {
-        if (searchPickupDate) params.pickup_datetime = searchPickupDate;
-        if (searchReturnDate) params.return_datetime = searchReturnDate;
-      }
-      const res = await listingApi.get<any>("/search", { params });
+      const res = await listingApi.get<any>("/search", {
+        params: { ...lastSearchBaseRef.current, cursor: searchOffset },
+      });
       const data = res.data?.data ?? {};
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
       const mapped = results.map(mapSearchResult);

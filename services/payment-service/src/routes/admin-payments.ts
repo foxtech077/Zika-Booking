@@ -241,9 +241,15 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
       if (!assertResourceCountryScope(req, reply, manualRefund.payment.countryCode)) return;
       if (!reason?.trim()) return sendError(reply, 400, "FAILURE_REASON_REQUIRED", "A failure reason is required.");
       if (manualRefund.status !== "pending") return sendError(reply, 400, "MANUAL_REFUND_NOT_PENDING", "Only pending manual refunds can be failed.");
-      const updated = await prisma.manualRefund.update({
-        where: { id },
-        data: { status: "failed", failureReason: reason.trim(), processedBy: (req as AdminRequest).admin.adminId, processedAt: new Date() },
+      // Claim the pending status atomically so a concurrent /complete cannot
+      // be overwritten by this update. Same guard as the complete endpoint.
+      const updated = await prisma.$transaction(async (tx) => {
+        const claimed = await tx.manualRefund.updateMany({
+          where: { id, status: "pending" },
+          data: { status: "failed", failureReason: reason.trim(), processedBy: (req as AdminRequest).admin.adminId, processedAt: new Date() },
+        });
+        if (claimed.count === 0) throw new Error("Only pending manual refunds can be failed.");
+        return tx.manualRefund.findUnique({ where: { id } });
       });
       await writeAdminAudit(req, { action: "manual_refund_failed", targetType: "manual_refund", targetId: id, oldValue: "status:pending", newValue: `status:failed;reason:${reason.trim()}` });
       return reply.send({ success: true, data: updated });

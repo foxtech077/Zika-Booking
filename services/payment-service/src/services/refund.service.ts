@@ -31,41 +31,39 @@ export async function createManualRefund(
     throw new InvalidPaymentStatusError(payment.status);
   }
 
+  // Each accepted request creates its own ManualRefund row so an operator
+  // can process several partial refunds against the same payment over
+  // time. Idempotency is per-request via `idempotencyKey`. The refundable
+  // balance counts committed refunds plus still-pending manual refunds, so
+  // concurrent requests cannot over-commit the charged amount.
   return prisma.$transaction(async (tx) => {
     const existing = await tx.manualRefund.findUnique({ where: { idempotencyKey: opts.idempotencyKey } });
     if (existing) return { id: existing.id, status: existing.status };
 
-    const existingForPayment = await tx.manualRefund.findUnique({ where: { paymentId: payment.id } });
-    if (existingForPayment?.status === "pending" || existingForPayment?.status === "completed") {
-      return { id: existingForPayment.id, status: existingForPayment.status };
-    }
-
     await tx.$executeRaw`SELECT 1 FROM payments."Payment" WHERE id = ${payment.id} FOR UPDATE`;
-    const refundSum = await tx.refund.aggregate({
-      where: { paymentId: payment.id, status: { not: "failed" } },
-      _sum: { amount: true },
-    });
-    if (Number(refundSum._sum.amount ?? 0) + opts.amount > Number(payment.chargedAmount ?? payment.amount)) {
+    const [refundSum, pendingManualSum] = await Promise.all([
+      tx.refund.aggregate({
+        where: { paymentId: payment.id, status: { not: "failed" } },
+        _sum: { amount: true },
+      }),
+      tx.manualRefund.aggregate({
+        where: { paymentId: payment.id, status: "pending" },
+        _sum: { amount: true },
+      }),
+    ]);
+    const alreadyCommitted = Number(refundSum._sum.amount ?? 0) + Number(pendingManualSum._sum.amount ?? 0);
+    if (alreadyCommitted + opts.amount > Number(payment.chargedAmount ?? payment.amount)) {
       throw new RefundLimitExceededError();
     }
 
-    const manual = await tx.manualRefund.upsert({
-      where: { paymentId: payment.id },
-      create: {
+    const manual = await tx.manualRefund.create({
+      data: {
         paymentId: payment.id,
         bookingId: payment.bookingId,
         amount: opts.amount,
         currency: payment.currency,
         reason: opts.reason ?? null,
         idempotencyKey: opts.idempotencyKey,
-      },
-      update: {
-        amount: opts.amount,
-        status: "pending",
-        reason: opts.reason ?? null,
-        failureReason: null,
-        processedBy: null,
-        processedAt: null,
       },
     });
     return { id: manual.id, status: manual.status };

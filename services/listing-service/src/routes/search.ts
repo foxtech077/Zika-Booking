@@ -271,8 +271,11 @@ export async function searchRoutes(app: FastifyInstance) {
       latRef = next();
       params.push(lat);
       if (radiusKm || adaptive) {
+        // Listings without coordinates bypass the radius filter instead of
+        // being dropped from results. When ranking by distance, the COALESCE
+        // sentinel in distance_km sorts them after every located result.
         push(
-          `(l.location IS NOT NULL AND public.ST_DWithin(l.location, public.ST_SetSRID(public.ST_MakePoint(${lngRef}, ${latRef}), 4326)::public.geography, ${next()}))`,
+          `(l.location IS NULL OR public.ST_DWithin(l.location, public.ST_SetSRID(public.ST_MakePoint(${lngRef}, ${latRef}), 4326)::public.geography, ${next()}))`,
           (radiusKm ?? ADAPTIVE_TIERS_KM[0]!) * 1000,
         );
         // The tier loop below rebinds this single value; indexes of every
@@ -301,6 +304,8 @@ export async function searchRoutes(app: FastifyInstance) {
     const pointExpr = hasGeo && lngRef && latRef
       ? `public.ST_SetSRID(public.ST_MakePoint(${lngRef}, ${latRef}), 4326)::public.geography`
       : null;
+    // Unlocated listings get the sentinel distance, which puts them last
+    // under ORDER BY distance ASC rather than excluding them.
     const distanceExpr = pointExpr
       ? `COALESCE(public.ST_Distance(l.location, ${pointExpr}) / 1000, 999999) AS distance_km`
       : "NULL::double precision AS distance_km";
