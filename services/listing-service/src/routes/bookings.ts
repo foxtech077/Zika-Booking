@@ -10,7 +10,6 @@ import { ipDetect } from "../middleware/ipDetect.js";
 import { getPricing } from "../services/pricing.services.js";
 import { getPaymentProvider, triggerPaymentRefund, generateRefundIdempotencyKey } from "../services/payment.services.js";
 import { calculateBilling, SERVICE_FEE_RATE } from "../services/billing.service.js";
-import { getTaxRate } from "../services/getTaxRate.services.js";
 import { VoucherDiscountType } from "../generated/index.js";
 import { logLoyaltyTransaction } from "./loyalty.js";
 import { convertCurrency } from "../services/fx.services";
@@ -414,7 +413,6 @@ export async function bookingRoutes(app: FastifyInstance) {
           subtotal: true,
           discountAmount: true,
           serviceFee: true,
-          taxAmount: true,
           deliveryFee: true,
           securityDeposit: true,
           nightsOrDays: true,
@@ -746,7 +744,6 @@ export async function bookingRoutes(app: FastifyInstance) {
       deliveryFee: body.deliveryRequested ? Number(listing.deliveryFee ?? 0) : 0,
       promotionDiscount,
       voucherAmount: 0,
-      taxRate: getTaxRate(listing.country),
       commissionRate,
       securityDeposit: Number(listing.securityDeposit ?? 0),
       driverProvided: Boolean(listing.driverProvided),
@@ -762,7 +759,6 @@ export async function bookingRoutes(app: FastifyInstance) {
         promotionDiscount: billing.promotionDiscount,
         voucherDiscount: billing.voucherDiscount,
         serviceFee: billing.serviceFee,
-        taxAmount: billing.taxAmount,
         deliveryFee: billing.deliveryFee,
         securityDeposit: billing.securityDeposit,
         totalAmount: billing.totalAmount,
@@ -778,7 +774,6 @@ export async function bookingRoutes(app: FastifyInstance) {
         promotionDiscount: billing.promotionDiscount,
         voucherDiscount: billing.voucherDiscount,
         serviceFee: billing.serviceFee,
-        taxAmount: billing.taxAmount,
         deliveryFee: billing.deliveryFee,
         securityDeposit: billing.securityDeposit,
         totalAmount: billing.totalAmount,
@@ -792,14 +787,12 @@ export async function bookingRoutes(app: FastifyInstance) {
       promotionDiscount: billing.promotionDiscount,
       voucherDiscount: billing.voucherDiscount,
       serviceFee: billing.serviceFee,
-      taxAmount: billing.taxAmount,
       deliveryFee: billing.deliveryFee,
       securityDeposit: billing.securityDeposit,
       totalAmount: billing.totalAmount,
       currency: listing.currency,
       commissionRate,
       serviceFeeRate: SERVICE_FEE_RATE,
-      taxRate: getTaxRate(listing.country),
       // Generic platform-currency snapshot (charge currency + reference
       // guest-local amounts). The charge is always listing → platform.
       platformCurrency: platformSnap.platformCurrency,
@@ -1167,7 +1160,6 @@ export async function bookingRoutes(app: FastifyInstance) {
           promotionDiscount,
           voucherAmount: 0,
 
-          taxRate: getTaxRate(listing.country),
 
           commissionRate,
           securityDeposit: Number(listing.securityDeposit ?? 0),
@@ -1184,7 +1176,6 @@ export async function bookingRoutes(app: FastifyInstance) {
             promotionDiscount: billing.promotionDiscount,
             voucherDiscount: billing.voucherDiscount,
             serviceFee: billing.serviceFee,
-            taxAmount: billing.taxAmount,
             deliveryFee: billing.deliveryFee,
             securityDeposit: billing.securityDeposit,
             totalAmount: billing.totalAmount,
@@ -1200,7 +1191,6 @@ export async function bookingRoutes(app: FastifyInstance) {
             promotionDiscount: billing.promotionDiscount,
             voucherDiscount: billing.voucherDiscount,
             serviceFee: billing.serviceFee,
-            taxAmount: billing.taxAmount,
             deliveryFee: billing.deliveryFee,
             securityDeposit: billing.securityDeposit,
             totalAmount: billing.totalAmount,
@@ -1214,14 +1204,12 @@ export async function bookingRoutes(app: FastifyInstance) {
           promotionDiscount: billing.promotionDiscount,
           voucherDiscount: billing.voucherDiscount,
           serviceFee: billing.serviceFee,
-          taxAmount: billing.taxAmount,
           deliveryFee: billing.deliveryFee,
           securityDeposit: billing.securityDeposit,
           totalAmount: billing.totalAmount,
           currency: listing.currency,
           commissionRate,
           serviceFeeRate: SERVICE_FEE_RATE,
-          taxRate: getTaxRate(listing.country),
           // Generic platform-currency snapshot (charge currency + reference
           // guest-local amounts). The charge is always listing → platform.
           platformCurrency: platformSnap.platformCurrency,
@@ -1621,7 +1609,6 @@ export async function bookingRoutes(app: FastifyInstance) {
           deliveryFee: body.deliveryRequested ? Number(listing.deliveryFee ?? 0) : 0,
           promotionDiscount: 0,
           voucherAmount: 0,
-          taxRate: getTaxRate(listing.country),
           commissionRate,
           driverProvided: Boolean(listing.driverProvided),
         });
@@ -1827,7 +1814,6 @@ export async function bookingRoutes(app: FastifyInstance) {
           promotionDiscount,
           voucherAmount: voucherDiscount,
           pointsDiscount,
-          taxRate: getTaxRate(listing.country),
           commissionRate,
           securityDeposit,
         });
@@ -1859,7 +1845,6 @@ export async function bookingRoutes(app: FastifyInstance) {
           pointsDiscount,
           serviceFee: finalBilling.serviceFee,
           serviceFeeRate: SERVICE_FEE_RATE,
-          taxAmount: finalBilling.taxAmount,
           deliveryFee,
           securityDeposit,
           discountAmount,
@@ -1975,7 +1960,6 @@ export async function bookingRoutes(app: FastifyInstance) {
             discountAmount,
             deliveryFee,
             serviceFee: finalBilling.serviceFee,
-            taxAmount: finalBilling.taxAmount,
             securityDeposit,
 
             currency: listing.currency ?? "USD",
@@ -2397,7 +2381,6 @@ export async function bookingRoutes(app: FastifyInstance) {
         //     baseAmount: Number((Number(booking.subtotal) + Number(booking.discountAmount)).toFixed(2)),
         //     discount: Number(booking.discountAmount),
         //     serviceFee: Number(booking.serviceFee),
-        //     taxAmount: Number(booking.taxAmount),
         //     deliveryFee: Number(booking.deliveryFee),
         //     totalAmount: Number(booking.totalAmount),
         //     commissionRate: Number(booking.commissionRate),
@@ -2806,7 +2789,6 @@ export async function bookingRoutes(app: FastifyInstance) {
       deliveryFee: Number(booking.deliveryFee),
       serviceFee: Number(booking.serviceFee),
       serviceFeeRate: snapBreakdown?.serviceFeeRate != null ? Number(snapBreakdown.serviceFeeRate) : SERVICE_FEE_RATE,
-      taxAmount: Number(booking.taxAmount),
       securityDeposit: Number(booking.securityDeposit ?? 0),
       voucherCode: booking.voucherCode ?? null,
       voucherDiscount: Number(booking.voucherDiscount),
@@ -3669,7 +3651,6 @@ export async function bookingRoutes(app: FastifyInstance) {
           promotionDiscount: Math.max(0, Number(booking.discountAmount) - Number(booking.voucherDiscount) - Number(booking.pointsDiscount)),
           voucherAmount: Number(booking.voucherDiscount),
           pointsDiscount: Number(booking.pointsDiscount),
-          taxRate: getTaxRate(booking.listing.country),
           commissionRate: rate,
           securityDeposit: Number(booking.securityDeposit ?? 0),
         });

@@ -29,6 +29,8 @@ import PriceRangeFields from "./components/PriceRangeFields";
 import type { PublicListingDetail } from "@/types";
 import { isTaraCountry } from "@zika/types";
 import { geocodePlaceText, getSearchOrigin } from "@/lib/geo";
+import { PlaceAutocomplete } from "@/components/maps/PlaceAutocomplete";
+import type { ResolvedPlace } from "@/lib/google-maps";
 
 // Accent-insensitive matching: strips diacritics so "makepe" matches "Maképé".
 function normalizeText(value: string): string {
@@ -126,13 +128,6 @@ interface WalletVoucher {
 
 
 
-
-// Tax rates by country (VAT %)
-const TAX_RATES: Record<string, number> = {
-  Kenya: 0.16, Nigeria: 0.075, Ghana: 0.125, Tanzania: 0.18,
-  Uganda: 0.18, "South Africa": 0.15, Rwanda: 0.18, Ethiopia: 0.15,
-  Zambia: 0.16, Zimbabwe: 0.15, Egypt: 0.14,
-};
 
 const AMENITY_LABELS: Record<string, string> = {
   wifi: "High-Speed Wi-Fi", "Connectivity:wifi": "High-Speed Wi-Fi",
@@ -276,6 +271,7 @@ export default function TravellerDashboard() {
   // Search Context
   const [searchCategory, setSearchCategory] = useState<"hotel" | "apartment" | "car">("hotel");
   const [searchDestination, setSearchDestination] = useState<string>("");
+  const [selectedSearchPlace, setSelectedSearchPlace] = useState<ResolvedPlace | null>(null);
   const [searchCheckIn, setSearchCheckIn] = useState<string>("");
   const [searchCheckOut, setSearchCheckOut] = useState<string>("");
   const [searchPickupDate, setSearchPickupDate] = useState<string>("");
@@ -309,8 +305,12 @@ export default function TravellerDashboard() {
   // Search Results + pagination
   const [listings, setListings] = useState<PublicListingDetail[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [searchOffset, setSearchOffset] = useState(0);
+  const [searchOffset, setSearchOffset] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Query params of the most recent search, minus the cursor. Load more
+  // replays them unchanged so page 2 runs the same query as page 1, even
+  // if the selected place or destination text changed since.
+  const lastSearchBaseRef = useRef<Record<string, any> | null>(null);
   const [mapHoveredId, setMapHoveredId] = useState<string | null>(null);
 
   // Details & Checkout context
@@ -923,7 +923,6 @@ export default function TravellerDashboard() {
           baseAmount: estimatedPricing.baseAmount,
           serviceFee: estimatedPricing.serviceFee,
           commissionRate: estimatedPricing.commissionRate,
-          taxAmount: estimatedPricing.taxAmount,
           promotionDiscount: estimatedPricing.promotionDiscount,
           totalAmount: estimatedPricing.totalAmount,
         });
@@ -1119,70 +1118,34 @@ export default function TravellerDashboard() {
     // Clear stale listings immediately so the grid never shows results from a previous search
     setListings([]);
 
-    // Priority: explicit override (popular destination click) → user input → default
-    const queryText = destinationOverride?.trim() || searchDestination.trim() || "Nairobi, Kenya";
-    // Flag: is this a real user-typed text search (not a programmatic global browse)?
-    const isTextSearch = !!(destinationOverride?.trim() || searchDestination.trim());
+    // An explicit override is plain text. Only a selected autocomplete place
+    // receives geographic intent; an empty value is browse mode.
+    const queryText = destinationOverride?.trim() || searchDestination.trim();
+    const isTextSearch = !!queryText;
+    const isPlaceSearch = !destinationOverride && !!queryText && !!selectedSearchPlace
+      && searchDestination.trim() === queryText;
 
     try {
-      // Geocode destination → lat/lng via Nominatim (free, no API key).
-      // Geocoding succeeding means the typed destination is a real place, which
-      // unlocks the backend's "nearby" fallback. If it fails, the search runs
-      // text-only so an unresolved/junk term never returns the whole category.
-      let lat: number | undefined;
-      let lng: number | undefined;
-      let geoResolved = false;
-
-      const destinationLower = queryText.toLowerCase();
-
-      // Fast-path for common cities — avoids a network round-trip
-      if (destinationLower.includes("mombasa")) {
-        lat = -3.9820; lng = 39.7260; geoResolved = true;
-      } else if (destinationLower.includes("nairobi") || destinationLower.includes("kenya")) {
-        lat = -1.2921; lng = 36.8219; geoResolved = true;
-      } else if (destinationLower.includes("paris")) {
-        lat = 48.8566; lng = 2.3522; geoResolved = true;
-      }
-
-      if (queryText && lat === undefined) {
-        // Place-shaped geocodes only (cities, towns, regions). A hotel name
-        // like "abacus" also geocodes — to some business on another continent —
-        // and must never become the anchor; it stays a pure text search.
-        const place = await geocodePlaceText(queryText);
-        if (place) {
-          lat = place.lat;
-          lng = place.lng;
-          geoResolved = true;
-        }
-      }
-
-      // Build search params.
-      //   Text search, resolved place  → q + place_resolved=true + geocoded
-      //     coords → backend ranks exact → partial → nearby around the place.
-      //   Text search, unresolved term → q + place_resolved=false, no coords →
-      //     backend returns exact/partial text matches only (never the category).
-      //   Programmatic global browse   → global radius, nearest-first.
       const isGlobalBrowse = !e && !searchDestination.trim() && !destinationOverride;
       const params: Record<string, any> = {
         category: activeCategory,
-        limit: 100, // Fetch a large batch so the client-side filter has enough candidates
+        limit: 20,
+        search_mode: isPlaceSearch ? "place" : isTextSearch ? "text" : "browse",
       };
 
       if (isTextSearch) {
         params.q = queryText;
-        params.place_resolved = geoResolved ? "true" : "false";
-        if (geoResolved && lat !== undefined && lng !== undefined) {
-          params.lat = lat;
-          params.lng = lng;
-          // No radius: the backend widens the area adaptively (Airbnb-style)
-          // and reports the reach back via `searchArea`.
+        if (isPlaceSearch) {
+          params.place_id = selectedSearchPlace.placeId;
+          params.lat = selectedSearchPlace.lat;
+          params.lng = selectedSearchPlace.lng;
         }
       } else {
         // Browsing with no destination: rank from the visitor's own origin
         // (browser location → timezone city → Nairobi).
         const origin = await getSearchOrigin();
-        params.lat = lat ?? origin.lat;
-        params.lng = lng ?? origin.lng;
+        params.lat = origin.lat;
+        params.lng = origin.lng;
       }
 
       if (searchGuests > 1) params.guests = searchGuests;
@@ -1205,37 +1168,18 @@ export default function TravellerDashboard() {
         if (searchReturnDate) params.return_datetime = searchReturnDate;
       }
 
-      // Call listing search API
+      // Snapshot the params before the request so load more can replay
+      // this exact query with only the cursor advanced.
+      lastSearchBaseRef.current = { ...params };
       const res = await listingApi.get<any>("/search", { params });
       const data = res.data?.data ?? {};
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
       const mapped = results.map(mapSearchResult);
 
-      // Client-side text filter — the definitive gate that ensures ONLY matching listings
-      // are rendered, regardless of what the geo-radius API returned.
-      // Fields matched (any field containing the term wins):
-      //   Hotels / Apartments: name, town, country, address, description
-      //   Cars:                name, town, country, address, description, carMake, carModel
-      let displayListings = mapped;
-      if (isTextSearch && !geoResolved) {
-        const term = queryText.toLowerCase().trim();
-        displayListings = mapped.filter((listing) => {
-          const fields: (string | undefined | null)[] = [
-            listing.name,
-            listing.town,
-            listing.country,
-            listing.address,
-            listing.description,
-          ];
-          if (activeCategory === "car") {
-            fields.push(listing.carMake, listing.carModel);
-          }
-          return fields.some((f) => matchesText(f, term));
-        });
-      }
+      const displayListings = mapped;
 
-      setSearchOffset(0);
-      setTotalCount(isTextSearch ? displayListings.length : (data.totalCount ?? data.availableCount ?? displayListings.length));
+      setSearchOffset(data.nextCursor ?? null);
+      setTotalCount(data.totalCount ?? data.availableCount ?? displayListings.length);
       if (displayListings.length > 0) {
         setListings(displayListings);
         fetchActivePromotion(activeCategory);
@@ -1253,75 +1197,23 @@ export default function TravellerDashboard() {
     }
   }
 
-  // 3b. Load More — append next page of search results, always scoped to the active query
+  // 3b. Load More — append the next page by replaying the exact params of the
+  // active search with only the cursor advanced. Rebuilding params from live
+  // state here could silently switch search mode (place ↔ text) or drop
+  // filters mid-pagination, returning a different result population.
   async function loadMoreListings() {
     if (loadingMore) return;
+    if (!searchOffset || !lastSearchBaseRef.current) return;
     setLoadingMore(true);
-    const nextOffset = searchOffset + 20;
-    const activeQuery = searchDestination.trim();
     try {
-      const destinationLower = activeQuery.toLowerCase();
-      let lat: number | undefined;
-      let lng: number | undefined;
-      let geoResolved = false;
-      if (destinationLower.includes("mombasa")) { lat = -3.982; lng = 39.726; geoResolved = true; }
-      else if (destinationLower.includes("paris")) { lat = 48.8566; lng = 2.3522; geoResolved = true; }
-      else if (destinationLower.includes("nairobi") || destinationLower.includes("kenya")) { lat = -1.2921; lng = 36.8219; geoResolved = true; }
-      else if (activeQuery) {
-        // Place-shaped geocodes only — business names stay a pure text search.
-        const place = await geocodePlaceText(activeQuery);
-        if (place) { lat = place.lat; lng = place.lng; geoResolved = true; }
-      }
-      if (lat === undefined || lng === undefined) {
-        const origin = await getSearchOrigin();
-        lat = origin.lat; lng = origin.lng;
-      }
-      // Stay scoped to the active query — never falls back to the full inventory.
-      const params: Record<string, any> = { category: searchCategory, limit: 100, cursor: nextOffset };
-      if (activeQuery) {
-        params.q = activeQuery;
-        params.place_resolved = geoResolved ? "true" : "false";
-        if (geoResolved) { params.lat = lat; params.lng = lng; }
-      } else {
-        params.lat = lat; params.lng = lng;      }
-      if (searchGuests > 1) params.guests = searchGuests;
-      if (priceMin > 0) params.price_min = priceMin;
-      if (priceMax < PRICE_NO_CAP) params.price_max = priceMax;
-      if (selectedRating) params.rating_min = selectedRating;
-      if (searchCategory === "hotel" && filterStarRating.length) params.star_rating = filterStarRating.join(",");
-      if (searchCategory === "apartment" && filterMaxGuests) params.max_guests_min = filterMaxGuests;
-      if (selectedCancellation) params.cancellation_policy = selectedCancellation;
-      if (showInstantOnly) params.instant_booking = true;
-      if (searchCategory === "car" && filterAirportPickup) params.airport_pickup = true;
-      params.sort = sortBy;
-      if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.flatMap(k => AMENITY_CATEGORY[k] ? [`${AMENITY_CATEGORY[k]}:${k}`, k] : [k]).join(",");
-      if (searchCategory !== "car") {
-        if (searchCheckIn) params.check_in = searchCheckIn;
-        if (searchCheckOut) params.check_out = searchCheckOut;
-      } else {
-        if (searchPickupDate) params.pickup_datetime = searchPickupDate;
-        if (searchReturnDate) params.return_datetime = searchReturnDate;
-      }
-      const res = await listingApi.get<any>("/search", { params });
+      const res = await listingApi.get<any>("/search", {
+        params: { ...lastSearchBaseRef.current, cursor: searchOffset },
+      });
       const data = res.data?.data ?? {};
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
       const mapped = results.map(mapSearchResult);
-      // Apply the same client-side text filter so appended pages are also accurate
-      // (skipped for resolved place searches — backend ranking handles relevance)
-      const filtered = activeQuery && !geoResolved
-        ? mapped.filter((listing) => {
-          const term = activeQuery.toLowerCase();
-          const fields: (string | undefined | null)[] = [
-            listing.name, listing.town, listing.country, listing.address, listing.description,
-          ];
-          if (searchCategory === "car") fields.push(listing.carMake, listing.carModel);
-          return fields.some((f) => matchesText(f, term));
-        })
-        : mapped;
-      if (filtered.length > 0) {
-        setListings((prev) => [...prev, ...filtered]);
-        setSearchOffset(nextOffset);
-      }
+      if (mapped.length > 0) setListings((prev) => [...prev, ...mapped]);
+      setSearchOffset(data.nextCursor ?? null);
     } catch { }
     finally { setLoadingMore(false); }
   }
@@ -2877,7 +2769,6 @@ export default function TravellerDashboard() {
                                   ? Math.max(0, amt(estimatedPricing.localizedBaseAmount, estimatedPricing.baseAmount)
                                     - amt(estimatedPricing.localizedPromotionDiscount, estimatedPricing.promotionDiscount ?? 0))
                                   + amt(estimatedPricing.localizedServiceFee, estimatedPricing.serviceFee ?? 0)
-                                  + amt(estimatedPricing.localizedTaxAmount, estimatedPricing.taxAmount ?? 0)
                                   + amt(estimatedPricing.localizedDeliveryFee, estimatedPricing.deliveryFee ?? 0)
                                   + amt(estimatedPricing.localizedSecurityDeposit, estimatedPricing.securityDeposit ?? 0)
                                   : estimatedPricing.totalAmount;
@@ -2903,12 +2794,6 @@ export default function TravellerDashboard() {
                                       <span>Service fee{estimatedPricing.serviceFeeRate ? ` (${Math.round(estimatedPricing.serviceFeeRate * 100)}%)` : ''}</span>
                                       <span>{money(estimatedPricing.localizedServiceFee, estimatedPricing.serviceFee)}</span>
                                     </div>
-                                    {estimatedPricing.taxAmount > 0 && (
-                                      <div className="flex justify-between text-slate-500">
-                                        <span>Taxes{estimatedPricing.taxRate ? ` (${Math.round(estimatedPricing.taxRate * 100)}%)` : ''}</span>
-                                        <span>{money(estimatedPricing.localizedTaxAmount, estimatedPricing.taxAmount)}</span>
-                                      </div>
-                                    )}
                                     {/* Delivery is part of totalAmount server-side. Without this row
                                     the itemised lines did not add up to the total shown below. */}
                                     {estimatedPricing.deliveryFee != null && estimatedPricing.deliveryFee > 0 && (
@@ -3006,7 +2891,6 @@ export default function TravellerDashboard() {
                             const discount = pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0);
                             const subtotal = base - discount;
                             const serviceFee = pricingPreview.serviceFee;
-                            const taxAmount = pricingPreview.taxAmount;
                             const securityDeposit = isCar ? (pricingPreview.securityDeposit ?? 0) : 0;
                             const deliveryFee = pricingPreview.deliveryFee ?? 0;
                             const grandTotal = pricingPreview.totalAmount;
@@ -3038,7 +2922,6 @@ export default function TravellerDashboard() {
                               ? Math.max(0, dispAmt(pricingPreview.localizedBaseAmount, base)
                                 - dispAmt(pricingPreview.localizedPromotionDiscount, discount))
                               + dispAmt(pricingPreview.localizedServiceFee, serviceFee)
-                              + dispAmt(pricingPreview.localizedTaxAmount, taxAmount)
                               + dispAmt(pricingPreview.localizedSecurityDeposit, securityDeposit)
                               + dispAmt(pricingPreview.localizedDeliveryFee, deliveryFee)
                               : grandTotal;
@@ -3101,12 +2984,6 @@ export default function TravellerDashboard() {
                                     <span>Service fee{pricingPreview?.serviceFeeRate ? ` (${Math.round(pricingPreview.serviceFeeRate * 100)}%)` : ''}</span>
                                     <span>{dispValue(pricingPreview.localizedServiceFee, serviceFee)}</span>
                                   </div>
-                                  {taxAmount > 0 && (
-                                    <div className="flex justify-between text-slate-500">
-                                      <span>Taxes & VAT{pricingPreview?.taxRate ? ` (${Math.round(pricingPreview.taxRate * 100)}%)` : ''}</span>
-                                      <span>{dispValue(pricingPreview.localizedTaxAmount, taxAmount)}</span>
-                                    </div>
-                                  )}
 
                                   {isCar && securityDeposit > 0 && (
                                     <div className="flex justify-between text-slate-600">
@@ -3206,7 +3083,6 @@ export default function TravellerDashboard() {
                               const discount = pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0);
                               const subtotal = baseTotal - discount;
                               const serviceFee = pricingPreview.serviceFee;
-                              const taxAmount = pricingPreview.taxAmount ?? 0;
                               const securityDeposit = isCar ? (pricingPreview.securityDeposit ?? 0) : 0;
                               const deliveryFee = pricingPreview.deliveryFee ?? 0;
                               const grandTotal = pricingPreview.totalAmount;
@@ -3233,7 +3109,6 @@ export default function TravellerDashboard() {
                                 ? Math.max(0, dispAmt(pricingPreview.localizedBaseAmount, baseTotal)
                                   - dispAmt(pricingPreview.localizedPromotionDiscount, discount))
                                 + dispAmt(pricingPreview.localizedServiceFee, serviceFee)
-                                + dispAmt(pricingPreview.localizedTaxAmount, taxAmount)
                                 + dispAmt(pricingPreview.localizedSecurityDeposit, securityDeposit)
                                 + dispAmt(pricingPreview.localizedDeliveryFee, deliveryFee)
                                 : grandTotal;
@@ -3250,12 +3125,6 @@ export default function TravellerDashboard() {
                                     </div>
                                   )}
                                   <div className="flex justify-between"><span>Service fee{pricingPreview?.serviceFeeRate ? ` (${Math.round(pricingPreview.serviceFeeRate * 100)}%)` : ''}</span><span>{dispValue(pricingPreview.localizedServiceFee, serviceFee)}</span></div>
-                                  {taxAmount > 0 && (
-                                    <div className="flex justify-between text-slate-500">
-                                      <span>Taxes{pricingPreview?.taxRate ? ` (${Math.round(pricingPreview.taxRate * 100)}%)` : ''}</span>
-                                      <span>{dispValue(pricingPreview.localizedTaxAmount, taxAmount)}</span>
-                                    </div>
-                                  )}
                                   {isCar && securityDeposit > 0 && (
                                     <div className="flex justify-between text-slate-600">
                                       <span>Security deposit</span>
@@ -3529,7 +3398,18 @@ export default function TravellerDashboard() {
 
                     {/* Destination */}
                     <div className="relative flex-[2] min-w-0">
-                      <div className="flex items-center gap-2 px-5 py-4 md:border-r border-slate-200">
+                      <PlaceAutocomplete
+                        value={searchDestination}
+                        onChange={(value) => {
+                          setSearchDestination(value);
+                          setSelectedSearchPlace(null);
+                        }}
+                        onResolved={setSelectedSearchPlace}
+                        label="Where to?"
+                        placeholder="Destination or listing name"
+                        className="px-5 py-3 md:border-r border-slate-200"
+                      />
+                      {false && <div className="hidden">
                         <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -3566,9 +3446,9 @@ export default function TravellerDashboard() {
                             className="w-full bg-transparent border-none outline-none text-sm font-semibold text-slate-800 placeholder-slate-400"
                           />
                         </div>
-                      </div>
-                      {/* Autocomplete dropdown */}
-                      {showSuggestions && (nominatimResults.length > 0 || apiSuggestions.filter(s => s.toLowerCase().includes(searchDestination.toLowerCase())).length > 0) && (
+                      </div>}
+                      {/* Legacy autocomplete disabled; Google Places is authoritative. */}
+                      {false && showSuggestions && (nominatimResults.length > 0 || apiSuggestions.filter(s => s.toLowerCase().includes(searchDestination.toLowerCase())).length > 0) && (
                         <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200/80 rounded-2xl shadow-2xl z-50 overflow-hidden max-h-56 overflow-y-auto">
                           {nominatimResults.length > 0 ? nominatimResults.map((r, i) => (
                             <button key={i} type="button"
@@ -5019,5 +4899,3 @@ export default function TravellerDashboard() {
     </div>
   );
 }
-
-

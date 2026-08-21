@@ -33,6 +33,7 @@ export async function searchRoutes(app: FastifyInstance) {
     // text query returns exact/partial matches only so junk never returns
     // the entire category.
     const placeResolved = q["place_resolved"] === "true";
+    const requestedSearchMode = q["search_mode"];
     // Radius is optional — when omitted, results are ranked nearest-first with
     // no distance cap (the historical 20000km default that faked a global sort).
     const radiusKm = q["radius_km"] ? parseInt(q["radius_km"], 10) : undefined;
@@ -48,6 +49,19 @@ export async function searchRoutes(app: FastifyInstance) {
     const sort = q["sort"] ?? "recommended";
     const limit = Math.min(parseInt(q["limit"] ?? "20", 10), 50);
     const cursor = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
+
+    // Keep autocomplete intent separate from free text. A typed value that was
+    // never selected must not become a geographic search by accident.
+    const searchMode = requestedSearchMode ?? (textQuery ? (placeResolved ? "place" : "text") : "browse");
+    if (!["place", "text", "browse"].includes(searchMode)) {
+      return sendError(reply, 400, "INVALID_PARAMS", "search_mode must be place, text, or browse.");
+    }
+    if (searchMode === "place" && (!textQuery || !Number.isFinite(lat) || !Number.isFinite(lng))) {
+      return sendError(reply, 400, "INVALID_PARAMS", "place searches require a selected place and coordinates.");
+    }
+    if (searchMode === "text" && !textQuery) {
+      return sendError(reply, 400, "INVALID_PARAMS", "text searches require q.");
+    }
 
     // Filters — common
     const priceMin = q["price_min"] ? parseFloat(q["price_min"]) : undefined;
@@ -239,8 +253,8 @@ export async function searchRoutes(app: FastifyInstance) {
     // mode (exact/partial matches only) so an unresolved/junk term never
     // returns the whole category disguised as "nearby".
     const hasGeoCoords = Number.isFinite(lat) && Number.isFinite(lng);
-    const textOnly = !!textQuery && !(placeResolved && hasGeoCoords);
-    const hasGeo = hasGeoCoords && !textOnly;
+    const textOnly = searchMode === "text";
+    const hasGeo = hasGeoCoords && searchMode !== "text";
     let lngRef: string | null = null;
     let latRef: string | null = null;
     // Airbnb-style adaptive area: when the caller gives an anchor but no
@@ -257,6 +271,9 @@ export async function searchRoutes(app: FastifyInstance) {
       latRef = next();
       params.push(lat);
       if (radiusKm || adaptive) {
+        // Listings without coordinates bypass the radius filter instead of
+        // being dropped from results. When ranking by distance, the COALESCE
+        // sentinel in distance_km sorts them after every located result.
         push(
           `(l.location IS NULL OR public.ST_DWithin(l.location, public.ST_SetSRID(public.ST_MakePoint(${lngRef}, ${latRef}), 4326)::public.geography, ${next()}))`,
           (radiusKm ?? ADAPTIVE_TIERS_KM[0]!) * 1000,
@@ -273,7 +290,7 @@ export async function searchRoutes(app: FastifyInstance) {
     if (textQuery) {
       const normQ = `public.f_unaccent(lower(${next()}))`;
       params.push(textQuery);
-      const fields = ["l.name", "l.town", "l.neighborhood", "l.address"];
+      const fields = ["l.name", "l.town", "l.neighborhood", "l.address", "l.description", "l.car_make", "l.car_model"];
       const exact = fields.map((f) => `public.f_unaccent(lower(${f})) = ${normQ}`);
       const partial = fields.map((f) => `public.f_unaccent(lower(${f})) LIKE '%' || ${normQ} || '%'`);
       textRankExpr = `CASE WHEN ${exact.join(" OR ")} THEN 0 WHEN ${partial.join(" OR ")} THEN 1 ELSE 2 END AS text_rank`;
@@ -287,6 +304,8 @@ export async function searchRoutes(app: FastifyInstance) {
     const pointExpr = hasGeo && lngRef && latRef
       ? `public.ST_SetSRID(public.ST_MakePoint(${lngRef}, ${latRef}), 4326)::public.geography`
       : null;
+    // Unlocated listings get the sentinel distance, which puts them last
+    // under ORDER BY distance ASC rather than excluding them.
     const distanceExpr = pointExpr
       ? `COALESCE(public.ST_Distance(l.location, ${pointExpr}) / 1000, 999999) AS distance_km`
       : "NULL::double precision AS distance_km";
@@ -623,8 +642,10 @@ export async function searchRoutes(app: FastifyInstance) {
           delivery: { type: "string", enum: ["true", "false"], description: "Filter by delivery availability" },
           airport_pickup: { type: "string", enum: ["true", "false"], description: "Car filter: only listings offering airport pickup" },
           instant_booking: { type: "string", enum: ["true", "false"], description: "Filter listings that support instant booking" },
-          currency: { type: "string", description: "ISO 4217 currency code for localized prices (e.g. KES, NGN, USD)" },
-        },
+           currency: { type: "string", description: "ISO 4217 currency code for localized prices (e.g. KES, NGN, USD)" },
+          search_mode: { type: "string", enum: ["place", "text", "browse"], description: "Search intent. place requires coordinates, text requires q, browse is used without a destination." },
+          place_id: { type: "string", description: "Google Places ID for the selected destination" },
+         },
         required: ["category"],
       },
     },

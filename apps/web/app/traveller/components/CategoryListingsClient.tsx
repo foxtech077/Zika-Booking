@@ -14,7 +14,9 @@ import PriceRangeFields from "./PriceRangeFields";
 import type { PublicListingDetail } from "@/types";
 import { ActivityPromoBanner } from "./PromoBanner";
 import { isPromotionValid, type ActivePromotion } from "../utils/promo-utils";
-import { geocodePlaceText, getSearchOrigin } from "@/lib/geo";
+import { getSearchOrigin } from "@/lib/geo";
+import { PlaceAutocomplete } from "@/components/maps/PlaceAutocomplete";
+import type { ResolvedPlace } from "@/lib/google-maps";
 
 /* ── lazy-loaded map ──────────────────────────────────────────── */
 const MapView = dynamic(() => import("./MapView"), { ssr: false });
@@ -119,27 +121,6 @@ const SORT_OPTIONS = [
 /* ── helpers ─────────────────────────────────────────────────── */
 function today() {
   return new Date().toISOString().slice(0, 10);
-}
-
-async function geocodeDestination(q: string): Promise<{ lat: number; lng: number } | null> {
-  const lower = q.toLowerCase();
-  // Fast-path for common cities — avoids a network round-trip.
-  if (lower.includes("nairobi") || lower.includes("kenya")) return { lat: -1.2921, lng: 36.8219 };
-  if (lower.includes("mombasa")) return { lat: -3.982, lng: 39.726 };
-  if (lower.includes("dubai")) return { lat: 25.2048, lng: 55.2708 };
-  if (lower.includes("cape town")) return { lat: -33.9249, lng: 18.4241 };
-  if (lower.includes("zanzibar")) return { lat: -6.1659, lng: 39.2026 };
-  if (lower.includes("kampala")) return { lat: 0.3476, lng: 32.5825 };
-  if (lower.includes("kigali")) return { lat: -1.9441, lng: 30.0619 };
-  if (lower.includes("dar es salaam")) return { lat: -6.7924, lng: 39.2083 };
-  if (lower.includes("lagos")) return { lat: 6.5244, lng: 3.3792 };
-  if (lower.includes("accra")) return { lat: 5.6037, lng: -0.1870 };
-  // Accept only place-shaped geocodes (cities, towns, regions). A hotel or
-  // business name that happens to geocode somewhere must NOT become the search
-  // anchor — that is how a query for "abacus" got pinned to California. Null
-  // here means "search by text alone".
-  const place = await geocodePlaceText(q);
-  return place ? { lat: place.lat, lng: place.lng } : null;
 }
 
 function mapListing(l: any): PublicListingDetail {
@@ -810,6 +791,7 @@ export default function CategoryListingsClient({ category }: Props) {
 
   /* ── search bar state (read initial values from URL) ──────── */
   const [destination, setDestination] = useState(sp.get("q") || "");
+  const [selectedPlace, setSelectedPlace] = useState<ResolvedPlace | null>(null);
   const [checkIn, setCheckIn] = useState(sp.get("checkin") || "");
   const [checkOut, setCheckOut] = useState(sp.get("checkout") || "");
   const [pickupDate, setPickupDate] = useState(sp.get("pickup") || "");
@@ -858,11 +840,6 @@ export default function CategoryListingsClient({ category }: Props) {
   const [showFiltersDrawer, setShowFiltersDrawer] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-
-  /* ── destination autocomplete ─────────────────────────────── */
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* ── refs ─────────────────────────────────────────────────── */
   const filterDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -917,35 +894,29 @@ export default function CategoryListingsClient({ category }: Props) {
     // Use destOverride when provided (e.g. Load More must stay scoped to the active query)
     const dest = typeof destOverride === "string" ? destOverride : destination.trim();
 
-    // Destination typed → anchor on it only when it geocodes to a real place.
-    // Otherwise (and for plain browsing) rank from the visitor's own origin:
-    // browser location → timezone city → Nairobi.
-    const destPlace = dest ? await geocodeDestination(dest) : null;
-    const { lat, lng } = destPlace ?? (await getSearchOrigin());
-
-    // Fetch a large batch for destination-based searches.
-    const effectiveLimit = dest ? 100 : PAGE_SIZE;
+    // A selected autocomplete place is geographic. Unselected text is strict
+    // text search; only an empty destination uses visitor-origin browsing.
+    const isPlaceSearch = !!dest && !!selectedPlace && dest === destination.trim();
+    const origin = !dest ? await getSearchOrigin() : null;
 
     const params: Record<string, any> = {
       category,
-      limit: effectiveLimit,
+      limit: PAGE_SIZE,
       cursor: newOffset,
-      lat,
-      lng,
-      // No radius: the backend widens the search area adaptively and reports
-      // the reach back via `searchArea` (rendered as a notice when expanded).
       sort: sortBy,
+      search_mode: isPlaceSearch ? "place" : dest ? "text" : "browse",
     };
 
-    // Send the destination box as a real text filter. Previously it was only
-    // geocoded into lat/lng, and since every text search uses a global radius
-    // the coordinates had no narrowing effect — so the full category came back
-    // regardless of what was typed.
     if (dest) {
       params.q = dest;
-      // Unlocks the backend's nearby-fallback around the place; without it a
-      // text query is matched by text alone (correct for business names).
-      params.place_resolved = destPlace ? "true" : "false";
+      if (isPlaceSearch) {
+        params.place_id = selectedPlace.placeId;
+        params.lat = selectedPlace.lat;
+        params.lng = selectedPlace.lng;
+      }
+    } else if (origin) {
+      params.lat = origin.lat;
+      params.lng = origin.lng;
     }
 
     if (guests > 1) params.guests = guests;
@@ -1122,31 +1093,10 @@ export default function CategoryListingsClient({ category }: Props) {
   }, [sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ─────────────────────────────────────────────────────────── */
-  /* Destination autocomplete via Nominatim                      */
-  /* ─────────────────────────────────────────────────────────── */
-  function handleDestinationChange(v: string) {
-    setDestination(v);
-    if (suggestTimer.current) clearTimeout(suggestTimer.current);
-    if (v.length < 2) { setSuggestions([]); setShowSuggestions(false); return; }
-    suggestTimer.current = setTimeout(async () => {
-      try {
-        const r = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(v)}&format=json&limit=5&addressdetails=0`,
-          { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } }
-        );
-        const d = await r.json();
-        setSuggestions(d.map((x: any) => x.display_name).slice(0, 5));
-        setShowSuggestions(true);
-      } catch { setSuggestions([]); }
-    }, 350);
-  }
-
-  /* ─────────────────────────────────────────────────────────── */
   /* Search submit                                               */
   /* ─────────────────────────────────────────────────────────── */
   function handleSearch(e?: React.FormEvent) {
     e?.preventDefault();
-    setShowSuggestions(false);
     router.replace(buildUrl(), { scroll: false });
     // Pass current destination explicitly so the search is always scoped to the
     // user's typed term (not a stale closure value).
@@ -1159,8 +1109,7 @@ export default function CategoryListingsClient({ category }: Props) {
   /* ─────────────────────────────────────────────────────────── */
   function handleClearSearch() {
     setDestination("");
-    setSuggestions([]);
-    setShowSuggestions(false);
+    setSelectedPlace(null);
     router.replace(buildUrl(), { scroll: false });
     // Reload default category inventory
     fetchListings(0, false, "");
@@ -1314,53 +1263,16 @@ export default function CategoryListingsClient({ category }: Props) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {/* Destination */}
             <div className="relative lg:col-span-2">
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                {isCar ? "Pickup Location" : "Destination"}
-              </label>
-              <div className="relative flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 gap-2 hover:border-slate-400 focus-within:border-[#1D8D2B] transition-colors">
-                <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  type="text"
-                  value={destination}
-                  onChange={(e) => handleDestinationChange(e.target.value)}
-                  onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-                  placeholder={isCar ? "City, airport, address…" : "City, country or property…"}
-                  className="flex-1 bg-transparent border-none outline-none text-xs font-medium text-slate-800 placeholder-slate-400 min-w-0"
-                />
-                {destination && (
-                  <button
-                    type="button"
-                    onClick={handleClearSearch}
-                    className="text-slate-300 hover:text-slate-500"
-                    title="Clear search"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-              {/* Autocomplete dropdown */}
-              {showSuggestions && suggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-50 bg-white border border-slate-200 rounded-xl shadow-xl mt-1 overflow-hidden">
-                  {suggestions.map((s, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onMouseDown={() => {
-                        setDestination(s);
-                        setShowSuggestions(false);
-                      }}
-                      className="w-full px-4 py-2.5 text-left text-xs text-slate-700 hover:bg-slate-50 border-b border-slate-100 last:border-0 truncate"
-                    >
-                      📍 {s}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <PlaceAutocomplete
+                value={destination}
+                onChange={(value) => {
+                  setDestination(value);
+                  setSelectedPlace(null);
+                }}
+                onResolved={setSelectedPlace}
+                label={isCar ? "Pickup Location" : "Destination"}
+                placeholder={isCar ? "City, airport, address…" : "City, country or property…"}
+              />
             </div>
 
             {/* Dates */}

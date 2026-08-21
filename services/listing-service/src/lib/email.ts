@@ -187,7 +187,6 @@ export async function sendBookingConfirmationEmail(
     baseAmount: number;
     discount: number;
     serviceFee: number;
-    taxAmount: number;
     deliveryFee: number;
     totalAmount: number;
     commissionRate: number;
@@ -223,7 +222,6 @@ export async function sendBookingConfirmationEmail(
           ${opts.discount > 0 ? `<tr><td style="padding:6px 8px;color:#15803d">Discount</td><td style="padding:6px 8px;text-align:right;color:#15803d">−${opts.currency} ${fmt(opts.discount)}</td></tr>` : ''}
           <tr><td style="padding:6px 8px;border-top:1px solid #e5e7eb;color:#6b7280">Subtotal</td><td style="padding:6px 8px;border-top:1px solid #e5e7eb;text-align:right">${opts.currency} ${fmt(opts.baseAmount - opts.discount)}</td></tr>
           <tr><td style="padding:6px 8px;color:#6b7280">Service fee${commissionPct > 0 ? ` (${commissionPct}%)` : ''}</td><td style="padding:6px 8px;text-align:right">${opts.currency} ${fmt(opts.serviceFee)}</td></tr>
-          ${opts.taxAmount > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Taxes</td><td style="padding:6px 8px;text-align:right">${opts.currency} ${fmt(opts.taxAmount)}</td></tr>` : ''}
           ${opts.deliveryFee > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Delivery fee</td><td style="padding:6px 8px;text-align:right">${opts.currency} ${fmt(opts.deliveryFee)}</td></tr>` : ''}
           <tr><td style="padding:8px;border-top:2px solid #1e293b;font-weight:bold;color:#1e293b">Total Paid</td><td style="padding:8px;border-top:2px solid #1e293b;font-weight:bold;text-align:right">${opts.currency} ${fmt(opts.totalAmount)}</td></tr>
         </table>

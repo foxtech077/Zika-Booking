@@ -359,7 +359,7 @@ async function processSinglePayout(payout: any): Promise<void> {
       // guest charges both use the raw market conversion (no buffer).
       //
       // The payout amount (booking.providerPayout) is the guest total minus the
-      // platform's retained commission, payment-processing fee and tax; it
+      // platform's retained commission and payment-processing fee; it
       // already includes the delivery fee and security deposit passed through
       // to the provider (see billing.service.ts). The security deposit is a
       // refundable hold — the provider receives it at payout and returns it to

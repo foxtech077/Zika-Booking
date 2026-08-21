@@ -502,7 +502,6 @@ enum BookingStatus {
     discountAmount  Decimal  @default(0) @map("discount_amount") @db.Decimal(12, 2)
     deliveryFee     Decimal  @default(0) @map("delivery_fee") @db.Decimal(12, 2)
     serviceFee      Decimal  @default(0) @map("service_fee") @db.Decimal(12, 2)
-    taxAmount       Decimal  @default(0) @map("tax_amount") @db.Decimal(12, 2)
     totalAmount     Decimal  @map("total_amount") @db.Decimal(12, 2)
     currency        String   @db.Char(3)
     securityDeposit Decimal? @map("security_deposit") @db.Decimal(12, 2)
@@ -936,7 +935,6 @@ model CommissionRate {
   @@map("commission_rates")
   @@schema("listing")
 }
-
 
 
 

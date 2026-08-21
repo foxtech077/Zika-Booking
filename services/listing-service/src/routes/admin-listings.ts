@@ -1,7 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { generateReference, getCommissionRate } from "./bookings.js";
-import { getTaxRate } from "../services/getTaxRate.services.js";
 import { calculateBilling } from "../services/billing.service.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
@@ -2320,7 +2319,6 @@ export async function adminListingRoutes(app: FastifyInstance) {
         deliveryFee: 0,
         promotionDiscount: 0,
         voucherAmount: 0,
-        taxRate: getTaxRate(listing.country),
         commissionRate,
       });
 
@@ -2352,7 +2350,6 @@ export async function adminListingRoutes(app: FastifyInstance) {
           discountAmount: 0,
           deliveryFee: 0,
           serviceFee: billing.serviceFee,
-          taxAmount: billing.taxAmount,
 
           currency: listing.currency ?? "USD",
 
@@ -2448,8 +2445,9 @@ export async function adminListingRoutes(app: FastifyInstance) {
                   commissionAmount: { type: "number" },
                   providerPayout: { type: "number" },
                   voucherDiscount: { type: "number", nullable: true },
-                  serviceFee: { type: "number", nullable: true },
-                  taxAmount: { type: "number", nullable: true },
+                   serviceFee: { type: "number", nullable: true },
+                   refundAmount: { type: "number", nullable: true },
+                   cancellationPolicy: { type: "string", nullable: true },
                   cancelledAt: { type: "string", format: "date-time", nullable: true },
                   confirmedAt: { type: "string", format: "date-time", nullable: true },
                   createdAt: { type: "string", format: "date-time" },
@@ -2516,7 +2514,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
             pickupDatetime: true, returnDatetime: true, nightsOrDays: true,
             guestFirstName: true, guestLastName: true, guestEmail: true,
             totalAmount: true, currency: true, commissionAmount: true,
-            providerPayout: true, voucherDiscount: true, serviceFee: true, taxAmount: true,
+             providerPayout: true, voucherDiscount: true, serviceFee: true,
+             refundAmount: true, cancellationPolicy: true,
             cancelledAt: true, confirmedAt: true, createdAt: true,
             listing: { select: { name: true } },
           },
@@ -2569,7 +2568,6 @@ export async function adminListingRoutes(app: FastifyInstance) {
                   amount: { type: "number" },
                   currency: { type: "string" },
                   serviceFee: { type: "number" },
-                  taxAmount: { type: "number" },
                   deliveryFee: { type: "number" },
                   securityDeposit: { type: "number" },
                   commissionRate: { type: "number" },
@@ -2659,7 +2657,6 @@ export async function adminListingRoutes(app: FastifyInstance) {
             totalAmount: true,
             currency: true,
             serviceFee: true,
-            taxAmount: true,
             deliveryFee: true,
             securityDeposit: true,
             commissionRate: true,
@@ -2727,7 +2724,6 @@ export async function adminListingRoutes(app: FastifyInstance) {
           amount: Number(b.totalAmount),
           currency: b.currency,
           serviceFee: Number(b.serviceFee),
-          taxAmount: Number(b.taxAmount),
           deliveryFee: Number(b.deliveryFee),
           securityDeposit: Number(b.securityDeposit),
           commissionRate: Number(b.commissionRate) * 100, // Convert to percentage
@@ -2925,7 +2921,6 @@ export async function adminListingRoutes(app: FastifyInstance) {
         deliveryFee: 0,
         promotionDiscount: 0,
         voucherAmount: 0,
-        taxRate: getTaxRate(listing.country),
         commissionRate,
       });
 
@@ -2941,7 +2936,6 @@ export async function adminListingRoutes(app: FastifyInstance) {
         baseAmount: billing.baseAmount,
         subtotal: billing.subtotal,
         serviceFee: billing.serviceFee,
-        taxAmount: billing.taxAmount,
         commissionRate,
         commissionAmount: billing.commissionAmount,
         providerPayout: billing.providerPayout,
@@ -2985,10 +2979,11 @@ export async function adminListingRoutes(app: FastifyInstance) {
             subtotal: { type: "number" },
             voucherDiscount: { type: "number" },
             deliveryFee: { type: "number" },
-            serviceFee: { type: "number" },
-            taxAmount: { type: "number" },
-            commissionAmount: { type: "number" },
-            providerPayout: { type: "number" },
+             serviceFee: { type: "number" },
+             commissionAmount: { type: "number" },
+             providerPayout: { type: "number" },
+             refundAmount: { type: "number", nullable: true },
+             cancellationPolicy: { type: "string", nullable: true },
 
             listing: {
               type: "object",
@@ -3848,7 +3843,6 @@ export async function adminListingRoutes(app: FastifyInstance) {
           baseAmount: Number((Number(booking.subtotal) + Number(booking.discountAmount)).toFixed(2)),
           discount: Number(booking.discountAmount),
           serviceFee: Number(booking.serviceFee),
-          taxAmount: Number(booking.taxAmount),
           deliveryFee: Number(booking.deliveryFee),
           totalAmount: Number(booking.totalAmount),
           commissionRate: Number(booking.commissionRate),

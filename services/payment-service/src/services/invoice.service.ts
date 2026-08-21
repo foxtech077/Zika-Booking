@@ -41,7 +41,6 @@ export function buildInvoice(booking: any, charge?: InvoiceCharge | null) {
       : Number(booking.subtotal || 0) + discount;
   const baseAmount = grossBase + deliveryFee;
   const serviceFee = Number(booking.serviceFee || 0);
-  const tax = Number(booking.taxAmount || 0);
   const securityDeposit = Number(booking.securityDeposit || 0);
 
   const subtotal = baseAmount - discount;
@@ -54,7 +53,6 @@ export function buildInvoice(booking: any, charge?: InvoiceCharge | null) {
     discount,
     subtotal,
     serviceFee,
-    tax,
     securityDeposit,
     total,
     listingCurrency,

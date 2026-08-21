@@ -22,6 +22,54 @@ export class InvalidPaymentStatusError extends Error {
   }
 }
 
+export async function createManualRefund(
+  payment: { id: string; bookingId: string; amount: unknown; chargedAmount?: unknown; currency: string; status: string },
+  opts: { amount: number; reason?: string | null; idempotencyKey: string },
+): Promise<{ id: string; status: string }> {
+  if (opts.amount <= 0) throw new Error("Refund amount must be greater than zero.");
+  if (!["captured", "partially_refunded"].includes(payment.status)) {
+    throw new InvalidPaymentStatusError(payment.status);
+  }
+
+  // Each accepted request creates its own ManualRefund row so an operator
+  // can process several partial refunds against the same payment over
+  // time. Idempotency is per-request via `idempotencyKey`. The refundable
+  // balance counts committed refunds plus still-pending manual refunds, so
+  // concurrent requests cannot over-commit the charged amount.
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.manualRefund.findUnique({ where: { idempotencyKey: opts.idempotencyKey } });
+    if (existing) return { id: existing.id, status: existing.status };
+
+    await tx.$executeRaw`SELECT 1 FROM payments."Payment" WHERE id = ${payment.id} FOR UPDATE`;
+    const [refundSum, pendingManualSum] = await Promise.all([
+      tx.refund.aggregate({
+        where: { paymentId: payment.id, status: { not: "failed" } },
+        _sum: { amount: true },
+      }),
+      tx.manualRefund.aggregate({
+        where: { paymentId: payment.id, status: "pending" },
+        _sum: { amount: true },
+      }),
+    ]);
+    const alreadyCommitted = Number(refundSum._sum.amount ?? 0) + Number(pendingManualSum._sum.amount ?? 0);
+    if (alreadyCommitted + opts.amount > Number(payment.chargedAmount ?? payment.amount)) {
+      throw new RefundLimitExceededError();
+    }
+
+    const manual = await tx.manualRefund.create({
+      data: {
+        paymentId: payment.id,
+        bookingId: payment.bookingId,
+        amount: opts.amount,
+        currency: payment.currency,
+        reason: opts.reason ?? null,
+        idempotencyKey: opts.idempotencyKey,
+      },
+    });
+    return { id: manual.id, status: manual.status };
+  });
+}
+
 export interface IssueRefundOptions {
   amount: number;
   reason?: string | null;

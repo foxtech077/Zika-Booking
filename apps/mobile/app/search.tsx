@@ -39,6 +39,8 @@ import { useRefreshOnFocus } from "../hooks/useRefreshOnFocus";
 import { CurrencyPickerModal } from "../components/CurrencyPickerModal";
 import { approxPrefix } from "../lib/currency";
 import { useResponsive, padToColumns } from "../lib/responsive";
+import { PlaceAutocomplete } from "../components/maps/PlaceAutocomplete";
+import type { ResolvedPlace } from "../lib/google-maps";
 
 /**
  * The search API returns `COALESCE(ST_Distance(...), 999999)`, so a listing with
@@ -93,30 +95,6 @@ const TEXT = "#111827";
 const MUTED = "#6b7280";
 const BORDER = "#e5e7eb";
 const BG = "#f9fafb";
-
-// Fallback coordinates for common cities (used when geocoding API fails due to auth)
-const CITY_COORDS: Record<
-  string,
-  { lat: number; lng: number; town: string; country: string }
-> = {
-  nairobi: { lat: -1.2921, lng: 36.8219, town: "Nairobi", country: "KE" },
-  mombasa: { lat: -4.0435, lng: 39.6682, town: "Mombasa", country: "KE" },
-  kisumu: { lat: -0.0917, lng: 34.7679, town: "Kisumu", country: "KE" },
-  kampala: { lat: 0.3476, lng: 32.5825, town: "Kampala", country: "UG" },
-  "dar es salaam": {
-    lat: -6.7924,
-    lng: 39.2083,
-    town: "Dar es Salaam",
-    country: "TZ",
-  },
-  lagos: { lat: 6.5244, lng: 3.3792, town: "Lagos", country: "NG" },
-  accra: { lat: 5.6037, lng: -0.187, town: "Accra", country: "GH" },
-  cairo: { lat: 30.0444, lng: 31.2357, town: "Cairo", country: "EG" },
-  dubai: { lat: 25.2048, lng: 55.2708, town: "Dubai", country: "AE" },
-  london: { lat: 51.5074, lng: -0.1278, town: "London", country: "GB" },
-  paris: { lat: 48.8566, lng: 2.3522, town: "Paris", country: "FR" },
-  "new york": { lat: 40.7128, lng: -74.006, town: "New York", country: "US" },
-};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -831,6 +809,7 @@ export default function SearchScreen() {
 
   // Search destination refiner state
   const [searchInput, setSearchInput] = useState(placeName);
+  const [selectedPlace, setSelectedPlace] = useState<ResolvedPlace | null>(null);
 
   // Filter Sheet visible state
   const [filterVisible, setFilterVisible] = useState(false);
@@ -967,33 +946,11 @@ export default function SearchScreen() {
     flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
   }
 
-  // ── Step 1: Geocode (falls back to local city map when API requires auth) ──
-  const { data: geo } = useQuery<GeoResult | null>({
-    queryKey: ["geocode", placeName],
-    queryFn: async () => {
-      if (!placeName) return null;
-      try {
-        const res = await listingApi.get<{ data: GeoResult }>(
-          `/geocode?address=${encodeURIComponent(placeName)}`,
-        );
-        return res.data.data;
-      } catch {
-        // Fall back to known city coordinates
-        const key = placeName.trim().toLowerCase();
-        const fallback = CITY_COORDS[key];
-        if (fallback) return fallback;
-        const prefixMatch = Object.keys(CITY_COORDS).find(
-          (k) => key.startsWith(k) || k.startsWith(key.split(",")[0].trim()),
-        );
-        if (prefixMatch) return CITY_COORDS[prefixMatch]!;
-        // Return null → search.tsx will use global fallback (lat=0,lng=0,radius=20000)
-        return null;
-      }
-    },
-    enabled: true,
-    retry: 0,
-    staleTime: 5 * 60_000,
-  });
+  // Coordinates are available only after an autocomplete selection. Raw text
+  // is never geocoded because it represents a strict text search.
+  const geo: GeoResult | null = selectedPlace
+    ? { lat: selectedPlace.lat, lng: selectedPlace.lng, town: selectedPlace.town, country: selectedPlace.country }
+    : null;
 
   // Sync map center region on searched place coords
   useEffect(() => {
@@ -1054,8 +1011,7 @@ export default function SearchScreen() {
   const searchQueryKey = [
     "search",
     category,
-    geo?.lat ?? fallbackLat,
-    geo?.lng ?? fallbackLng,
+    selectedPlace?.placeId ?? searchInput.trim(),
     sort,
     localCheckIn,
     localCheckOut,
@@ -1083,6 +1039,8 @@ export default function SearchScreen() {
     // the cache identity — without it a currency change serves cached amounts
     // still labelled with the previous currency.
     localCurrency,
+    selectedPlace?.lat,
+    selectedPlace?.lng,
   ];
 
   const {
@@ -1096,36 +1054,29 @@ export default function SearchScreen() {
     queryKey: searchQueryKey,
     queryFn: async () => {
       const qText = searchInput.trim();
-      // A typed destination is "resolved" only when its geocode succeeded AND
-      // the submitted place matches what's currently in the box (geocoding runs
-      // on submit; while the user is still editing, treat as unresolved so the
-      // backend does live partial text matching instead of stale nearby).
-      const placeResolved =
-        !!geo &&
-        placeName.trim().toLowerCase() === searchInput.trim().toLowerCase();
+      const isPlaceSearch = !!qText && !!selectedPlace;
 
       const qp = new URLSearchParams({
-        category,
-        sort,
-        limit: "50",
-      });
+         category,
+         sort,
+         limit: "50",
+          search_mode: isPlaceSearch ? "place" : qText ? "text" : "browse",
+       });
 
       let anchorLat: number | null = null;
       let anchorLng: number | null = null;
 
       if (qText) {
-        // Free-text destination — backend runs accent-insensitive ranking.
-        // Only the geocoded place is a valid anchor; otherwise text-only.
         qp.set("q", qText);
-        qp.set("place_resolved", placeResolved ? "true" : "false");
-        if (placeResolved && geo) {
-          anchorLat = geo.lat;
-          anchorLng = geo.lng;
+        if (isPlaceSearch) {
+          if (selectedPlace.placeId) qp.set("place_id", selectedPlace.placeId);
+          anchorLat = selectedPlace.lat;
+          anchorLng = selectedPlace.lng;
         }
       } else {
-        // Browse (no typed text) — anchor at geocoded place or detected IP
-        anchorLat = geo?.lat ?? fallbackLat ?? null;
-        anchorLng = geo?.lng ?? fallbackLng ?? null;
+        // Browse (no typed text) — anchor at the detected visitor location.
+        anchorLat = fallbackLat ?? null;
+        anchorLng = fallbackLng ?? null;
       }
 
       if (
@@ -1560,25 +1511,22 @@ export default function SearchScreen() {
             <Ionicons name="arrow-back" size={24} color={TEXT} />
           </TouchableOpacity>
 
-          <View style={styles.searchInputContainer}>
-            <Ionicons
-              name="search"
-              size={18}
-              color={MUTED}
-              style={{ marginRight: 6 }}
-            />
-            <TextInput
-              style={styles.searchTextInput}
-              placeholder="Where to? (e.g. Nairobi, Mombasa)"
+          <View style={{ flex: 1 }}>
+            <PlaceAutocomplete
               value={searchInput}
-              onChangeText={setSearchInput}
-              onSubmitEditing={() => {
-                if (searchInput.trim()) {
-                  router.setParams({ placeName: searchInput.trim() });
-                  setCursor(null);
-                  setAllResults([]);
-                }
+              onChange={(value) => {
+                setSearchInput(value);
+                setSelectedPlace(null);
+                setCursor(null);
+                setAllResults([]);
               }}
+              onResolved={(place) => {
+                setSelectedPlace(place);
+                setSearchInput(place.address);
+                setCursor(null);
+                setAllResults([]);
+              }}
+              placeholder="Where to? (or type a listing name)"
             />
           </View>
 

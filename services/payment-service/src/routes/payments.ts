@@ -1004,6 +1004,20 @@ export async function paymentRoutes(app: FastifyInstance) {
     // 2. Idempotency via idempotency-key header + atomic issue (shared logic).
     const idempotencyKey = (req.headers["idempotency-key"] as string) ?? null;
     try {
+      if (payment.paymentProvider === "tara") {
+        const { createManualRefund } = await import("../services/refund.service.js");
+        const manual = await createManualRefund(payment, {
+          amount: refundAmount,
+          reason: reason ?? null,
+          idempotencyKey: idempotencyKey ?? `manual-refund:${payment.id}:${refundAmount}`,
+        });
+        return sendSuccess(reply, 202, {
+          refundId: manual.id,
+          status: manual.status,
+          manual: true,
+        });
+      }
+
       const refund = await issueRefund(payment, {
         amount: refundAmount,
         reason: reason ?? null,

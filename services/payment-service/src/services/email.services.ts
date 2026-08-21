@@ -71,7 +71,6 @@ export async function sendGuestEmail(
         ${Number(invoice.discount) > 0 ? `<tr><td style="padding:6px 8px;color:#15803d">Discount</td><td style="padding:6px 8px;text-align:right;color:#15803d">−${money(invoice.discount, listingCurrency)}</td></tr>` : ''}
         <tr><td style="padding:6px 8px;border-top:1px solid #e5e7eb;color:#6b7280">Subtotal</td><td style="padding:6px 8px;border-top:1px solid #e5e7eb;text-align:right">${money(invoice.subtotal, listingCurrency)}</td></tr>
         <tr><td style="padding:6px 8px;color:#6b7280">Service fee${serviceFeePct > 0 ? ` (${serviceFeePct}%)` : ''}</td><td style="padding:6px 8px;text-align:right">${money(invoice.serviceFee, listingCurrency)}</td></tr>
-        ${Number(invoice.tax) > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Taxes</td><td style="padding:6px 8px;text-align:right">${money(invoice.tax, listingCurrency)}</td></tr>` : ''}
         ${isCar && Number(invoice.securityDeposit) > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Security deposit</td><td style="padding:6px 8px;text-align:right">${money(invoice.securityDeposit, listingCurrency)}</td></tr>` : ''}
         <tr>
           <td style="padding:8px;border-top:2px solid #1e293b;font-weight:bold;color:#1e293b">Total Paid</td>

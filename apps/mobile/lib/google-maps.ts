@@ -24,6 +24,7 @@ export const isGoogleMapsConfigured = () => GOOGLE_MAPS_API_KEY.length > 0;
 
 /** Coordinates plus the address parts Google resolved alongside them. */
 export interface ResolvedPlace {
+  placeId?: string;
   lat: number;
   lng: number;
   address: string;
