@@ -457,6 +457,16 @@ export default function BookingDetailScreen() {
     : rawStatusLabel;
   const isCar = booking.listingType === "car";
   const cancelled = isCancelled(booking.status);
+  const stayStart = isCar ? booking.pickupDatetime : booking.checkIn;
+  const stayEnd = isCar ? booking.returnDatetime : booking.checkOut;
+  const nowMs = Date.now();
+  const isDuringStay =
+    !!stayStart &&
+    !!stayEnd &&
+    nowMs >= new Date(stayStart).getTime() &&
+    nowMs <= new Date(stayEnd).getTime();
+  const isActiveStay =
+    (booking.status === "confirmed" || booking.status === "active") && isDuringStay;
 
   function stayDetails(): string {
     if (!booking) return "";
@@ -751,8 +761,8 @@ export default function BookingDetailScreen() {
               )
             )}
 
-            {/* Message host — available at every stage, including after payment */}
-            {user && booking.listing?.id && !cancelled && (
+            {/* Message host — only while the guest is inside their stay window */}
+            {user && booking.listing?.id && !cancelled && isActiveStay && (
               <TouchableOpacity
                 style={styles.messageHostBtn}
                 onPress={() => void openHostChat(booking.listing.id, booking.id)}

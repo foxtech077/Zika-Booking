@@ -235,6 +235,16 @@ export default function BookingManageView() {
 
   const isCar = booking.listingType === "car";
   const isCancelled = booking.status.startsWith("cancelled");
+  const stayStart = isCar ? booking.pickupDatetime : booking.checkIn;
+  const stayEnd = isCar ? booking.returnDatetime : booking.checkOut;
+  const now = Date.now();
+  const isDuringStay =
+    !!stayStart &&
+    !!stayEnd &&
+    now >= new Date(stayStart).getTime() &&
+    now <= new Date(stayEnd).getTime();
+  const isActiveStay =
+    (booking.status === "confirmed" || booking.status === "completed") && isDuringStay;
   const statusStyle = STATUS_STYLES[booking.status] ?? "bg-slate-100 text-slate-600 border-slate-200";
   const statusLabel = STATUS_LABEL[booking.status] ?? booking.status;
   const dateLabel1 = isCar ? "Pick-up" : "Check-in";
@@ -388,8 +398,8 @@ export default function BookingManageView() {
           </div>
         </div>
 
-        {/* Contact host — available after payment, not just before booking */}
-        {isAuthenticated && !isCancelled && booking.listing?.id && (
+        {/* Contact host — only while the guest is inside their stay window */}
+        {isAuthenticated && !isCancelled && isActiveStay && booking.listing?.id && (
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
             <h2 className="font-bold text-slate-800 text-sm">Need to reach your host?</h2>
             <p className="text-sm text-slate-600 leading-relaxed">
