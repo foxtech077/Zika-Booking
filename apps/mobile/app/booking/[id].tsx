@@ -67,7 +67,6 @@ interface BookingDetail {
   discountAmount?: number;
   serviceFee?: number;
   serviceFeeRate?: number;
-  taxAmount?: number;
   deliveryFee?: number;
   securityDeposit?: number;
   totalAmount: number;
@@ -183,9 +182,6 @@ async function shareVoucher(booking: BookingDetail) {
       : "",
     booking.serviceFee && booking.serviceFee > 0
       ? `Service fee: +${formatCurrency(booking.serviceFee, booking.currency)}`
-      : "",
-    booking.taxAmount && booking.taxAmount > 0
-      ? `Taxes: +${formatCurrency(booking.taxAmount, booking.currency)}`
       : "",
     `TOTAL: ${formatCurrency(booking.totalAmount, booking.currency)}`,
     "",
@@ -598,12 +594,6 @@ export default function BookingDetailScreen() {
                     Service fee{booking.serviceFeeRate ? ` (${Math.round(Number(booking.serviceFeeRate) * 100)}%)` : ''}
                   </Text>
                   <Text style={styles.priceValue}>+ {formatCurrency(booking.serviceFee, booking.currency)}</Text>
-                </View>
-              )}
-              {booking.taxAmount != null && booking.taxAmount > 0 && (
-                <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>Taxes</Text>
-                  <Text style={styles.priceValue}>+ {formatCurrency(booking.taxAmount, booking.currency)}</Text>
                 </View>
               )}
               {booking.deliveryFee != null && booking.deliveryFee > 0 && (

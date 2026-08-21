@@ -39,7 +39,6 @@ interface PricingPreview {
   discountAmount?: number;
   serviceFee?: number;
   serviceFeeRate?: number;
-  taxAmount?: number;
   deliveryFee?: number;
   securityDeposit?: number;
   total: number;
@@ -59,7 +58,6 @@ interface PricingPreview {
   localizedSubtotal?: number | null;
   localizedDiscountAmount?: number | null;
   localizedServiceFee?: number | null;
-  localizedTaxAmount?: number | null;
   localizedDeliveryFee?: number | null;
   localizedSecurityDeposit?: number | null;
   localizedTotal?: number | null;
@@ -82,7 +80,6 @@ function mapLocalizedPricing(raw: any, units: number): Partial<PricingPreview> {
     localizedSubtotal: subtotal,
     localizedDiscountAmount: raw.localizedPromotionDiscount ?? null,
     localizedServiceFee: raw.localizedServiceFee ?? null,
-    localizedTaxAmount: raw.localizedTaxAmount ?? null,
     localizedDeliveryFee: raw.localizedDeliveryFee ?? null,
     localizedSecurityDeposit: raw.localizedSecurityDeposit ?? null,
     // localizedTotalAmount comes from the same conversion as the lines above;
@@ -373,7 +370,7 @@ export default function BookingFlowScreen() {
         "/bookings/initiate", body,
       );
       // Backend (/bookings/initiate) returns { units, baseAmount, promotionDiscount,
-      // voucherDiscount, serviceFee, taxAmount, deliveryFee, totalAmount, currency } —
+      // voucherDiscount, serviceFee, deliveryFee, totalAmount, currency } —
       // there is no nightlyRate/dailyRate/days/nights/subtotal/discountAmount field,
       // so those must be derived rather than read directly.
       const raw = res.data.data.pricingPreview ?? {};
@@ -387,7 +384,6 @@ export default function BookingFlowScreen() {
         discountAmount: raw.promotionDiscount || undefined,
         serviceFee: raw.serviceFee ?? undefined,
         serviceFeeRate: raw.serviceFeeRate ?? undefined,
-        taxAmount: raw.taxAmount ?? undefined,
         deliveryFee: raw.deliveryFee ?? undefined,
         total: raw.totalAmount ?? 0,
         currency: raw.currency ?? "",
@@ -543,7 +539,7 @@ export default function BookingFlowScreen() {
         );
 
         // Backend (/bookings/initiate) returns { units, baseAmount, promotionDiscount,
-        // voucherDiscount, serviceFee, taxAmount, deliveryFee, totalAmount, currency } —
+      // voucherDiscount, serviceFee, deliveryFee, totalAmount, currency } —
         // there is no nightlyRate/dailyRate/days/nights/subtotal/discountAmount field,
         // so those must be derived rather than read directly.
         const raw = res.data.data.pricingPreview ?? {};
@@ -557,7 +553,6 @@ export default function BookingFlowScreen() {
           discountAmount: raw.promotionDiscount || undefined,
           serviceFee: raw.serviceFee ?? undefined,
           serviceFeeRate: raw.serviceFeeRate ?? undefined,
-          taxAmount: raw.taxAmount ?? undefined,
           deliveryFee: raw.deliveryFee ?? undefined,
           securityDeposit: raw.securityDeposit ?? undefined,
           platformCurrency: raw.platformCurrency ?? null,
@@ -671,7 +666,6 @@ export default function BookingFlowScreen() {
                 // quote already gave us — otherwise re-quoting after a delivery
                 // toggle drops the "(4%)" off the Service fee label mid-checkout.
                 serviceFeeRate: raw.serviceFeeRate ?? prev.pricingPreview?.serviceFeeRate,
-                taxAmount: raw.taxAmount ?? undefined,
                 deliveryFee: raw.deliveryFee ?? undefined,
                 securityDeposit: raw.securityDeposit ?? undefined,
                 platformCurrency: raw.platformCurrency ?? null,
@@ -1417,14 +1411,6 @@ export default function BookingFlowScreen() {
                   </View>
                 )}
 
-                {pricing.taxAmount != null && pricing.taxAmount > 0 && (
-                  <View style={styles.priceRow}>
-                    <Text style={styles.priceLabel}>Taxes</Text>
-                    <Text style={styles.priceValue}>
-                      + {dispFmt(pricing.localizedTaxAmount, pricing.taxAmount)}
-                    </Text>
-                  </View>
-                )}
 
                 {pricing.deliveryFee != null && pricing.deliveryFee > 0 && (
                   <View style={styles.priceRow}>
@@ -1450,12 +1436,11 @@ export default function BookingFlowScreen() {
                   const bestAmt = Math.max(promoAmt, voucherAmt);
                   const subAfterDiscount = Math.max(0, pricing.subtotal - bestAmt);
                   const sFee = pricing.serviceFee ?? 0;
-                  const tFee = pricing.taxAmount ?? 0;
                   const dFee = pricing.deliveryFee ?? 0;
                   const sDep = pricing.securityDeposit ?? 0;
 
-                  // Total = Subtotal after discount + Service fee + Taxes + Delivery fee + Security deposit
-                  const exactTotal = subAfterDiscount + sFee + tFee + dFee + sDep;
+                   // Total = Subtotal after discount + Service fee + Delivery fee + Security deposit
+                   const exactTotal = subAfterDiscount + sFee + dFee + sDep;
                   // Summed from the same values the lines above render, so a
                   // converted breakdown always adds up to its own total rather
                   // than to a separately-converted grand total.
@@ -1466,7 +1451,6 @@ export default function BookingFlowScreen() {
                       - dispAmt(pricing.localizedDiscountAmount, bestAmt),
                     )
                     + dispAmt(pricing.localizedServiceFee, sFee)
-                    + dispAmt(pricing.localizedTaxAmount, tFee)
                     + dispAmt(pricing.localizedDeliveryFee, dFee)
                     + dispAmt(pricing.localizedSecurityDeposit, sDep)
                     : exactTotal;

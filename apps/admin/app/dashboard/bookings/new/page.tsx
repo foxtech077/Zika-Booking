@@ -38,7 +38,6 @@ interface PriceSummary {
   voucherDiscount?: number;
   promotionDiscount?: number;
   serviceFee: number;
-  tax: number;
   total: number;
   currency: string;
   nights?: number;
@@ -702,12 +701,8 @@ export default function ManualBookingPage() {
     const commRate = price.commissionRate ?? 0.10;
     // Recalculate service fee based on discounted subtotal (4% flat rate)
     const serviceFee = Math.ceil(subtotal * 0.04 * 100) / 100;
-    // Recalculate tax based on discounted subtotal
-    const tRate = price.baseAmount > 0 ? price.tax / price.baseAmount : 0;
-    const tax = Math.round(subtotal * tRate * 100) / 100;
-
     // Grand total
-    const total = Math.max(0, subtotal + serviceFee + tax);
+    const total = Math.max(0, subtotal + serviceFee);
 
     return {
       baseAmount,
@@ -716,7 +711,6 @@ export default function ManualBookingPage() {
       discount,
       subtotal,
       serviceFee,
-      tax,
       total,
       currency: price.currency,
       nights: price.nights ?? nights,
@@ -728,7 +722,6 @@ export default function ManualBookingPage() {
   const pricePerNight = computedPricing ? computedPricing.pricePerNight : null;
   const pricePerGuest = computedPricing && guests > 0 ? computedPricing.total / guests : null;
   const serviceFeeRate = computedPricing && computedPricing.baseAmount > 0 ? (computedPricing.serviceFee / computedPricing.baseAmount) * 100 : null;
-  const taxRate = computedPricing && computedPricing.baseAmount > 0 ? (computedPricing.tax / computedPricing.baseAmount) * 100 : null;
   const commissionRate = computedPricing ? computedPricing.commissionRate * 100 : null;
 
   const formatDateLabel = (dateStr: string) => {
@@ -816,7 +809,6 @@ export default function ManualBookingPage() {
           voucherDiscount: undefined,
           promotionDiscount: undefined,
           serviceFee: d.serviceFee ?? 0,
-          tax: d.taxAmount ?? 0,
           total: d.totalAmount ?? 0,
           currency: d.currency ?? getCurrencyForCountry(country),
           nights: d.nights ?? 0,
@@ -880,8 +872,7 @@ export default function ManualBookingPage() {
         baseAmount: base,
         discount: 0,
         serviceFee: Math.round(base * 0.05),
-        tax: Math.round(base * 0.10),
-        total: Math.round(base * 1.15),
+        total: Math.round(base * 1.05),
         currency: getCurrencyForCountry(country),
       });
     }
@@ -1943,10 +1934,6 @@ export default function ManualBookingPage() {
                         value={commissionRate !== null ? formatRate(commissionRate) : "—"}
                       />
                       <InfoRow label="Service Fee / Commission Amount" value={formatCurrency(computedPricing.serviceFee, computedPricing.currency)} />
-                      <InfoRow
-                        label="Taxes"
-                        value={formatCurrency(computedPricing.tax, computedPricing.currency)}
-                      />
                     </div>
 
                     <div className="pt-3 border-t border-slate-200">
@@ -2145,4 +2132,3 @@ export default function ManualBookingPage() {
     </div>
   );
 }
-

@@ -23,13 +23,11 @@ interface PricingPreview {
   promotionDiscount: number;
   voucherDiscount: number;
   serviceFee: number;
-  taxAmount: number;
   deliveryFee: number;
   securityDeposit?: number;
   totalAmount: number;
   commissionRate?: number;
   serviceFeeRate?: number;
-  taxRate?: number;
   /** Platform (charge) currency — EUR for Stripe, XAF for Tara. */
   platformCurrency?: string;
   /** Amount actually charged in the platform currency (EUR includes the buffer). */
@@ -45,7 +43,6 @@ interface PricingPreview {
   localizedNightlyRate?: number | null;
   localizedPromotionDiscount?: number | null;
   localizedServiceFee?: number | null;
-  localizedTaxAmount?: number | null;
   localizedDeliveryFee?: number | null;
   localizedSecurityDeposit?: number | null;
   localizedTotalAmount?: number | null;
@@ -111,13 +108,11 @@ interface ConfirmedBooking {
   transactionId?: string;
   baseAmount: number;
   serviceFee: number;
-  taxes: number;
   discount: number;
   securityDeposit?: number;
   deliveryFee?: number;
   commissionRate?: number;
   serviceFeeRate?: number;
-  taxRate?: number;
 }
 
 type PayStep = "review" | "payment" | "stripe_card" | "polling" | "confirmed";
@@ -141,14 +136,13 @@ function getPricing(ctx: CheckoutCtx) {
   const pp = ctx.pricingPreview;
   const base = pp.baseAmount ?? 0;
   const serviceFee = pp.serviceFee ?? 0;
-  const taxAmount = pp.taxAmount ?? 0;
   const deliveryFee = pp.deliveryFee ?? 0;
   const securityDeposit = pp.securityDeposit ?? 0;
   const totalDiscount = ctx.discountSource === "voucher"
     ? (ctx.voucherDiscount ?? 0)
     : (pp.promotionDiscount ?? 0);
   const subtotal = Math.max(0, base - totalDiscount);
-  const total = subtotal + serviceFee + taxAmount + deliveryFee + securityDeposit;
+  const total = subtotal + serviceFee + deliveryFee + securityDeposit;
   // The end amount the guest pays is the platform-currency total (EUR for
   // Stripe, XAF for Tara) returned by the booking API. Breakdown lines stay in
   // the listing currency; only this converted total is shown in the platform
@@ -176,7 +170,7 @@ function getPricing(ctx: CheckoutCtx) {
   );
 
   return {
-    base, discount: totalDiscount, subtotal, serviceFee, taxes: taxAmount,
+    base, discount: totalDiscount, subtotal, serviceFee,
     deliveryFee, securityDeposit, total,
     platformCurrency: info.platformCurrency,
     platformAmount: info.platformAmount,
@@ -191,8 +185,7 @@ function getPricing(ctx: CheckoutCtx) {
     dispTotal: showLocalized
       ? dispSubtotal
       + dispAmt(pp.localizedServiceFee, serviceFee)
-      + dispAmt(pp.localizedTaxAmount, taxAmount)
-      + dispAmt(pp.localizedDeliveryFee, deliveryFee)
+       + dispAmt(pp.localizedDeliveryFee, deliveryFee)
       + dispAmt(pp.localizedSecurityDeposit, securityDeposit)
       : total,
   };
@@ -472,14 +465,12 @@ export default function BookingReviewPage() {
     total: number,
     base: number,
     fee: number,
-    tax: number,
     disc: number,
     method: string,
     securityDeposit?: number,
     deliveryFee?: number,
     commissionRate?: number,
     serviceFeeRate?: number,
-    taxRate?: number,
   ) {
     if (pollRef.current) clearInterval(pollRef.current);
     const startedAt = Date.now();
@@ -512,10 +503,10 @@ export default function BookingReviewPage() {
             totalAmount: total,
             currency: ctx!.currency,
             paymentId: pmId, displayId, paymentMethod: method, transactionId: txId,
-            baseAmount: base, serviceFee: fee, taxes: tax, discount: disc,
+             baseAmount: base, serviceFee: fee, discount: disc,
             securityDeposit,
             deliveryFee,
-            commissionRate, serviceFeeRate, taxRate,
+             commissionRate, serviceFeeRate,
           });
           sessionStorage.removeItem("zika:checkout");
           setStep("confirmed");
@@ -631,7 +622,7 @@ export default function BookingReviewPage() {
         pmId = payRes.data.data.paymentId as string;
         setPaymentId(pmId);
         setStep("polling");
-        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money", ctx.pricingPreview?.securityDeposit, ctx.pricingPreview?.deliveryFee, ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.serviceFeeRate, ctx.pricingPreview?.taxRate);
+        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.discount, "Mobile Money", ctx.pricingPreview?.securityDeposit, ctx.pricingPreview?.deliveryFee, ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.serviceFeeRate);
       }
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message ?? err?.response?.data?.message ?? err?.message ?? "Something went wrong.";
@@ -653,7 +644,7 @@ export default function BookingReviewPage() {
         setPayError(result.error.message ?? "Card payment failed. Please check your details.");
       } else {
         setStep("polling");
-        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Card", ctx!.pricingPreview?.securityDeposit, ctx!.pricingPreview?.deliveryFee, ctx!.pricingPreview?.commissionRate, ctx!.pricingPreview?.serviceFeeRate, ctx!.pricingPreview?.taxRate);
+        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.discount, "Card", ctx!.pricingPreview?.securityDeposit, ctx!.pricingPreview?.deliveryFee, ctx!.pricingPreview?.commissionRate, ctx!.pricingPreview?.serviceFeeRate);
       }
     } catch (err: any) {
       setPayError(err?.message ?? "Card payment failed.");
@@ -1318,12 +1309,6 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
             <span>Service fee{ctx.pricingPreview?.serviceFeeRate ? ` (${Math.round(ctx.pricingPreview.serviceFeeRate * 100)}%)` : ''}</span>
             <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedServiceFee, pricing.serviceFee), pricing.dispCurrency)}</span>
           </div>
-          {pricing.taxes > 0 && (
-            <div className="flex justify-between text-slate-600">
-              <span>Taxes{ctx.pricingPreview?.taxRate ? ` (${Math.round(ctx.pricingPreview.taxRate * 100)}%)` : ''}</span>
-              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedTaxAmount, pricing.taxes), pricing.dispCurrency)}</span>
-            </div>
-          )}
           {pricing.deliveryFee > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Delivery fee</span>
@@ -1459,12 +1444,6 @@ function ConfirmedView({
             <span>Service fee{confirmed.serviceFeeRate ? ` (${Math.round(confirmed.serviceFeeRate * 100)}%)` : ''}</span>
             <span>{confirmed.currency} {fmt(confirmed.serviceFee, confirmed.currency)}</span>
           </div>
-          {confirmed.taxes > 0 && (
-            <div className="flex justify-between text-slate-600">
-              <span>Taxes{confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}</span>
-              <span>{confirmed.currency} {fmt(confirmed.taxes, confirmed.currency)}</span>
-            </div>
-          )}
           {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Security deposit</span>
@@ -1593,7 +1572,6 @@ function VoucherLayout({
         <VoucherRow label="Base amount" value={lv(confirmed.baseAmount)} />
         {confirmed.discount > 0 && <VoucherRow label="Discount" value={`−${lv(confirmed.discount)}`} />}
         <VoucherRow label={`Service fee${confirmed.serviceFeeRate ? ` (${Math.round(confirmed.serviceFeeRate * 100)}%)` : ''}`} value={lv(confirmed.serviceFee)} />
-        {confirmed.taxes > 0 && <VoucherRow label={`Taxes${confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}`} value={lv(confirmed.taxes)} />}
         {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && <VoucherRow label="Security deposit" value={lv(confirmed.securityDeposit)} />}
         <VoucherRow label="Total Paid" value={totalDisplay} bold />
       </VoucherSection>

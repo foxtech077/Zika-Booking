@@ -84,6 +84,174 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
     }
   });
 
+  // ── GET /admin/refunds/manual ──────────────────────────────────────────────
+  app.get("/admin/refunds/manual", {
+    schema: {
+      tags: ["Admin Payments"],
+      description: "Get mobile-money refunds requiring manual processing",
+      querystring: {
+        type: "object",
+        properties: {
+          status: { type: "string", enum: ["pending", "completed", "failed"] },
+          page: { type: "string" },
+          limit: { type: "string" },
+        },
+      },
+    },
+    preHandler: [requireAdminPermission(AdminPermission.RefundsRead)],
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const query = req.query as { status?: string; page?: string; limit?: string };
+      const page = Math.max(1, parseInt(query.page ?? "1", 10));
+      const limit = Math.max(1, Math.min(100, parseInt(query.limit ?? "50", 10)));
+      const scope = countryScopeFilter(req);
+      const where = {
+        ...(query.status ? { status: query.status as "pending" | "completed" | "failed" } : {}),
+        ...(scope ? { payment: { is: scope } } : {}),
+      };
+      const [refunds, total] = await Promise.all([
+        prisma.manualRefund.findMany({
+          where,
+          include: {
+            payment: {
+              select: {
+                countryCode: true,
+                paymentProvider: true,
+                providerPaymentId: true,
+                paymentMethodType: true,
+                mobileNumberMasked: true,
+                amount: true,
+                currency: true,
+                chargedAmount: true,
+                chargedCurrency: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        prisma.manualRefund.count({ where }),
+      ]);
+      return reply.send({ success: true, data: refunds, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } });
+    } catch (err) {
+      return sendError(reply, 400, "GET_MANUAL_REFUNDS_FAILED", (err as Error).message);
+    }
+  });
+
+  // ── POST /admin/refunds/manual/:id/complete ────────────────────────────────
+  app.post("/admin/refunds/manual/:id/complete", {
+    schema: {
+      tags: ["Admin Payments"],
+      description: "Record a completed mobile-money refund",
+      params: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
+      body: { type: "object", required: ["refundReference"], properties: { refundReference: { type: "string" }, note: { type: "string" } } },
+    },
+    preHandler: [requireAdminPermission(AdminPermission.RefundsProcess)],
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const { refundReference, note } = req.body as { refundReference: string; note?: string };
+    try {
+      const manualRefund = await prisma.manualRefund.findUnique({ where: { id }, include: { payment: true } });
+      if (!manualRefund) return sendError(reply, 404, "MANUAL_REFUND_NOT_FOUND", "Manual refund not found.");
+      if (!assertResourceCountryScope(req, reply, manualRefund.payment.countryCode)) return;
+      if (!refundReference?.trim()) return sendError(reply, 400, "REFUND_REFERENCE_REQUIRED", "A mobile-money refund reference is required.");
+      if (manualRefund.status !== "pending") return sendError(reply, 400, "MANUAL_REFUND_NOT_PENDING", "Only pending manual refunds can be completed.");
+
+      const processedAt = new Date();
+      const updated = await prisma.$transaction(async (tx) => {
+        const claimed = await tx.manualRefund.updateMany({
+          where: { id, status: "pending" },
+          data: {
+            status: "completed",
+            refundReference: refundReference.trim(),
+            note: note?.trim() || null,
+            processedBy: (req as AdminRequest).admin.adminId,
+            processedAt,
+          },
+        });
+        if (claimed.count === 0) throw new Error("Only pending manual refunds can be completed.");
+
+        await tx.refund.create({
+          data: {
+            paymentId: manualRefund.paymentId,
+            bookingId: manualRefund.bookingId,
+            amount: manualRefund.amount,
+            currency: manualRefund.currency,
+            status: RefundStatus.succeeded,
+            reason: manualRefund.reason,
+            providerRefundId: refundReference.trim(),
+            refundedAt: processedAt,
+            idempotencyKey: `manual-refund-record:${id}`,
+          },
+        });
+
+        const refundTotal = await tx.refund.aggregate({
+          where: { paymentId: manualRefund.paymentId, status: { not: RefundStatus.failed } },
+          _sum: { amount: true },
+        });
+        const chargedAmount = Number(manualRefund.payment.chargedAmount ?? manualRefund.payment.amount);
+        await tx.payment.update({
+          where: { id: manualRefund.paymentId },
+          data: { status: Number(refundTotal._sum.amount ?? 0) >= chargedAmount ? PaymentStatus.refunded : PaymentStatus.partially_refunded },
+        });
+        return tx.manualRefund.findUnique({ where: { id } });
+      });
+
+      try {
+        await notifyBookingServiceOfRefund(manualRefund.bookingId, {
+          refundId: `manual:${id}`,
+          refundAmount: Number(manualRefund.amount),
+          provider: manualRefund.payment.paymentProvider,
+          refundedAt: processedAt,
+        });
+      } catch (notifyErr) {
+        await queueFailedRefundNotification(manualRefund.bookingId, `manual:${id}`, Number(manualRefund.amount), manualRefund.payment.paymentProvider, processedAt);
+        req.log.error({ err: notifyErr }, "Failed to notify booking service of manual refund");
+      }
+
+      await writeAdminAudit(req, {
+        action: "manual_refund_completed",
+        targetType: "manual_refund",
+        targetId: id,
+        oldValue: "status:pending",
+        newValue: `status:completed;reference:${refundReference.trim()}`,
+      });
+      return reply.send({ success: true, data: updated });
+    } catch (err) {
+      return sendError(reply, 400, "COMPLETE_MANUAL_REFUND_FAILED", (err as Error).message);
+    }
+  });
+
+  // ── POST /admin/refunds/manual/:id/fail ────────────────────────────────────
+  app.post("/admin/refunds/manual/:id/fail", {
+    schema: {
+      tags: ["Admin Payments"],
+      description: "Record a failed mobile-money refund attempt",
+      params: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
+      body: { type: "object", required: ["reason"], properties: { reason: { type: "string" } } },
+    },
+    preHandler: [requireAdminPermission(AdminPermission.RefundsProcess)],
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const { reason } = req.body as { reason: string };
+    try {
+      const manualRefund = await prisma.manualRefund.findUnique({ where: { id }, include: { payment: true } });
+      if (!manualRefund) return sendError(reply, 404, "MANUAL_REFUND_NOT_FOUND", "Manual refund not found.");
+      if (!assertResourceCountryScope(req, reply, manualRefund.payment.countryCode)) return;
+      if (!reason?.trim()) return sendError(reply, 400, "FAILURE_REASON_REQUIRED", "A failure reason is required.");
+      if (manualRefund.status !== "pending") return sendError(reply, 400, "MANUAL_REFUND_NOT_PENDING", "Only pending manual refunds can be failed.");
+      const updated = await prisma.manualRefund.update({
+        where: { id },
+        data: { status: "failed", failureReason: reason.trim(), processedBy: (req as AdminRequest).admin.adminId, processedAt: new Date() },
+      });
+      await writeAdminAudit(req, { action: "manual_refund_failed", targetType: "manual_refund", targetId: id, oldValue: "status:pending", newValue: `status:failed;reason:${reason.trim()}` });
+      return reply.send({ success: true, data: updated });
+    } catch (err) {
+      return sendError(reply, 400, "FAIL_MANUAL_REFUND_FAILED", (err as Error).message);
+    }
+  });
+
   // ── POST /admin/refunds/:id/process ─────────────────────────────────────────
   app.post("/admin/refunds/:id/process", {
     schema: {

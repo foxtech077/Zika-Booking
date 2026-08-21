@@ -69,7 +69,32 @@ export default function RefundManagementPage() {
 
   const refunds = data?.data ?? [];
 
-  const eurRates = useEurRates(refunds.map((r: any) => r.currency));
+  const { data: manualData, refetch: refetchManual } = useQuery({
+    queryKey: ["admin-manual-refunds"],
+    queryFn: async () => {
+      const res = await paymentPayoutApi.get(`/admin/refunds/manual`);
+      return res.data;
+    },
+  });
+  const manualRefunds = manualData?.data ?? [];
+
+  const manualActionMutation = useMutation({
+    mutationFn: async ({ id, action, value }: { id: string; action: "complete" | "fail"; value: string }) => {
+      const res = await paymentPayoutApi.post(`/admin/refunds/manual/${id}/${action}`, action === "complete"
+        ? { refundReference: value }
+        : { reason: value });
+      return res.data;
+    },
+    onSuccess: () => {
+      refetchManual();
+      refetch();
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.error?.message ?? err?.message ?? "Failed to update manual refund");
+    },
+  });
+
+  const eurRates = useEurRates([...refunds, ...manualRefunds].map((r: any) => r.currency));
 
   // Filter refunds based on scope & parameters
   const filteredRefunds = useMemo(() => {
@@ -285,6 +310,66 @@ export default function RefundManagementPage() {
           total={filteredRefunds.length}
           onPageChange={setPage}
         />
+      </Card>
+
+      <Card padding="none">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <div>
+            <h3 className="font-semibold text-slate-900">Manual mobile-money refunds</h3>
+            <p className="mt-0.5 text-xs text-slate-500">Refunds requiring an operator because the payment gateway cannot reverse them automatically.</p>
+          </div>
+          <Badge label={`${manualRefunds.filter((r: any) => r.status === "pending").length} pending`} status="pending_payment" />
+        </div>
+        {manualRefunds.length === 0 ? (
+          <p className="px-5 py-8 text-center text-sm text-slate-500">No manual mobile-money refunds recorded.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-5 py-3">Booking</th>
+                  <th className="px-5 py-3">Payment</th>
+                  <th className="px-5 py-3 text-right">Refund amount</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3">Reference / action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y border-border">
+                {manualRefunds.map((refund: any) => (
+                  <tr key={refund.id}>
+                    <td className="px-5 py-3 font-mono text-xs text-primary">{refund.bookingId}</td>
+                    <td className="px-5 py-3">
+                      <span className="font-semibold uppercase">{refund.payment?.paymentProvider ?? "mobile money"}</span>
+                      <span className="block text-xs text-slate-500">{refund.payment?.providerPaymentId ?? "No provider reference"}</span>
+                    </td>
+                    <td className="px-5 py-3 text-right font-semibold tabular-nums">
+                      {formatCurrency(Number(refund.amount), refund.currency)}
+                    </td>
+                    <td className="px-5 py-3">
+                      <Badge label={refund.status} status={refund.status === "completed" ? "confirmed" : refund.status === "failed" ? "cancelled_by_guest" : "pending_payment"} />
+                    </td>
+                    <td className="px-5 py-3">
+                      {refund.status === "pending" && canModifyRefunds ? (
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="primary" loading={manualActionMutation.isPending} onClick={() => {
+                            const reference = window.prompt("Enter the mobile-money refund reference:");
+                            if (reference?.trim()) manualActionMutation.mutate({ id: refund.id, action: "complete", value: reference });
+                          }}>Mark paid</Button>
+                          <Button size="sm" variant="danger" loading={manualActionMutation.isPending} onClick={() => {
+                            const reason = window.prompt("Why did the manual refund fail?");
+                            if (reason?.trim()) manualActionMutation.mutate({ id: refund.id, action: "fail", value: reason });
+                          }}>Failed</Button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-500">{refund.refundReference ?? refund.failureReason ?? "-"}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
 
       {/* Details drawer */}

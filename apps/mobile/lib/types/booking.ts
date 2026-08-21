@@ -79,7 +79,6 @@ export interface BookingDetail {
   discountAmount?: number;
   serviceFee?: number;
   serviceFeeRate?: number;
-  taxAmount?: number;
   deliveryFee?: number;
   securityDeposit?: number;
   totalAmount: number;
@@ -266,7 +265,6 @@ export interface PricingPreview {
   subtotal: number;
   discountAmount?: number;
   serviceFee?: number;
-  taxAmount?: number;
   deliveryFee?: number;
   securityDeposit?: number;
   total: number;

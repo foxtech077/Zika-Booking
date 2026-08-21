@@ -309,7 +309,7 @@ export default function BrowseCategoryScreen() {
   // Tablet grid: 2–4 listing cards per row instead of one stretched card.
   const { columns } = useResponsive();
   const [sort, setSort] = useState<string>("recommended");
-  const [cursor, setCursor] = useState(0);
+  const [cursor, setCursor] = useState<string | null>(null);
   const [allResults, setAllResults] = useState<Listing[]>([]);
   const [favouriteLoading, setFavouriteLoading] = useState<string | null>(null);
 
@@ -319,18 +319,20 @@ export default function BrowseCategoryScreen() {
     // Prices are localized per currency by the API, so the currency is part of
     // the cache identity — without it a currency change serves cached amounts
     // still labelled with the previous currency.
-    queryKey: ["browse", apiCategory, sort, cursor, localCurrency, userLat, userLng],
+    queryKey: ["browse", apiCategory, sort, cursor, keyword, localCurrency, userLat, userLng],
     queryFn: async () => {
       const qp = new URLSearchParams({
         category: apiCategory,
+        search_mode: keyword.trim() ? "text" : "browse",
         sort,
         limit: "50",  // Max allowed — gets all listings in one page for small datasets
       });
+      if (keyword.trim()) qp.set("q", keyword.trim());
       if (hasLocation) {
         qp.set("lat", String(userLat));
         qp.set("lng", String(userLng));
       }
-      if (cursor > 0) qp.set("cursor", String(cursor));
+      if (cursor) qp.set("cursor", cursor);
 
       const res = await listingApi.get(`/search?${qp.toString()}`);
       const incoming: { totalCount: number; nextCursor: string | null; results: Listing[] } = res.data.data;
@@ -352,7 +354,7 @@ export default function BrowseCategoryScreen() {
   // called) also correctly populate / append the displayed list.
   useEffect(() => {
     if (isPlaceholderData || !data) return;
-    if (cursor === 0) {
+    if (!cursor) {
       setAllResults(data.results ?? []);
     } else {
       setAllResults((prev) => {
@@ -369,7 +371,7 @@ export default function BrowseCategoryScreen() {
 
   const totalFromApi = data?.totalCount ?? 0;
   const hasNextPage = !!data?.nextCursor;
-  const isLoadingMore = isFetching && cursor > 0;
+  const isLoadingMore = isFetching && !!cursor;
   const isFirstLoad = (isLoading || isFetching) && allResults.length === 0;
 
   // /search already returns primaryPhotoUrl on every result — this used to
@@ -379,15 +381,14 @@ export default function BrowseCategoryScreen() {
   function handleSortChange(newSort: string) {
     if (newSort === sort) return;
     setSort(newSort);
-    setCursor(0);
+    setCursor(null);
     // Do NOT call setAllResults([]) — the previous sorted list stays visible
     // (via placeholderData) until the freshly sorted results arrive.
   }
 
   function handleLoadMore() {
     if (hasNextPage && !isFetching) {
-      const nextOffset = cursor + 50;
-      setCursor(nextOffset);
+      setCursor(data?.nextCursor ?? null);
     }
   }
 
@@ -466,7 +467,7 @@ export default function BrowseCategoryScreen() {
           <Ionicons name="wifi-outline" size={48} color={BORDER} />
           <Text style={s.errTitle}>Failed to load listings</Text>
           <Text style={s.errSub}>Please check your connection and try again.</Text>
-          <TouchableOpacity style={s.retryBtn} onPress={() => { setCursor(0); void refetch(); }}>
+          <TouchableOpacity style={s.retryBtn} onPress={() => { setCursor(null); void refetch(); }}>
             <Text style={s.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>

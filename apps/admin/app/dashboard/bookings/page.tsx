@@ -836,10 +836,11 @@ export default function BookingsPage() {
               {[["Subtotal", <EurValue key="s" amount={detailData.subtotal} currency={detailData.currency} rates={eurRates} />],
                 ["Voucher Discount", <span key="v" className="text-danger">- <EurValue amount={detailData.voucherDiscount} currency={detailData.currency} rates={eurRates} /></span>],
                 ["Service Fee", <EurValue key="f" amount={detailData.serviceFee} currency={detailData.currency} rates={eurRates} />],
-                ["Taxes", <EurValue key="t" amount={detailData.taxAmount} currency={detailData.currency} rates={eurRates} />],
                 ["Delivery Fee", <EurValue key="d" amount={detailData.deliveryFee} currency={detailData.currency} rates={eurRates} />],
-                ["Total", <EurValue key="T" amount={detailData.totalAmount} currency={detailData.currency} rates={eurRates} />],
-                ["Commission", <EurValue key="c" amount={detailData.commissionAmount} currency={detailData.currency} rates={eurRates} />],
+                 ["Total", <EurValue key="T" amount={detailData.totalAmount} currency={detailData.currency} rates={eurRates} />],
+                 ["Refund Due", <EurValue key="r" amount={detailData.refundAmount ?? 0} currency={detailData.currency} rates={eurRates} />],
+                 ["Cancellation Policy", detailData.cancellationPolicy ?? "-"],
+                 ["Commission", <EurValue key="c" amount={detailData.commissionAmount} currency={detailData.currency} rates={eurRates} />],
                 ["Provider Payout", <EurValue key="p" amount={detailData.providerPayout} currency={detailData.currency} rates={eurRates} />],
               ].map(([k, v]) => (
                 <div key={String(k)} className="flex justify-between">
