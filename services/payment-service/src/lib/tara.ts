@@ -14,6 +14,9 @@ const REQUEST_TIMEOUT_MS = 30_000;
 export interface TaraPaymentResult {
   taraReference: string;
   status: "pending" | "successful" | "failed";
+  // Wave (and other hosted-page networks) return a URL to a network-hosted
+  // payment page the client must open (WebView / QR). Null for STK-push flows.
+  authUrl?: string | null;
 }
 
 interface TaraApiResponse {
@@ -27,8 +30,24 @@ interface TaraApiResponse {
   };
   reference?: string;
   transactionId?: string;
+  // Hosted-page networks (e.g. Wave) return authUrl as a JSON-encoded string
+  // like "{\"url\":\"https://pay.wave.com/...\"}".
+  authUrl?: string;
   message?: string;
   error?: string;
+}
+
+// Unwrap the JSON-encoded authUrl into a plain URL. Returns null when absent
+// or malformed — the client falls back to reference-based polling either way.
+function parseAuthUrl(raw?: string): string | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { url?: string };
+    return parsed.url ?? null;
+  } catch {
+    // Some gateways may send the URL directly instead of JSON-encoded
+    return raw.startsWith("http") ? raw : null;
+  }
 }
 
 // ── Shared fetch with timeout ─────────────────────────────────────────────────
@@ -99,6 +118,7 @@ export async function initiateTaraPayment(opts: {
     productPrice: opts.amount,
     phoneNumber: opts.mobileNumber.replace("+", ""),
     webHookUrl: TARA_WEBHOOK_URL,
+    ...(opts.network ? { network: opts.network } : {}),
   });
 
   let lastError: unknown;
@@ -127,6 +147,7 @@ export async function initiateTaraPayment(opts: {
       return {
         taraReference: extractReference(json, idempotencyKey),
         status: "pending",
+        authUrl: parseAuthUrl(json.authUrl),
       };
     } catch (err: unknown) {
       lastError = err;

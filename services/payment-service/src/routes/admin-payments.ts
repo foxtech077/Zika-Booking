@@ -18,13 +18,32 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
         properties: {
           page: { type: "string" },
           limit: { type: "string" },
+          bookingIds: { type: "string", description: "Comma-separated booking UUIDs (max 200)" },
         },
       },
     },
     preHandler: [requireAdminPermission(AdminPermission.PaymentsRead)],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const query = req.query as { page?: string; limit?: string };
+      const query = req.query as { page?: string; limit?: string; bookingIds?: string };
+
+      // When bookingIds is provided, return all payments for those bookings
+      // (used by other services to enrich booking listings), bypassing pagination.
+      const bookingIds = (query.bookingIds ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 200);
+
+      if (bookingIds.length > 0) {
+        const scope = countryScopeFilter(req);
+        const payments = await prisma.payment.findMany({
+          where: { ...scope, bookingId: { in: bookingIds } },
+          orderBy: { createdAt: "desc" },
+        });
+        return reply.send({ success: true, data: payments });
+      }
+
       const page = Math.max(1, parseInt(query.page || "1", 10));
       const limit = Math.max(1, Math.min(100, parseInt(query.limit || "20", 10)));
       const skip = (page - 1) * limit;

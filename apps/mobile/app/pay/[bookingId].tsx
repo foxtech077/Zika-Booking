@@ -12,6 +12,7 @@ import {
   AppState,
   Share,
   Clipboard,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter, Stack, useNavigation } from "expo-router";
@@ -79,6 +80,8 @@ interface InitiateResponse {
     publishableKey?: string;
     requiresAction?: boolean;
     taraReference?: string;
+    // Hosted-page networks (Wave) return a URL to the network's payment page.
+    authUrl?: string | null;
     message?: string;
   };
 }
@@ -164,7 +167,7 @@ function useCountdown(expiresAt: string | null) {
 type ScreenView =
   | "select"        // method selection + input form
   | "stripe_polling" // polling Stripe status
-  | "tara_waiting"  // waiting for Tara mobile confirmation
+  | "tara_waiting"  // waiting for Tara mobile confirmation (or Wave hosted page)
   | "success"       // navigating away
   | "failure";      // payment failed
 
@@ -278,6 +281,11 @@ export default function PaymentScreen() {
   const [mobileNumber, setMobileNumber] = useState("");
   const [saveMobileNumber, setSaveMobileNumber] = useState(false);
   const [showPrefixPicker, setShowPrefixPicker] = useState(false);
+  // Mobile money network selected at checkout. "default" is the standard Tara
+  // flow; "wave" routes the charge through Wave (same Tara API, network: "wave").
+  const [mobileNetwork, setMobileNetwork] = useState<"default" | "wave">("default");
+  // Wave hosted payment page URL (returned as authUrl by /payments/initiate)
+  const [waveAuthUrl, setWaveAuthUrl] = useState<string | null>(null);
   const [taraXafAmount, setTaraXafAmount] = useState<number | null>(null);
   const [taraXafLoading, setTaraXafLoading] = useState(false);
 
@@ -643,10 +651,10 @@ export default function PaymentScreen() {
   }
 
   // ── Tara polling ──────────────────────────────────────────────────────────
-  function startTaraPolling(paymentId: string) {
+  function startTaraPolling(paymentId: string, maxDurationMs = 90_000) {
     taraPollingActiveRef.current = true;
     const INTERVAL = 5_000;
-    const MAX_DURATION = 90_000;
+    const MAX_DURATION = maxDurationMs;
     const startTime = Date.now();
 
     async function poll() {
@@ -979,6 +987,7 @@ export default function PaymentScreen() {
         bookingId,
         paymentProvider: "tara",
         mobileNumber: fullMobileNumber,
+        ...(mobileNetwork === "wave" ? { network: "wave" } : {}),
         ...(selectedSavedMethodId ? { savedPaymentMethodId: selectedSavedMethodId } : {}),
       };
       payLog("info", "HANDLE-PAY", "Tara initiate — POST /payments/initiate", { bookingId, mobileNumber: `${countryPrefix}****${mobileNumber.slice(-4)}` });
@@ -990,9 +999,18 @@ export default function PaymentScreen() {
       payLog("success", "HANDLE-PAY", `Tara initiate OK — paymentId: ${paymentId}`);
       setAttemptCount((c) => c + 1);
 
-      setView("tara_waiting");
-      startTaraCountdown();
-      startTaraPolling(paymentId);
+      if (mobileNetwork === "wave") {
+        // Wave is a hosted-page flow: the guest completes payment on the
+        // network's page (opened via hyperlink). No STK countdown — allow a
+        // generous 10-minute polling window for them to pay and return.
+        setWaveAuthUrl(res.data.data.authUrl ?? null);
+        setView("tara_waiting");
+        startTaraPolling(paymentId, 10 * 60_000);
+      } else {
+        setView("tara_waiting");
+        startTaraCountdown();
+        startTaraPolling(paymentId);
+      }
     } catch (err: any) {
       payLog("error", "HANDLE-PAY", "Tara initiate FAILED", {
         httpStatus: err?.response?.status,
@@ -1083,6 +1101,37 @@ export default function PaymentScreen() {
 
   // ── Render: Tara waiting ──────────────────────────────────────────────────
   if (view === "tara_waiting") {
+    // Wave hosted-page flow: no STK push — the guest pays on the Wave page
+    // opened via hyperlink; we poll our backend until the webhook confirms.
+    if (mobileNetwork === "wave") {
+      return (
+        <SafeAreaView style={styles.container}>
+          <View style={styles.centered}>
+            <Ionicons name="water" size={64} color="#16a34a" />
+            <Text style={styles.pollingTitle}>Waiting for your Wave payment</Text>
+            <Text style={[styles.pollingSubtitle, { textAlign: "center", paddingHorizontal: 24 }]}>
+              Complete the payment on the Wave page. This screen will update automatically once it's confirmed.
+            </Text>
+            {waveAuthUrl ? (
+              <TouchableOpacity
+                style={styles.waveLinkBtn}
+                onPress={() => Linking.openURL(waveAuthUrl).catch(() => {
+                  Alert.alert("Unable to open link", "Please try again or copy the link.");
+                })}
+              >
+                <Ionicons name="open-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.waveLinkBtnText}>Open Wave Payment Page</Text>
+              </TouchableOpacity>
+            ) : null}
+            <ActivityIndicator size="small" color="#16a34a" style={{ marginTop: 16 }} />
+            <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      );
+    }
+
     const savedTaraMethod = selectedSavedMethodId
       ? savedMethods?.find((m) => m.id === selectedSavedMethodId)
       : undefined;
@@ -1313,9 +1362,10 @@ export default function PaymentScreen() {
 
           {taraListingEligible && (
             <TouchableOpacity
-              style={[styles.methodTile, provider === "tara" && styles.methodTileSelected]}
+              style={[styles.methodTile, provider === "tara" && mobileNetwork === "default" && styles.methodTileSelected]}
               onPress={() => {
                 setProvider("tara");
+                setMobileNetwork("default");
                 setSelectedSavedMethodId(null);
                 stripeSessionRef.current = null;
               }}
@@ -1324,12 +1374,35 @@ export default function PaymentScreen() {
               <Ionicons
                 name="phone-portrait-outline"
                 size={28}
-                color={provider === "tara" ? "#16a34a" : "#6b7280"}
+                color={provider === "tara" && mobileNetwork === "default" ? "#16a34a" : "#6b7280"}
               />
-              <Text style={[styles.methodTileTitle, provider === "tara" && styles.methodTileTitleSelected]}>
+              <Text style={[styles.methodTileTitle, provider === "tara" && mobileNetwork === "default" && styles.methodTileTitleSelected]}>
                 Mobile Money
               </Text>
               <Text style={styles.methodTileSubtitle}>M-Pesa, MTN, Airtel Money</Text>
+            </TouchableOpacity>
+          )}
+
+          {taraListingEligible && (
+            <TouchableOpacity
+              style={[styles.methodTile, provider === "tara" && mobileNetwork === "wave" && styles.methodTileSelected]}
+              onPress={() => {
+                setProvider("tara");
+                setMobileNetwork("wave");
+                setSelectedSavedMethodId(null);
+                stripeSessionRef.current = null;
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="water-outline"
+                size={28}
+                color={provider === "tara" && mobileNetwork === "wave" ? "#16a34a" : "#6b7280"}
+              />
+              <Text style={[styles.methodTileTitle, provider === "tara" && mobileNetwork === "wave" && styles.methodTileTitleSelected]}>
+                Wave
+              </Text>
+              <Text style={styles.methodTileSubtitle}>Wave Money</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -1808,6 +1881,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   cancelBtnText: { fontSize: 15, color: "#374151", fontWeight: "600" },
+  waveLinkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#16a34a",
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 20,
+  },
+  waveLinkBtnText: { fontSize: 15, color: "#fff", fontWeight: "700" },
 
   // Modal styles
   modalOverlay: {

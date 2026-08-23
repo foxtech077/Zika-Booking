@@ -346,6 +346,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         chargedAmount: charge.amountXaf,
         chargedCurrency: "XAF",
         chargedRate: charge.rate,
+        ...(network ? { network } : {}),
         mobileNumber: rawPhone,
       },
     });
@@ -669,6 +670,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         attemptNumber,
         idempotencyKey,
         paymentMethodType: paymentProvider === "tara" ? "mobile_money" : undefined,
+        ...(paymentProvider === "tara" && network ? { network } : {}),
         ...(paymentProvider === "tara" && mobileNumber ? { mobileNumber } : {}),
       },
     });
@@ -824,6 +826,7 @@ export async function paymentRoutes(app: FastifyInstance) {
             chargedAmount: charge.amountXaf,
             chargedCurrency: "XAF",
             chargedRate: charge.rate,
+            ...(network ? { network } : {}),
             mobileNumber,
           },
         });
@@ -832,7 +835,10 @@ export async function paymentRoutes(app: FastifyInstance) {
           paymentId: payment.id,
           displayId: payment.displayId,
           taraReference: taraResult.taraReference,
-          message: "STK push sent. Please approve on your handset within 60 seconds.",
+          authUrl: taraResult.authUrl ?? null,
+          message: network === "wave"
+            ? "Wave payment page created. Open the hosted page to complete the payment."
+            : "STK push sent. Please approve on your handset within 60 seconds.",
         });
       }
     } catch (err: any) {
