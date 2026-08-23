@@ -34,13 +34,16 @@ export async function searchRoutes(app: FastifyInstance) {
     // the entire category.
     const placeResolved = q["place_resolved"] === "true";
     const requestedSearchMode = q["search_mode"];
-    // Radius is optional — when omitted, results are ranked nearest-first with
-    // no distance cap (the historical 20000km default that faked a global sort).
+    // Radius is optional. When omitted, browse/text searches rank nearest-first
+    // with no distance cap; an explicit place/destination search falls back to
+    // DEFAULT_PLACE_RADIUS_KM below.
     const radiusKm = q["radius_km"] ? parseInt(q["radius_km"], 10) : undefined;
-    // ~half Earth's circumference: the "give up on locality" tier.
-    const GLOBAL_RADIUS_KM = 20100;
-    // Airbnb-style page fill: stop widening once this many results exist.
-    const MIN_AREA_RESULTS = 6;
+    // Default radius for an explicit place/destination search when the caller
+    // doesn't supply one. It is fixed and does not depend on how many listings
+    // exist, so the same destination always returns the same set. The old code
+    // widened the radius until it found 6 listings, which hid nearby listings
+    // and made counts differ between searches for the same place.
+    const DEFAULT_PLACE_RADIUS_KM = 100;
     const checkIn = q["check_in"];
     const checkOut = q["check_out"];
     const pickupDatetime = q["pickup_datetime"];
@@ -63,7 +66,7 @@ export async function searchRoutes(app: FastifyInstance) {
       return sendError(reply, 400, "INVALID_PARAMS", "text searches require q.");
     }
 
-    // Filters — common
+    // Common filters
     const priceMin = q["price_min"] ? parseFloat(q["price_min"]) : undefined;
     const priceMax = q["price_max"] ? parseFloat(q["price_max"]) : undefined;
     const ratingMin = q["rating_min"] ? parseFloat(q["rating_min"]) : undefined;
@@ -105,9 +108,9 @@ export async function searchRoutes(app: FastifyInstance) {
     const validStatuses = category === "hotel" ? ["approved"] : ["active"];
 
     // ── Single SQL search core ──────────────────────────────────────────────
-    // All filtering, ranking (exact → partial → nearby), availability and
-    // rating are computed in Postgres. Only the requested page is ever held in
-    // memory — no wide-net candidate load.
+    // All filtering, ranking (exact, then partial, then nearby), availability
+    // and rating run in Postgres. The query holds only the requested page in
+    // memory, never the whole candidate set.
     const priceCol = category === "car" ? "price_per_day" : "price_per_night";
 
     let p = 0;
@@ -122,7 +125,7 @@ export async function searchRoutes(app: FastifyInstance) {
     push(`l.category::text = ${next()}`, category);
     push(`l.status::text = ANY(${next()})`, validStatuses);
 
-    // Category-aware price filtering — applied to the guest-payable price
+    // Category-aware price filtering. Applied to the guest-payable price
     // (raw list price, converted to the requested currency, ceiling-
     // rounded), i.e. the exact `localizedNightlyRate`/`localizedDailyRate`
     // values the response exposes, minus the client-side promo badge (a
@@ -192,7 +195,7 @@ export async function searchRoutes(app: FastifyInstance) {
     if (delivery !== undefined) push(`l.delivery_enabled = ${next()}`, delivery === "true");
     if (airportPickup !== undefined) push(`l.airport_pickup = ${next()}`, airportPickup === "true");
     if (instantBooking !== undefined) push(`l.instant_booking = ${next()}`, instantBooking === "true");
-    // Amenities — each requested key is an EXISTS over the join table
+    // Amenities. Each requested key is an EXISTS over the join table
     if (amenityIds?.length) {
       const PREFIXES = ["Connectivity", "Food & Drink", "Wellness", "Comfort", "Services"];
       const seen = new Set<string>();
@@ -215,7 +218,7 @@ export async function searchRoutes(app: FastifyInstance) {
     if (minRentalDays !== undefined) push(`(l.minimum_rental_days IS NULL OR l.minimum_rental_days <= ${next()})`, minRentalDays);
     if (minStayNights !== undefined) push(`(l.min_stay_nights IS NULL OR l.min_stay_nights <= ${next()})`, minStayNights);
 
-    // Availability — overlapping bookings excluded at the SQL level
+    // Availability. Overlapping bookings are excluded at the SQL level
     if (checkIn && checkOut) {
       const inRef = next();
       const outRef = next();
@@ -235,7 +238,7 @@ export async function searchRoutes(app: FastifyInstance) {
       );
     }
 
-    // User rating (guest review score) — explicit NULL semantics: listings
+    // User rating (guest review score). Explicit NULL handling: listings
     // without visible reviews are excluded when a threshold is applied, and the
     // clause states that directly (COALESCE sentinel) instead of relying on
     // three-valued logic. Correlated subquery keeps the COUNT query correct
@@ -244,12 +247,12 @@ export async function searchRoutes(app: FastifyInstance) {
       push(buildUserRatingFilterClause(next, ratingMin), ratingMin);
     }
 
-    // Geo anchor (optional) — distance ranking needs both coordinates. No
+    // Geo anchor (optional). Distance ranking needs both coordinates. No
     // artificial radius cap: radius_km narrows only when explicitly chosen,
     // otherwise results sort nearest-first.
     //
     // For a text query the anchor is only trustworthy when the typed place
-    // actually resolved (place_resolved=true) — otherwise we run in text-only
+    // actually resolved (place_resolved=true). Otherwise we run in text-only
     // mode (exact/partial matches only) so an unresolved/junk term never
     // returns the whole category disguised as "nearby".
     const hasGeoCoords = Number.isFinite(lat) && Number.isFinite(lng);
@@ -257,34 +260,31 @@ export async function searchRoutes(app: FastifyInstance) {
     const hasGeo = hasGeoCoords && searchMode !== "text";
     let lngRef: string | null = null;
     let latRef: string | null = null;
-    // Airbnb-style adaptive area: when the caller gives an anchor but no
-    // explicit radius, start local and widen only until a page's worth of
-    // results exists. A fixed radius fails both ways on a sparse inventory —
-    // 200 km returns nothing almost everywhere, and an Earth-sized one turns
-    // "near Kollam" into a list of the whole planet.
-    const ADAPTIVE_TIERS_KM = [100, 500, 2000, GLOBAL_RADIUS_KM];
-    const adaptive = hasGeo && !radiusKm;
-    let radiusParamIdx: number | null = null;
+    // Effective search radius. Set explicitly, not from the listing count. A
+    // destination (place) search without an explicit radius uses
+    // DEFAULT_PLACE_RADIUS_KM, so the same place always returns the same set. An
+    // explicit radius_km (the user-controlled "widen") is used as given. Browse
+    // and text searches apply no radius. They rank nearest-first and keep every
+    // listing instead of dropping far ones.
+    const placeRadius =
+      searchMode === "place" && radiusKm == null ? DEFAULT_PLACE_RADIUS_KM : radiusKm;
     if (hasGeo) {
       lngRef = next();
       params.push(lng);
       latRef = next();
       params.push(lat);
-      if (radiusKm || adaptive) {
+      if (placeRadius != null) {
         // Listings without coordinates bypass the radius filter instead of
         // being dropped from results. When ranking by distance, the COALESCE
         // sentinel in distance_km sorts them after every located result.
         push(
           `(l.location IS NULL OR public.ST_DWithin(l.location, public.ST_SetSRID(public.ST_MakePoint(${lngRef}, ${latRef}), 4326)::public.geography, ${next()}))`,
-          (radiusKm ?? ADAPTIVE_TIERS_KM[0]!) * 1000,
+          placeRadius * 1000,
         );
-        // The tier loop below rebinds this single value; indexes of every
-        // other param stay untouched.
-        radiusParamIdx = params.length - 1;
       }
     }
 
-    // Free-text rank — accent-insensitive via the immutable f_unaccent wrapper
+    // Free-text rank. Accent-insensitive via the immutable f_unaccent wrapper
     // (unaccent itself is not immutable, so it cannot be indexed directly).
     let textRankExpr = "0 AS text_rank";
     if (textQuery) {
@@ -295,7 +295,7 @@ export async function searchRoutes(app: FastifyInstance) {
       const partial = fields.map((f) => `public.f_unaccent(lower(${f})) LIKE '%' || ${normQ} || '%'`);
       textRankExpr = `CASE WHEN ${exact.join(" OR ")} THEN 0 WHEN ${partial.join(" OR ")} THEN 1 ELSE 2 END AS text_rank`;
       // Text-only mode: the destination did not resolve to a real location, so
-      // only genuine text matches (exact/partial) are eligible — no nearby fill.
+      // only genuine text matches (exact/partial) are eligible. No nearby fill.
       if (textOnly) {
         push(`(${exact.join(" OR ")} OR ${partial.join(" OR ")})`);
       }
@@ -315,7 +315,7 @@ export async function searchRoutes(app: FastifyInstance) {
     const whereSql = where.join("\n      AND ");
     const selectExprs = ["l.id", textRankExpr, distanceExpr, latExpr, lngExpr].join(",\n      ");
 
-    // Price sort — order by the SAME guest-payable price the response displays
+    // Price sort. Order by the same guest-payable price the response displays
     // (min active room-type price for hotels / raw listing price, converted to
     // the requested currency and ceiling-rounded), not the raw listing column.
     // The expression's placeholders are allocated after all WHERE params, and
@@ -362,27 +362,13 @@ export async function searchRoutes(app: FastifyInstance) {
 
     const countSql = `SELECT COUNT(*)::int AS total ${fromSql} WHERE ${whereSql}`;
 
-    let total: number;
-    let effectiveRadiusKm: number | null = radiusKm ?? null;
-    if (adaptive && radiusParamIdx !== null) {
-      // Widen tier by tier until enough results exist. Counts are cheap and
-      // sequential probes only happen while the area is still sparse.
-      total = 0;
-      for (const tierKm of ADAPTIVE_TIERS_KM) {
-        params[radiusParamIdx] = tierKm * 1000;
-        const rows = await prisma.$queryRawUnsafe<Array<{ total: number }>>(
-          countSql, ...params.slice(0, countParamCount),
-        );
-        total = rows[0]?.total ?? 0;
-        effectiveRadiusKm = tierKm;
-        if (total >= MIN_AREA_RESULTS) break;
-      }
-    } else {
-      const rows = await prisma.$queryRawUnsafe<Array<{ total: number }>>(
-        countSql, ...params.slice(0, countParamCount),
-      );
-      total = rows[0]?.total ?? 0;
-    }
+    // One count query. The radius is fixed above, so the result set is stable
+    // for a given query.
+    const countRows = await prisma.$queryRawUnsafe<Array<{ total: number }>>(
+      countSql, ...params.slice(0, countParamCount),
+    );
+    const total = countRows[0]?.total ?? 0;
+    const effectiveRadiusKm: number | null = placeRadius ?? null;
 
     const pageRows = await prisma.$queryRawUnsafe<Array<{ id: string; distance_km: number | null; lat: number | null; lng: number | null }>>(
       pageSql, ...params,
@@ -434,7 +420,7 @@ export async function searchRoutes(app: FastifyInstance) {
         placeName,
         lat: logLat,
         lng: logLng,
-        radiusKm: radiusKm ?? 25,
+        radiusKm: placeRadius ?? undefined,
         checkIn: checkIn ? new Date(checkIn) : undefined,
         checkOut: checkOut ? new Date(checkOut) : undefined,
         pickupDatetime: pickupDatetime ? new Date(pickupDatetime) : undefined,
@@ -445,7 +431,7 @@ export async function searchRoutes(app: FastifyInstance) {
       },
     }).catch(() => { /* non-critical */ });
 
-    // Fetch active promotion badge for this category (non-critical — never blocks search)
+    // Fetch active promotion badge for this category (non-critical, never blocks search)
     let promoBadge: { labelText: string; labelColour: string } | null = null;
     try {
       const now = new Date();
@@ -472,7 +458,7 @@ export async function searchRoutes(app: FastifyInstance) {
 
       // Calculate the guest-facing rate: use the minimum room-type price for
       // hotels, otherwise the raw list price. The commission is no longer baked
-      // into the guest price — guests pay listPrice + service fee, and commission
+      // into the guest price. Guests pay listPrice + service fee, and commission
       // is deducted from the provider's payout instead.
       let nightlyRate: number | null = null;
       if (l.category !== "car") {
@@ -535,7 +521,7 @@ export async function searchRoutes(app: FastifyInstance) {
         commissionRate,
         serviceFeeRate: SERVICE_FEE_RATE,
         cancellationPolicy: l.cancellationPolicy,
-        // Stays (hotel + apartment) — clients badge this when > 1 night
+        // Stays (hotel + apartment). Clients badge this when > 1 night
         minStayNights: l.category === "car" ? null : l.minStayNights,
         // Hotel
         starRating: l.starRating,
@@ -566,12 +552,12 @@ export async function searchRoutes(app: FastifyInstance) {
       availableCount: available,
       nextCursor,
       results,
-      // How far the search actually reached. `expanded` means the local area
-      // was too sparse and the radius widened — clients show an Airbnb-style
-      // "showing results further away" note on it.
+      // `expanded` is true only when the user explicitly widened past the
+      // default destination radius (an opt-in "search nearby areas"), never an
+      // automatic global fallback.
       searchArea: {
         effectiveRadiusKm,
-        expanded: adaptive && effectiveRadiusKm !== ADAPTIVE_TIERS_KM[0],
+        expanded: placeRadius != null && placeRadius > DEFAULT_PLACE_RADIUS_KM,
       },
     });
     } catch (err) {
@@ -588,12 +574,12 @@ export async function searchRoutes(app: FastifyInstance) {
         type: "object",
         properties: {
           category: { type: "string", enum: ["hotel", "apartment", "car"], description: "Listing category (required)" },
-          lat: { type: "number", description: "Latitude of search centre — optional; omitted → no distance ranking" },
-          lng: { type: "number", description: "Longitude of search centre — optional; omitted → no distance ranking" },
-          q: { type: "string", description: "Free-text destination search — matches listing name/location fields accent-insensitively; exact → partial → nearby ranked" },
+          lat: { type: "number", description: "Latitude of search centre. Optional. When omitted, results are not distance-ranked." },
+          lng: { type: "number", description: "Longitude of search centre. Optional. When omitted, results are not distance-ranked." },
+          q: { type: "string", description: "Free-text destination search. Matches listing name and location fields accent-insensitively. Ranked exact, then partial, then nearby." },
           place_resolved: { type: "string", enum: ["true", "false"], description: "Set true only when the typed destination resolved to a real geocoded location; unlocks the nearby fallback for q. When false/absent, q returns exact/partial text matches only." },
           place_name: { type: "string", description: "Human-readable place name (for logging)" },
-          radius_km: { type: "integer", description: "Search radius in km — only applied when explicitly provided; omitted → nearest-first without a cap" },
+          radius_km: { type: "integer", description: "Search radius in km. Applied only when provided. When omitted, results are nearest-first with no cap." },
           check_in: { type: "string", description: "Hotel/apartment check-in date (YYYY-MM-DD)" },
           check_out: { type: "string", description: "Hotel/apartment check-out date (YYYY-MM-DD)" },
           pickup_datetime: { type: "string", description: "Car pickup datetime (ISO 8601)" },
@@ -626,7 +612,7 @@ export async function searchRoutes(app: FastifyInstance) {
           bathrooms_min: { type: "integer", description: "Minimum number of bathrooms" },
           max_guests_min: { type: "integer", description: "Minimum max-guests capacity" },
           long_stay_discount: { type: "string", enum: ["true", "false"], description: "Filter listings that have a long-stay discount enabled" },
-          min_stay_nights: { type: "integer", description: "User's planned stay duration in nights — filters out listings that require more than this many nights minimum" },
+          min_stay_nights: { type: "integer", description: "User's planned stay length in nights. Filters out listings whose minimum stay exceeds this." },
           // Car filters
           car_make: { type: "string", description: "Car brand/make (case-insensitive partial match, e.g. Toyota)" },
           car_model: { type: "string", description: "Car model (case-insensitive partial match, e.g. Hilux)" },
@@ -637,8 +623,8 @@ export async function searchRoutes(app: FastifyInstance) {
           car_category: { type: "string", enum: ["Economy", "Compact", "SUV", "Minivan", "Pickup", "Luxury", "Electric", "Convertible"], description: "Car category" },
           drive_type: { type: "string", enum: ["2WD", "4WD", "AWD"], description: "Drive type" },
           air_conditioning: { type: "string", enum: ["true", "false"], description: "Air conditioning filter" },
-          driver_age: { type: "integer", description: "Driver age — filters out listings with minimum driver age requirement above this value" },
-          min_rental_days: { type: "integer", description: "User's planned rental duration in days — filters out listings that require more than this many days minimum" },
+          driver_age: { type: "integer", description: "Driver age. Filters out listings whose minimum driver age exceeds this." },
+          min_rental_days: { type: "integer", description: "User's planned rental length in days. Filters out listings whose minimum rental days exceed this." },
           delivery: { type: "string", enum: ["true", "false"], description: "Filter by delivery availability" },
           airport_pickup: { type: "string", enum: ["true", "false"], description: "Car filter: only listings offering airport pickup" },
           instant_booking: { type: "string", enum: ["true", "false"], description: "Filter listings that support instant booking" },
@@ -733,7 +719,7 @@ export async function searchRoutes(app: FastifyInstance) {
       const baseCurrency = listing.currency ?? "USD";
       const target = targetCurrency?.toUpperCase() || null;
       const ctx = await getLocalizedContext(baseCurrency, target);
-      // Guest-facing rates are the raw list prices — no commission baked in.
+      // Guest-facing rates are the raw list prices. No commission is baked in.
       const baseNightlyRate: number | null = listing.category !== "car"
         ? (listing.category === "hotel" && listing.hotelRoomTypes.length > 0
             ? Math.min(...listing.hotelRoomTypes.map((rt) => Number(rt.pricePerNight)))
@@ -812,7 +798,7 @@ export async function searchRoutes(app: FastifyInstance) {
         localizedDailyRate,
         localizedCurrency: ctx.currency,
         // Override the raw `hotelRoomTypes` from the listing spread with the
-        // localized room-type prices — consumers prefer `hotelRoomTypes` over
+        // localized room-type prices. Consumers prefer hotelRoomTypes over
         // `roomTypes`, so leaving the raw row here would mislabel them when a
         // display currency is set.
         hotelRoomTypes: localizedRoomTypes,
@@ -835,7 +821,7 @@ export async function searchRoutes(app: FastifyInstance) {
   );
 
   // ── GET /listings/:id/availability ───────────────────────────────────────
-  const LOCK_TTL_MS = 300_000; // 5 minutes — must match bookings.ts
+  const LOCK_TTL_MS = 300_000; // 5 minutes, must match bookings.ts
 
   function nextDay(dateStr: string): string {
     const d = new Date(dateStr);
@@ -999,7 +985,7 @@ export async function searchRoutes(app: FastifyInstance) {
         return sendSuccess(reply, 200, { roomTypeAvailability });
       }
 
-      // Legacy: no room types — return single unavailable ranges
+      // Legacy: no room types. Return a single set of unavailable ranges
       const unitCount = Math.max(1, listing.unitCount ?? 1);
 
       const [bookings, blockedDates] = await Promise.all([
