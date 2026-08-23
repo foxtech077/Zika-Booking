@@ -7,7 +7,7 @@ import { requireUser, requireAdminPermission, requireInternalService, requireAcc
 import { AdminPermission } from "@zika/types";
 import { cancelPayout } from "../services/payout.service.js";
 import { issueRefund, RefundLimitExceededError, InvalidPaymentStatusError, handleConfirmFailure } from "../services/refund.service.js";
-import { initiateTaraPayment } from "../lib/tara.js";
+import { initiateTaraPayment, TaraApiError } from "../lib/tara.js";
 import { computeTaraCharge, getTaraPhoneCountry, TaraNotAllowedError } from "../lib/taraEligibility.js";
 import { sendPaymentLinkEmail } from "../services/email.services.js";
 import { resolveEurCharge, EurQuoteUnavailableError, type EurChargeResult } from "../services/eurCharge.service.js";
@@ -327,15 +327,30 @@ export async function paymentRoutes(app: FastifyInstance) {
       return reply.type("text/html").send("<h2>A payment request was already sent to your phone. Please check your phone.</h2>");
     }
 
-    const taraResult = await initiateTaraPayment({
-      amount: charge.amountXaf,
-      currency: "XAF",
-      mobileNumber: rawPhone,
-      reference: bookingReference,
-      description: `Booking ${bookingReference}`,
-      attemptNumber: 1,
-      network,
-    });
+    let taraResult;
+    try {
+      taraResult = await initiateTaraPayment({
+        amount: charge.amountXaf,
+        currency: "XAF",
+        mobileNumber: rawPhone,
+        reference: bookingReference,
+        description: `Booking ${bookingReference}`,
+        attemptNumber: 1,
+        network,
+      });
+    } catch (err: any) {
+      if (err instanceof TaraApiError) {
+        const msg = err.code === "INVALID_NUMBER_FOR_THIS_NETWORK"
+          ? "This mobile number is not supported by the selected network. Please contact support or pay by card."
+          : err.message;
+        await prisma.payment.update({
+          where: { id: existingPayment.id },
+          data: { status: "failed", failureCode: err.code, failureMessage: msg },
+        });
+        return reply.type("text/html").send(`<h2>Payment failed.</h2><p>${msg}</p>`);
+      }
+      throw err;
+    }
 
     // Update the existing payment record instead of creating a duplicate
     await prisma.payment.update({
@@ -806,15 +821,30 @@ export async function paymentRoutes(app: FastifyInstance) {
           throw err;
         }
 
-        const taraResult = await initiateTaraPayment({
-          amount: charge.amountXaf,
-          currency: "XAF",
-          mobileNumber,
-          reference: bookingReference,
-          description: `Booking ${bookingReference}`,
-          attemptNumber,
-          network,
-        });
+        let taraResult;
+        try {
+          taraResult = await initiateTaraPayment({
+            amount: charge.amountXaf,
+            currency: "XAF",
+            mobileNumber,
+            reference: bookingReference,
+            description: `Booking ${bookingReference}`,
+            attemptNumber,
+            network,
+          });
+        } catch (err: any) {
+          if (err instanceof TaraApiError) {
+            const msg = err.code === "INVALID_NUMBER_FOR_THIS_NETWORK"
+              ? "This mobile number is not supported by the selected network. Please check the number or choose a different payment method."
+              : err.message;
+            await prisma.payment.update({
+              where: { id: payment.id },
+              data: { status: "failed", failureCode: err.code, failureMessage: msg }
+            });
+            return sendError(reply, 400, err.code, msg);
+          }
+          throw err;
+        }
 
         await prisma.payment.update({
           where: { id: payment.id },

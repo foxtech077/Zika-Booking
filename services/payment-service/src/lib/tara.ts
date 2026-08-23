@@ -50,6 +50,22 @@ function parseAuthUrl(raw?: string): string | null {
   }
 }
 
+// ── Typed API error ───────────────────────────────────────────────────────────
+// Thrown when Tara responds with a definitive business error (status "ERROR"),
+// e.g. INVALID_NUMBER_FOR_THIS_NETWORK. Not retried, unlike transient
+// HTTP/network failures.
+
+export class TaraApiError extends Error {
+  /** Tara's machine-readable error code, e.g. INVALID_NUMBER_FOR_THIS_NETWORK */
+  code: string;
+
+  constructor(code: string, message?: string) {
+    super(message ?? code);
+    this.name = "TaraApiError";
+    this.code = code;
+  }
+}
+
 // ── Shared fetch with timeout ─────────────────────────────────────────────────
 
 async function taraFetch(
@@ -139,6 +155,14 @@ export async function initiateTaraPayment(opts: {
       const json = (await res.json()) as TaraApiResponse;
 
       if (!res.ok || json.status !== "SUCCESS") {
+        // Definitive business error from Tara (status "ERROR", e.g.
+        // INVALID_NUMBER_FOR_THIS_NETWORK) — do not retry, surface to caller.
+        if (json.status === "ERROR") {
+          throw new TaraApiError(
+            json.message ?? json.error ?? "TARA_ERROR",
+            `Tara API error: ${json.message ?? json.error ?? "unknown"}`,
+          );
+        }
         throw new Error(
           `Tara API ${res.status}: ${json.message ?? json.error ?? "unknown error"}`,
         );
@@ -151,6 +175,8 @@ export async function initiateTaraPayment(opts: {
       };
     } catch (err: unknown) {
       lastError = err;
+      // Business errors are definitive — surface immediately, no retry
+      if (err instanceof TaraApiError) throw err;
       const isAbort = err instanceof Error && err.name === "AbortError";
       // Don't retry on timeout (STK already sent)
       if (isAbort || attempt === 3) break;
