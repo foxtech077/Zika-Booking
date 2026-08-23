@@ -223,6 +223,9 @@ export interface Booking {
   confirmedAt: string | null;
   completedAt: string | null;
   paymentId: string | null;
+  paymentStatus?: string | null;
+  paymentGateway?: "stripe" | "tara" | null;
+  paymentNetwork?: string | null;
   createdAt: string;
   updatedAt: string;
   listing?: { name: string | null; country?: string | null };

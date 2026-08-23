@@ -89,6 +89,9 @@ model Payment {
   cardLast4           String?         @db.Char(4)
   mobileNumberMasked  String?
   mobileNumber        String?
+  // Mobile money network used for Tara charges (e.g. "wave"). Empty for
+  // Stripe payments and legacy Tara rows where no network was selected.
+  network             String?
   voucherPdfKey       String?
   failureCode         String?
   failureMessage      String?

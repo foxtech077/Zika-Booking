@@ -2451,6 +2451,9 @@ export async function adminListingRoutes(app: FastifyInstance) {
                   cancelledAt: { type: "string", format: "date-time", nullable: true },
                   confirmedAt: { type: "string", format: "date-time", nullable: true },
                   createdAt: { type: "string", format: "date-time" },
+                  paymentStatus: { type: "string", nullable: true },
+                  paymentGateway: { type: "string", nullable: true },
+                  paymentNetwork: { type: "string", nullable: true },
                   listing: {
                     type: "object",
                     properties: { name: { type: "string", nullable: true } },
@@ -2522,7 +2525,48 @@ export async function adminListingRoutes(app: FastifyInstance) {
         }),
       ]);
 
-      return sendSuccess(reply, 200, { bookings, total, page: parseInt(page, 10), limit: take });
+      // Fetch payment data for these bookings so the admin listing can show
+      // which gateway (and mobile money network) was used.
+      const bookingIds = bookings.map((b) => b.id);
+      let paymentMap = new Map<string, { status: string; paymentProvider: string; network: string | null }>();
+
+      if (bookingIds.length > 0) {
+        try {
+          const PAYMENT_SERVICE_URL = process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3003";
+
+          const paymentRes = await fetch(`${PAYMENT_SERVICE_URL}/admin/payments?bookingIds=${bookingIds.join(",")}`, {
+            headers: { "Content-Type": "application/json" },
+          });
+
+          if (paymentRes.ok) {
+            const paymentData = await paymentRes.json() as { data?: any[] };
+            const payments = paymentData?.data ?? [];
+            for (const p of payments) {
+              if (p.bookingId) {
+                paymentMap.set(p.bookingId, {
+                  status: p.status,
+                  paymentProvider: p.paymentProvider,
+                  network: p.network ?? null,
+                });
+              }
+            }
+          }
+        } catch {
+          // Payment service unavailable — continue without payment details
+        }
+      }
+
+      const enrichedBookings = bookings.map((b) => {
+        const payment = paymentMap.get(b.id);
+        return {
+          ...b,
+          paymentStatus: payment?.status ?? null,
+          paymentGateway: payment?.paymentProvider ?? null,
+          paymentNetwork: payment?.network ?? null,
+        };
+      });
+
+      return sendSuccess(reply, 200, { bookings: enrichedBookings, total, page: parseInt(page, 10), limit: take });
     } catch (err: any) {
       return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch bookings.");
     }

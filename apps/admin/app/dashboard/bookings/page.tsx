@@ -399,6 +399,21 @@ export default function BookingsPage() {
       ),
     },
     {
+      key: "payment",
+      label: "Payment Method",
+      render: (b) => {
+        const label =
+          b.paymentGateway === "stripe"
+            ? "Stripe"
+            : b.paymentGateway === "tara"
+              ? b.paymentNetwork
+                ? `Tara-${b.paymentNetwork}`
+                : "Tara"
+              : "—";
+        return <span className="text-sm text-slate-700">{label}</span>;
+      },
+    },
+    {
       key: "status",
       label: "Status",
       render: (b) => <Badge label={b.status} status={b.status} />,
