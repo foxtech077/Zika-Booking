@@ -188,8 +188,9 @@ const NON_PAYABLE_STATUSES = [
 ];
 
 function getPaymentErrorMessage(err: unknown): string {
-  const res = (err as { response?: { data?: { message?: string } } })?.response;
-  const message = res?.data?.message ?? (err as Error)?.message ?? "";
+  const res = (err as { response?: { data?: { message?: string; error?: { message?: string } } } })?.response;
+  // API errors use the envelope shape { error: { code, message } }
+  const message = res?.data?.error?.message ?? res?.data?.message ?? (err as Error)?.message ?? "";
   if (message.includes("idempotencyKey") || message.includes("Unique constraint")) {
     return "A payment session is already open for this booking. Tap Pay Now again to continue.";
   }

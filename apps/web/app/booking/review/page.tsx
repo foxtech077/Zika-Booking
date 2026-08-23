@@ -257,6 +257,11 @@ export default function BookingReviewPage() {
   const [phoneCountry, setPhoneCountry] = useState("");
   const [taraXafAmount, setTaraXafAmount] = useState<number | null>(null);
   const [taraXafLoading, setTaraXafLoading] = useState(false);
+  // Mobile money network selected at checkout. "default" is the standard Tara
+  // STK-push flow; "wave" routes the charge through Wave (same Tara gateway,
+  // network: "wave") which returns a hosted payment page URL instead.
+  const [payNetwork, setPayNetwork] = useState<"default" | "wave">("default");
+  const [waveAuthUrl, setWaveAuthUrl] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [payError, setPayError] = useState("");
@@ -471,11 +476,12 @@ export default function BookingReviewPage() {
     deliveryFee?: number,
     commissionRate?: number,
     serviceFeeRate?: number,
+    maxDurationMs = 120_000,
   ) {
     if (pollRef.current) clearInterval(pollRef.current);
     const startedAt = Date.now();
     pollRef.current = setInterval(async () => {
-      if (Date.now() - startedAt > 120_000) {
+      if (Date.now() - startedAt > maxDurationMs) {
         clearInterval(pollRef.current!);
         pollRef.current = null;
         setPayError("Payment took too long. Please try again.");
@@ -614,6 +620,7 @@ export default function BookingReviewPage() {
           bookingId: bId,
           paymentProvider: "tara",
           mobileNumber: mobileNumber.trim(),
+          ...(payNetwork === "wave" ? { network: "wave" } : {}),
         });
         if (!payRes.data.success) {
           setPayError(payRes.data?.error?.message ?? "Payment initiation failed.");
@@ -621,8 +628,14 @@ export default function BookingReviewPage() {
         }
         pmId = payRes.data.data.paymentId as string;
         setPaymentId(pmId);
+        if (payNetwork === "wave") {
+          // Wave is a hosted-page flow: the guest completes payment on the
+          // network's page (opened via link). No STK prompt — allow a generous
+          // 10-minute polling window for them to pay and return to this tab.
+          setWaveAuthUrl(payRes.data.data.authUrl ?? null);
+        }
         setStep("polling");
-        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.discount, "Mobile Money", ctx.pricingPreview?.securityDeposit, ctx.pricingPreview?.deliveryFee, ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.serviceFeeRate);
+        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.discount, payNetwork === "wave" ? "Tara-wave" : "Mobile Money", ctx.pricingPreview?.securityDeposit, ctx.pricingPreview?.deliveryFee, ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.serviceFeeRate, payNetwork === "wave" ? 10 * 60_000 : undefined);
       }
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message ?? err?.response?.data?.message ?? err?.message ?? "Something went wrong.";
@@ -796,13 +809,27 @@ export default function BookingReviewPage() {
               </div>
               <div>
                 <h2 className="text-xl font-bold text-slate-800 mb-2">
-                  {provider === "tara" ? "Payment Request Sent" : "Processing Payment"}
+                  {provider === "tara"
+                    ? payNetwork === "wave" ? "Waiting for your Wave payment" : "Payment Request Sent"
+                    : "Processing Payment"}
                 </h2>
                 <p className="text-slate-500 text-sm leading-relaxed">
                   {provider === "tara"
-                    ? "A payment request has been sent to your phone. Please approve it to complete your booking."
+                    ? payNetwork === "wave"
+                      ? "Complete the payment on the Wave page. This screen will update automatically once it's confirmed."
+                      : "A payment request has been sent to your phone. Please approve it to complete your booking."
                     : "Please wait while we confirm your payment."}
                 </p>
+                {provider === "tara" && payNetwork === "wave" && waveAuthUrl && (
+                  <a
+                    href={waveAuthUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 mt-5 px-6 py-3 rounded-xl bg-[#0B1E3F] text-white text-sm font-bold hover:bg-[#0B1E3F]/90 transition"
+                  >
+                    Open Wave Payment Page ↗
+                  </a>
+                )}
                 <p className="text-slate-400 text-xs mt-3 animate-pulse">Waiting for payment confirmation…</p>
               </div>
             </div>
@@ -1051,19 +1078,28 @@ export default function BookingReviewPage() {
 
                 {/* Payment method selector */}
                 <SectionCard title="Payment Method">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className={`grid gap-3 ${taraListingEligible ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2"}`}>
                     {(taraListingEligible ? (["tara", "stripe"] as PayProvider[]) : (["stripe"] as PayProvider[])).map((p) => (
                       <button
                         key={p}
-                        onClick={() => setProvider(p)}
-                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition text-sm font-semibold ${provider === p ? "border-[#0B1E3F] bg-[#0B1E3F]/5 text-[#0B1E3F]" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}
+                        onClick={() => { setProvider(p); if (p === "tara") setPayNetwork("default"); }}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition text-sm font-semibold ${provider === p && !(p === "tara" && payNetwork === "wave") ? "border-[#0B1E3F] bg-[#0B1E3F]/5 text-[#0B1E3F]" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}
                       >
                         <span className="text-2xl">{p === "tara" ? "📱" : "💳"}</span>
                         <span>{p === "tara" ? "Mobile Money" : "Card & Digital Wallets"}</span>
-                        {hasTara && p === "tara" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
+                        {hasTara && p === "tara" && payNetwork === "default" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
                         {!hasTara && p === "stripe" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
                       </button>
                     ))}
+                    {taraListingEligible && (
+                      <button
+                        onClick={() => { setProvider("tara"); setPayNetwork("wave"); }}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition text-sm font-semibold ${provider === "tara" && payNetwork === "wave" ? "border-[#0B1E3F] bg-[#0B1E3F]/5 text-[#0B1E3F]" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}
+                      >
+                        <span className="text-2xl">🌊</span>
+                        <span>Wave</span>
+                      </button>
+                    )}
                   </div>
                 </SectionCard>
 
@@ -1091,7 +1127,11 @@ export default function BookingReviewPage() {
                         Mobile money is only available for supported African countries. Please use card payment instead.
                       </p>
                     )}
-                    <p className="text-xs text-slate-400 mt-2">You will receive a payment prompt on this number.</p>
+                    <p className="text-xs text-slate-400 mt-2">
+                      {payNetwork === "wave"
+                        ? "You'll complete the payment on the Wave payment page after you confirm."
+                        : "You will receive a payment prompt on this number."}
+                    </p>
                     {ctx && (ctx.currency ?? "").toUpperCase() !== "XAF" && (
                       <p className="text-xs text-slate-500 mt-1">
                         {taraXafLoading
