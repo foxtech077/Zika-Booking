@@ -131,6 +131,24 @@ function fmt(n: number, currency?: string) {
   return n.toLocaleString(undefined, { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
 }
 
+/** Wave returns authUrl as a JSON-encoded object in some responses. */
+function getWaveAuthUrl(value: unknown): string | null {
+  let candidate = value;
+  if (typeof candidate === "string") {
+    try { candidate = JSON.parse(candidate); } catch { /* already a URL, or invalid */ }
+  }
+  const url = typeof candidate === "object" && candidate !== null
+    ? (candidate as { url?: unknown }).url
+    : candidate;
+  if (typeof url !== "string") return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 function getPricing(ctx: CheckoutCtx) {
   if (!ctx.pricingPreview) return null;
   const pp = ctx.pricingPreview;
@@ -512,8 +530,14 @@ export default function BookingReviewPage() {
              baseAmount: base, serviceFee: fee, discount: disc,
             securityDeposit,
             deliveryFee,
-             commissionRate, serviceFeeRate,
+            commissionRate, serviceFeeRate,
           });
+          // Tara locks are intentionally retained while payment is pending so
+          // a failed attempt can be retried. Release the lock once payment is
+          // confirmed; the booking now protects the dates.
+          if (ctx!.lockToken) {
+            void listingApi.delete(`/bookings/lock/${ctx!.lockToken}`).catch(() => { });
+          }
           sessionStorage.removeItem("zika:checkout");
           setStep("confirmed");
         } else if (status === "failed" || status === "timed_out") {
@@ -529,8 +553,27 @@ export default function BookingReviewPage() {
 
   async function handlePay() {
     if (!ctx || !pricing) return;
-    setSubmitting(true);
     setPayError("");
+
+    // Validate payment-specific input before creating the booking. Creating a
+    // booking consumes the reservation lock, so a typo must not turn into an
+    // unrecoverable expired checkout.
+    if (provider === "tara") {
+      if (!mobileNumber.trim()) {
+        setPayError("Please enter your mobile number.");
+        return;
+      }
+      let enteredPhoneCountry = "";
+      try {
+        enteredPhoneCountry = parsePhoneNumber(mobileNumber.trim())?.country ?? "";
+      } catch { /* handled by the validation below */ }
+      if (!enteredPhoneCountry || !isTaraCountry(enteredPhoneCountry)) {
+        setPayError("Mobile money is only available for supported African countries. Please use card payment instead.");
+        return;
+      }
+    }
+
+    setSubmitting(true);
 
     // Record the acceptance the guest just gave, once. Best-effort: a failure
     // must not cost them their reservation lock, so it is logged and the
@@ -545,46 +588,52 @@ export default function BookingReviewPage() {
     }
 
     try {
-      // Step 1: Create booking
-      const body: Record<string, any> = {
-        lockToken: ctx.lockToken,
-        listingId: ctx.listingId,
-        guestFirstName: ctx.firstName,
-        guestLastName: ctx.lastName,
-        guestEmail: ctx.email,
-        guestPhone: ctx.phone,
-        adults: ctx.adults,
-        children: ctx.children,
-        specialRequests: ctx.specialRequests,
-      };
-      if (ctx.listingCategory !== "car") {
-        body.checkIn = ctx.checkIn;
-        body.checkOut = ctx.checkOut;
-      } else {
-        body.pickupDatetime = toIsoDatetime(ctx.pickupDatetime);
-        body.returnDatetime = toIsoDatetime(ctx.returnDatetime);
-        body.driverFirstName = ctx.driverFirstName ?? ctx.firstName;
-        body.driverLastName = ctx.driverLastName ?? ctx.lastName;
-        body.driverAge = ctx.driverAge;
-        body.deliveryRequested = ctx.deliveryRequested;
-        body.deliveryAddress = ctx.deliveryAddress;
-      }
-      if (ctx.listingCategory === "hotel") {
-        body.roomTypeId = ctx.roomTypeId;
-      }
-      if (ctx.discountSource === "voucher" && ctx.voucherCode) body.voucherCode = ctx.voucherCode;
-      if (ctx.discountSource === "promotion" && ctx.promotionId) body.promotionId = ctx.promotionId;
+      // Step 1: Create the booking only once. If payment initiation fails, the
+      // existing pending booking can be retried without trying to reuse the
+      // already-consumed reservation lock.
+      let bId = bookingId;
+      let bRef = bookingRef;
+      let total = pricing.total;
+      if (!bId) {
+        const body: Record<string, any> = {
+          lockToken: ctx.lockToken,
+          listingId: ctx.listingId,
+          guestFirstName: ctx.firstName,
+          guestLastName: ctx.lastName,
+          guestEmail: ctx.email,
+          guestPhone: ctx.phone,
+          adults: ctx.adults,
+          children: ctx.children,
+          specialRequests: ctx.specialRequests,
+          paymentProvider: provider,
+        };
+        if (ctx.listingCategory !== "car") {
+          body.checkIn = ctx.checkIn;
+          body.checkOut = ctx.checkOut;
+        } else {
+          body.pickupDatetime = toIsoDatetime(ctx.pickupDatetime);
+          body.returnDatetime = toIsoDatetime(ctx.returnDatetime);
+          body.driverFirstName = ctx.driverFirstName ?? ctx.firstName;
+          body.driverLastName = ctx.driverLastName ?? ctx.lastName;
+          body.driverAge = ctx.driverAge;
+          body.deliveryRequested = ctx.deliveryRequested;
+          body.deliveryAddress = ctx.deliveryAddress;
+        }
+        if (ctx.listingCategory === "hotel") body.roomTypeId = ctx.roomTypeId;
+        if (ctx.discountSource === "voucher" && ctx.voucherCode) body.voucherCode = ctx.voucherCode;
+        if (ctx.discountSource === "promotion" && ctx.promotionId) body.promotionId = ctx.promotionId;
 
-      const bookRes = await listingApi.post<any>("/bookings", body);
-      if (!bookRes.data.success || !bookRes.data.data?.bookingId) {
-        setPayError(bookRes.data?.error?.message ?? "Booking failed. Please try again.");
-        return;
+        const bookRes = await listingApi.post<any>("/bookings", body);
+        if (!bookRes.data.success || !bookRes.data.data?.bookingId) {
+          setPayError(bookRes.data?.error?.message ?? "Booking failed. Please try again.");
+          return;
+        }
+        bId = bookRes.data.data.bookingId as string;
+        bRef = bookRes.data.data.bookingReference as string;
+        total = Number(bookRes.data.data.totalAmount) || pricing.total;
+        setBookingId(bId);
+        setBookingRef(bRef);
       }
-      const bId = bookRes.data.data.bookingId as string;
-      const bRef = bookRes.data.data.bookingReference as string;
-      const total = Number(bookRes.data.data.totalAmount) || pricing.total;
-      setBookingId(bId);
-      setBookingRef(bRef);
 
       // Step 2: Initiate payment
       let pmId: string;
@@ -607,15 +656,6 @@ export default function BookingReviewPage() {
         setStep("stripe_card");
       } else {
         // Tara M-Pesa
-        if (!mobileNumber.trim()) { setPayError("Please enter your mobile number."); return; }
-        let phoneCountry = "";
-        try {
-          phoneCountry = parsePhoneNumber(mobileNumber.trim())?.country ?? "";
-        } catch { /* handled below */ }
-        if (!phoneCountry || !isTaraCountry(phoneCountry)) {
-          setPayError("Mobile money is only available for supported African countries. Please use card payment instead.");
-          return;
-        }
         const payRes = await paymentApi.post<any>("/payments/initiate", {
           bookingId: bId,
           paymentProvider: "tara",
@@ -632,7 +672,13 @@ export default function BookingReviewPage() {
           // Wave is a hosted-page flow: the guest completes payment on the
           // network's page (opened via link). No STK prompt — allow a generous
           // 10-minute polling window for them to pay and return to this tab.
-          setWaveAuthUrl(payRes.data.data.authUrl ?? null);
+          const authUrl = getWaveAuthUrl(payRes.data.data.authUrl ?? payRes.data.data.auth_url);
+          if (!authUrl) {
+            setPayError("Wave did not return a payment page. Please try again.");
+            setStep("payment");
+            return;
+          }
+          setWaveAuthUrl(authUrl);
         }
         setStep("polling");
         startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.discount, payNetwork === "wave" ? "Tara-wave" : "Mobile Money", ctx.pricingPreview?.securityDeposit, ctx.pricingPreview?.deliveryFee, ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.serviceFeeRate, payNetwork === "wave" ? 10 * 60_000 : undefined);
@@ -640,6 +686,19 @@ export default function BookingReviewPage() {
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message ?? err?.response?.data?.message ?? err?.message ?? "Something went wrong.";
       setPayError(msg);
+      // A 400 from Tara is a user-correctable error; keep the lock and allow
+      // another attempt. Provider/server/network failures are not safely
+      // retryable, so terminate this checkout immediately.
+      if (provider === "tara" && err?.response?.status !== 400) {
+        if (ctx.lockToken) {
+          await listingApi.delete(`/bookings/lock/${ctx.lockToken}`).catch(() => { });
+        }
+        if (pollRef.current) clearInterval(pollRef.current);
+        sessionStorage.removeItem("zika:checkout");
+        // Give the guest a moment to read the provider/server error before
+        // leaving the now-terminated checkout.
+        window.setTimeout(() => router.replace("/"), 1500);
+      }
     } finally {
       setSubmitting(false);
     }

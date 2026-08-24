@@ -112,7 +112,7 @@ function normaliseStatus(raw?: string): TaraPaymentResult["status"] {
   return "pending";
 }
 
-// ── Initiate STK push — exponential backoff on network error ──────────────────
+// ── Initiate STK push ──────────────────────────────────────────────────────────
 // Idempotency key format per spec: bookingReference + attemptNumber
 
 export async function initiateTaraPayment(opts: {
@@ -137,54 +137,37 @@ export async function initiateTaraPayment(opts: {
     ...(opts.network ? { network: opts.network } : {}),
   });
 
-  let lastError: unknown;
+  const res = await taraFetch(
+    "/api/tara/mobilepay",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+    },
+    STK_TIMEOUT_MS,
+  );
 
-  // Retry up to 3 times with exponential backoff: 2 s → 4 s
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const res = await taraFetch(
-        "/api/tara/mobilepay",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: payload,
-        },
-        STK_TIMEOUT_MS,
+  const json = (await res.json()) as TaraApiResponse;
+
+  if (!res.ok || json.status !== "SUCCESS") {
+    // Definitive business error from Tara (status "ERROR", e.g.
+    // INVALID_NUMBER_FOR_THIS_NETWORK) — surface immediately.
+    if (json.status === "ERROR") {
+      throw new TaraApiError(
+        json.message ?? json.error ?? "TARA_ERROR",
+        `Tara API error: ${json.message ?? json.error ?? "unknown"}`,
       );
-
-      const json = (await res.json()) as TaraApiResponse;
-
-      if (!res.ok || json.status !== "SUCCESS") {
-        // Definitive business error from Tara (status "ERROR", e.g.
-        // INVALID_NUMBER_FOR_THIS_NETWORK) — do not retry, surface to caller.
-        if (json.status === "ERROR") {
-          throw new TaraApiError(
-            json.message ?? json.error ?? "TARA_ERROR",
-            `Tara API error: ${json.message ?? json.error ?? "unknown"}`,
-          );
-        }
-        throw new Error(
-          `Tara API ${res.status}: ${json.message ?? json.error ?? "unknown error"}`,
-        );
-      }
-
-      return {
-        taraReference: extractReference(json, idempotencyKey),
-        status: "pending",
-        authUrl: parseAuthUrl(json.authUrl),
-      };
-    } catch (err: unknown) {
-      lastError = err;
-      // Business errors are definitive — surface immediately, no retry
-      if (err instanceof TaraApiError) throw err;
-      const isAbort = err instanceof Error && err.name === "AbortError";
-      // Don't retry on timeout (STK already sent)
-      if (isAbort || attempt === 3) break;
-      await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 1_000));
     }
+    throw new Error(
+      `Tara API ${res.status}: ${json.message ?? json.error ?? "unknown error"}`,
+    );
   }
 
-  throw lastError;
+  return {
+    taraReference: extractReference(json, idempotencyKey),
+    status: "pending",
+    authUrl: parseAuthUrl(json.authUrl),
+  };
 }
 
 // ── Poll payment status ───────────────────────────────────────────────────────
@@ -217,5 +200,4 @@ export async function initiateTaraReversal(opts: {
   void opts;
   return { reversalId: `TREV-${Date.now()}` };
 }
-
 
