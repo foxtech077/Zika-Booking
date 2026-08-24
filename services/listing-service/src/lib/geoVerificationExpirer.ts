@@ -5,7 +5,9 @@ export async function expireStaleGeoVerifications(): Promise<void> {
   const now = new Date();
 
   try {
-    const stale = await prisma.$queryRaw<Array<{ id: string; providerId: string; name: string | null }>>`
+    const stale = await prisma.$queryRaw<
+      Array<{ id: string; providerId: string; name: string | null }>
+    >`
       SELECT id, provider_id AS "providerId", name
       FROM listing.listings
       WHERE category = 'apartment'
@@ -17,7 +19,9 @@ export async function expireStaleGeoVerifications(): Promise<void> {
 
     if (stale.length === 0) return;
 
-    console.log(`[GeoVerificationExpirer] Expiring ${stale.length} listing(s) with stale geolocation.`);
+    console.log(
+      `[GeoVerificationExpirer] Expiring ${stale.length} listing(s) with stale geolocation.`,
+    );
 
     const listingIds = stale.map((l) => l.id);
 
@@ -28,7 +32,8 @@ export async function expireStaleGeoVerifications(): Promise<void> {
           status: "auto_suspended",
           suspendedAt: now,
           suspendedBy: "system",
-          suspensionReason: "Geolocation not verified within 180-day temporary activation period.",
+          suspensionReason:
+            "Geolocation not verified within 180-day temporary activation period.",
         },
       });
 
@@ -39,7 +44,8 @@ export async function expireStaleGeoVerifications(): Promise<void> {
           actorId: "system",
           actorRole: "system",
           metadata: {
-            reason: "Geolocation not verified within 180-day temporary activation period.",
+            reason:
+              "Geolocation not verified within 180-day temporary activation period.",
             previousStatus: "active",
             geoExpiredAt: now.toISOString(),
           },
@@ -56,6 +62,10 @@ export async function expireStaleGeoVerifications(): Promise<void> {
       });
     }
   } catch (err: any) {
-    console.error("[GeoVerificationExpirer] Error running expiry job:", err.message);
+    console.error(
+      "[GeoVerificationExpirer] Error running expiry job:",
+      err.message,
+    );
+    throw err;
   }
 }

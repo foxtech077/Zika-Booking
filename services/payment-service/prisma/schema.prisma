@@ -262,6 +262,7 @@ model RefundNotificationRetry {
   status      RefundRetryStatus @default(pending)
   attempts    Int               @default(0)
   lastAttempt DateTime?         @map("last_attempt")
+  processingStartedAt DateTime?  @map("processing_started_at")
   nextAttempt DateTime?         @map("next_attempt")
   failedAt    DateTime?         @map("failed_at")
   createdAt   DateTime          @default(now()) @map("created_at")

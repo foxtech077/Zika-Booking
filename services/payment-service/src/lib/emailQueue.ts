@@ -4,15 +4,23 @@ import Redis from "ioredis";
 
 // Dedicated connection for BullMQ — must use maxRetriesPerRequest: null
 // (Worker's blocking commands conflict with non-null retry settings).
-const connection = new Redis(process.env["REDIS_URL"] ?? "redis://localhost:6379", {
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-  lazyConnect: false,
-});
+const connection = new Redis(
+  process.env["REDIS_URL"] ?? "redis://localhost:6379",
+  {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    lazyConnect: false,
+  },
+);
 
 // Shares the Payment queue (QueueName.Payment) so the existing worker in
 // jobs.ts processes these jobs alongside payouts / refund-retries.
 export const emailQueue = new Queue(QueueName.Payment, { connection });
+
+export async function closeEmailQueue(): Promise<void> {
+  await emailQueue.close();
+  connection.disconnect();
+}
 
 export type EmailKind = "guest" | "host";
 
@@ -23,7 +31,10 @@ export type EmailKind = "guest" | "host";
  * a second in-flight job. Unlike the previous in-process `setTimeout` retry,
  * these jobs survive process restarts, deploys and replica switches.
  */
-export async function enqueueEmailJob(paymentId: string, kind: EmailKind): Promise<void> {
+export async function enqueueEmailJob(
+  paymentId: string,
+  kind: EmailKind,
+): Promise<void> {
   await emailQueue.add(
     PaymentJob.EmailRetryJob,
     { paymentId, kind },

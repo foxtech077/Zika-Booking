@@ -14,9 +14,11 @@ export enum ListingJob {
   BookingCompletion = "booking-completion",
   VoucherExpiryWarner = "voucher-expiry-warner",
   IcalPoller = "ical-poller",
+  IcalFeedSync = "ical-feed-sync",
   CommissionScheduler = "commission-scheduler",
   GeoVerificationExpirer = "geo-verification-expirer",
   ExchangeRateRefresher = "exchange-rate-refresher",
+  ReservationTimerWarning = "reservation-timer-warning",
 }
 
 export enum PaymentJob {
