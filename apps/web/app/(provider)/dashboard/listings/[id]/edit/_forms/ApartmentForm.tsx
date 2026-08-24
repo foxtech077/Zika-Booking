@@ -18,6 +18,7 @@ import { Input, Textarea, Select } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
 import { FormShell, type FormStep } from "./shared/FormShell";
 import { CurrencyCombobox } from "@/components/ui/CurrencyCombobox";
+import { normalizeCountryCode } from "@/components/ui/CountryCombobox";
 import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
 import { AMENITY_OPTIONS, CATEGORY_MAP, groupAmenities, flattenGroupedAmenities } from "./shared/amenities";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
@@ -469,7 +470,7 @@ export function ApartmentForm({ listingId, listing }: Props) {
                   lat={s.lat}
                   lng={s.lng}
                   onChange={(f, v) => {
-                    const normalized = f === "country" ? v.toUpperCase().slice(0, 2) : v;
+                      const normalized = f === "country" ? normalizeCountryCode(v) : v;
                     set(f, normalized);
                     // Auto-populate currency when country changes
                     if (f === "country") {
@@ -478,14 +479,15 @@ export function ApartmentForm({ listingId, listing }: Props) {
                     }
                   }}
                   onGeocoded={(r) => {
-                    const detectedCurrency = getCurrencyForCountry(r.country);
+                      const country = normalizeCountryCode(r.country);
+                      const detectedCurrency = getCurrencyForCountry(country);
                     setS((p) => ({
                       ...p,
                       lat: r.lat,
                       lng: r.lng,
                       town: r.town,
                       neighborhood: r.neighborhood,
-                      country: r.country,
+                        country,
                       // Auto-populate currency from geocoded country (only if a mapping exists)
                       ...(detectedCurrency ? { currency: detectedCurrency } : {}),
                     }));

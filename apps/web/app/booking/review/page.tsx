@@ -1155,8 +1155,11 @@ export default function BookingReviewPage() {
                         onClick={() => { setProvider("tara"); setPayNetwork("wave"); }}
                         className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition text-sm font-semibold ${provider === "tara" && payNetwork === "wave" ? "border-[#0B1E3F] bg-[#0B1E3F]/5 text-[#0B1E3F]" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}
                       >
-                        <span className="text-2xl">🌊</span>
-                        <span>Wave</span>
+                        <img
+                          src="https://www.wave.com/img/nav-logo.png"
+                          alt="Wave"
+                          className="h-8 w-auto max-w-[96px] object-contain"
+                        />
                       </button>
                     )}
                   </div>
