@@ -255,6 +255,15 @@ export const WORLD_COUNTRIES = [
   { code: "ZW", name: "Zimbabwe" }
 ];
 
+/** Normalize either an ISO code or a country name to the stored ISO code. */
+export function normalizeCountryCode(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  const country = WORLD_COUNTRIES.find(
+    (candidate) => candidate.code.toLowerCase() === normalized || candidate.name.toLowerCase() === normalized,
+  );
+  return country?.code ?? value.trim().toUpperCase();
+}
+
 interface CountryComboboxProps {
   label?: string;
   value: string;

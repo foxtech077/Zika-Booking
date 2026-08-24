@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import type { Listing } from "@/types/provider";
 import type { HotelRoomType } from "@/types";
 import { CurrencyCombobox } from "@/components/ui/CurrencyCombobox";
+import { normalizeCountryCode } from "@/components/ui/CountryCombobox";
 import { FormShell, type FormStep } from "./shared/FormShell";
 import { useAuthStore } from "@/stores/auth";
 import { PayoutCurrencyWarning } from "./shared/PayoutCurrencyWarning";
@@ -617,7 +618,7 @@ export function HotelForm({ listingId, listing }: Props) {
                       lat={s.lat}
                       lng={s.lng}
                       onChange={(f, v) => {
-                        const normalized = f === "country" ? v.toUpperCase().slice(0, 2) : v;
+                        const normalized = f === "country" ? normalizeCountryCode(v) : v;
                         set(f, normalized);
                         // Auto-populate currency when country changes
                         if (f === "country") {
@@ -626,14 +627,15 @@ export function HotelForm({ listingId, listing }: Props) {
                         }
                       }}
                       onGeocoded={(r) => {
-                        const detectedCurrency = getCurrencyForCountry(r.country);
+                        const country = normalizeCountryCode(r.country);
+                        const detectedCurrency = getCurrencyForCountry(country);
                         setS((p) => ({
                           ...p,
                           lat: r.lat,
                           lng: r.lng,
                           town: r.town,
                           neighborhood: r.neighborhood,
-                          country: r.country,
+                           country,
                           // Auto-populate currency from geocoded country (only if a mapping exists)
                           ...(detectedCurrency ? { currency: detectedCurrency } : {}),
                         }));
