@@ -561,6 +561,7 @@ export async function paymentRoutes(app: FastifyInstance) {
               properties: {
                 paymentId: { type: "string", description: "Internal payment record ID" },
                 taraReference: { type: "string", description: "Tara transaction reference (Tara flow only)" },
+                authUrl: { type: ["string", "null"], description: "Hosted payment page URL (Wave flow only)" },
                 message: { type: "string", description: "STK push status message (Tara flow only)" },
                 requiresAction: { type: "boolean", description: "true when Stripe 3DS is required (Stripe flow only)" },
                 clientSecret: { type: "string", description: "Stripe client secret for 3DS re-auth (Stripe flow only)" },
