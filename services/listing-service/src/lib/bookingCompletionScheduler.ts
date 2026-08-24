@@ -11,15 +11,17 @@ function getScheduledCheckoutTime(booking: any): Date | null {
   const [hours, minutes] = checkoutTimeStr.split(":").map(Number);
 
   // Combine checkOut date and checkoutTime time in UTC
-  const checkoutTime = new Date(Date.UTC(
-    baseDate.getUTCFullYear(),
-    baseDate.getUTCMonth(),
-    baseDate.getUTCDate(),
-    hours || 0,
-    minutes || 0,
-    0,
-    0
-  ));
+  const checkoutTime = new Date(
+    Date.UTC(
+      baseDate.getUTCFullYear(),
+      baseDate.getUTCMonth(),
+      baseDate.getUTCDate(),
+      hours || 0,
+      minutes || 0,
+      0,
+      0,
+    ),
+  );
   return checkoutTime;
 }
 
@@ -37,7 +39,9 @@ export async function completeEligibleBookings(): Promise<void> {
       const scheduledCheckout = getScheduledCheckoutTime(booking);
       if (!scheduledCheckout || now < scheduledCheckout) continue;
 
-      console.log(`[Booking Completion Scheduler] Booking ${booking.id} (Ref: ${booking.reference}) has reached its scheduled checkout time (${scheduledCheckout.toISOString()}). Automatically completing booking.`);
+      console.log(
+        `[Booking Completion Scheduler] Booking ${booking.id} (Ref: ${booking.reference}) has reached its scheduled checkout time (${scheduledCheckout.toISOString()}). Automatically completing booking.`,
+      );
 
       try {
         await prisma.$transaction(async (tx) => {
@@ -71,14 +75,23 @@ export async function completeEligibleBookings(): Promise<void> {
             },
           });
         });
-        console.log(`[Booking Completion Scheduler] Successfully completed booking ${booking.id}.`);
+        console.log(
+          `[Booking Completion Scheduler] Successfully completed booking ${booking.id}.`,
+        );
       } catch (txnErr: any) {
-        console.error(`[Booking Completion Scheduler] Transaction failed for booking ${booking.id}:`, txnErr.message);
+        // Log and continue — one bad row must not starve completions behind
+        // it. The sweep is idempotent and reruns every 5 minutes.
+        console.error(
+          `[Booking Completion Scheduler] Transaction failed for booking ${booking.id}:`,
+          txnErr.message,
+        );
       }
     }
   } catch (err: any) {
-    console.error("[Booking Completion Scheduler] Error running completion job:", err.message);
+    console.error(
+      "[Booking Completion Scheduler] Error running completion job:",
+      err.message,
+    );
+    throw err;
   }
 }
-
-

@@ -6,19 +6,30 @@ import Redis from "ioredis";
 import { cancelStalePendingPayments } from "./lib/pendingPaymentCanceller.js";
 import { completeEligibleBookings } from "./lib/bookingCompletionScheduler.js";
 import { checkVoucherExpiryWarnings } from "./lib/voucherExpiryWarner.js";
-import { pollIcalFeeds } from "./routes/ical.js";
+import { getDueIcalFeedIds, syncFeed } from "./routes/ical.js";
 import { promotePendingRates } from "./lib/commissionScheduler.js";
 import { expireStaleGeoVerifications } from "./lib/geoVerificationExpirer.js";
 import { refreshExchangeRates } from "./services/exchangeRate.services.js";
+import { sendReservationTimerWarning } from "./lib/reservationTimerWarning.js";
 import { QueueName, ListingJob } from "@zika/types";
+
+const defaultJobOptions = {
+  attempts: 5,
+  backoff: { type: "exponential" as const, delay: 30_000 },
+  removeOnComplete: { age: 24 * 60 * 60, count: 1000 },
+  removeOnFail: { age: 7 * 24 * 60 * 60 },
+};
 
 // Dedicated connection for BullMQ — must use maxRetriesPerRequest: null
 // (Worker's blocking commands conflict with non-null retry settings).
-const connection = new Redis(process.env["REDIS_URL"] ?? "redis://localhost:6379", {
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-  lazyConnect: false,
-});
+const connection = new Redis(
+  process.env["REDIS_URL"] ?? "redis://localhost:6379",
+  {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    lazyConnect: false,
+  },
+);
 
 const queue = new Queue(QueueName.Listing, { connection });
 
@@ -36,8 +47,27 @@ const worker = new Worker(
         await checkVoucherExpiryWarnings();
         break;
       case ListingJob.IcalPoller:
-        await pollIcalFeeds();
+        for (const feedId of await getDueIcalFeedIds()) {
+          await queue.add(
+            ListingJob.IcalFeedSync,
+            { feedId },
+            {
+              ...defaultJobOptions,
+              removeOnComplete: true,
+              jobId: `ical-feed-${feedId}-${Math.floor(Date.now() / (15 * 60_000))}`,
+            },
+          );
+        }
         break;
+      case ListingJob.IcalFeedSync: {
+        const { feedId } = job.data as { feedId: string };
+        const result = await syncFeed(feedId);
+        if (result.error)
+          console.warn(
+            `[iCal Poller] Feed ${feedId} sync error: ${result.error}`,
+          );
+        break;
+      }
       case ListingJob.CommissionScheduler:
         await promotePendingRates();
         break;
@@ -45,13 +75,12 @@ const worker = new Worker(
         await expireStaleGeoVerifications();
         break;
       case ListingJob.ExchangeRateRefresher:
-        try {
-          await refreshExchangeRates();
-        } catch (err) {
-          // Never fail the job — the repeatable schedule keeps the next run
-          // coming regardless, so a transient failure can't drop the cadence.
-          console.error("[ExchangeRate] Refresh failed:", err instanceof Error ? err.message : err);
-        }
+        await refreshExchangeRates();
+        break;
+      case ListingJob.ReservationTimerWarning:
+        await sendReservationTimerWarning(
+          (job.data as { lockToken: string }).lockToken,
+        );
         break;
     }
   },
@@ -75,40 +104,105 @@ export function registerBullBoard(app: any) {
 }
 
 const FX_REFRESH_JOB_ID = "exchange-rate-refresh-next";
+const FX_STARTUP_JOB_ID = "exchange-rate-refresh-startup";
 
 /**
  * Enqueue an immediate ExchangeRateRefresher job (deduplicated), used on-demand
  * by the /internal/fx/refresh endpoint when a stale-rate failure occurs.
  */
 export async function enqueueExchangeRateRefresh(): Promise<void> {
-  const existing = await queue.getJob(FX_REFRESH_JOB_ID);
+  await enqueueExchangeRateJob(FX_REFRESH_JOB_ID);
+}
+
+/**
+ * Enqueue the one-off startup warm-up refresh. The remove-then-add pattern is
+ * required (rather than just a static jobId): with `removeOnComplete` age
+ * retention BullMQ deduplicates against completed jobs, so a plain re-add
+ * after a restart would be silently dropped until retention expires.
+ */
+async function enqueueStartupExchangeRateRefresh(): Promise<void> {
+  await enqueueExchangeRateJob(FX_STARTUP_JOB_ID);
+}
+
+async function enqueueExchangeRateJob(jobId: string): Promise<void> {
+  const existing = await queue.getJob(jobId);
   if (existing) {
-    await existing.remove();
+    const state = await existing.getState();
+    if (!(["completed", "failed"] as string[]).includes(state)) return;
+
+    // Only terminal jobs may be replaced. A concurrent replica may claim the
+    // job between getState() and remove(), so preserve it if removal loses the
+    // race rather than failing service startup.
+    try {
+      await existing.remove();
+    } catch {
+      return;
+    }
   }
-  await queue.add(ListingJob.ExchangeRateRefresher, {}, { jobId: FX_REFRESH_JOB_ID });
+  await queue.add(
+    ListingJob.ExchangeRateRefresher,
+    {},
+    { ...defaultJobOptions, jobId },
+  );
+}
+
+export async function enqueueReservationTimerWarning(
+  lockToken: string,
+): Promise<void> {
+  await queue.add(
+    ListingJob.ReservationTimerWarning,
+    { lockToken },
+    {
+      ...defaultJobOptions,
+      jobId: `reservation-warning-${lockToken}`,
+      delay: 240_000,
+    },
+  );
 }
 
 export async function startJobs() {
-  await queue.add(ListingJob.PendingPaymentCanceller, {}, { repeat: { every: 60_000 } });
-  await queue.add(ListingJob.BookingCompletion, {}, { repeat: { every: 300_000 } });
-  await queue.add(ListingJob.VoucherExpiryWarner, {}, { repeat: { every: 4 * 60 * 60 * 1000 } });
-  await queue.add(ListingJob.IcalPoller, {}, { repeat: { every: 15 * 60 * 1000 } });
-  await queue.add(ListingJob.CommissionScheduler, {}, { repeat: { every: 60 * 60 * 1000 } });
-  await queue.add(ListingJob.GeoVerificationExpirer, {}, { repeat: { every: 2 * 60 * 60 * 1000 } });
+  await queue.add(
+    ListingJob.PendingPaymentCanceller,
+    {},
+    { ...defaultJobOptions, repeat: { every: 60_000 } },
+  );
+  await queue.add(
+    ListingJob.BookingCompletion,
+    {},
+    { ...defaultJobOptions, repeat: { every: 300_000 } },
+  );
+  await queue.add(
+    ListingJob.VoucherExpiryWarner,
+    {},
+    { ...defaultJobOptions, repeat: { every: 4 * 60 * 60 * 1000 } },
+  );
+  await queue.add(
+    ListingJob.IcalPoller,
+    {},
+    { ...defaultJobOptions, repeat: { every: 15 * 60 * 1000 } },
+  );
+  await queue.add(
+    ListingJob.CommissionScheduler,
+    {},
+    { ...defaultJobOptions, repeat: { every: 60 * 60 * 1000 } },
+  );
+  await queue.add(
+    ListingJob.GeoVerificationExpirer,
+    {},
+    { ...defaultJobOptions, repeat: { every: 2 * 60 * 60 * 1000 } },
+  );
 
-  // Exchange rates: repeatable 2-hour job (runs immediately on startup, then
-  // every 2h). Repeatable jobs are re-scheduled by the queue manager, so the
-  // next run happens regardless of whether the previous run succeeded.
-  await queue.add(ListingJob.ExchangeRateRefresher, {}, { repeat: { every: 2 * 60 * 60 * 1000 } });
+  // Exchange rates: repeatable 2-hour job. Repeatable jobs are re-scheduled by
+  // the queue manager, and the one-off startup job warms the table immediately.
+  await queue.add(
+    ListingJob.ExchangeRateRefresher,
+    {},
+    { ...defaultJobOptions, repeat: { every: 2 * 60 * 60 * 1000 } },
+  );
 
-  // Refresh rates at least once at boot so the table is populated before the
-  // service serves traffic. Failure is logged, not fatal — the repeatable job
-  // still covers the cadence.
-  try {
-    await refreshExchangeRates();
-  } catch (err) {
-    console.error("[ExchangeRate] Initial refresh failed on startup:", err instanceof Error ? err.message : err);
-  }
+  // Refresh rates at least once at boot. Failure is retryable and does not
+  // prevent the service from starting.
+  await enqueueStartupExchangeRateRefresh();
 }
 
 export async function stopJobs() {

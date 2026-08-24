@@ -3,7 +3,9 @@ import { prisma } from "./prisma.js";
 const WARNING_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export async function checkVoucherExpiryWarnings() {
-   console.log("[Voucher Expiry Warner] Scanning database for vouchers expiring within 24 hours...");
+  console.log(
+    "[Voucher Expiry Warner] Scanning database for vouchers expiring within 24 hours...",
+  );
   try {
     const now = new Date();
     const warningThreshold = new Date(now.getTime() + WARNING_WINDOW_MS);
@@ -22,10 +24,12 @@ export async function checkVoucherExpiryWarnings() {
 
     // Filter usage limits in memory (since Prisma doesn't support comparing usageCount < usageLimit directly in standard query filters)
     const expiringVouchers = expiringVouchersFromDb.filter(
-      (v) => v.usageLimit === null || v.usageCount < v.usageLimit
+      (v) => v.usageLimit === null || v.usageCount < v.usageLimit,
     );
-    
-    console.log(`[Voucher Expiry Warner] Found ${expiringVouchers.length} valid expiring vouchers.`);
+
+    console.log(
+      `[Voucher Expiry Warner] Found ${expiringVouchers.length} valid expiring vouchers.`,
+    );
     if (expiringVouchers.length === 0) return;
 
     for (const voucher of expiringVouchers) {
@@ -38,17 +42,19 @@ export async function checkVoucherExpiryWarnings() {
       if (isUniversal) {
         // Fetch all active users
         targetUsers = await prisma.$queryRawUnsafe(
-          `SELECT id FROM auth."User" WHERE status = 'active'`
+          `SELECT id FROM auth."User" WHERE status = 'active'`,
         );
       } else {
         // Fetch active users matching the applicable tiers
         targetUsers = await prisma.$queryRawUnsafe(
           `SELECT id FROM auth."User" WHERE status = 'active' AND "currentTier"::text = ANY($1)`,
-          voucher.applicableTiers
+          voucher.applicableTiers,
         );
       }
 
-      console.log(`[Voucher Expiry Warner] Found ${targetUsers.length} potential target users for voucher "${voucher.code}"`);
+      console.log(
+        `[Voucher Expiry Warner] Found ${targetUsers.length} potential target users for voucher "${voucher.code}"`,
+      );
 
       for (const user of targetUsers) {
         // 3. Check if user already redeemed this voucher
@@ -62,15 +68,15 @@ export async function checkVoucherExpiryWarnings() {
         if (alreadyRedeemed) continue;
 
         // 4. Deduplicate: Ensure we haven't already sent an expiry warning for this voucher
-        const alreadyNotified = await prisma.$queryRawUnsafe(
+        const alreadyNotified = (await prisma.$queryRawUnsafe(
           `SELECT id FROM auth."Notification" 
            WHERE "userId" = $1 
              AND type = 'voucher_expiry_warning' 
              AND (data->>'voucherId') = $2 
            LIMIT 1`,
           user.id,
-          voucher.id
-        ) as any[];
+          voucher.id,
+        )) as any[];
 
         if (alreadyNotified.length > 0) continue;
 
@@ -90,12 +96,15 @@ export async function checkVoucherExpiryWarnings() {
           user.id,
           title,
           body,
-          metadata
+          metadata,
         );
-        console.log(`[Voucher Expiry Warner] Sent warning notification to user ${user.id} for voucher ${voucher.code}`);
+        console.log(
+          `[Voucher Expiry Warner] Sent warning notification to user ${user.id} for voucher ${voucher.code}`,
+        );
       }
     }
   } catch (error) {
     console.error("[Voucher Expiry Warner] Error:", error);
+    throw error;
   }
 }

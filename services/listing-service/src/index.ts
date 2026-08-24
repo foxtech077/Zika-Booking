@@ -26,10 +26,13 @@ import { roomTypeRoutes } from "./routes/room-types.js";
 import { fxRoutes } from "./routes/fx.js";
 const PORT = Number(process.env["LISTING_SERVICE_PORT"] ?? 3003);
 const HOST = process.env["LISTING_SERVICE_HOST"] ?? "0.0.0.0";
+let ready = false;
 
 async function build() {
   const app = Fastify({
-    logger: { level: process.env["NODE_ENV"] === "production" ? "warn" : "info" },
+    logger: {
+      level: process.env["NODE_ENV"] === "production" ? "warn" : "info",
+    },
     trustProxy: true,
   });
 
@@ -45,7 +48,10 @@ async function build() {
     }
     return reply.status(statusCode).send({
       success: false,
-      error: { code: err.code ?? "INTERNAL_ERROR", message: err.message ?? "An unexpected error occurred." },
+      error: {
+        code: err.code ?? "INTERNAL_ERROR",
+        message: err.message ?? "An unexpected error occurred.",
+      },
     });
   });
 
@@ -68,27 +74,98 @@ async function build() {
         },
       ],
       tags: [
-        { name: "Listings", description: "Provider property management — create, edit, submit and photo/document uploads" },
-        { name: "Bookings", description: "Guest and provider reservation management — initiate, lock, confirm and cancel" },
-        { name: "Search", description: "Public search, availability check, detail and summary views" },
+        {
+          name: "Listings",
+          description:
+            "Provider property management — create, edit, submit and photo/document uploads",
+        },
+        {
+          name: "Bookings",
+          description:
+            "Guest and provider reservation management — initiate, lock, confirm and cancel",
+        },
+        {
+          name: "Search",
+          description:
+            "Public search, availability check, detail and summary views",
+        },
         { name: "Favourites", description: "Guest saved listings management" },
-        { name: "Recently Viewed", description: "Guest browsing history tracking" },
-        { name: "Reviews", description: "Guest reviews and ratings, and provider replies" },
-        { name: "Messaging", description: "Guest-provider direct messaging with contact information filtering" },
-        { name: "iCal Calendar Sync", description: "iCal external calendar feeds registration and sync" },
-        { name: "Commission", description: "Platform commission rate rules lookup" },
-        { name: "Vouchers", description: "Voucher validation and discount calculation" },
-        { name: "Provider Portal", description: "Provider dashboard analytics, summarized statistics, bookings, reviews and earnings" },
-        { name: "Admin Listings", description: "Admin listing review queue management, approvals, suspensions and status search" },
-        { name: "Admin Bookings", description: "Admin booking tracking, detailed status logs and cancellations" },
-        { name: "Admin Conversations", description: "Admin direct conversation viewer and filter audit" },
-        { name: "Admin iCal", description: "Admin iCal feed configurations and sync triggers" },
-        { name: "Admin Reviews", description: "Admin user review feed review and moderation" },
-        { name: "Admin Commission", description: "Admin commission rates management per country scope" },
-        { name: "Admin Vouchers", description: "Admin voucher code generation and validation rules management" },
-        { name: "Loyalty", description: "AfriPoints loyalty programme — tier profile, points history for guests" },
-        { name: "Admin Loyalty", description: "Admin manual points adjustment and guest loyalty history" },
-        { name: "Room Types", description: "Hotel room type management — create, update, and deactivate room types with pricing and availability" },
+        {
+          name: "Recently Viewed",
+          description: "Guest browsing history tracking",
+        },
+        {
+          name: "Reviews",
+          description: "Guest reviews and ratings, and provider replies",
+        },
+        {
+          name: "Messaging",
+          description:
+            "Guest-provider direct messaging with contact information filtering",
+        },
+        {
+          name: "iCal Calendar Sync",
+          description: "iCal external calendar feeds registration and sync",
+        },
+        {
+          name: "Commission",
+          description: "Platform commission rate rules lookup",
+        },
+        {
+          name: "Vouchers",
+          description: "Voucher validation and discount calculation",
+        },
+        {
+          name: "Provider Portal",
+          description:
+            "Provider dashboard analytics, summarized statistics, bookings, reviews and earnings",
+        },
+        {
+          name: "Admin Listings",
+          description:
+            "Admin listing review queue management, approvals, suspensions and status search",
+        },
+        {
+          name: "Admin Bookings",
+          description:
+            "Admin booking tracking, detailed status logs and cancellations",
+        },
+        {
+          name: "Admin Conversations",
+          description: "Admin direct conversation viewer and filter audit",
+        },
+        {
+          name: "Admin iCal",
+          description: "Admin iCal feed configurations and sync triggers",
+        },
+        {
+          name: "Admin Reviews",
+          description: "Admin user review feed review and moderation",
+        },
+        {
+          name: "Admin Commission",
+          description: "Admin commission rates management per country scope",
+        },
+        {
+          name: "Admin Vouchers",
+          description:
+            "Admin voucher code generation and validation rules management",
+        },
+        {
+          name: "Loyalty",
+          description:
+            "AfriPoints loyalty programme — tier profile, points history for guests",
+        },
+        {
+          name: "Admin Loyalty",
+          description:
+            "Admin manual points adjustment and guest loyalty history",
+        },
+        {
+          name: "Room Types",
+          description:
+            "Hotel room type management — create, update, and deactivate room types with pricing and availability",
+        },
       ],
       components: {
         securitySchemes: {
@@ -96,7 +173,8 @@ async function build() {
             type: "http",
             scheme: "bearer",
             bearerFormat: "JWT",
-            description: "Enter your Bearer Access Token (without 'Bearer ' prefix)",
+            description:
+              "Enter your Bearer Access Token (without 'Bearer ' prefix)",
           },
         },
       },
@@ -164,22 +242,38 @@ async function build() {
     keyGenerator: (req) => req.ip,
     errorResponseBuilder: () => ({
       success: false,
-      error: { code: "RATE_LIMITED", message: "Too many requests. Please try again later." },
+      error: {
+        code: "RATE_LIMITED",
+        message: "Too many requests. Please try again later.",
+      },
     }),
   });
 
-  app.get("/health", async () => ({ status: "ok", timestamp: new Date().toISOString() }));
+  app.get("/health", async () => ({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+  }));
+  app.get("/ready", async (_request, reply) => {
+    if (!ready)
+      return reply
+        .status(503)
+        .send({ status: "unready", service: "listing-service" });
+    return { status: "ready", service: "listing-service" };
+  });
 
   // ── Proxy merchant requests to payment-service ──────────────────────────────
-  const PAYMENT_SERVICE_URL = process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3004";
+  const PAYMENT_SERVICE_URL =
+    process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3004";
   app.all("/merchant/*", async (req, reply) => {
     try {
       const subPath = (req.params as any)["*"];
-      const queryParams = new URLSearchParams(req.query as Record<string, string>).toString();
+      const queryParams = new URLSearchParams(
+        req.query as Record<string, string>,
+      ).toString();
       const url = `${PAYMENT_SERVICE_URL}/merchant/${subPath}${queryParams ? `?${queryParams}` : ""}`;
-      
+
       const headers: Record<string, string> = {
-        "Accept": "application/json",
+        Accept: "application/json",
       };
       if (req.headers.authorization) {
         headers["Authorization"] = req.headers.authorization;
@@ -205,134 +299,142 @@ async function build() {
       } catch {
         data = text;
       }
-      
+
       reply.status(res.status).send(data);
     } catch (err) {
-      req.log.error({ err }, "Failed to proxy merchant request to payment-service");
-      reply.status(502).send({ success: false, error: { code: "BAD_GATEWAY", message: "Failed to communicate with payment service." } });
+      req.log.error(
+        { err },
+        "Failed to proxy merchant request to payment-service",
+      );
+      reply.status(502).send({
+        success: false,
+        error: {
+          code: "BAD_GATEWAY",
+          message: "Failed to communicate with payment service.",
+        },
+      });
     }
 
     // ── Proxy admin payouts requests to payment-service ──────────────────────────
-
   });
 
   app.all("/admin/payouts", async (req, reply) => {
-  try {
-    const queryParams = new URLSearchParams(
-      req.query as Record<string, string>
-    ).toString();
-
-    const url =
-      `${PAYMENT_SERVICE_URL}/admin/payouts` +
-      (queryParams ? `?${queryParams}` : "");
-
-    const headers: Record<string, string> = {
-      Accept: "application/json",
-    };
-
-    if (req.headers.authorization) {
-      headers.Authorization = req.headers.authorization;
-    }
-
-    if (req.headers["content-type"]) {
-      headers["Content-Type"] = req.headers["content-type"];
-    }
-
-    const fetchOptions: any = {
-      method: req.method,
-      headers,
-    };
-
-    if (["POST", "PATCH", "PUT"].includes(req.method) && req.body) {
-      fetchOptions.body = JSON.stringify(req.body);
-    }
-
-    const res = await fetch(url, fetchOptions);
-    const text = await res.text();
-
-    let data: any;
     try {
-      data = JSON.parse(text);
-    } catch {
-      data = text;
+      const queryParams = new URLSearchParams(
+        req.query as Record<string, string>,
+      ).toString();
+
+      const url =
+        `${PAYMENT_SERVICE_URL}/admin/payouts` +
+        (queryParams ? `?${queryParams}` : "");
+
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+      };
+
+      if (req.headers.authorization) {
+        headers.Authorization = req.headers.authorization;
+      }
+
+      if (req.headers["content-type"]) {
+        headers["Content-Type"] = req.headers["content-type"];
+      }
+
+      const fetchOptions: any = {
+        method: req.method,
+        headers,
+      };
+
+      if (["POST", "PATCH", "PUT"].includes(req.method) && req.body) {
+        fetchOptions.body = JSON.stringify(req.body);
+      }
+
+      const res = await fetch(url, fetchOptions);
+      const text = await res.text();
+
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+
+      reply.status(res.status).send(data);
+    } catch (err) {
+      req.log.error(
+        { err },
+        "Failed to proxy admin payouts request to payment-service",
+      );
+
+      reply.status(502).send({
+        success: false,
+        error: {
+          code: "BAD_GATEWAY",
+          message: "Failed to communicate with payment service.",
+        },
+      });
     }
+  });
 
-    reply.status(res.status).send(data);
-  } catch (err) {
-    req.log.error(
-      { err },
-      "Failed to proxy admin payouts request to payment-service"
-    );
-
-    reply.status(502).send({
-      success: false,
-      error: {
-        code: "BAD_GATEWAY",
-        message: "Failed to communicate with payment service.",
-      },
-    });
-  }
-});
-
-app.all("/admin/payouts/*", async (req, reply) => {
-  try {
-    const subPath = (req.params as any)["*"];
-
-    const queryParams = new URLSearchParams(
-      req.query as Record<string, string>
-    ).toString();
-
-    const url =
-      `${PAYMENT_SERVICE_URL}/admin/payouts/${subPath}` +
-      (queryParams ? `?${queryParams}` : "");
-
-    const headers: Record<string, string> = {
-      Accept: "application/json",
-    };
-
-    if (req.headers.authorization) {
-      headers.Authorization = req.headers.authorization;
-    }
-
-    if (req.headers["content-type"]) {
-      headers["Content-Type"] = req.headers["content-type"];
-    }
-
-    const fetchOptions: any = {
-      method: req.method,
-      headers,
-    };
-
-    if (["POST", "PATCH", "PUT"].includes(req.method) && req.body) {
-      fetchOptions.body = JSON.stringify(req.body);
-    }
-
-    const res = await fetch(url, fetchOptions);
-    const text = await res.text();
-
-    let data: any;
+  app.all("/admin/payouts/*", async (req, reply) => {
     try {
-      data = JSON.parse(text);
-    } catch {
-      data = text;
+      const subPath = (req.params as any)["*"];
+
+      const queryParams = new URLSearchParams(
+        req.query as Record<string, string>,
+      ).toString();
+
+      const url =
+        `${PAYMENT_SERVICE_URL}/admin/payouts/${subPath}` +
+        (queryParams ? `?${queryParams}` : "");
+
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+      };
+
+      if (req.headers.authorization) {
+        headers.Authorization = req.headers.authorization;
+      }
+
+      if (req.headers["content-type"]) {
+        headers["Content-Type"] = req.headers["content-type"];
+      }
+
+      const fetchOptions: any = {
+        method: req.method,
+        headers,
+      };
+
+      if (["POST", "PATCH", "PUT"].includes(req.method) && req.body) {
+        fetchOptions.body = JSON.stringify(req.body);
+      }
+
+      const res = await fetch(url, fetchOptions);
+      const text = await res.text();
+
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+
+      reply.status(res.status).send(data);
+    } catch (err) {
+      req.log.error(
+        { err },
+        "Failed to proxy admin payouts subpath request to payment-service",
+      );
+
+      reply.status(502).send({
+        success: false,
+        error: {
+          code: "BAD_GATEWAY",
+          message: "Failed to communicate with payment service.",
+        },
+      });
     }
-
-    reply.status(res.status).send(data);
-  } catch (err) {
-    req.log.error(
-      { err },
-      "Failed to proxy admin payouts subpath request to payment-service"
-    );
-
-    reply.status(502).send({
-      success: false,
-      error: {
-        code: "BAD_GATEWAY",
-        message: "Failed to communicate with payment service.",
-      },
-    });
-  }
-});
+  });
 
   await app.register(listingRoutes);
   await app.register(adminListingRoutes);
@@ -361,11 +463,48 @@ app.all("/admin/payouts/*", async (req, reply) => {
 async function main() {
   const app = await build();
 
-  const shutdown = async (signal: string) => {
-    app.log.info(`[Listing Service] ${signal} received. Shutting down gracefully…`);
-    await stopJobs();
-    await app.close();
-    process.exit(0);
+  // Bound the graceful shutdown so a hung job or connection cannot outlive
+  // the orchestrator's termination grace period and force a SIGKILL anyway.
+  const SHUTDOWN_TIMEOUT_MS = Number(
+    process.env["SHUTDOWN_TIMEOUT_MS"] ?? 30_000,
+  );
+
+  let shutdownPromise: Promise<void> | null = null;
+  const shutdown = (signal: string) => {
+    if (shutdownPromise) return shutdownPromise;
+    ready = false;
+    shutdownPromise = (async () => {
+      app.log.info(
+        `[Listing Service] ${signal} received. Shutting down gracefully…`,
+      );
+      try {
+        await Promise.race([
+          (async () => {
+            await app.close();
+            await stopJobs();
+          })(),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    `shutdown timed out after ${SHUTDOWN_TIMEOUT_MS}ms`,
+                  ),
+                ),
+              SHUTDOWN_TIMEOUT_MS,
+            ),
+          ),
+        ]);
+        process.exit(0);
+      } catch (err) {
+        app.log.error(
+          { err },
+          `[Listing Service] Graceful shutdown did not complete in time — forcing exit.`,
+        );
+        process.exit(1);
+      }
+    })();
+    return shutdownPromise;
   };
 
   process.on("SIGINT", () => void shutdown("SIGINT"));
@@ -376,6 +515,7 @@ async function main() {
     console.log(`[Listing Service] listening on ${HOST}:${PORT}`);
 
     await startJobs();
+    ready = true;
     console.log(`[Listing Service] Background jobs registered.`);
   } catch (err) {
     app.log.error(err);
