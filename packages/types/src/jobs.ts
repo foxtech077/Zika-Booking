@@ -19,6 +19,9 @@ export enum ListingJob {
   GeoVerificationExpirer = "geo-verification-expirer",
   ExchangeRateRefresher = "exchange-rate-refresher",
   ReservationTimerWarning = "reservation-timer-warning",
+  DeviceTokenCleanup = "device-token-cleanup",
+  DeviceTokenCleanupBatch = "device-token-cleanup-batch",
+  NotificationPushBatch = "notification-push-batch",
 }
 
 export enum PaymentJob {

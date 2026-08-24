@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { sendCommissionRateChangeEmail } from "../lib/email.js";
-import { fireNotification } from "../lib/notifications.js";
+import { fireBulkNotification } from "../lib/notifications.js";
 
 // ── Role helpers ─────────────────────────────────────────────────────────────
 
@@ -988,14 +988,12 @@ async function fireCommissionNotifications(
   effectiveDate: Date,
 ): Promise<void> {
   const effectiveDateStr = effectiveDate.toISOString().split("T")[0];
-  for (const providerId of providerIds) {
-    fireNotification(providerId, {
-      type:  "commission_update",
-      title: "Commission Rate Update",
-      body:  `The commission rate for ${scope} has been updated to ${(newRate * 100).toFixed(2)}%, effective ${effectiveDateStr}.`,
-      data:  { scope, newRate, effectiveDate: effectiveDateStr },
-    });
-  }
+  fireBulkNotification(providerIds, {
+    type:  "commission_update",
+    title: "Commission Rate Update",
+    body:  `The commission rate for ${scope} has been updated to ${(newRate * 100).toFixed(2)}%, effective ${effectiveDateStr}.`,
+    data:  { scope, newRate, effectiveDate: effectiveDateStr },
+  });
 }
 
 async function fetchProviderEmails(providerIds: string[]): Promise<string[]> {

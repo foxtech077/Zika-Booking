@@ -1,6 +1,6 @@
 import { prisma } from "./prisma.js";
 import { sendCommissionRateChangeEmail } from "./email.js";
-import { fireNotification } from "./notifications.js";
+import { fireBulkNotification } from "./notifications.js";
 
 // Runs nightly at 00:01 UTC — promotes pending commission rates whose
 // effectiveFrom date has been reached to the current rate, then writes history.
@@ -60,14 +60,12 @@ async function promotePendingRates(): Promise<void> {
       .then((rows) => {
         const providerIds = rows.map((r) => r.providerId);
         const effectiveDateStr = cr.pendingEffectiveFrom!.toISOString().split("T")[0];
-        for (const providerId of providerIds) {
-          fireNotification(providerId, {
-            type: "commission_update",
-            title: "Commission Rate Update",
-            body: `The commission rate for ${cr.country} has been updated to ${(newRate * 100).toFixed(2)}%, effective ${effectiveDateStr}.`,
-            data: { scope: cr.country, newRate, effectiveDate: effectiveDateStr },
-          });
-        }
+        fireBulkNotification(providerIds, {
+          type: "commission_update",
+          title: "Commission Rate Update",
+          body: `The commission rate for ${cr.country} has been updated to ${(newRate * 100).toFixed(2)}%, effective ${effectiveDateStr}.`,
+          data: { scope: cr.country, newRate, effectiveDate: effectiveDateStr },
+        });
       })
       .catch(() => null);
   }
@@ -118,14 +116,12 @@ async function promotePendingRates(): Promise<void> {
       .then((rows) => {
         const providerIds = rows.map((r) => r.providerId);
         const effectiveDateStr = settings.pendingGlobalEffectiveFrom!.toISOString().split("T")[0];
-        for (const providerId of providerIds) {
-          fireNotification(providerId, {
-            type: "commission_update",
-            title: "Commission Rate Update",
-            body: `The commission rate for All markets has been updated to ${(newRate * 100).toFixed(2)}%, effective ${effectiveDateStr}.`,
-            data: { scope: "All markets", newRate, effectiveDate: effectiveDateStr },
-          });
-        }
+        fireBulkNotification(providerIds, {
+          type: "commission_update",
+          title: "Commission Rate Update",
+          body: `The commission rate for All markets has been updated to ${(newRate * 100).toFixed(2)}%, effective ${effectiveDateStr}.`,
+          data: { scope: "All markets", newRate, effectiveDate: effectiveDateStr },
+        });
       })
       .catch(() => null);
   }
