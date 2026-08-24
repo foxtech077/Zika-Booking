@@ -1,8 +1,7 @@
-import { Queue, Worker } from "bullmq";
+import { Worker } from "bullmq";
 import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { FastifyAdapter } from "@bull-board/fastify";
-import Redis from "ioredis";
 import { cancelStalePendingPayments } from "./lib/pendingPaymentCanceller.js";
 import { completeEligibleBookings } from "./lib/bookingCompletionScheduler.js";
 import { checkVoucherExpiryWarnings } from "./lib/voucherExpiryWarner.js";
@@ -11,27 +10,16 @@ import { promotePendingRates } from "./lib/commissionScheduler.js";
 import { expireStaleGeoVerifications } from "./lib/geoVerificationExpirer.js";
 import { refreshExchangeRates } from "./services/exchangeRate.services.js";
 import { sendReservationTimerWarning } from "./lib/reservationTimerWarning.js";
+import { cleanDeviceTokenBatch, enqueueDeviceTokenCleanupBatches } from "./lib/deviceTokenCleanup.js";
+import {
+  deliverNotificationPushBatch,
+} from "./lib/notifications.js";
+import {
+  listingJobOptions as defaultJobOptions,
+  listingQueue as queue,
+  listingQueueConnection as connection,
+} from "./lib/listingQueue.js";
 import { QueueName, ListingJob } from "@zika/types";
-
-const defaultJobOptions = {
-  attempts: 5,
-  backoff: { type: "exponential" as const, delay: 30_000 },
-  removeOnComplete: { age: 24 * 60 * 60, count: 1000 },
-  removeOnFail: { age: 7 * 24 * 60 * 60 },
-};
-
-// Dedicated connection for BullMQ — must use maxRetriesPerRequest: null
-// (Worker's blocking commands conflict with non-null retry settings).
-const connection = new Redis(
-  process.env["REDIS_URL"] ?? "redis://localhost:6379",
-  {
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
-    lazyConnect: false,
-  },
-);
-
-const queue = new Queue(QueueName.Listing, { connection });
 
 const worker = new Worker(
   QueueName.Listing,
@@ -80,6 +68,21 @@ const worker = new Worker(
       case ListingJob.ReservationTimerWarning:
         await sendReservationTimerWarning(
           (job.data as { lockToken: string }).lockToken,
+        );
+        break;
+      case ListingJob.DeviceTokenCleanup:
+        await enqueueDeviceTokenCleanupBatches(
+          (jobs) => queue.addBulk(jobs as any),
+          ListingJob.DeviceTokenCleanupBatch,
+          defaultJobOptions,
+        );
+        break;
+      case ListingJob.DeviceTokenCleanupBatch:
+        await cleanDeviceTokenBatch((job.data as { tokenIds: string[] }).tokenIds);
+        break;
+      case ListingJob.NotificationPushBatch:
+        await deliverNotificationPushBatch(
+          job.data as Parameters<typeof deliverNotificationPushBatch>[0],
         );
         break;
     }
@@ -144,6 +147,7 @@ async function enqueueExchangeRateJob(jobId: string): Promise<void> {
     {},
     { ...defaultJobOptions, jobId },
   );
+
 }
 
 export async function enqueueReservationTimerWarning(
@@ -198,6 +202,14 @@ export async function startJobs() {
     ListingJob.ExchangeRateRefresher,
     {},
     { ...defaultJobOptions, repeat: { every: 2 * 60 * 60 * 1000 } },
+  );
+
+  // Validate FCM/APNs registration tokens once per month without delivering
+  // a notification. The parent job fans out work in batches of 100.
+  await queue.add(
+    ListingJob.DeviceTokenCleanup,
+    {},
+    { ...defaultJobOptions, repeat: { every: 30 * 24 * 60 * 60 * 1000 } },
   );
 
   // Refresh rates at least once at boot. Failure is retryable and does not
