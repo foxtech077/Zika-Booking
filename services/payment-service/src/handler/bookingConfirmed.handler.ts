@@ -66,6 +66,9 @@ export async function bookingConfirmedHandler(payment: any) {
   const rawBooking = await fetchInternalBooking(bookingId);
   const booking = normalizeBooking(rawBooking);
   booking.paymentMethod = paymentMethodLabel(dbPayment);
+  // The booking service does not own the payment display ID. Use the payment
+  // record so the first guest-email attempt matches retry-generated documents.
+  booking.transactionId = dbPayment.displayId ?? dbPayment.id;
 
   // Create pending payout (idempotent, does not schedule yet)
   if (rawBooking.providerId && Number(rawBooking.providerPayout) > 0) {
