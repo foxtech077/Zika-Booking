@@ -1471,6 +1471,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             voucherCode: { type: "string", maxLength: 30 },
             redeemPoints: { type: "integer", minimum: 0, description: "Amount of loyalty points to redeem" },
             currency: { type: "string", description: "ISO 4217 display currency for the localized snapshot (e.g. KES, INR)" },
+            paymentProvider: { type: "string", enum: ["stripe", "tara"], description: "Payment provider selected for this checkout" },
           },
         },
         response: {
@@ -1527,6 +1528,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         voucherCode?: string;
         redeemPoints?: number;
         currency?: string;
+        paymentProvider?: "stripe" | "tara";
       };
 
       try {
@@ -1989,8 +1991,13 @@ export async function bookingRoutes(app: FastifyInstance) {
           },
         });
 
-        // Consume the lock token — prevent reuse for duplicate bookings
-        await redis.del(`rlk:ctx:${body.lockToken}`).catch(() => {});
+        // Tara can fail after the booking is created (invalid network number,
+        // provider outage, or a Wave redirect error). Keep its lock alive so
+        // the guest can retry payment without losing the reservation. Stripe
+        // keeps the original consume-on-booking behaviour.
+        if (body.paymentProvider !== "tara") {
+          await redis.del(`rlk:ctx:${body.lockToken}`).catch(() => {});
+        }
 
         // NOTE: The voucher is NOT consumed here. usageCount + VoucherRedemption
         // are only committed inside the confirm transaction (payment success) so
