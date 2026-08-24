@@ -91,9 +91,6 @@ export async function sendGuestEmail(
       <h3 style="color:#374151;font-size:14px;margin:20px 0 8px">Cancellation Policy</h3>
       <p style="color:#4b5563;font-size:13px">Free cancellation before 24 hours of check-in.</p>
 
-      <h3 style="color:#374151;font-size:14px;margin:20px 0 8px">Host Contact</h3>
-      <p style="color:#4b5563;font-size:13px">${booking.listing.hostEmail ?? "Available in booking dashboard"}</p>
-
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
 
       <p style="text-align:center;">
