@@ -37,6 +37,15 @@ export async function getWebFcmToken(): Promise<string | null> {
   if (permission !== "granted") return null;
 
   const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+  console.info("[FCM] Firebase config", {
+    projectId: firebaseConfig.projectId,
+    messagingSenderId: firebaseConfig.messagingSenderId,
+    appId: firebaseConfig.appId,
+    apiKey: firebaseConfig.apiKey
+      ? `${firebaseConfig.apiKey.slice(0, 6)}...`
+      : undefined,
+    vapidKeyConfigured: Boolean(process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY),
+  });
   return getToken(getMessaging(app), {
     vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
     serviceWorkerRegistration: registration,
