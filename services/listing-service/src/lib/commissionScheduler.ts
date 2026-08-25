@@ -1,6 +1,7 @@
 import { prisma } from "./prisma.js";
 import { sendCommissionRateChangeEmail } from "./email.js";
 import { fireBulkNotification } from "./notifications.js";
+import { liveProviderListingWhere } from "../services/commission.service.js";
 
 // Runs nightly at 00:01 UTC — promotes pending commission rates whose
 // effectiveFrom date has been reached to the current rate, then writes history.
@@ -53,7 +54,7 @@ async function promotePendingRates(): Promise<void> {
     // Notify providers in this country
     sendCountryEmail(cr.country, newRate, oldRate, cr.pendingEffectiveFrom, cr.pendingReason ?? "Scheduled rate change").catch(() => null);
     prisma.listing.findMany({
-      where: { country: cr.country, status: "active" },
+      where: liveProviderListingWhere(cr.country),
       select: { providerId: true },
       distinct: ["providerId"],
     })
@@ -109,7 +110,7 @@ async function promotePendingRates(): Promise<void> {
 
     sendGlobalEmail(newRate, oldRate, settings.pendingGlobalEffectiveFrom, settings.pendingGlobalReason ?? "Scheduled rate change").catch(() => null);
     prisma.listing.findMany({
-      where: { status: "active" },
+      where: liveProviderListingWhere(),
       select: { providerId: true },
       distinct: ["providerId"],
     })
@@ -135,7 +136,7 @@ async function sendCountryEmail(
   reason: string,
 ): Promise<void> {
   const providers = await prisma.listing.findMany({
-    where: { country: countryCode, status: "active" },
+    where: liveProviderListingWhere(countryCode),
     select: { providerId: true },
     distinct: ["providerId"],
   });
@@ -158,7 +159,7 @@ async function sendGlobalEmail(
   reason: string,
 ): Promise<void> {
   const providers = await prisma.listing.findMany({
-    where: { status: "active" },
+    where: liveProviderListingWhere(),
     select: { providerId: true },
     distinct: ["providerId"],
   });
