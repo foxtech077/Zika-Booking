@@ -1,4 +1,5 @@
 import { prisma } from "./prisma.js";
+import { Prisma } from "../generated/index.js";
 import { GoogleAuth } from "google-auth-library";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
@@ -311,7 +312,19 @@ export async function sendBulkNotifications(
   payload: NotificationPayload,
 ): Promise<void> {
   for (let offset = 0; offset < userIds.length; offset += BULK_USER_BATCH_SIZE) {
-    const batchUserIds = [...new Set(userIds.slice(offset, offset + BULK_USER_BATCH_SIZE))];
+    const requestedUserIds = [...new Set(userIds.slice(offset, offset + BULK_USER_BATCH_SIZE))];
+    if (requestedUserIds.length === 0) continue;
+
+    // Listings retain provider IDs after an account is deleted. Resolve against
+    // auth.User before inserting notifications so one stale ID cannot roll back
+    // the whole batch through Notification_userId_fkey.
+    const existingUsers = await prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id
+      FROM auth."User"
+      WHERE id IN (${Prisma.join(requestedUserIds)})
+    `;
+    const existingUserIds = new Set(existingUsers.map((user) => user.id));
+    const batchUserIds = requestedUserIds.filter((userId) => existingUserIds.has(userId));
     if (batchUserIds.length === 0) continue;
 
     await (prisma as any).notification.createMany({
