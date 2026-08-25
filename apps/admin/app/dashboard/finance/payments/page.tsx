@@ -31,6 +31,17 @@ const COUNTRY_OPTIONS = [
   { value: "CA", label: "CA" },
 ];
 
+// Tara payments show the mobile-money network so Wave charges are
+// distinguishable from other Tara networks (which display generically).
+function getGatewayLabel(paymentProvider?: string | null, network?: string | null): string {
+  if (paymentProvider === "tara") {
+    if (!network) return "Tara";
+    return network.toLowerCase() === "wave" ? "Tara (Wave)" : "Tara (Mobile Money)";
+  }
+  if (paymentProvider) return paymentProvider.charAt(0).toUpperCase() + paymentProvider.slice(1);
+  return "—";
+}
+
 export default function BookingPaymentsPage() {
   const searchParams = useSearchParams();
   const { user } = useAuthStore();
@@ -142,8 +153,8 @@ export default function BookingPaymentsPage() {
       label: "Gateway & Provider ID",
       render: (t) => (
         <div>
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 capitalize">
-            {t.paymentProvider}
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
+            {getGatewayLabel(t.paymentProvider, t.network)}
           </span>
           {t.providerPaymentId && (
             <p className="text-[11px] font-mono text-slate-400 mt-1 truncate max-w-[150px]" title={t.providerPaymentId}>
@@ -331,7 +342,13 @@ export default function BookingPaymentsPage() {
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Gateway Provider</dt>
-                <dd className="font-semibold text-slate-900 mt-0.5 capitalize">{selectedTx.paymentProvider}</dd>
+                <dd className="font-semibold text-slate-900 mt-0.5">{getGatewayLabel(selectedTx.paymentProvider, selectedTx.network)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">Network</dt>
+                <dd className="font-semibold text-slate-900 mt-0.5 capitalize">
+                  {selectedTx.paymentProvider === "tara" && selectedTx.network ? selectedTx.network : "—"}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Payment ID</dt>
