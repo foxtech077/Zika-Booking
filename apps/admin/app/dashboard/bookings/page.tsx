@@ -66,6 +66,13 @@ function getNetworksForCountry(countryCode?: string | null): { value: string; la
   return COUNTRY_NETWORKS[countryCode.toUpperCase()] ?? [];
 }
 
+function getPaymentMethodLabel(gateway?: Booking["paymentGateway"], network?: string | null): string {
+  if (gateway === "stripe") return "Stripe";
+  if (gateway !== "tara") return "—";
+  if (!network) return "Tara";
+  return network.toLowerCase() === "wave" ? "Tara (Wave)" : "Tara (Mobile Money)";
+}
+
 const fetchBookings = (params: Record<string, string>) =>
   listingApi.get(`/admin/bookings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
 
@@ -401,17 +408,7 @@ export default function BookingsPage() {
     {
       key: "payment",
       label: "Payment Method",
-      render: (b) => {
-        const label =
-          b.paymentGateway === "stripe"
-            ? "Stripe"
-            : b.paymentGateway === "tara"
-              ? b.paymentNetwork
-                ? `Tara-${b.paymentNetwork}`
-                : "Tara"
-              : "—";
-        return <span className="text-sm text-slate-700">{label}</span>;
-      },
+      render: (b) => <span className="text-sm text-slate-700">{getPaymentMethodLabel(b.paymentGateway, b.paymentNetwork)}</span>,
     },
     {
       key: "status",
@@ -830,6 +827,7 @@ export default function BookingsPage() {
                 ["Reference", detailData.reference],
                 ["Status", ""],
                 ["Type", detailData.listingType],
+                ["Payment Method", getPaymentMethodLabel(detailData.paymentGateway, detailData.paymentNetwork)],
                 ["Nights/Days", detailData.nightsOrDays],
                 ["Check-in", formatDate(detailData.checkIn)],
                 ["Check-out", formatDate(detailData.checkOut)],
