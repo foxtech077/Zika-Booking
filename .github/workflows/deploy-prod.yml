@@ -121,7 +121,11 @@ jobs:
             IFS=':' read -r ecs_svc _ img <<< "$spec"
             NEW_IMAGE="${{ env.ECR_REGISTRY }}/$img:prod-$SHA"
             TD=$(aws ecs describe-task-definition --task-definition "$ecs_svc" --query 'taskDefinition' --output json)
-            NEW_TD=$(printf '%s' "$TD" | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy, .deregisteredAt, .taskDefinitionId) | .containerDefinitions[].image = $image' --arg image "$NEW_IMAGE")
+            # Strip lifecycle-only fields AND any container command/entryPoint
+            # overrides. The override would otherwise replace the Dockerfile CMD,
+            # e.g. a leftover "prisma migrate status" leaked into kainook-auth rev 26
+            # and made the container exit without starting the server.
+            NEW_TD=$(printf '%s' "$TD" | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy, .deregisteredAt, .taskDefinitionId) | .containerDefinitions[].image = $image | .containerDefinitions[] |= del(.command, .entryPoint)' --arg image "$NEW_IMAGE")
             REV=$(aws ecs register-task-definition --cli-input-json "$NEW_TD" --query 'taskDefinition.revision' --output text)
             aws ecs update-service --cluster kainook-prod-cluster --service "$ecs_svc" --task-definition "$ecs_svc:$REV" --force-new-deployment --region af-south-1
             echo "deployed $ecs_svc -> $NEW_IMAGE (task-def rev $REV)"
