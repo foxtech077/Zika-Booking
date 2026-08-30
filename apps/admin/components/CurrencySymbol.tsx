@@ -12,6 +12,17 @@ const SYMBOL_MAP: Record<string, string> = {
   MYR: "RM",
   SAR: "SAR",
   AED: "AED",
+  XAF: "FCFA",
+  XOF: "CFA",
+  KES: "KSh",
+  NGN: "₦",
+  GHS: "GH₵",
+  UGX: "USh",
+  TZS: "TSh",
+  RWF: "R₣",
+  ZAR: "R",
+  CDF: "FC",
+  XPF: "₣",
 };
 
 export function CurrencySymbol({ currency, className, ...props }: CurrencySymbolProps) {

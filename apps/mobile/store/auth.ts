@@ -2,7 +2,6 @@ import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import type { PublicUser } from "@zika/types";
-import { getCurrencyForCountry } from "../lib/currency";
 import { clearAnonymousToken, hydrateAnonymousToken } from "../lib/anonymous";
 
 const ACCESS_TOKEN_KEY = "zika_access_token";
@@ -15,6 +14,8 @@ interface AuthState {
   isHydrated: boolean;
   hasCompletedOnboarding: boolean;
   localCurrency: string | null;
+  /** True once the user has picked a currency by hand via the header selector. */
+  currencyExplicit: boolean;
   setAuth: (user: PublicUser, accessToken: string) => Promise<void>;
   updateUser: (patch: Partial<PublicUser>) => Promise<void>;
   clearAuth: () => Promise<void>;
@@ -25,6 +26,7 @@ interface AuthState {
 
 const ONBOARDING_COMPLETED_KEY = "zika_onboarding_completed";
 const LOCAL_CURRENCY_KEY = "zika_local_currency";
+const CURRENCY_EXPLICIT_KEY = "zika_currency_explicit";
 
 // photoUrl is excluded from anything written to SecureStore: /auth/profile and
 // PATCH /auth/profile/:id now return a presigned S3 URL valid for ~15 minutes,
@@ -42,17 +44,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   isHydrated: false,
   hasCompletedOnboarding: false,
-  localCurrency: "USD", // default fallback
+  // EUR is the fixed default. There used to be an automatic country/IP-based
+  // suggestion here (a profile-country mapping in setAuth, and an
+  // IP-geolocation one in hooks/useLocation.ts) that silently replaced it —
+  // removed at the user's request so EUR stays the default until the traveller
+  // explicitly picks a currency from the header selector.
+  localCurrency: "EUR",
+  currencyExplicit: false,
 
   setAuth: async (user, accessToken) => {
     // A real session supersedes any anonymous one. Clearing it here stops a
     // leftover anonymous token from being picked up as a fallback later.
     await clearAnonymousToken();
-    const currency = getCurrencyForCountry(user.country).code;
     await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
     await SecureStore.setItemAsync(USER_KEY, JSON.stringify(stripPersistedFields(user)));
-    await SecureStore.setItemAsync(LOCAL_CURRENCY_KEY, currency);
-    set({ user, accessToken, localCurrency: currency });
+    set({ user, accessToken });
   },
 
   // Merges a partial update (e.g. after editing the profile or changing the
@@ -99,27 +105,34 @@ clearAuth: async () => {
 
   setLocalCurrency: async (currency: string) => {
     await SecureStore.setItemAsync(LOCAL_CURRENCY_KEY, currency);
-    set({ localCurrency: currency });
+    await SecureStore.setItemAsync(CURRENCY_EXPLICIT_KEY, "true");
+    set({ localCurrency: currency, currencyExplicit: true });
   },
 
   hydrate: async () => {
     try {
-      const [token, userJson, onboardingCompletedVal, currencyVal] = await Promise.all([
+      const [token, userJson, onboardingCompletedVal, currencyVal, explicitVal] = await Promise.all([
         SecureStore.getItemAsync(ACCESS_TOKEN_KEY).catch(() => null),
         SecureStore.getItemAsync(USER_KEY).catch(() => null),
         SecureStore.getItemAsync(ONBOARDING_COMPLETED_KEY).catch(() => null),
         SecureStore.getItemAsync(LOCAL_CURRENCY_KEY).catch(() => null),
+        SecureStore.getItemAsync(CURRENCY_EXPLICIT_KEY).catch(() => null),
       ]);
       // Interceptors read the anonymous token synchronously, so warm its cache
       // during hydration alongside the account session.
       await hydrateAnonymousToken().catch(() => {});
       const user = userJson ? (JSON.parse(userJson) as PublicUser) : null;
-      const localCurrency = currencyVal || (user ? getCurrencyForCountry(user.country).code : "USD");
+      const currencyExplicit = explicitVal === "true";
+      // Keep a currency the traveller picked by hand; a value that only ever
+      // came from the now-removed profile-country / IP-geolocation
+      // auto-detection resets to the fixed EUR default.
+      const localCurrency = currencyExplicit && currencyVal ? currencyVal : "EUR";
       set({
         user,
         accessToken: token,
         hasCompletedOnboarding: onboardingCompletedVal === "true",
         localCurrency,
+        currencyExplicit,
       });
     } catch (e) {
       console.warn("Auth hydration warning:", e);

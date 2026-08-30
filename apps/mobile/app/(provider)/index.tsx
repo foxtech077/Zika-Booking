@@ -420,7 +420,7 @@ const rv = StyleSheet.create({
 export default function ProviderHomeScreen() {
   const user          = useAuthStore(s => s.user);
   const localCurrency = useAuthStore(s => s.localCurrency);
-  const currency      = localCurrency ?? "USD";
+  const currency      = localCurrency ?? "EUR";
   const { data, isLoading, isError, refetch, isRefetching } = useQuery<DashboardData>({
     queryKey: ["providerDashboard"],
     queryFn:  async () => {
@@ -781,7 +781,7 @@ export default function ProviderHomeScreen() {
           <Text style={s.finLabel}>FINANCIAL OVERVIEW</Text>
           <View style={s.finRow}>
             <View style={s.finItem}>
-              <Text style={s.finItemLabel}>Current Balance</Text>
+              <Text style={s.finItemLabel}>This Month</Text>
               <Text style={s.finBalance}>${fmtMoney(data?.thisMonthEarnings ?? 0)}</Text>
             </View>
             <View style={s.finItem}>
@@ -814,7 +814,7 @@ export default function ProviderHomeScreen() {
               style={s.withdrawBtn}
               onPress={() => router.push("/(provider)/payouts" as any)}
             >
-              <Text style={s.withdrawText}>Withdraw Now</Text>
+              <Text style={s.withdrawText}>View Payouts</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -825,33 +825,22 @@ export default function ProviderHomeScreen() {
             title="Calendar & Channel Sync"
             onSeeAll={() => router.push("/(provider)/channels" as any)}
           />
-          <View style={s.whiteCard}>
-            {[
-              { icon: "home",        color: "#FF5A5F", name: "Airbnb",       sub: "External calendar sync" },
-              { icon: "bed-outline", color: "#003580", name: "Booking.com",  sub: "External calendar sync" },
-            ].map((ch, i, arr) => (
-              <TouchableOpacity
-                key={ch.name}
-                style={[s.channelRow, i < arr.length - 1 && s.channelBorder]}
-                onPress={() => router.push("/(provider)/channels" as any)}
-                activeOpacity={0.75}
-              >
-                <View style={[s.channelIcon, { backgroundColor: ch.color + "18" }]}>
-                  <Ionicons name={ch.icon as any} size={20} color={ch.color} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.channelName}>{ch.name}</Text>
-                  <Text style={s.channelSub}>{ch.sub}</Text>
-                </View>
-                <TouchableOpacity
-                  style={s.channelManageBtn}
-                  onPress={() => router.push("/(provider)/channels" as any)}
-                >
-                  <Text style={s.channelManageText}>Manage</Text>
-                </TouchableOpacity>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <TouchableOpacity
+            style={s.whiteCard}
+            onPress={() => router.push("/(provider)/channels" as any)}
+            activeOpacity={0.75}
+          >
+            <View style={s.channelRow}>
+              <View style={[s.channelIcon, { backgroundColor: "#eff6ff" }]}>
+                <Ionicons name="calendar-outline" size={20} color="#2563eb" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.channelName}>Manage calendar feeds</Text>
+                <Text style={s.channelSub}>Connect or sync external iCal calendars</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* ── Recent Reviews ── */}

@@ -119,7 +119,7 @@ export function PlaceAutocomplete({
         return;
       }
       onChange(place.address || suggestion.primary);
-      onResolved(place);
+      onResolved({ ...place, placeId: suggestion.placeId });
     } catch {
       setFailed(true);
     } finally {
@@ -138,7 +138,8 @@ export function PlaceAutocomplete({
         <TextInput
           style={s.input}
           value={value}
-          editable={configured}
+          // Google suggestions are optional; free-form text search must still work.
+          editable
           onChangeText={handleChange}
           placeholder={configured ? placeholder : "Search unavailable"}
           placeholderTextColor={K.colors.textMuted}

@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { listingApi } from "@/lib/listing-api";
+import { useAuthStore } from "@/stores/auth";
 import ListingImage from "../../traveller/components/ListingImage";
+import { MessageProviderButton } from "../../traveller/components/MessageProviderButton";
 
 interface ManageListing {
   id: string;
@@ -37,7 +39,6 @@ interface ManageBooking {
   deliveryFee: number;
   serviceFee: number;
   serviceFeeRate?: number;
-  taxAmount: number;
   securityDeposit: number;
   voucherCode: string | null;
   voucherDiscount: number;
@@ -107,6 +108,7 @@ export default function BookingManageView() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const code = typeof params?.code === "string" ? params.code : undefined;
   const token = searchParams.get("token");
 
@@ -233,6 +235,16 @@ export default function BookingManageView() {
 
   const isCar = booking.listingType === "car";
   const isCancelled = booking.status.startsWith("cancelled");
+  const stayStart = isCar ? booking.pickupDatetime : booking.checkIn;
+  const stayEnd = isCar ? booking.returnDatetime : booking.checkOut;
+  const now = Date.now();
+  const isDuringStay =
+    !!stayStart &&
+    !!stayEnd &&
+    now >= new Date(stayStart).getTime() &&
+    now <= new Date(stayEnd).getTime();
+  const isActiveStay =
+    (booking.status === "confirmed" || booking.status === "completed") && isDuringStay;
   const statusStyle = STATUS_STYLES[booking.status] ?? "bg-slate-100 text-slate-600 border-slate-200";
   const statusLabel = STATUS_LABEL[booking.status] ?? booking.status;
   const dateLabel1 = isCar ? "Pick-up" : "Check-in";
@@ -246,7 +258,12 @@ export default function BookingManageView() {
   const discount = Number(booking.discountAmount) + Number(booking.voucherDiscount);
   // booking.subtotal is the post-discount subtotal; the gross commission-inclusive
   // base is read from the price snapshot so the receipt lines reconcile.
-  const grossBase = Number(booking.priceBreakdownJson?.breakdown?.baseAmount ?? booking.subtotal);
+  // Fallback: reconstruct gross base from post-discount subtotal + discount
+  // (not booking.subtotal alone, which is post-discount).
+  const grossBase = Number(
+    booking.priceBreakdownJson?.breakdown?.baseAmount
+    ?? (Number(booking.subtotal) + discount)
+  );
   const currency = booking.currency;
   const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
@@ -368,12 +385,6 @@ export default function BookingManageView() {
                 <span>{currency} {fmt(Number(booking.serviceFee))}</span>
               </div>
             )}
-            {Number(booking.taxAmount) > 0 && (
-              <div className="flex justify-between text-slate-600">
-                <span>Taxes</span>
-                <span>{currency} {fmt(Number(booking.taxAmount))}</span>
-              </div>
-            )}
             {Number(booking.deliveryFee) > 0 && (
               <div className="flex justify-between text-slate-600">
                 <span>Delivery fee</span>
@@ -386,6 +397,17 @@ export default function BookingManageView() {
             </div>
           </div>
         </div>
+
+        {/* Contact host — only while the guest is inside their stay window */}
+        {isAuthenticated && !isCancelled && isActiveStay && booking.listing?.id && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+            <h2 className="font-bold text-slate-800 text-sm">Need to reach your host?</h2>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              Message your host about check-in, directions, or any special requests.
+            </p>
+            <MessageProviderButton listingId={booking.listing.id} />
+          </div>
+        )}
 
         {/* Cancellation policy */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">

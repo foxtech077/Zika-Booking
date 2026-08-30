@@ -16,7 +16,9 @@ export async function cancelStalePendingPayments(): Promise<void> {
 
     if (stale.length === 0) return;
 
-    console.log(`[PendingPaymentCanceller] Found ${stale.length} stale pending_payment booking(s) — cancelling…`);
+    console.log(
+      `[PendingPaymentCanceller] Found ${stale.length} stale pending_payment booking(s) — cancelling…`,
+    );
 
     for (const booking of stale) {
       try {
@@ -43,7 +45,8 @@ export async function cancelStalePendingPayments(): Promise<void> {
               fromStatus: "pending_payment",
               toStatus: "cancelled_by_system",
               actorType: "system",
-              reason: "Payment timeout — no payment received within 30 minutes.",
+              reason:
+                "Payment timeout — no payment received within 30 minutes.",
             },
           });
 
@@ -57,12 +60,23 @@ export async function cancelStalePendingPayments(): Promise<void> {
           }
         });
 
-        console.log(`[PendingPaymentCanceller] Cancelled booking ${booking.id} (Ref: ${booking.reference})`);
+        console.log(
+          `[PendingPaymentCanceller] Cancelled booking ${booking.id} (Ref: ${booking.reference})`,
+        );
       } catch (txErr: any) {
-        console.error(`[PendingPaymentCanceller] Transaction failed for booking ${booking.id}:`, txErr.message);
+        // Log and continue — one bad row must not starve the bookings behind
+        // it. The sweep is idempotent and reruns every minute.
+        console.error(
+          `[PendingPaymentCanceller] Transaction failed for booking ${booking.id}:`,
+          txErr.message,
+        );
       }
     }
   } catch (err: any) {
-    console.error("[PendingPaymentCanceller] Error scanning for stale bookings:", err.message);
+    console.error(
+      "[PendingPaymentCanceller] Error scanning for stale bookings:",
+      err.message,
+    );
+    throw err;
   }
 }

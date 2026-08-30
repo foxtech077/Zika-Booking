@@ -61,6 +61,7 @@ export function loadGoogleMaps(): Promise<typeof google.maps> {
 
 /** Coordinates plus the address parts Google resolved alongside them. */
 export interface ResolvedPlace {
+  placeId?: string;
   lat: number;
   lng: number;
   address: string;

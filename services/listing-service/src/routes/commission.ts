@@ -3,7 +3,8 @@ import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { sendCommissionRateChangeEmail } from "../lib/email.js";
-import { fireNotification } from "../lib/notifications.js";
+import { fireBulkNotification } from "../lib/notifications.js";
+import { liveProviderListingWhere } from "../services/commission.service.js";
 
 // ── Role helpers ─────────────────────────────────────────────────────────────
 
@@ -257,7 +258,7 @@ export async function commissionRoutes(app: FastifyInstance) {
 
         if (notifyProviders) {
           sendGlobalCommissionEmails(decimalRate, oldGlobalRate, effectiveDate, body.reason).catch(() => null);
-          prisma.listing.findMany({ where: { status: "active" }, select: { providerId: true }, distinct: ["providerId"] })
+          prisma.listing.findMany({ where: liveProviderListingWhere(), select: { providerId: true }, distinct: ["providerId"] })
             .then((rows) => fireCommissionNotifications(rows.map((r) => r.providerId), "All markets", decimalRate, effectiveDate))
             .catch(() => null);
         }
@@ -452,7 +453,7 @@ export async function commissionRoutes(app: FastifyInstance) {
 
         if (notifyProviders) {
           sendCountryCommissionEmail(countryCode, decimalRate, oldRate, effectiveDate, body.reason).catch(() => null);
-          prisma.listing.findMany({ where: { status: "active", country: countryCode }, select: { providerId: true }, distinct: ["providerId"] })
+           prisma.listing.findMany({ where: liveProviderListingWhere(countryCode), select: { providerId: true }, distinct: ["providerId"] })
             .then((rows) => fireCommissionNotifications(rows.map((r) => r.providerId), countryCode, decimalRate, effectiveDate))
             .catch(() => null);
         }
@@ -612,7 +613,7 @@ export async function commissionRoutes(app: FastifyInstance) {
           const old = existingMap.get(code);
           const oldRate = old ? Number(old.rate) : Number(globalSettings.globalCommissionRate);
           sendCountryCommissionEmail(code, decimalRate, oldRate, effectiveDate, body.reason).catch(() => null);
-          prisma.listing.findMany({ where: { status: "active", country: code }, select: { providerId: true }, distinct: ["providerId"] })
+           prisma.listing.findMany({ where: liveProviderListingWhere(code), select: { providerId: true }, distinct: ["providerId"] })
             .then((rows) => fireCommissionNotifications(rows.map((r) => r.providerId), code, decimalRate, effectiveDate))
             .catch(() => null);
         }
@@ -942,7 +943,7 @@ async function sendCountryCommissionEmail(
   reason: string,
 ): Promise<void> {
   const providers = await prisma.listing.findMany({
-    where: { country: countryCode, status: "active" },
+    where: liveProviderListingWhere(countryCode),
     select: { providerId: true },
     distinct: ["providerId"],
   });
@@ -965,7 +966,7 @@ async function sendGlobalCommissionEmails(
   reason: string,
 ): Promise<void> {
   const providers = await prisma.listing.findMany({
-    where: { status: "active" },
+    where: liveProviderListingWhere(),
     select: { providerId: true },
     distinct: ["providerId"],
   });
@@ -988,14 +989,12 @@ async function fireCommissionNotifications(
   effectiveDate: Date,
 ): Promise<void> {
   const effectiveDateStr = effectiveDate.toISOString().split("T")[0];
-  for (const providerId of providerIds) {
-    fireNotification(providerId, {
-      type:  "commission_update",
-      title: "Commission Rate Update",
-      body:  `The commission rate for ${scope} has been updated to ${(newRate * 100).toFixed(2)}%, effective ${effectiveDateStr}.`,
-      data:  { scope, newRate, effectiveDate: effectiveDateStr },
-    });
-  }
+  fireBulkNotification(providerIds, {
+    type:  "commission_update",
+    title: "Commission Rate Update",
+    body:  `The commission rate for ${scope} has been updated to ${(newRate * 100).toFixed(2)}%, effective ${effectiveDateStr}.`,
+    data:  { scope, newRate, effectiveDate: effectiveDateStr },
+  });
 }
 
 async function fetchProviderEmails(providerIds: string[]): Promise<string[]> {

@@ -1,6 +1,7 @@
 import { prisma } from "./prisma.js";
 import { sendCommissionRateChangeEmail } from "./email.js";
-import { fireNotification } from "./notifications.js";
+import { fireBulkNotification } from "./notifications.js";
+import { liveProviderListingWhere } from "../services/commission.service.js";
 
 // Runs nightly at 00:01 UTC — promotes pending commission rates whose
 // effectiveFrom date has been reached to the current rate, then writes history.
@@ -53,21 +54,19 @@ async function promotePendingRates(): Promise<void> {
     // Notify providers in this country
     sendCountryEmail(cr.country, newRate, oldRate, cr.pendingEffectiveFrom, cr.pendingReason ?? "Scheduled rate change").catch(() => null);
     prisma.listing.findMany({
-      where: { country: cr.country, status: "active" },
+      where: liveProviderListingWhere(cr.country),
       select: { providerId: true },
       distinct: ["providerId"],
     })
       .then((rows) => {
         const providerIds = rows.map((r) => r.providerId);
         const effectiveDateStr = cr.pendingEffectiveFrom!.toISOString().split("T")[0];
-        for (const providerId of providerIds) {
-          fireNotification(providerId, {
-            type: "commission_update",
-            title: "Commission Rate Update",
-            body: `The commission rate for ${cr.country} has been updated to ${(newRate * 100).toFixed(2)}%, effective ${effectiveDateStr}.`,
-            data: { scope: cr.country, newRate, effectiveDate: effectiveDateStr },
-          });
-        }
+        fireBulkNotification(providerIds, {
+          type: "commission_update",
+          title: "Commission Rate Update",
+          body: `The commission rate for ${cr.country} has been updated to ${(newRate * 100).toFixed(2)}%, effective ${effectiveDateStr}.`,
+          data: { scope: cr.country, newRate, effectiveDate: effectiveDateStr },
+        });
       })
       .catch(() => null);
   }
@@ -111,21 +110,19 @@ async function promotePendingRates(): Promise<void> {
 
     sendGlobalEmail(newRate, oldRate, settings.pendingGlobalEffectiveFrom, settings.pendingGlobalReason ?? "Scheduled rate change").catch(() => null);
     prisma.listing.findMany({
-      where: { status: "active" },
+      where: liveProviderListingWhere(),
       select: { providerId: true },
       distinct: ["providerId"],
     })
       .then((rows) => {
         const providerIds = rows.map((r) => r.providerId);
         const effectiveDateStr = settings.pendingGlobalEffectiveFrom!.toISOString().split("T")[0];
-        for (const providerId of providerIds) {
-          fireNotification(providerId, {
-            type: "commission_update",
-            title: "Commission Rate Update",
-            body: `The commission rate for All markets has been updated to ${(newRate * 100).toFixed(2)}%, effective ${effectiveDateStr}.`,
-            data: { scope: "All markets", newRate, effectiveDate: effectiveDateStr },
-          });
-        }
+        fireBulkNotification(providerIds, {
+          type: "commission_update",
+          title: "Commission Rate Update",
+          body: `The commission rate for All markets has been updated to ${(newRate * 100).toFixed(2)}%, effective ${effectiveDateStr}.`,
+          data: { scope: "All markets", newRate, effectiveDate: effectiveDateStr },
+        });
       })
       .catch(() => null);
   }
@@ -139,7 +136,7 @@ async function sendCountryEmail(
   reason: string,
 ): Promise<void> {
   const providers = await prisma.listing.findMany({
-    where: { country: countryCode, status: "active" },
+    where: liveProviderListingWhere(countryCode),
     select: { providerId: true },
     distinct: ["providerId"],
   });
@@ -162,7 +159,7 @@ async function sendGlobalEmail(
   reason: string,
 ): Promise<void> {
   const providers = await prisma.listing.findMany({
-    where: { status: "active" },
+    where: liveProviderListingWhere(),
     select: { providerId: true },
     distinct: ["providerId"],
   });

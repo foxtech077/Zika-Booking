@@ -1,8 +1,8 @@
 import axios from "axios";
-import type { PublicUser } from "@zika/types";
 import { useAuthStore } from "../store/auth";
 
 import { getAuthBaseUrl } from "./config";
+import { refreshAccessToken } from "./token-refresh";
 
 export const BASE_URL = getAuthBaseUrl();
 
@@ -31,9 +31,9 @@ function isAccountRevoked(error: unknown): boolean {
   return res.status === 403 && ACCOUNT_CODES.includes(code);
 }
 
-// On 401, try to refresh then retry once.
+// On 401, try to refresh then retry once — via the shared singleton so that
+// concurrent 401s across all three clients issue only ONE refresh request.
 // On 403 with account-revocation codes, clear auth immediately.
-let refreshing: Promise<void> | null = null;
 api.interceptors.response.use(
   (res) => {
     const fullUrl = `${res.config.baseURL ?? BASE_URL}${res.config.url ?? ""}`;
@@ -56,29 +56,9 @@ api.interceptors.response.use(
     const original = error.config as (typeof error.config) & { _retry?: boolean };
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
-      if (!refreshing) {
-        refreshing = (async () => {
-          try {
-            const res = await axios.post(`${BASE_URL}auth/refresh`, {}, { withCredentials: true });
-            const body = (res.data as {
-              data: { tokens: { accessToken: string }; user?: PublicUser };
-            }).data;
-            const token = body.tokens.accessToken;
-            // Prefer the user object the refresh returns. Reusing the cached
-            // one kept server-side changes out of the app — hostStatus above
-            // all, which is minted into the new token but would then disagree
-            // with the stale copy in the store.
-            const { user: cachedUser } = useAuthStore.getState();
-            const nextUser = body.user ?? cachedUser;
-            if (nextUser) await useAuthStore.getState().setAuth(nextUser, token);
-          } catch {
-            await useAuthStore.getState().clearAuth();
-          } finally {
-            refreshing = null;
-          }
-        })();
-      }
-      await refreshing;
+      const newToken = await refreshAccessToken();
+      if (!newToken) return Promise.reject(error);
+      original.headers.Authorization = `Bearer ${newToken}`;
       return api(original);
     }
     return Promise.reject(error);

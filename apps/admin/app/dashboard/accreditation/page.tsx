@@ -26,7 +26,7 @@ const REJECTION_REASONS = [
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 const fetchQueue = (params: Record<string, string>) =>
-  listingApi.get(`/admin/listings/review-queue?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
+  listingApi.get(`/admin/listings/review-queue?${new URLSearchParams({ queue: "approval", ...params })}`).then((r) => r.data.data ?? r.data);
 
 const fetchDetail = (id: string) =>
   listingApi.get(`/admin/listings/${id}/review`).then((r) => r.data.data ?? r.data);
@@ -258,7 +258,7 @@ export default function AccreditationPage() {
   // Country managers: client-side filter as safety net (in case API doesn't filter)
   const rawTasks: ListingReviewTask[] = data?.tasks ?? [];
 
-  const tasks = isCountryManager && userCountryScope.length > 0
+  const tasks = (isCountryManager && userCountryScope.length > 0
     ? rawTasks.filter((t) => {
       const listingCountry = t.listing?.country?.toUpperCase();
       const selectedCountry = country?.toUpperCase();
@@ -268,11 +268,11 @@ export default function AccreditationPage() {
 
       return inScope && (!selectedCountry || selectedCountry === listingCountry);
     })
-    : rawTasks;
+    : rawTasks).filter((t) => t.listing.category === "hotel");
   const total: number = data?.total ?? tasks.length;
 
   const offset = (page - 1) * limit;
-  const requestUrl = `/admin/listings/review-queue?${new URLSearchParams(params)}`;
+  const requestUrl = `/admin/listings/review-queue?${new URLSearchParams({ queue: "approval", ...params })}`;
   const responseCount = data?.tasks?.length ?? 0;
   const renderedRows = tasks.length;
   console.log("AccreditationPage Pagination Debug:", {
@@ -466,8 +466,8 @@ export default function AccreditationPage() {
       )}
 
       <SectionHeader
-        title="Hotel Accreditation Queue"
-        description={`${total} hotel listings pending review`}
+        title="Approval Queue"
+        description={`${total} hotel listings pending approval`}
         action={<Badge label={`${total} Pending`} status="pending_review" size="md" />}
       />
 

@@ -67,7 +67,6 @@ interface BookingDetail {
   discountAmount?: number;
   serviceFee?: number;
   serviceFeeRate?: number;
-  taxAmount?: number;
   deliveryFee?: number;
   securityDeposit?: number;
   totalAmount: number;
@@ -183,9 +182,6 @@ async function shareVoucher(booking: BookingDetail) {
       : "",
     booking.serviceFee && booking.serviceFee > 0
       ? `Service fee: +${formatCurrency(booking.serviceFee, booking.currency)}`
-      : "",
-    booking.taxAmount && booking.taxAmount > 0
-      ? `Taxes: +${formatCurrency(booking.taxAmount, booking.currency)}`
       : "",
     `TOTAL: ${formatCurrency(booking.totalAmount, booking.currency)}`,
     "",
@@ -315,6 +311,7 @@ export default function BookingDetailScreen() {
   // Auto-refresh until backend confirms the booking (webhook delay). Stops after 3 minutes.
   const [autoRefresh, setAutoRefresh] = useState(() => fromPayment === "true");
   const [pollingTimedOut, setPollingTimedOut] = useState(false);
+  const [openingChat, setOpeningChat] = useState(false);
 
   useEffect(() => {
     if (!justPaid) return;
@@ -329,6 +326,26 @@ export default function BookingDetailScreen() {
 
     return () => subscription.remove();
   }, [justPaid]);
+
+  // Guests need to reach their host after paying, not just before booking.
+  // Same POST /conversations flow the listing page's "Message Host" uses.
+  async function openHostChat(listingId: string, bookingId: string) {
+    if (openingChat) return;
+    setOpeningChat(true);
+    try {
+      const res = await listingApi.post<{ data: { conversationId: string } }>("/conversations", {
+        listingId,
+        bookingId,
+      });
+      router.push(`/conversation/${res.data.data.conversationId}` as any);
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error?.message ?? "Could not open the conversation. Please try again.";
+      Alert.alert("Error", message);
+    } finally {
+      setOpeningChat(false);
+    }
+  }
 
   const { data: booking, isLoading, isError, refetch } = useQuery<BookingDetail>({
     queryKey: ["booking", id],
@@ -347,21 +364,11 @@ export default function BookingDetailScreen() {
   // anonymous sessions skip the lookup.
   const reviewedBookingIds = useReviewedBookingIds(!!user);
 
-  // Fetch signed cover photo via /listings/:id/public (listing.primaryPhotoUrl may be an unsigned S3 URL)
-  const { data: signedCoverPhoto } = useQuery<string | null>({
-    queryKey: ["public-photo", booking?.listing?.id],
-    queryFn: async () => {
-      try {
-        const res = await listingApi.get<{
-          data: { primaryPhotoUrl?: string | null; photos?: Array<{ cdnUrl: string }> };
-        }>(`/listings/${booking!.listing.id}/public`);
-        return res.data.data?.primaryPhotoUrl ?? res.data.data?.photos?.[0]?.cdnUrl ?? null;
-      } catch { return null; }
-    },
-    enabled: !!booking?.listing?.id,
-    staleTime: 5 * 60_000,
-    retry: false,
-  });
+  // GET /guests/me/bookings/:id already returns listing.primaryPhotoUrl (the
+  // same stable, permanent listing_photos.cdn_url — not a signed/expiring
+  // URL) — this used to re-fetch it via GET /listings/:id/public for data
+  // already in hand.
+  const signedCoverPhoto = booking?.listing?.primaryPhotoUrl ?? null;
 
   // Stop auto-refresh once the status moves away from pending_payment
   useEffect(() => {
@@ -450,6 +457,16 @@ export default function BookingDetailScreen() {
     : rawStatusLabel;
   const isCar = booking.listingType === "car";
   const cancelled = isCancelled(booking.status);
+  const stayStart = isCar ? booking.pickupDatetime : booking.checkIn;
+  const stayEnd = isCar ? booking.returnDatetime : booking.checkOut;
+  const nowMs = Date.now();
+  const isDuringStay =
+    !!stayStart &&
+    !!stayEnd &&
+    nowMs >= new Date(stayStart).getTime() &&
+    nowMs <= new Date(stayEnd).getTime();
+  const isActiveStay =
+    (booking.status === "confirmed" || booking.status === "active") && isDuringStay;
 
   function stayDetails(): string {
     if (!booking) return "";
@@ -587,12 +604,6 @@ export default function BookingDetailScreen() {
                     Service fee{booking.serviceFeeRate ? ` (${Math.round(Number(booking.serviceFeeRate) * 100)}%)` : ''}
                   </Text>
                   <Text style={styles.priceValue}>+ {formatCurrency(booking.serviceFee, booking.currency)}</Text>
-                </View>
-              )}
-              {booking.taxAmount != null && booking.taxAmount > 0 && (
-                <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>Taxes</Text>
-                  <Text style={styles.priceValue}>+ {formatCurrency(booking.taxAmount, booking.currency)}</Text>
                 </View>
               )}
               {booking.deliveryFee != null && booking.deliveryFee > 0 && (
@@ -748,6 +759,24 @@ export default function BookingDetailScreen() {
                   <Text style={styles.reviewBtnText}>Leave a Review</Text>
                 </TouchableOpacity>
               )
+            )}
+
+            {/* Message host — only while the guest is inside their stay window */}
+            {user && booking.listing?.id && !cancelled && isActiveStay && (
+              <TouchableOpacity
+                style={styles.messageHostBtn}
+                onPress={() => void openHostChat(booking.listing.id, booking.id)}
+                disabled={openingChat}
+              >
+                {openingChat ? (
+                  <ActivityIndicator size="small" color="#16a34a" />
+                ) : (
+                  <>
+                    <Ionicons name="chatbubble-ellipses-outline" size={16} color="#16a34a" style={{ marginRight: 6 }} />
+                    <Text style={styles.messageHostBtnText}>Message Host</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             )}
 
             {/* Share voucher (text) */}
@@ -1065,6 +1094,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#eff6ff",
   },
   reviewBtnText: { fontSize: 15, fontWeight: "700", color: "#16a34a" },
+
+  messageHostBtn: {
+    borderWidth: 2,
+    borderColor: "#16a34a",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    backgroundColor: "#f0fdf4",
+  },
+  messageHostBtnText: { fontSize: 15, fontWeight: "700", color: "#16a34a" },
 
   reviewSubmittedBox: {
     borderWidth: 1,

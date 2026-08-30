@@ -249,3 +249,62 @@ export async function getAllPayouts(params?: {
   return payouts;
 }
 
+// ─── Payment summary per booking (provider view) ─────────────────────────────
+// Real payment/refund/payout state keyed by bookingId, served by the payment
+// service so the provider app does not need a cross-schema join.
+
+export interface BookingPaymentSummary {
+  payment: {
+    id: string;
+    displayId: string | null;
+    status: string;
+    amount: number | null;
+    currency: string;
+    chargedAmount: number | null;
+    chargedCurrency: string | null;
+    chargedRate: number | null;
+    paymentMethodType: string | null;
+    cardBrand: string | null;
+    cardLast4: string | null;
+    mobileNumberMasked: string | null;
+    providerPaymentId: string | null;
+    failureCode: string | null;
+    failureMessage: string | null;
+    capturedAt: string | null;
+    createdAt: string;
+  } | null;
+  refunds: {
+    id: string;
+    amount: number | null;
+    currency: string;
+    status: string;
+    reason: string | null;
+    providerRefundId: string | null;
+    failureReason: string | null;
+    refundedAt: string | null;
+  }[];
+  payout: {
+    id: string;
+    status: string;
+    amount: number | null;
+    currency: string;
+    scheduledAt: string | null;
+    processedAt: string | null;
+    providerPayoutId: string | null;
+    failureReason: string | null;
+    priceBreakdownJson: unknown;
+  } | null;
+}
+
+export type PaymentSummaryMap = Record<string, BookingPaymentSummary>;
+
+export async function getPaymentSummary(bookingIds: string[]): Promise<PaymentSummaryMap> {
+  const unique = [...new Set(bookingIds.filter(Boolean))].slice(0, 200);
+  if (unique.length === 0) return {};
+  const res = await paymentApi.get<{ success: boolean; data: PaymentSummaryMap }>(
+    "/provider/me/bookings/payment-summary",
+    { params: { bookingIds: unique.join(",") } },
+  );
+  return res.data?.data ?? {};
+}
+

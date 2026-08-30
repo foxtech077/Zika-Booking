@@ -9,7 +9,10 @@ import { ALL_CURRENCIES } from "@/lib/currency";
 // Lets a guest or signed-in traveller override the currency listing prices
 // are shown in. Selecting a currency updates stores/currency.ts, which
 // lib/listing-api.ts's request interceptor then attaches as `?currency=` to
-// every search / listing-detail call.
+// every search / listing-detail call. Defaults to EUR — there used to be a
+// timezone-based auto-suggestion here that silently swapped in the visitor's
+// detected country currency; removed so EUR stays the default until the
+// visitor picks something else themselves.
 export function CurrencyDropdown() {
   const currency = useCurrencyStore((s) => s.currency);
   const setCurrency = useCurrencyStore((s) => s.setCurrency);

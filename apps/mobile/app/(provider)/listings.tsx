@@ -16,7 +16,7 @@ import { router } from "expo-router";
 import { AppLayout } from "../../components/layout/AppLayout";
 import { ListingImage } from "../../components/ListingImage";
 import { Feather } from "@expo/vector-icons";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listingApi } from "../../lib/listing-api";
 import { K } from "../../constants/theme";
 import { useAuthStore } from "../../store/auth";
@@ -34,6 +34,7 @@ interface ListingItem {
   town: string | null;
   country: string | null;
   pricePerNight: number | null;
+  pricePerDay: number | null;
   currency: string | null;
   claimedStarRating: number | null;
   rejectionNote: string | null;
@@ -104,22 +105,32 @@ interface CardProps {
   item: ListingItem;
   summary?: SummaryItem;
   maxBookings: number;
+  /** Cheapest room-type rate — hotels price per room type, not on the listing. */
+  minRoomPrice?: number;
   onEdit: () => void;
   onMore: () => void;
   /** Columns in the parent grid. 1 on phones — card keeps its phone layout. */
   columns?: number;
 }
 
-const ListingCard = memo(function ListingCard({ item, summary, maxBookings, onEdit, onMore, columns = 1 }: CardProps) {
+const ListingCard = memo(function ListingCard({ item, summary, maxBookings, minRoomPrice, onEdit, onMore, columns = 1 }: CardProps) {
   const cfg = STATUS_CFG[item.status] ?? { label: item.status, bg: "#64748B", text: "#fff" };
   const coverUrl = item.photos[0]?.cdnUrl ?? null;
   const bookings  = summary?.bookingCount ?? 0;
   const barPct    = maxBookings > 0 ? Math.min(100, Math.round((bookings / maxBookings) * 100)) : 0;
   const barColor  = barPct >= 70 ? K.colors.accent : barPct >= 30 ? "#F59E0B" : "#E5E7EB";
 
-  const priceLabel = item.pricePerNight != null
-    ? formatCurrency(item.pricePerNight, item.currency ?? "USD")
-    : "—";
+  // Cars price per day; hotels without a listing-level price fall back to the
+  // cheapest room type (the same figure search results show as "from").
+  const rawPrice =
+    item.category === "car"
+      ? item.pricePerDay ?? item.pricePerNight
+      : item.pricePerNight ?? (item.category === "hotel" ? minRoomPrice ?? null : null);
+  const isFromPrice = item.category === "hotel" && item.pricePerNight == null && minRoomPrice != null;
+  const priceLabel =
+    rawPrice != null && Number(rawPrice) > 0
+      ? formatCurrency(Number(rawPrice), item.currency ?? "USD")
+      : "—";
 
   const rating = summary?.averageRating;
 
@@ -222,6 +233,7 @@ const ListingCard = memo(function ListingCard({ item, summary, maxBookings, onEd
 
         {/* Price */}
         <View style={s.priceBlockRow}>
+          {isFromPrice && <Text style={s.priceFrom}>from</Text>}
           <Text style={s.price}>{priceLabel}</Text>
           <Text style={s.priceUnit}>/ {item.category === "car" ? "day" : "night"}</Text>
         </View>
@@ -336,6 +348,35 @@ export default function ListingsScreen() {
   }, [summaryQ.data]);
 
   const allListings = listingsQ.data?.listings ?? [];
+
+  // Hotels price per room type, so the listing-level pricePerNight is empty for
+  // them — fetch each such hotel's room types and show the cheapest rate.
+  // Same query key as the wizard's useRoomTypes, so the cache is shared.
+  const hotelsNeedingPrice = useMemo(
+    () => allListings.filter((l) => l.category === "hotel" && l.pricePerNight == null).map((l) => l.id),
+    [allListings]
+  );
+  const roomTypeQueries = useQueries({
+    queries: hotelsNeedingPrice.map((id) => ({
+      queryKey: ["room-types", id],
+      queryFn: async () => {
+        const res = await listingApi.get<{ data: Array<{ pricePerNight: number }> }>(
+          `/listings/${id}/room-types`
+        );
+        return res.data?.data ?? [];
+      },
+      staleTime: 60_000,
+    })),
+  });
+  const minRoomPrices = useMemo(() => {
+    const m: Record<string, number> = {};
+    hotelsNeedingPrice.forEach((id, i) => {
+      const rts = roomTypeQueries[i]?.data;
+      if (rts && rts.length > 0) m[id] = Math.min(...rts.map((rt) => Number(rt.pricePerNight)));
+    });
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotelsNeedingPrice, ...roomTypeQueries.map((q) => q.data)]);
 
   const filtered = useMemo(() => {
     return allListings.filter((l) => {
@@ -453,13 +494,14 @@ export default function ListingsScreen() {
         item={item}
         summary={summaryMap[item.id]}
         maxBookings={maxBookings}
+        minRoomPrice={minRoomPrices[item.id]}
         onEdit={() => router.push(editRoute(item))}
         onMore={() => openMoreMenu(item)}
         columns={columns}
       />
       )
     ),
-    [summaryMap, maxBookings, columns]
+    [summaryMap, maxBookings, minRoomPrices, columns]
   );
 
   return (
@@ -823,6 +865,7 @@ const s = StyleSheet.create({
 
   // Footer price + actions
   priceBlockRow: { flexDirection: "row", alignItems: "baseline", gap: 4, marginBottom: 12 },
+  priceFrom: { fontSize: K.font.xs, color: "#94A3B8", fontWeight: "600" },
   price: { fontSize: K.font.xl, fontWeight: "900", color: K.colors.textDark },
   priceUnit: { fontSize: K.font.xs, color: "#94A3B8" },
 

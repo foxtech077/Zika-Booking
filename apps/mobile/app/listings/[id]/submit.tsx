@@ -4,12 +4,16 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import { listingApi } from "../../../lib/listing-api";
+import { useRoomTypes } from "../_room-types";
 import { K } from "../../../constants/theme";
 
 export default function SubmitListingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
+  // Hotels price per room type — the listing-level pricePerNight/roomType
+  // fields are legacy and stay empty for listings created by the new wizard.
+  const { data: roomTypes = [] } = useRoomTypes(String(id ?? ""));
   const { data: listing, isLoading } = useQuery({
     queryKey: ["listing-submit", id],
     queryFn: async () => {
@@ -68,9 +72,8 @@ export default function SubmitListingScreen() {
 
   const hotelChecklist = [
     { label: "Hotel name", ok: !!listing.name },
-    { label: "Room type", ok: !!listing.roomType },
-    { label: "Number of units (≥ 1)", ok: !!listing.unitCount && listing.unitCount >= 1 },
-    { label: "Price & currency", ok: !!listing.pricePerNight && !!listing.currency },
+    { label: `At least one room type (${roomTypes.length} added)`, ok: roomTypes.length >= 1 },
+    { label: "Currency", ok: !!listing.currency },
     { label: "Address & town", ok: !!listing.address && !!listing.town },
     { label: "Country", ok: !!listing.country },
     { label: "Cancellation policy", ok: !!listing.cancellationPolicy },
@@ -157,13 +160,21 @@ export default function SubmitListingScreen() {
             </>
           ) : (
             <>
-              <Row label="Room type" value={listing.roomType ?? "—"} />
+              <Row label="Room types" value={roomTypes.length ? String(roomTypes.length) : "—"} />
               <Row label="Units" value={listing.unitCount?.toString() ?? "—"} />
             </>
           )}
           <Row
             label={isCar ? "Daily rate" : "Price / night"}
-            value={listing.pricePerNight ? `${listing.currency} ${listing.pricePerNight}` : "—"}
+            value={
+              listing.category === "hotel"
+                ? roomTypes.length
+                  ? `${listing.currency} ${Math.min(...roomTypes.map((rt) => rt.pricePerNight))} (lowest room)`
+                  : "—"
+                : (isCar ? listing.pricePerDay : listing.pricePerNight)
+                  ? `${listing.currency} ${isCar ? listing.pricePerDay : listing.pricePerNight}`
+                  : "—"
+            }
           />
           <Row label="Location" value={[listing.town, listing.country].filter(Boolean).join(", ") || "—"} />
           <Row label="Photos" value={`${photoCount} uploaded`} />

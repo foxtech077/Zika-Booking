@@ -1,4 +1,4 @@
-import { useWindowDimensions } from "react-native";
+import { useWindowDimensions, type ViewStyle } from "react-native";
 
 /**
  * Width breakpoints, in dp. Chosen against real device widths rather than
@@ -77,7 +77,9 @@ export function padToColumns<T>(items: T[], columns: number): (T | null)[] {
  * split into columns — the eye has to scan in two directions for what is
  * really one chronological stream. Constrain them instead.
  */
-export function useReadableWidth(): { maxWidth: number | undefined; alignSelf: "center" } {
+export function useReadableWidth(): ViewStyle {
   const { width } = useWindowDimensions();
-  return { maxWidth: width >= BP.sm ? 720 : undefined, alignSelf: "center" };
+  if (width < BP.sm) return {};
+
+  return { maxWidth: 720, width: "100%", alignSelf: "center" };
 }

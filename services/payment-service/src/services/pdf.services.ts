@@ -128,7 +128,6 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
     { label: "Discount", value: -invoice.discount, currency: listingCurrency, isDiscount: true },
     { label: "Subtotal", value: invoice.subtotal, currency: listingCurrency },
     { label: `Service Fee${booking.serviceFeeRate ? ` (${Math.round(Number(booking.serviceFeeRate) * 100)}%)` : ''}`, value: invoice.serviceFee, currency: listingCurrency },
-    { label: "Tax", value: invoice.tax, currency: listingCurrency },
   ];
 
   if (invoice.securityDeposit && invoice.securityDeposit > 0) {
@@ -190,7 +189,7 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
   doc.strokeColor(BORDER_COLOR).lineWidth(0.5).moveTo(col1X, footerY).lineTo(555, footerY).stroke();
   
   doc.font("Helvetica").fontSize(8.5).fillColor(TEXT_DARK).text("Thank you for booking with Kainook.", 40, footerY + 12, { align: "center", width: 515 });
-  doc.font("Helvetica").fontSize(7.5).fillColor(TEXT_MUTED).text("For support, contact the host or email us at support@kainook.com.", 40, footerY + 24, { align: "center", width: 515 });
+  doc.font("Helvetica").fontSize(7.5).fillColor(TEXT_MUTED).text("For support, please visit the Kainook help centre.", 40, footerY + 24, { align: "center", width: 515 });
 
   doc.end();
 

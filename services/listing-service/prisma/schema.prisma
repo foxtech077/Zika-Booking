@@ -502,7 +502,6 @@ enum BookingStatus {
     discountAmount  Decimal  @default(0) @map("discount_amount") @db.Decimal(12, 2)
     deliveryFee     Decimal  @default(0) @map("delivery_fee") @db.Decimal(12, 2)
     serviceFee      Decimal  @default(0) @map("service_fee") @db.Decimal(12, 2)
-    taxAmount       Decimal  @default(0) @map("tax_amount") @db.Decimal(12, 2)
     totalAmount     Decimal  @map("total_amount") @db.Decimal(12, 2)
     currency        String   @db.Char(3)
     securityDeposit Decimal? @map("security_deposit") @db.Decimal(12, 2)
@@ -510,6 +509,15 @@ enum BookingStatus {
     // Money-amount + currency snapshot captured at booking/payment time.
     // Display (listing/base + localized) and EUR charged equivalents.
     priceBreakdownJson Json?  @map("price_breakdown_json")
+
+    // Charge-time snapshot — the ACTUAL money moved at the moment the guest was
+    // charged (amount, currency and rate). Mirrors payments.charged* so the
+    // real charge is queryable for historical auditing instead of living only
+    // in priceBreakdownJson. Set at confirmation.
+    chargedAmount   Decimal?  @map("charged_amount")    @db.Decimal(12, 2)
+    chargedCurrency String?   @map("charged_currency")  @db.Char(3)
+    chargedRate     Decimal?  @map("charged_rate")      @db.Decimal(16, 8)
+    chargedAt       DateTime? @map("charged_at")
 
     commissionRate   Decimal @map("commission_rate") @db.Decimal(6, 4)
     commissionAmount Decimal @map("commission_amount") @db.Decimal(12, 2)
@@ -927,7 +935,6 @@ model CommissionRate {
   @@map("commission_rates")
   @@schema("listing")
 }
-
 
 
 

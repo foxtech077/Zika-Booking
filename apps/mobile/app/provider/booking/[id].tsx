@@ -100,14 +100,6 @@ function buildTimelineEvents(b: ProviderBooking): TimelineEvent[] {
   ];
 }
 
-function showMessageStub() {
-  Alert.alert(
-    "Messaging Coming Soon",
-    "In-app guest messaging is not yet available. Please use the contact details provided at check-in to communicate with your guest.",
-    [{ text: "OK" }]
-  );
-}
-
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function ProviderBookingDetailScreen() {
@@ -416,7 +408,7 @@ export default function ProviderBookingDetailScreen() {
         {/* ── Actions ─────────────────────────────────────────────────── */}
         <View style={s.actionsWrap}>
           <BookingActionRow
-            onMessage={showMessageStub}
+            onMessage={() => router.push("/(provider)/messages" as any)}
             canCancel={canCancel}
             cancelled={cancelled}
             isCancelling={cancelMutation.isPending}

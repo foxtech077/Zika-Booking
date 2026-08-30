@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { 
   BarChart3, Calendar, Globe, DollarSign, TrendingUp, 
   Download, Printer, FileSpreadsheet, Eye, Info,
   BadgeCheck, Clock, RotateCcw, Landmark, Percent,
-  CreditCard, XCircle, Tag
+  CreditCard, XCircle, Tag, Euro
 } from "lucide-react";
 import { Card, SectionHeader, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -14,6 +14,7 @@ import { StatCard, RevenueBarChart, DonutChart } from "@/components/charts/Chart
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency, slugToLabel } from "@/lib/utils";
+import { useEurRates, EurValue, toEur, formatEur, chargedToEur, toEurAtCharge } from "@/lib/eur";
 import { useQuery } from "@tanstack/react-query";
 import { paymentPayoutApi } from "@/lib/payment-api";
 import { listingApi } from "@/lib/listing-api";
@@ -156,14 +157,6 @@ export default function FinancialReportsPage() {
   });
 
   const transactions: FinancialTransaction[] = reportsData?.transactions ?? [];
-  const summary: FinancialSummary = reportsData?.summary ?? {
-    grossRevenue: 0,
-    totalVoucherDiscounts: 0,
-    netRevenue: 0,
-    totalCommission: 0,
-    totalPayout: 0,
-    totalBookings: 0,
-  };
 
   // Filter datasets based on dates and country scopes
   const filteredTxs = useMemo(() => {
@@ -193,16 +186,35 @@ export default function FinancialReportsPage() {
     });
   }, [refunds, user, countryFilter, startDate, endDate]);
 
+  // EUR display rates — the reporting KPI cards aggregate across currencies, so
+  // every amount is converted to EUR (the money-of-record for all settlements).
+  const eurRates = useEurRates([
+    ...transactions.map((tx) => tx.currency),
+    ...payouts.map((p: any) => p.currency),
+    ...refunds.map((r: any) => r.currency),
+  ]);
+
+  /** EUR value of an amount in its own currency (0 when the rate is unavailable). */
+  const eur = useCallback(
+    (amount: number, currency?: string | null): number => toEur(amount, currency, eurRates) ?? 0,
+    [eurRates],
+  );
+
   // Report Specific Tables & Data Aggregation
   const reportTableData = useMemo(() => {
     switch (activeReport) {
       case "revenue":
-        // Group by Month
+        // Group by Month. Money flow: gross is the ACTUAL charge captured at
+        // booking time (chargedAmount in EUR/XAF, converted to EUR via the
+        // charge-time snapshot — see billing.service.ts). Platform net revenue
+        // is gross minus the provider payout (which includes the full base +
+        // delivery + deposit passed through to the provider).
         const revMap: Record<string, { 
           id: string; 
           period: string; 
           gross: number; 
           voucherDiscounts: number;
+          payout: number;
           netRevenue: number;
           bookingsCount: number; 
           avgValue: number; 
@@ -217,20 +229,28 @@ export default function FinancialReportsPage() {
               period: key, 
               gross: 0, 
               voucherDiscounts: 0,
+              payout: 0,
               netRevenue: 0,
               bookingsCount: 0, 
               avgValue: 0, 
               country: countryFilter || "All" 
             };
           }
-          revMap[key].gross += tx.subtotal;
-          revMap[key].voucherDiscounts += tx.voucherDiscount;
-          revMap[key].netRevenue += tx.amount;
+          // Money flow: gross = the actual charge captured at booking time
+          // (chargedAmount in EUR/XAF → EUR). The platform keeps the difference
+          // between gross and the provider payout; everything else passes
+          // through to the provider (see billing.service.ts).
+          revMap[key].gross += chargedToEur(tx.chargedAmount, tx.chargedCurrency, eurRates)
+            ?? eur(tx.amount, tx.currency);
+          revMap[key].voucherDiscounts += eur(tx.voucherDiscount, tx.currency);
+          revMap[key].payout += toEurAtCharge(tx.providerPayout, tx.currency, tx.chargedCurrency, tx.chargedRate, eurRates) ?? 0;
+          revMap[key].netRevenue += (chargedToEur(tx.chargedAmount, tx.chargedCurrency, eurRates) ?? eur(tx.amount, tx.currency))
+            - (toEurAtCharge(tx.providerPayout, tx.currency, tx.chargedCurrency, tx.chargedRate, eurRates) ?? 0);
           revMap[key].bookingsCount += 1;
         });
         return Object.values(revMap).map((m) => ({
           ...m,
-          avgValue: m.bookingsCount ? m.netRevenue / m.bookingsCount : 0,
+          avgValue: m.bookingsCount ? m.gross / m.bookingsCount : 0,
         })).sort((a, b) => b.period.localeCompare(a.period));
 
       case "payment":
@@ -258,7 +278,7 @@ export default function FinancialReportsPage() {
             payMap[key] = { id: key, providerName: p.providerName, totalPaid: 0, pendingCount: 0, completedCount: 0, failedCount: 0 };
           }
           if (p.status === "completed") {
-            payMap[key].totalPaid += p.amount;
+            payMap[key].totalPaid += eur(p.amount, p.currency);
             payMap[key].completedCount += 1;
           } else if (p.status === "failed") {
             payMap[key].failedCount += 1;
@@ -276,6 +296,7 @@ export default function FinancialReportsPage() {
           traveller: r.travellerName,
           originalAmount: r.originalAmount,
           refundAmount: r.refundAmount,
+          currency: r.currency,
           reason: r.reason,
           status: r.status,
           date: r.requestedDate,
@@ -289,8 +310,8 @@ export default function FinancialReportsPage() {
           if (!commMap[key]) {
             commMap[key] = { id: key, country: key, totalRevenue: 0, commissionEarned: 0, bookingsCount: 0, avgRate: 0 };
           }
-          commMap[key].totalRevenue += tx.amount;
-          commMap[key].commissionEarned += tx.commissionAmount;
+          commMap[key].totalRevenue += eur(tx.amount, tx.currency);
+          commMap[key].commissionEarned += eur(tx.commissionAmount, tx.currency);
           commMap[key].bookingsCount += 1;
         });
         // Calculate average rate per country
@@ -302,7 +323,7 @@ export default function FinancialReportsPage() {
       default:
         return [];
     }
-  }, [activeReport, filteredTxs, filteredPayouts, filteredRefunds, countryFilter]);
+  }, [activeReport, filteredTxs, filteredPayouts, filteredRefunds, countryFilter, eur, eurRates]);
 
   // Dynamic columns based on active tab
   const tableColumns = useMemo((): Column<any>[] => {
@@ -311,14 +332,15 @@ export default function FinancialReportsPage() {
         return [
           { key: "period", label: "Month/Year", render: (r) => <span className="font-semibold text-slate-800">{r.period}</span> },
           { key: "bookingsCount", label: "Bookings", render: (r) => <span>{r.bookingsCount}</span> },
-          { key: "gross", label: "Gross Revenue", align: "right", render: (r) => <span className="tabular font-medium">{formatCurrency(r.gross)}</span> },
+          { key: "gross", label: "Gross Revenue", align: "right", render: (r) => <span className="tabular font-medium">{formatCurrency(r.gross, "EUR")}</span> },
           { key: "voucherDiscounts", label: "Voucher Discounts", align: "right", render: (r) => (
             <span className="tabular font-medium text-amber-600">
-              {r.voucherDiscounts > 0 ? `- ${formatCurrency(r.voucherDiscounts)}` : "—"}
+              {r.voucherDiscounts > 0 ? `- ${formatCurrency(r.voucherDiscounts, "EUR")}` : "—"}
             </span>
           )},
-          { key: "netRevenue", label: "Net Revenue", align: "right", render: (r) => <span className="tabular font-bold text-slate-900">{formatCurrency(r.netRevenue)}</span> },
-          { key: "avgValue", label: "Avg Booking Value", align: "right", render: (r) => <span className="tabular font-medium">{formatCurrency(r.avgValue)}</span> },
+          { key: "payout", label: "Provider Payouts", align: "right", render: (r) => <span className="tabular font-medium text-blue-600">{formatCurrency(r.payout, "EUR")}</span> },
+          { key: "netRevenue", label: "Platform Net Revenue", align: "right", render: (r) => <span className="tabular font-bold text-slate-900">{formatCurrency(r.netRevenue, "EUR")}</span> },
+          { key: "avgValue", label: "Avg Booking Value", align: "right", render: (r) => <span className="tabular font-medium">{formatCurrency(r.avgValue, "EUR")}</span> },
         ];
       case "payment":
         return [
@@ -337,11 +359,11 @@ export default function FinancialReportsPage() {
           )},
           { key: "voucherDiscount", label: "Discount", align: "right", render: (r) => (
             <span className={`tabular font-medium ${r.voucherDiscount > 0 ? "text-amber-600" : "text-slate-400"}`}>
-              {r.voucherDiscount > 0 ? `-${formatCurrency(r.voucherDiscount)}` : "—"}
+              {r.voucherDiscount > 0 ? `-${formatEur(r.voucherDiscount, r.currency, eurRates) ?? formatCurrency(r.voucherDiscount, r.currency)}` : "—"}
             </span>
           )},
           { key: "date", label: "Date", render: (r) => <span className="text-xs text-slate-500">{formatDate(r.date)}</span> },
-          { key: "amount", label: "Amount", align: "right", render: (r) => <span className="tabular font-semibold">{formatCurrency(r.amount, r.currency)}</span> },
+          { key: "amount", label: "Amount", align: "right", render: (r) => <span className="tabular font-semibold"><EurValue amount={r.amount} currency={r.currency} rates={eurRates} /></span> },
           { key: "status", label: "Status", render: (r) => <Badge label={r.status} status={r.status === "captured" ? "confirmed" : r.status === "failed" ? "cancelled_by_system" : r.status === "refunded" ? "suspended" : "pending_payment"} /> },
         ];
       case "payout":
@@ -350,7 +372,7 @@ export default function FinancialReportsPage() {
           { key: "completedCount", label: "Settled Count", render: (r) => <span>{r.completedCount} transfers</span> },
           { key: "pendingCount", label: "Pending/Scheduled", render: (r) => <span className="text-slate-500">{r.pendingCount} holded</span> },
           { key: "failedCount", label: "Failed", render: (r) => <span className={r.failedCount ? "text-danger font-medium" : "text-slate-400"}>{r.failedCount} failed</span> },
-          { key: "totalPaid", label: "Total Paid Out", align: "right", render: (r) => <span className="tabular font-bold text-emerald-600">{formatCurrency(r.totalPaid)}</span> },
+          { key: "totalPaid", label: "Total Paid Out", align: "right", render: (r) => <span className="tabular font-bold text-emerald-600">{formatCurrency(r.totalPaid, "EUR")}</span> },
         ];
       case "refund":
         return [
@@ -358,16 +380,16 @@ export default function FinancialReportsPage() {
           { key: "traveller", label: "Traveller", render: (r) => <span>{r.traveller}</span> },
           { key: "date", label: "Requested Date", render: (r) => <span className="text-xs text-slate-500">{formatDate(r.date)}</span> },
           { key: "reason", label: "Reason", render: (r) => <p className="text-xs text-slate-500 truncate max-w-[200px]" title={r.reason}>{r.reason}</p> },
-          { key: "amount", label: "Refund Amount", align: "right", render: (r) => <span className="tabular font-bold text-danger">{formatCurrency(r.refundAmount)}</span> },
+          { key: "amount", label: "Refund Amount", align: "right", render: (r) => <span className="tabular font-bold text-danger"><EurValue amount={r.refundAmount} currency={r.currency} rates={eurRates} /></span> },
           { key: "status", label: "Status", render: (r) => <Badge label={r.status} status={r.status === "processed" ? "confirmed" : r.status === "approved" ? "confirmed" : r.status === "rejected" ? "cancelled_by_guest" : "pending_payment"} /> },
         ];
       case "commission":
         return [
           { key: "country", label: "Country", render: (r) => <span className="font-semibold text-slate-800">{r.country}</span> },
           { key: "bookingsCount", label: "Bookings", render: (r) => <span>{r.bookingsCount}</span> },
-          { key: "totalRevenue", label: "Total Volume", align: "right", render: (r) => <span className="tabular font-medium">{formatCurrency(r.totalRevenue)}</span> },
+          { key: "totalRevenue", label: "Total Volume", align: "right", render: (r) => <span className="tabular font-medium">{formatCurrency(r.totalRevenue, "EUR")}</span> },
           { key: "avgRate", label: "Avg Rate", align: "right", render: (r) => <span className="tabular font-medium">{r.avgRate.toFixed(1)}%</span> },
-          { key: "commissionEarned", label: "Commission Earned", align: "right", render: (r) => <span className="tabular font-bold text-blue-600">{formatCurrency(r.commissionEarned)}</span> },
+          { key: "commissionEarned", label: "Commission Earned", align: "right", render: (r) => <span className="tabular font-bold text-blue-600">{formatCurrency(r.commissionEarned, "EUR")}</span> },
         ];
       default:
         return [];
@@ -381,8 +403,8 @@ export default function FinancialReportsPage() {
     const fileName = `financial-${activeReport}-report-${new Date().toISOString().split("T")[0]}`;
 
     if (activeReport === "revenue") {
-      headers = ["Period", "Bookings", "Gross Revenue", "Voucher Discounts", "Net Revenue", "Avg Booking Value"];
-      rows = reportTableData.map((r: any) => [r.period, r.bookingsCount, r.gross, r.voucherDiscounts, r.netRevenue, r.avgValue]);
+      headers = ["Period", "Bookings", "Gross Revenue", "Voucher Discounts", "Provider Payout", "Platform Net Revenue", "Avg Booking Value"];
+      rows = reportTableData.map((r: any) => [r.period, r.bookingsCount, r.gross, r.voucherDiscounts, r.payout, r.netRevenue, r.avgValue]);
     } else if (activeReport === "payment") {
       headers = ["Booking Ref", "Traveller", "Gateway", "Voucher Code", "Discount", "Amount", "Currency", "Date", "Status"];
       rows = reportTableData.map((r: any) => [r.reference, r.traveller, r.gateway, r.voucherCode ?? "", r.voucherDiscount, r.amount, r.currency, r.date, r.status]);
@@ -427,11 +449,24 @@ export default function FinancialReportsPage() {
   const currentSummaryCards = useMemo(() => {
     switch (activeReport) {
       case "revenue":
+        // Money flow: gross is the ACTUAL charge captured at booking time
+        // (chargedAmount in EUR/XAF → EUR). Platform net revenue is gross minus
+        // the provider payout (which includes full base + delivery + deposit
+        // passed through to the provider). See billing.service.ts.
+        const grossRevenue = filteredTxs.reduce(
+          (s, t) => s + (chargedToEur(t.chargedAmount, t.chargedCurrency, eurRates) ?? eur(t.amount, t.currency)),
+          0,
+        );
+        const totalPayout = filteredTxs.reduce(
+          (s, t) => s + (toEurAtCharge(t.providerPayout, t.currency, t.chargedCurrency, t.chargedRate, eurRates) ?? 0),
+          0,
+        );
+        const netRevenue = grossRevenue - totalPayout;
         return (
           <>
-            <StatCard title="Gross Revenue" value={summary.grossRevenue} currency="USD" icon={<DollarSign className="text-emerald-600 h-4 w-4" />} iconBg="bg-emerald-100" />
-            <StatCard title="Total Voucher Discounts" value={summary.totalVoucherDiscounts} currency="USD" icon={<Tag className="text-amber-600 h-4 w-4" />} iconBg="bg-amber-100" />
-            <StatCard title="Net Revenue" value={summary.netRevenue} currency="USD" icon={<TrendingUp className="text-blue-600 h-4 w-4" />} iconBg="bg-blue-100" />
+            <StatCard title="Gross Revenue" value={grossRevenue} currency="EUR" icon={<Euro className="text-emerald-600 h-4 w-4" />} iconBg="bg-emerald-100" />
+            <StatCard title="Provider Payouts" value={totalPayout} currency="EUR" icon={<Landmark className="text-blue-600 h-4 w-4" />} iconBg="bg-blue-100" />
+            <StatCard title="Platform Net Revenue" value={netRevenue} currency="EUR" icon={<TrendingUp className="text-emerald-600 h-4 w-4" />} iconBg="bg-emerald-100" />
           </>
         );
 
@@ -440,45 +475,45 @@ export default function FinancialReportsPage() {
         const successCount = filteredTxs.filter(t => t.paymentStatus === "captured").length;
         const failCount = filteredTxs.filter(t => t.paymentStatus === "failed").length;
         const successRate = attempts ? (successCount / (attempts - filteredTxs.filter(t => t.paymentStatus === "pending").length || 1)) * 100 : 100;
-        const totalVoucherDiscounts = filteredTxs.reduce((sum, t) => sum + t.voucherDiscount, 0);
+        const totalVoucherDiscounts = filteredTxs.reduce((sum, t) => sum + eur(t.voucherDiscount, t.currency), 0);
         return (
           <>
             <StatCard title="Payment Attempts" value={attempts} icon={<CreditCard className="text-indigo-600 h-4 w-4" />} iconBg="bg-indigo-100" />
             <StatCard title="Gateway Success Rate" value={successRate} icon={<BadgeCheck className="text-emerald-600 h-4 w-4" />} iconBg="bg-emerald-100" />
-            <StatCard title="Total Voucher Discounts" value={totalVoucherDiscounts} currency="USD" icon={<Tag className="text-amber-600 h-4 w-4" />} iconBg="bg-amber-100" />
+            <StatCard title="Total Voucher Discounts" value={totalVoucherDiscounts} currency="EUR" icon={<Tag className="text-amber-600 h-4 w-4" />} iconBg="bg-amber-100" />
           </>
         );
 
       case "payout":
-        const settledAmount = filteredPayouts.filter((p: any) => p.status === "completed").reduce((sum: number, p: any) => sum + p.amount, 0);
-        const pendingAmount = filteredPayouts.filter((p: any) => p.status === "scheduled").reduce((sum: number, p: any) => sum + p.amount, 0);
+        const settledAmount = filteredPayouts.filter((p: any) => p.status === "completed").reduce((sum: number, p: any) => sum + eur(p.amount, p.currency), 0);
+        const pendingAmount = filteredPayouts.filter((p: any) => p.status === "scheduled").reduce((sum: number, p: any) => sum + eur(p.amount, p.currency), 0);
         const failedPayoutsCount = filteredPayouts.filter((p: any) => p.status === "failed").length;
         return (
           <>
-            <StatCard title="Total Payouts Settled" value={settledAmount} currency="USD" icon={<Landmark className="text-emerald-600 h-4 w-4" />} iconBg="bg-emerald-100" />
-            <StatCard title="Awaiting Release Escrow" value={pendingAmount} currency="USD" icon={<Clock className="text-amber-600 h-4 w-4" />} iconBg="bg-amber-100" />
+            <StatCard title="Total Payouts Settled" value={settledAmount} currency="EUR" icon={<Landmark className="text-emerald-600 h-4 w-4" />} iconBg="bg-emerald-100" />
+            <StatCard title="Awaiting Release Escrow" value={pendingAmount} currency="EUR" icon={<Clock className="text-amber-600 h-4 w-4" />} iconBg="bg-amber-100" />
             <StatCard title="Failed Bank Transfers" value={failedPayoutsCount} icon={<XCircle className="text-red-600 h-4 w-4" />} iconBg="bg-red-100" />
           </>
         );
 
       case "refund":
-        const totRefunded = filteredRefunds.filter((r: any) => r.status === "processed").reduce((sum: number, r: any) => sum + r.refundAmount, 0);
+        const totRefunded = filteredRefunds.filter((r: any) => r.status === "processed").reduce((sum: number, r: any) => sum + eur(r.refundAmount, r.currency), 0);
         const pendingRefsCount = filteredRefunds.filter((r: any) => r.status === "pending_approval").length;
         const approvedRefsCount = filteredRefunds.filter((r: any) => r.status === "approved").length;
         return (
           <>
-            <StatCard title="Total Cleared Refunds" value={totRefunded} currency="USD" icon={<RotateCcw className="text-danger h-4 w-4" />} iconBg="bg-red-100" />
+            <StatCard title="Total Cleared Refunds" value={totRefunded} currency="EUR" icon={<RotateCcw className="text-danger h-4 w-4" />} iconBg="bg-red-100" />
             <StatCard title="Claims Pending Review" value={pendingRefsCount} icon={<Clock className="text-amber-600 h-4 w-4" />} iconBg="bg-amber-100" />
             <StatCard title="Claims Approved (Escrow)" value={approvedRefsCount} icon={<BadgeCheck className="text-blue-600 h-4 w-4" />} iconBg="bg-blue-100" />
           </>
         );
 
       case "commission":
-        const commEarned = summary.totalCommission;
+        const commEarned = filteredTxs.reduce((s, t) => s + eur(t.commissionAmount, t.currency), 0);
         const avgRate = commissionRules.find((r: any) => r.country === "Global")?.rate || 10;
         return (
           <>
-            <StatCard title="Platform Commission Earned" value={commEarned} currency="USD" icon={<TrendingUp className="text-blue-600 h-4 w-4" />} iconBg="bg-blue-100" />
+            <StatCard title="Platform Commission Earned" value={commEarned} currency="EUR" icon={<TrendingUp className="text-blue-600 h-4 w-4" />} iconBg="bg-blue-100" />
             <StatCard title="Standard Global Rate" value={avgRate} icon={<Percent className="text-purple-600 h-4 w-4" />} iconBg="bg-purple-100" />
             <StatCard title="Active Country Overrides" value={commissionRules.filter((r: any) => r.country !== "Global").length} icon={<Globe className="text-indigo-600 h-4 w-4" />} iconBg="bg-indigo-100" />
           </>
@@ -487,7 +522,7 @@ export default function FinancialReportsPage() {
       default:
         return null;
     }
-  }, [activeReport, filteredTxs, filteredPayouts, filteredRefunds, commissionRules, summary]);
+  }, [activeReport, filteredTxs, filteredPayouts, filteredRefunds, commissionRules, eur, eurRates]);
 
   const CM_OPTIONS = useMemo(() => {
     if (user?.role === "country_manager") {

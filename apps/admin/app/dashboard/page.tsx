@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   Users, Building2, CalendarDays, BadgeCheck,
-  DollarSign, TrendingUp, Clock, AlertCircle,
+  Euro, TrendingUp, Clock, AlertCircle,
   RefreshCw, ChevronRight, ShieldAlert, CreditCard
 } from "lucide-react";
 import Link from "next/link";
@@ -134,8 +134,8 @@ export default function DashboardPage() {
     {
       title: "Total Revenue",
       value: summaryData?.totalRevenue ?? 0,
-      currency: "USD",
-      icon: <DollarSign className="h-4 w-4 text-success" />,
+      currency: "EUR",
+      icon: <Euro className="h-4 w-4 text-success" />,
       iconBg: "bg-success/10",
     },
     {

@@ -34,6 +34,13 @@ jobs:
               NEXT_PUBLIC_LISTING_API_URL=https://api.kainook.com/listings
               NEXT_PUBLIC_PAYMENT_API_URL=https://api.kainook.com/payments
               NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=${{vars.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}}
+              NEXT_PUBLIC_FIREBASE_API_KEY=${{vars.NEXT_PUBLIC_FIREBASE_API_KEY}}
+              NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}}
+              NEXT_PUBLIC_FIREBASE_PROJECT_ID=${{vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID}}
+              NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${{vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}}
+              NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}}
+              NEXT_PUBLIC_FIREBASE_APP_ID=${{vars.NEXT_PUBLIC_FIREBASE_APP_ID}}
+              NEXT_PUBLIC_FIREBASE_VAPID_KEY=${{vars.NEXT_PUBLIC_FIREBASE_VAPID_KEY}}
           - app_name: "Web Admin"
             dockerfile: apps/admin/Dockerfile
             image: zika/admin
@@ -42,6 +49,7 @@ jobs:
               NEXT_PUBLIC_AUTH_API_URL=https://api.kainook.com/auth
               NEXT_PUBLIC_LISTING_API_URL=https://api.kainook.com/listings
               NEXT_PUBLIC_PAYMENT_API_URL=https://api.kainook.com/payments
+              NEXT_PUBLIC_PAYMENT_ADMIN_API_URL=https://api.kainook.com/payments
               NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=${{vars.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}}
     steps:
       - name: Checkout code
@@ -81,6 +89,7 @@ jobs:
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
           build-args: ${{ matrix.build_args }}
   deploy-prod:
+    name: "Deploy to Production"
     needs: build-and-push-prod
     runs-on: ubuntu-latest
     permissions:

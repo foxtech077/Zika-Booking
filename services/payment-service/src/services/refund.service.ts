@@ -3,7 +3,8 @@ import { RefundRetryStatus } from "../generated/index.js";
 import { stripe, toStripeAmount } from "../lib/stripe.js";
 import { initiateTaraReversal } from "../lib/tara.js";
 
-const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
+const BOOKING_SERVICE_URL =
+  process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
 const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
 
 const BACKOFF_DELAYS_MINUTES = [1, 5, 15, 30, 60, 360]; // 1m, 5m, 15m, 30m, 1h, 6h
@@ -17,9 +18,74 @@ export class RefundLimitExceededError extends Error {
 
 export class InvalidPaymentStatusError extends Error {
   constructor(status: string) {
-    super(`Only captured or partially refunded payments can be refunded (status: ${status}).`);
+    super(
+      `Only captured or partially refunded payments can be refunded (status: ${status}).`,
+    );
     this.name = "InvalidPaymentStatusError";
   }
+}
+
+export async function createManualRefund(
+  payment: {
+    id: string;
+    bookingId: string;
+    amount: unknown;
+    chargedAmount?: unknown;
+    currency: string;
+    status: string;
+  },
+  opts: { amount: number; reason?: string | null; idempotencyKey: string },
+): Promise<{ id: string; status: string }> {
+  if (opts.amount <= 0)
+    throw new Error("Refund amount must be greater than zero.");
+  if (!["captured", "partially_refunded"].includes(payment.status)) {
+    throw new InvalidPaymentStatusError(payment.status);
+  }
+
+  // Each accepted request creates its own ManualRefund row so an operator
+  // can process several partial refunds against the same payment over
+  // time. Idempotency is per-request via `idempotencyKey`. The refundable
+  // balance counts committed refunds plus still-pending manual refunds, so
+  // concurrent requests cannot over-commit the charged amount.
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.manualRefund.findUnique({
+      where: { idempotencyKey: opts.idempotencyKey },
+    });
+    if (existing) return { id: existing.id, status: existing.status };
+
+    await tx.$executeRaw`SELECT 1 FROM payments."Payment" WHERE id = ${payment.id} FOR UPDATE`;
+    const [refundSum, pendingManualSum] = await Promise.all([
+      tx.refund.aggregate({
+        where: { paymentId: payment.id, status: { not: "failed" } },
+        _sum: { amount: true },
+      }),
+      tx.manualRefund.aggregate({
+        where: { paymentId: payment.id, status: "pending" },
+        _sum: { amount: true },
+      }),
+    ]);
+    const alreadyCommitted =
+      Number(refundSum._sum.amount ?? 0) +
+      Number(pendingManualSum._sum.amount ?? 0);
+    if (
+      alreadyCommitted + opts.amount >
+      Number(payment.chargedAmount ?? payment.amount)
+    ) {
+      throw new RefundLimitExceededError();
+    }
+
+    const manual = await tx.manualRefund.create({
+      data: {
+        paymentId: payment.id,
+        bookingId: payment.bookingId,
+        amount: opts.amount,
+        currency: payment.currency,
+        reason: opts.reason ?? null,
+        idempotencyKey: opts.idempotencyKey,
+      },
+    });
+    return { id: manual.id, status: manual.status };
+  });
 }
 
 export interface IssueRefundOptions {
@@ -63,12 +129,16 @@ export async function issueRefund(
   // Provider refunds are always in the platform charge currency (EUR for
   // Stripe, XAF for Tara), never the listing currency. Fall back to the raw
   // amount/currency only for payments without a recorded charge.
-  const chargeCurrency = (payment.chargedCurrency ?? payment.currency).toUpperCase();
+  const chargeCurrency = (
+    payment.chargedCurrency ?? payment.currency
+  ).toUpperCase();
   const chargeAmount = Number(payment.chargedAmount ?? payment.amount);
 
   let refund: { id: string; status: string } | undefined;
   if (idempotencyKey) {
-    const existingRefund = await prisma.refund.findUnique({ where: { idempotencyKey } });
+    const existingRefund = await prisma.refund.findUnique({
+      where: { idempotencyKey },
+    });
     if (existingRefund) {
       if (existingRefund.status !== "failed") {
         return { id: existingRefund.id, status: existingRefund.status };
@@ -88,28 +158,28 @@ export async function issueRefund(
   try {
     if (!refund) {
       refund = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT 1 FROM payments."Payment" WHERE id = ${payment.id} FOR UPDATE`;
+        await tx.$executeRaw`SELECT 1 FROM payments."Payment" WHERE id = ${payment.id} FOR UPDATE`;
 
-      const refundSum = await tx.refund.aggregate({
-        where: { paymentId: payment.id, status: { not: "failed" } },
-        _sum: { amount: true },
-      });
-      const alreadyRefunded = Number(refundSum._sum.amount ?? 0);
+        const refundSum = await tx.refund.aggregate({
+          where: { paymentId: payment.id, status: { not: "failed" } },
+          _sum: { amount: true },
+        });
+        const alreadyRefunded = Number(refundSum._sum.amount ?? 0);
 
-      if (alreadyRefunded + amount > chargeAmount) {
-        throw new RefundLimitExceededError();
-      }
+        if (alreadyRefunded + amount > chargeAmount) {
+          throw new RefundLimitExceededError();
+        }
 
-      return await tx.refund.create({
-        data: {
-          paymentId: payment.id,
-          bookingId: payment.bookingId,
-          amount,
-          currency: chargeCurrency,
-          reason: reason ?? null,
-          status: "pending",
-          idempotencyKey: idempotencyKey ?? null,
-        },
+        return await tx.refund.create({
+          data: {
+            paymentId: payment.id,
+            bookingId: payment.bookingId,
+            amount,
+            currency: chargeCurrency,
+            reason: reason ?? null,
+            status: "pending",
+            idempotencyKey: idempotencyKey ?? null,
+          },
         });
       });
     }
@@ -134,7 +204,7 @@ export async function issueRefund(
             amount: toStripeAmount(amount, chargeCurrency),
             reason: "requested_by_customer",
           },
-          { idempotencyKey: `stripe-refund-${refund.id}` }
+          { idempotencyKey: `stripe-refund-${refund.id}` },
         );
 
         await prisma.refund.update({
@@ -144,7 +214,8 @@ export async function issueRefund(
 
         return { id: refund.id, status: "submitted" };
       } catch (stripeErr) {
-        const message = stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
+        const message =
+          stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
         await prisma.refund.update({
           where: { id: refund.id },
           data: { status: "failed", failureReason: message },
@@ -167,7 +238,8 @@ export async function issueRefund(
 
         return { id: refund.id, status: "submitted" };
       } catch (taraErr) {
-        const message = taraErr instanceof Error ? taraErr.message : String(taraErr);
+        const message =
+          taraErr instanceof Error ? taraErr.message : String(taraErr);
         await prisma.refund.update({
           where: { id: refund.id },
           data: { status: "failed", failureReason: message },
@@ -176,7 +248,9 @@ export async function issueRefund(
       }
     }
     default: {
-      throw new Error(`Unsupported payment provider: ${payment.paymentProvider}`);
+      throw new Error(
+        `Unsupported payment provider: ${payment.paymentProvider}`,
+      );
     }
   }
 }
@@ -190,10 +264,12 @@ export interface BookingRefundPayload {
 
 export async function notifyBookingServiceOfRefund(
   bookingId: string,
-  payload: BookingRefundPayload
+  payload: BookingRefundPayload,
 ): Promise<void> {
   const url = `${BOOKING_SERVICE_URL}/bookings/internal/${bookingId}/refund`;
-  console.log(`[refund-service] Sending notification to ${url} with refund amount ${payload.refundAmount}`);
+  console.log(
+    `[refund-service] Sending notification to ${url} with refund amount ${payload.refundAmount}`,
+  );
 
   const response = await fetch(url, {
     method: "PATCH",
@@ -212,14 +288,18 @@ export async function notifyBookingServiceOfRefund(
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
     throw new Error(
-      `Failed to notify booking service of refund: status ${response.status}. Response: ${errorText}`
+      `Failed to notify booking service of refund: status ${response.status}. Response: ${errorText}`,
     );
   }
 
-  console.log(`[refund-service] Booking service notified successfully for booking ${bookingId}`);
+  console.log(
+    `[refund-service] Booking service notified successfully for booking ${bookingId}`,
+  );
 }
 
-export async function calculateAlreadyRefunded(paymentId: string): Promise<number> {
+export async function calculateAlreadyRefunded(
+  paymentId: string,
+): Promise<number> {
   const refundSum = await prisma.refund.aggregate({
     where: { paymentId, status: { not: "failed" } },
     _sum: { amount: true },
@@ -232,7 +312,7 @@ export async function queueFailedRefundNotification(
   refundId: string,
   amount: number,
   provider: string,
-  refundedAt: Date
+  refundedAt: Date,
 ): Promise<void> {
   try {
     await prisma.refundNotificationRetry.upsert({
@@ -252,27 +332,38 @@ export async function queueFailedRefundNotification(
         failedAt: null,
       },
     });
-    console.log(`[refund-retry] Queued failed refund notification for refund ${refundId}`);
+    console.log(
+      `[refund-retry] Queued failed refund notification for refund ${refundId}`,
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(
       `[refund-retry] Failed to queue refund notification retry for refund ${refundId}:`,
-      message
+      message,
     );
   }
 }
 
 export async function processFailedRefundNotifications(): Promise<void> {
   try {
+    // Recover rows stranded in `processing` by a crash or a mid-batch job
+    // failure. The lease timestamp is set when a row is claimed, so a live
+    // attempt is never mistaken for a stale one.
+    const staleProcessingCutoff = new Date(Date.now() - 15 * 60 * 1000);
+    await prisma.refundNotificationRetry.updateMany({
+      where: {
+        status: RefundRetryStatus.processing,
+        processingStartedAt: { lt: staleProcessingCutoff },
+      },
+      data: { status: RefundRetryStatus.pending, processingStartedAt: null },
+    });
+
     const now = new Date();
     // Fetch pending notifications due for attempt
     const retries = await prisma.refundNotificationRetry.findMany({
       where: {
         status: RefundRetryStatus.pending,
-        OR: [
-          { nextAttempt: null },
-          { nextAttempt: { lte: now } },
-        ],
+        OR: [{ nextAttempt: null }, { nextAttempt: { lte: now } }],
       },
       take: 20, // process in small batches
     });
@@ -280,14 +371,19 @@ export async function processFailedRefundNotifications(): Promise<void> {
     if (retries.length === 0) return;
 
     for (const record of retries) {
-      // Mark as processing
-      await prisma.refundNotificationRetry.update({
-        where: { id: record.id },
-        data: { status: RefundRetryStatus.processing },
+      // Claim conditionally so multiple workers cannot deliver the same row.
+      const claimedAt = new Date();
+      const claim = await prisma.refundNotificationRetry.updateMany({
+        where: { id: record.id, status: RefundRetryStatus.pending },
+        data: {
+          status: RefundRetryStatus.processing,
+          processingStartedAt: claimedAt,
+        },
       });
+      if (claim.count === 0) continue;
 
       console.log(
-        `[refund-retry-job] Retrying notification for refund ${record.refundId} (booking ${record.bookingId}), attempt ${record.attempts + 1}`
+        `[refund-retry-job] Retrying notification for refund ${record.refundId} (booking ${record.bookingId}), attempt ${record.attempts + 1}`,
       );
 
       try {
@@ -305,6 +401,7 @@ export async function processFailedRefundNotifications(): Promise<void> {
             status: RefundRetryStatus.completed,
             attempts: record.attempts + 1,
             lastAttempt: new Date(),
+            processingStartedAt: null,
           },
         });
       } catch (err) {
@@ -313,7 +410,7 @@ export async function processFailedRefundNotifications(): Promise<void> {
         if (nextAttemptsCount >= BACKOFF_DELAYS_MINUTES.length) {
           // Exceeded retry limit
           console.error(
-            `[refund-retry-job] Refund ${record.refundId} notification failed permanently after ${nextAttemptsCount} attempts: ${message}`
+            `[refund-retry-job] Refund ${record.refundId} notification failed permanently after ${nextAttemptsCount} attempts: ${message}`,
           );
           await prisma.refundNotificationRetry.update({
             where: { id: record.id },
@@ -321,14 +418,17 @@ export async function processFailedRefundNotifications(): Promise<void> {
               status: RefundRetryStatus.failed,
               attempts: nextAttemptsCount,
               lastAttempt: new Date(),
+              processingStartedAt: null,
               failedAt: new Date(),
             },
           });
         } else {
           const delayMinutes = BACKOFF_DELAYS_MINUTES[record.attempts] || 360;
-          const nextAttemptDate = new Date(Date.now() + delayMinutes * 60 * 1000);
+          const nextAttemptDate = new Date(
+            Date.now() + delayMinutes * 60 * 1000,
+          );
           console.warn(
-            `[refund-retry-job] Refund ${record.refundId} notification failed. Scheduling next attempt in ${delayMinutes} mins at ${nextAttemptDate.toISOString()}: ${message}`
+            `[refund-retry-job] Refund ${record.refundId} notification failed. Scheduling next attempt in ${delayMinutes} mins at ${nextAttemptDate.toISOString()}: ${message}`,
           );
           await prisma.refundNotificationRetry.update({
             where: { id: record.id },
@@ -336,6 +436,7 @@ export async function processFailedRefundNotifications(): Promise<void> {
               status: RefundRetryStatus.pending,
               attempts: nextAttemptsCount,
               lastAttempt: new Date(),
+              processingStartedAt: null,
               nextAttempt: nextAttemptDate,
             },
           });
@@ -344,7 +445,11 @@ export async function processFailedRefundNotifications(): Promise<void> {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[refund-retry-job] Error processing failed notifications:", message);
+    console.error(
+      "[refund-retry-job] Error processing failed notifications:",
+      message,
+    );
+    throw err;
   }
 }
 
@@ -392,7 +497,11 @@ export async function handleConfirmFailure(
   log?: { error: (obj: unknown, msg?: string) => void },
 ): Promise<boolean> {
   if (!isDefinitiveConfirmError(err)) {
-    if (log) log.error({ err }, "[confirm-failure] Transient failure — provider will retry");
+    if (log)
+      log.error(
+        { err },
+        "[confirm-failure] Transient failure — provider will retry",
+      );
     return false;
   }
 
@@ -404,14 +513,29 @@ export async function handleConfirmFailure(
   // Re-check the live booking status to decide before refunding.
   if (code === "INVALID_STATUS") {
     try {
-      const bookingRes = await fetch(`${BOOKING_SERVICE_URL}/bookings/internal/${payment.bookingId}`, {
-        headers: { "Content-Type": "application/json", "x-service-key": INTERNAL_SERVICE_KEY },
-      });
+      const bookingRes = await fetch(
+        `${BOOKING_SERVICE_URL}/bookings/internal/${payment.bookingId}`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "x-service-key": INTERNAL_SERVICE_KEY,
+          },
+        },
+      );
       if (bookingRes.ok) {
-        const json = (await bookingRes.json()) as { data?: { status?: string } };
+        const json = (await bookingRes.json()) as {
+          data?: { status?: string };
+        };
         const status = json?.data?.status;
-        if (status && ["confirmed", "checked_in", "completed"].includes(status)) {
-          if (log) log.error({ err }, "[confirm-failure] Booking already confirmed — no refund");
+        if (
+          status &&
+          ["confirmed", "checked_in", "completed"].includes(status)
+        ) {
+          if (log)
+            log.error(
+              { err },
+              "[confirm-failure] Booking already confirmed — no refund",
+            );
           return true;
         }
       }
@@ -424,17 +548,24 @@ export async function handleConfirmFailure(
   // XAF for Tara). The booking service is notified with the listing-currency
   // total (payment.amount), since booking refundAmount is tracked in the
   // booking's own currency.
-  const amount = Number(payment.chargedAmount ?? payment.amount);
+  const chargeAmount = Number(payment.chargedAmount ?? payment.amount);
+  const listingAmount = Number(payment.amount);
   try {
     const refund = await issueRefund(payment, {
-      amount,
+      amount: chargeAmount,
       reason: `Payment captured but booking could not be confirmed (${code})`,
       idempotencyKey: `refund:${payment.id}:confirm-failure`,
     });
 
+    // Notify booking service with the proportional listing-currency amount.
+    // For a full refund this equals payment.amount; for partial refunds,
+    // scale proportionally by the ratio of charged to original amount.
+    const ratio =
+      chargeAmount > 0 && listingAmount > 0 ? listingAmount / chargeAmount : 1;
+    const refundListingAmount = Math.round(chargeAmount * ratio * 100) / 100;
     await notifyBookingServiceOfRefund(payment.bookingId, {
       refundId: refund.id,
-      refundAmount: Number(payment.amount),
+      refundAmount: refundListingAmount,
       provider: payment.paymentProvider,
       refundedAt: new Date(),
     });

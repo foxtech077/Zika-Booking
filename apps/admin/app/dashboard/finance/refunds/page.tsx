@@ -14,6 +14,7 @@ import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { useEurRates, EurValue, formatEur } from "@/lib/eur";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { paymentPayoutApi } from "@/lib/payment-api";
 import { roleHasPermission, roleScopePolicy, AdminPermission, AdminScope } from "@/permissions/rbac";
@@ -67,6 +68,33 @@ export default function RefundManagementPage() {
   });
 
   const refunds = data?.data ?? [];
+
+  const { data: manualData, refetch: refetchManual } = useQuery({
+    queryKey: ["admin-manual-refunds"],
+    queryFn: async () => {
+      const res = await paymentPayoutApi.get(`/admin/refunds/manual`);
+      return res.data;
+    },
+  });
+  const manualRefunds = manualData?.data ?? [];
+
+  const manualActionMutation = useMutation({
+    mutationFn: async ({ id, action, value }: { id: string; action: "complete" | "fail"; value: string }) => {
+      const res = await paymentPayoutApi.post(`/admin/refunds/manual/${id}/${action}`, action === "complete"
+        ? { refundReference: value }
+        : { reason: value });
+      return res.data;
+    },
+    onSuccess: () => {
+      refetchManual();
+      refetch();
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.error?.message ?? err?.message ?? "Failed to update manual refund");
+    },
+  });
+
+  const eurRates = useEurRates([...refunds, ...manualRefunds].map((r: any) => r.currency));
 
   // Filter refunds based on scope & parameters
   const filteredRefunds = useMemo(() => {
@@ -163,7 +191,7 @@ export default function RefundManagementPage() {
       key: "original",
       label: "Paid Total",
       align: "right",
-      render: (r) => <span className="text-xs text-slate-500 tabular">{formatCurrency(Number(r.payment?.amount ?? 0), r.currency)}</span>,
+      render: (r) => <span className="text-xs text-slate-500 tabular"><EurValue amount={r.payment?.amount ?? 0} currency={r.currency} rates={eurRates} /></span>,
     },
     {
       key: "amount",
@@ -171,7 +199,7 @@ export default function RefundManagementPage() {
       align: "right",
       render: (r) => (
         <div className="text-right">
-          <span className="font-bold text-sm text-danger tabular">{formatCurrency(Number(r.amount), r.currency)}</span>
+          <span className="font-bold text-sm text-danger tabular"><EurValue amount={r.amount} currency={r.currency} rates={eurRates} /></span>
           <span className="text-[10px] block text-slate-400 font-semibold uppercase">Refund</span>
         </div>
       ),
@@ -284,6 +312,66 @@ export default function RefundManagementPage() {
         />
       </Card>
 
+      <Card padding="none">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <div>
+            <h3 className="font-semibold text-slate-900">Manual mobile-money refunds</h3>
+            <p className="mt-0.5 text-xs text-slate-500">Refunds requiring an operator because the payment gateway cannot reverse them automatically.</p>
+          </div>
+          <Badge label={`${manualRefunds.filter((r: any) => r.status === "pending").length} pending`} status="pending_payment" />
+        </div>
+        {manualRefunds.length === 0 ? (
+          <p className="px-5 py-8 text-center text-sm text-slate-500">No manual mobile-money refunds recorded.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-5 py-3">Booking</th>
+                  <th className="px-5 py-3">Payment</th>
+                  <th className="px-5 py-3 text-right">Refund amount</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3">Reference / action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y border-border">
+                {manualRefunds.map((refund: any) => (
+                  <tr key={refund.id}>
+                    <td className="px-5 py-3 font-mono text-xs text-primary">{refund.bookingId}</td>
+                    <td className="px-5 py-3">
+                      <span className="font-semibold uppercase">{refund.payment?.paymentProvider ?? "mobile money"}</span>
+                      <span className="block text-xs text-slate-500">{refund.payment?.providerPaymentId ?? "No provider reference"}</span>
+                    </td>
+                    <td className="px-5 py-3 text-right font-semibold tabular-nums">
+                      {formatCurrency(Number(refund.amount), refund.currency)}
+                    </td>
+                    <td className="px-5 py-3">
+                      <Badge label={refund.status} status={refund.status === "completed" ? "confirmed" : refund.status === "failed" ? "cancelled_by_guest" : "pending_payment"} />
+                    </td>
+                    <td className="px-5 py-3">
+                      {refund.status === "pending" && canModifyRefunds ? (
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="primary" loading={manualActionMutation.isPending} onClick={() => {
+                            const reference = window.prompt("Enter the mobile-money refund reference:");
+                            if (reference?.trim()) manualActionMutation.mutate({ id: refund.id, action: "complete", value: reference });
+                          }}>Mark paid</Button>
+                          <Button size="sm" variant="danger" loading={manualActionMutation.isPending} onClick={() => {
+                            const reason = window.prompt("Why did the manual refund fail?");
+                            if (reason?.trim()) manualActionMutation.mutate({ id: refund.id, action: "fail", value: reason });
+                          }}>Failed</Button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-500">{refund.refundReference ?? refund.failureReason ?? "-"}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
       {/* Details drawer */}
       <SlideDrawer
         open={!!selectedRefund}
@@ -298,7 +386,7 @@ export default function RefundManagementPage() {
               <div>
                 <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block">Refund Amount</span>
                 <span className="text-xl font-bold text-danger tracking-tight mt-0.5">
-                  {formatCurrency(Number(selectedRefund.amount), selectedRefund.currency)}
+                  <EurValue amount={selectedRefund.amount} currency={selectedRefund.currency} rates={eurRates} />
                 </span>
               </div>
               <Badge
@@ -324,7 +412,7 @@ export default function RefundManagementPage() {
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Original Total</dt>
-                <dd className="font-medium text-slate-800 mt-0.5">{formatCurrency(Number(selectedRefund.payment?.amount ?? 0), selectedRefund.currency)}</dd>
+                <dd className="font-medium text-slate-800 mt-0.5"><EurValue amount={selectedRefund.payment?.amount ?? 0} currency={selectedRefund.currency} rates={eurRates} /></dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Requested Date</dt>
@@ -399,7 +487,7 @@ export default function RefundManagementPage() {
         onConfirm={handleApprove}
         loading={actionLoading}
         title="Approve Refund Request"
-        description={`Do you want to approve this refund request for ${formatCurrency(Number(approveConfirm?.amount || 0), approveConfirm?.currency)}? This authorizes the gateway capture release.`}
+        description={`Do you want to approve this refund request for ${formatEur(approveConfirm?.amount, approveConfirm?.currency, eurRates) ?? formatCurrency(Number(approveConfirm?.amount || 0), approveConfirm?.currency)}? This authorizes the gateway capture release.`}
         confirmLabel="Approve Request"
         variant="info"
       />
@@ -411,7 +499,7 @@ export default function RefundManagementPage() {
         onConfirm={handleProcess}
         loading={actionLoading}
         title="Clear Credit to Gateway"
-        description={`Are you sure you want to process this refund transaction? This will issue an API capture credit of ${formatCurrency(Number(processConfirm?.amount || 0), processConfirm?.currency)} to the guest's credit card.`}
+        description={`Are you sure you want to process this refund transaction? This will issue an API capture credit of ${formatEur(processConfirm?.amount, processConfirm?.currency, eurRates) ?? formatCurrency(Number(processConfirm?.amount || 0), processConfirm?.currency)} to the guest's credit card.`}
         confirmLabel="Process Refund"
         variant="info"
       />
@@ -421,7 +509,7 @@ export default function RefundManagementPage() {
         open={!!rejectConfirm}
         onClose={() => { setRejectConfirm(null); setRejectionReason(""); }}
         title="Reject Refund Claim"
-        description={`Rejecting refund request ${rejectConfirm?.id} for ${formatCurrency(Number(rejectConfirm?.amount || 0), rejectConfirm?.currency)}.`}
+        description={`Rejecting refund request ${rejectConfirm?.id} for ${formatEur(rejectConfirm?.amount, rejectConfirm?.currency, eurRates) ?? formatCurrency(Number(rejectConfirm?.amount || 0), rejectConfirm?.currency)}.`}
         size="sm"
         footer={
           <>

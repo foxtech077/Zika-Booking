@@ -1,7 +1,8 @@
 import axios from "axios";
 import { useAuthStore } from "../store/auth";
 import { getCachedAnonymousToken } from "./anonymous";
-import { getListingBaseUrl, getAuthBaseUrl } from "./config";
+import { getListingBaseUrl } from "./config";
+import { refreshAccessToken } from "./token-refresh";
 
 const LISTING_BASE_URL = getListingBaseUrl();
 
@@ -57,8 +58,6 @@ function _listingErrorLogger(error: any): void {
   console.log("[LISTING-API] Error message:", error?.message);
 }
 
-const AUTH_BASE_URL = getAuthBaseUrl();
-
 const ACCOUNT_CODES = ["ACCOUNT_BANNED", "ACCOUNT_SUSPENDED", "ACCOUNT_INACTIVE", "INVALID_SESSION", "SESSION_EXPIRED"];
 
 function isAccountRevoked(error: unknown): boolean {
@@ -68,7 +67,6 @@ function isAccountRevoked(error: unknown): boolean {
   return res.status === 403 && ACCOUNT_CODES.includes(code);
 }
 
-let refreshing: Promise<void> | null = null;
 listingApi.interceptors.response.use(
   (res) => {
     const fullUrl = `${res.config.baseURL ?? LISTING_BASE_URL}${res.config.url ?? ""}`;
@@ -90,25 +88,10 @@ listingApi.interceptors.response.use(
       // would wipe an unrelated signed-in session. Let the caller handle it.
       if (original._anon) return Promise.reject(error);
       original._retry = true;
-      if (!refreshing) {
-        refreshing = (async () => {
-          try {
-            const res = await axios.post(`${AUTH_BASE_URL}/auth/refresh`, {}, { withCredentials: true });
-            const token = (res.data as any).data.tokens.accessToken;
-            // Prefer the refreshed user object; reusing the cached one keeps
-            // server-side changes (hostStatus especially) out of the store.
-            const refreshedUser = (res.data as any).data.user;
-            const nextUser = refreshedUser ?? useAuthStore.getState().user;
-            if (nextUser) await useAuthStore.getState().setAuth(nextUser, token);
-          } catch {
-            await useAuthStore.getState().clearAuth();
-          } finally {
-            refreshing = null;
-          }
-        })();
-      }
-      await refreshing;
-      const newToken = useAuthStore.getState().accessToken;
+      // Shared singleton: a 401 arriving here and on payment-api at the same
+      // moment must not fire two refreshes, because refresh rotates and the
+      // loser's revoked token used to trigger clearAuth().
+      const newToken = await refreshAccessToken();
       if (!newToken) return Promise.reject(error);
       original.headers.Authorization = `Bearer ${newToken}`;
       return listingApi(original);

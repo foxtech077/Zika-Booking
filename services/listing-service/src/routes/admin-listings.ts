@@ -1,7 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { generateReference, getCommissionRate } from "./bookings.js";
-import { getTaxRate } from "../services/getTaxRate.services.js";
 import { calculateBilling } from "../services/billing.service.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
@@ -155,6 +154,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
         type: "object",
         properties: {
           country: { type: "string", description: "Filter by country code (ISO 3166-1 alpha-2)" },
+          queue: { type: "string", enum: ["approval", "moderation"], description: "Which queue to fetch: approval (listings pending review) or moderation (auto-suspended listings). Defaults to both." },
           taskStatus: { type: "string", enum: ["open", "escalated"] },
           starRating: { type: "string", description: "Filter by claimed star rating (1–5)" },
           slaStatus: { type: "string", enum: ["breached", "approaching", "ok"], description: "SLA breach status" },
@@ -180,6 +180,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
                     properties: {
                       id: { type: "string" },
                       name: { type: "string", nullable: true },
+                      category: { type: "string" },
+                      status: { type: "string" },
                       country: { type: "string", nullable: true },
                       town: { type: "string", nullable: true },
                       claimedStarRating: { type: "integer", nullable: true },
@@ -208,7 +210,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
     if (!checkAdminRole(req, reply)) return;
     const admin = req as AdminRequest;
 
-    const { country, starRating, taskStatus, slaStatus, page = "1", limit = "20", sortBy = "sla_deadline" } = req.query as Record<string, string>;
+    const { country, starRating, taskStatus, slaStatus, queue, page = "1", limit = "20", sortBy = "sla_deadline" } = req.query as Record<string, string>;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -235,9 +237,15 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const isCountryManager = admin.adminRole === "country_manager";
 
     const listingFilter: any = {
-      status: { in: ["pending_review", "auto_suspended"]
-    },
-  };
+      status: {
+        in:
+          queue === "approval"
+            ? ["pending_review"]
+            : queue === "moderation"
+              ? ["auto_suspended"]
+              : ["pending_review", "auto_suspended"],
+      },
+    };
     if (isCountryManager) {
       if (country) {
         if (admin.countryScope.includes(country)) {
@@ -2311,7 +2319,6 @@ export async function adminListingRoutes(app: FastifyInstance) {
         deliveryFee: 0,
         promotionDiscount: 0,
         voucherAmount: 0,
-        taxRate: getTaxRate(listing.country),
         commissionRate,
       });
 
@@ -2343,7 +2350,6 @@ export async function adminListingRoutes(app: FastifyInstance) {
           discountAmount: 0,
           deliveryFee: 0,
           serviceFee: billing.serviceFee,
-          taxAmount: billing.taxAmount,
 
           currency: listing.currency ?? "USD",
 
@@ -2439,9 +2445,15 @@ export async function adminListingRoutes(app: FastifyInstance) {
                   commissionAmount: { type: "number" },
                   providerPayout: { type: "number" },
                   voucherDiscount: { type: "number", nullable: true },
+                   serviceFee: { type: "number", nullable: true },
+                   refundAmount: { type: "number", nullable: true },
+                   cancellationPolicy: { type: "string", nullable: true },
                   cancelledAt: { type: "string", format: "date-time", nullable: true },
                   confirmedAt: { type: "string", format: "date-time", nullable: true },
                   createdAt: { type: "string", format: "date-time" },
+                  paymentStatus: { type: "string", nullable: true },
+                  paymentGateway: { type: "string", nullable: true },
+                  paymentNetwork: { type: "string", nullable: true },
                   listing: {
                     type: "object",
                     properties: { name: { type: "string", nullable: true } },
@@ -2505,14 +2517,56 @@ export async function adminListingRoutes(app: FastifyInstance) {
             pickupDatetime: true, returnDatetime: true, nightsOrDays: true,
             guestFirstName: true, guestLastName: true, guestEmail: true,
             totalAmount: true, currency: true, commissionAmount: true,
-            providerPayout: true, voucherDiscount: true,
+             providerPayout: true, voucherDiscount: true, serviceFee: true,
+             refundAmount: true, cancellationPolicy: true,
             cancelledAt: true, confirmedAt: true, createdAt: true,
             listing: { select: { name: true } },
           },
         }),
       ]);
 
-      return sendSuccess(reply, 200, { bookings, total, page: parseInt(page, 10), limit: take });
+      // Fetch payment data for these bookings so the admin listing can show
+      // which gateway (and mobile money network) was used.
+      const bookingIds = bookings.map((b) => b.id);
+      let paymentMap = new Map<string, { status: string; paymentProvider: string; network: string | null }>();
+
+      if (bookingIds.length > 0) {
+        try {
+          const PAYMENT_SERVICE_URL = process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3003";
+
+          const paymentRes = await fetch(`${PAYMENT_SERVICE_URL}/admin/payments?bookingIds=${bookingIds.join(",")}`, {
+            headers: { "Content-Type": "application/json" },
+          });
+
+          if (paymentRes.ok) {
+            const paymentData = await paymentRes.json() as { data?: any[] };
+            const payments = paymentData?.data ?? [];
+            for (const p of payments) {
+              if (p.bookingId) {
+                paymentMap.set(p.bookingId, {
+                  status: p.status,
+                  paymentProvider: p.paymentProvider,
+                  network: p.network ?? null,
+                });
+              }
+            }
+          }
+        } catch {
+          // Payment service unavailable — continue without payment details
+        }
+      }
+
+      const enrichedBookings = bookings.map((b) => {
+        const payment = paymentMap.get(b.id);
+        return {
+          ...b,
+          paymentStatus: payment?.status ?? null,
+          paymentGateway: payment?.paymentProvider ?? null,
+          paymentNetwork: payment?.network ?? null,
+        };
+      });
+
+      return sendSuccess(reply, 200, { bookings: enrichedBookings, total, page: parseInt(page, 10), limit: take });
     } catch (err: any) {
       return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch bookings.");
     }
@@ -2552,13 +2606,21 @@ export async function adminListingRoutes(app: FastifyInstance) {
                   travellerEmail: { type: "string" },
                   providerId: { type: "string" },
                   subtotal: { type: "number" },
+                  discount: { type: "number" },
                   voucherCode: { type: "string", nullable: true },
                   voucherDiscount: { type: "number" },
                   amount: { type: "number" },
                   currency: { type: "string" },
+                  serviceFee: { type: "number" },
+                  deliveryFee: { type: "number" },
+                  securityDeposit: { type: "number" },
                   commissionRate: { type: "number" },
                   commissionAmount: { type: "number" },
                   providerPayout: { type: "number" },
+                  chargedAmount: { type: "number", nullable: true },
+                  chargedCurrency: { type: "string", nullable: true, maxLength: 3 },
+                  chargedRate: { type: "number", nullable: true },
+                  chargedAt: { type: "string", format: "date-time", nullable: true },
                   paymentStatus: { type: "string", nullable: true },
                   paymentGateway: { type: "string", nullable: true },
                   date: { type: "string" },
@@ -2633,13 +2695,21 @@ export async function adminListingRoutes(app: FastifyInstance) {
             guestEmail: true,
             providerId: true,
             subtotal: true,
+            discountAmount: true,
             voucherCode: true,
             voucherDiscount: true,
             totalAmount: true,
             currency: true,
+            serviceFee: true,
+            deliveryFee: true,
+            securityDeposit: true,
             commissionRate: true,
             commissionAmount: true,
             providerPayout: true,
+            chargedAmount: true,
+            chargedCurrency: true,
+            chargedRate: true,
+            chargedAt: true,
             createdAt: true,
             paymentId: true,
             listing: { select: { name: true, country: true } },
@@ -2692,13 +2762,22 @@ export async function adminListingRoutes(app: FastifyInstance) {
           travellerEmail: b.guestEmail,
           providerId: b.providerId,
           subtotal: Number(b.subtotal),
+          discount: Number(b.discountAmount),
           voucherCode: b.voucherCode ?? null,
           voucherDiscount: Number(b.voucherDiscount),
           amount: Number(b.totalAmount),
           currency: b.currency,
+          serviceFee: Number(b.serviceFee),
+          deliveryFee: Number(b.deliveryFee),
+          securityDeposit: Number(b.securityDeposit),
           commissionRate: Number(b.commissionRate) * 100, // Convert to percentage
           commissionAmount: Number(b.commissionAmount),
           providerPayout: Number(b.providerPayout),
+          // Actual money moved at charge time (mirrors payments.charged*).
+          chargedAmount: b.chargedAmount != null ? Number(b.chargedAmount) : null,
+          chargedCurrency: b.chargedCurrency ?? null,
+          chargedRate: b.chargedRate != null ? Number(b.chargedRate) : null,
+          chargedAt: b.chargedAt?.toISOString() ?? null,
           paymentStatus: payment?.status ?? null,
           paymentGateway: payment?.paymentProvider ?? null,
           date: b.createdAt.toISOString(),
@@ -2706,13 +2785,63 @@ export async function adminListingRoutes(app: FastifyInstance) {
         };
       });
 
-      // Calculate summary
+      // Actual-money-moved conversion for the summary.
+      // The guest was charged chargedAmount in chargedCurrency (EUR for Stripe,
+      // XAF for Tara). Convert to the money-of-record EUR: identity for EUR,
+      // fixed parity peg for XAF. Per-component amounts (payout, commission)
+      // are stored in the listing currency, so scale them by the charge-time
+      // rate first to reproduce what actually moved (see billing.service.ts).
+      const XAF_PER_EUR = 655.957;
+      const chargedToEur = (
+        chargedAmount: number | null,
+        chargedCurrency?: string | null,
+      ): number | null => {
+        if (chargedAmount == null) return null;
+        const c = (chargedCurrency ?? "").toUpperCase();
+        if (c === "EUR") return Number(chargedAmount.toFixed(2));
+        if (c === "XAF") return Number((chargedAmount / XAF_PER_EUR).toFixed(2));
+        return null;
+      };
+      const listingToEurAtCharge = (
+        amount: number,
+        currency: string,
+        chargedCurrency?: string | null,
+        chargedRate?: number | null,
+      ): number | null => {
+        const c = (chargedCurrency ?? "").toUpperCase();
+        const rate = chargedRate != null ? Number(chargedRate) : null;
+        if (c && rate != null && rate > 0) {
+          const inChargeCurrency = Number(amount) * rate;
+          if (c === "EUR") return Number(inChargeCurrency.toFixed(2));
+          if (c === "XAF") return Number((inChargeCurrency / XAF_PER_EUR).toFixed(2));
+        }
+        return null;
+      };
+
+      // Calculate summary on ACTUAL money moved.
+      //   gross = the charge actually captured (EUR/XAF → EUR)
+      //   payout = provider share scaled by the charge-time snapshot rate
+      //   net (platform) = gross − payout (includes the FX buffer/platform take)
+      // Rows without a charge snapshot fall back to their listing-currency
+      // amount so legacy bookings still contribute.
+      const grossRevenue = transactions.reduce(
+        (sum, t) => sum + (chargedToEur(t.chargedAmount, t.chargedCurrency) ?? t.amount),
+        0,
+      );
+      const totalPayout = transactions.reduce(
+        (sum, t) => sum + (listingToEurAtCharge(t.providerPayout, t.currency, t.chargedCurrency, t.chargedRate) ?? t.providerPayout),
+        0,
+      );
+      const totalCommission = transactions.reduce(
+        (sum, t) => sum + (listingToEurAtCharge(t.commissionAmount, t.currency, t.chargedCurrency, t.chargedRate) ?? t.commissionAmount),
+        0,
+      );
       const summary = {
-        grossRevenue: transactions.reduce((sum, t) => sum + t.subtotal, 0),
-        totalVoucherDiscounts: transactions.reduce((sum, t) => sum + t.voucherDiscount, 0),
-        netRevenue: transactions.reduce((sum, t) => sum + t.amount, 0),
-        totalCommission: transactions.reduce((sum, t) => sum + t.commissionAmount, 0),
-        totalPayout: transactions.reduce((sum, t) => sum + t.providerPayout, 0),
+        grossRevenue: Number(grossRevenue.toFixed(2)),
+        totalVoucherDiscounts: transactions.reduce((sum, t) => sum + Number(t.voucherDiscount ?? 0), 0),
+        netRevenue: Number((grossRevenue - totalPayout).toFixed(2)),
+        totalCommission: Number(totalCommission.toFixed(2)),
+        totalPayout: Number(totalPayout.toFixed(2)),
         totalBookings: transactions.length,
       };
 
@@ -2824,14 +2953,20 @@ export async function adminListingRoutes(app: FastifyInstance) {
         });
       }
 
-
-      // Build pricing preview for the admin
-      const nights = Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000);
-      const pricePerNight = Number(listing.pricePerNight ?? listing.pricePerDay ?? 0);
-      const subtotal = pricePerNight * nights;
+      // Use calculateBilling() to get consistent pricing with web flow
       const commissionRate = await getCommissionRate(listing.country ?? null);
-      const commissionAmount = Math.round(subtotal * commissionRate * 100) / 100;
-      const totalAmount = Math.round((subtotal + commissionAmount) * 100) / 100;
+      const pricePerNight = Number(listing.pricePerNight ?? listing.pricePerDay ?? 0);
+
+      const billing = calculateBilling({
+        listingCategory: listing.category,
+        checkIn,
+        checkOut,
+        rate: pricePerNight,
+        deliveryFee: 0,
+        promotionDiscount: 0,
+        voucherAmount: 0,
+        commissionRate,
+      });
 
       return sendSuccess(reply, 200, {
         available: true,
@@ -2840,12 +2975,15 @@ export async function adminListingRoutes(app: FastifyInstance) {
         listingType: listing.category,
         checkIn,
         checkOut,
-        nights,
-        pricePerNight,
-        subtotal,
+        nights: billing.units,
+        pricePerNight: billing.baseAmount / billing.units, // Raw list rate for display
+        baseAmount: billing.baseAmount,
+        subtotal: billing.subtotal,
+        serviceFee: billing.serviceFee,
         commissionRate,
-        commissionAmount,
-        totalAmount,
+        commissionAmount: billing.commissionAmount,
+        providerPayout: billing.providerPayout,
+        totalAmount: billing.totalAmount,
         currency: listing.currency ?? "USD",
       });
     } catch (err: any) {
@@ -2885,8 +3023,11 @@ export async function adminListingRoutes(app: FastifyInstance) {
             subtotal: { type: "number" },
             voucherDiscount: { type: "number" },
             deliveryFee: { type: "number" },
-            commissionAmount: { type: "number" },
-            providerPayout: { type: "number" },
+             serviceFee: { type: "number" },
+             commissionAmount: { type: "number" },
+             providerPayout: { type: "number" },
+             refundAmount: { type: "number", nullable: true },
+             cancellationPolicy: { type: "string", nullable: true },
 
             listing: {
               type: "object",
@@ -3746,7 +3887,6 @@ export async function adminListingRoutes(app: FastifyInstance) {
           baseAmount: Number((Number(booking.subtotal) + Number(booking.discountAmount)).toFixed(2)),
           discount: Number(booking.discountAmount),
           serviceFee: Number(booking.serviceFee),
-          taxAmount: Number(booking.taxAmount),
           deliveryFee: Number(booking.deliveryFee),
           totalAmount: Number(booking.totalAmount),
           commissionRate: Number(booking.commissionRate),

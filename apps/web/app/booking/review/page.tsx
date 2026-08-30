@@ -12,6 +12,7 @@ import { storeLatestReviewContext } from "@/services/traveller";
 import { useAuthStore } from "@/stores/auth";
 import { capitalize } from "@/lib/utils";
 import { derivePlatform, fmtMoney } from "@/lib/platform-currency";
+import { ZERO_DECIMAL_CURRENCIES } from "@zika/types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -22,13 +23,11 @@ interface PricingPreview {
   promotionDiscount: number;
   voucherDiscount: number;
   serviceFee: number;
-  taxAmount: number;
   deliveryFee: number;
   securityDeposit?: number;
   totalAmount: number;
   commissionRate?: number;
   serviceFeeRate?: number;
-  taxRate?: number;
   /** Platform (charge) currency — EUR for Stripe, XAF for Tara. */
   platformCurrency?: string;
   /** Amount actually charged in the platform currency (EUR includes the buffer). */
@@ -44,7 +43,6 @@ interface PricingPreview {
   localizedNightlyRate?: number | null;
   localizedPromotionDiscount?: number | null;
   localizedServiceFee?: number | null;
-  localizedTaxAmount?: number | null;
   localizedDeliveryFee?: number | null;
   localizedSecurityDeposit?: number | null;
   localizedTotalAmount?: number | null;
@@ -110,13 +108,11 @@ interface ConfirmedBooking {
   transactionId?: string;
   baseAmount: number;
   serviceFee: number;
-  taxes: number;
   discount: number;
   securityDeposit?: number;
   deliveryFee?: number;
   commissionRate?: number;
   serviceFeeRate?: number;
-  taxRate?: number;
 }
 
 type PayStep = "review" | "payment" | "stripe_card" | "polling" | "confirmed";
@@ -128,9 +124,29 @@ const CARD_LOGOS = ["Visa", "Mastercard", "Amex", "UnionPay", "Apple Pay", "Goog
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmt(n: number) {
+function fmt(n: number, currency?: string) {
   if (typeof n !== "number" || isNaN(n)) return "0";
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const zeroDecimal = currency != null && ZERO_DECIMAL_CURRENCIES.has(currency.toUpperCase());
+  const fractionDigits = zeroDecimal ? 0 : 2;
+  return n.toLocaleString(undefined, { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
+}
+
+/** Wave returns authUrl as a JSON-encoded object in some responses. */
+function getWaveAuthUrl(value: unknown): string | null {
+  let candidate = value;
+  if (typeof candidate === "string") {
+    try { candidate = JSON.parse(candidate); } catch { /* already a URL, or invalid */ }
+  }
+  const url = typeof candidate === "object" && candidate !== null
+    ? (candidate as { url?: unknown }).url
+    : candidate;
+  if (typeof url !== "string") return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function getPricing(ctx: CheckoutCtx) {
@@ -138,14 +154,13 @@ function getPricing(ctx: CheckoutCtx) {
   const pp = ctx.pricingPreview;
   const base = pp.baseAmount ?? 0;
   const serviceFee = pp.serviceFee ?? 0;
-  const taxAmount = pp.taxAmount ?? 0;
   const deliveryFee = pp.deliveryFee ?? 0;
   const securityDeposit = pp.securityDeposit ?? 0;
   const totalDiscount = ctx.discountSource === "voucher"
     ? (ctx.voucherDiscount ?? 0)
     : (pp.promotionDiscount ?? 0);
   const subtotal = Math.max(0, base - totalDiscount);
-  const total = subtotal + serviceFee + taxAmount + deliveryFee + securityDeposit;
+  const total = subtotal + serviceFee + deliveryFee + securityDeposit;
   // The end amount the guest pays is the platform-currency total (EUR for
   // Stripe, XAF for Tara) returned by the booking API. Breakdown lines stay in
   // the listing currency; only this converted total is shown in the platform
@@ -173,7 +188,7 @@ function getPricing(ctx: CheckoutCtx) {
   );
 
   return {
-    base, discount: totalDiscount, subtotal, serviceFee, taxes: taxAmount,
+    base, discount: totalDiscount, subtotal, serviceFee,
     deliveryFee, securityDeposit, total,
     platformCurrency: info.platformCurrency,
     platformAmount: info.platformAmount,
@@ -188,8 +203,7 @@ function getPricing(ctx: CheckoutCtx) {
     dispTotal: showLocalized
       ? dispSubtotal
       + dispAmt(pp.localizedServiceFee, serviceFee)
-      + dispAmt(pp.localizedTaxAmount, taxAmount)
-      + dispAmt(pp.localizedDeliveryFee, deliveryFee)
+       + dispAmt(pp.localizedDeliveryFee, deliveryFee)
       + dispAmt(pp.localizedSecurityDeposit, securityDeposit)
       : total,
   };
@@ -261,6 +275,11 @@ export default function BookingReviewPage() {
   const [phoneCountry, setPhoneCountry] = useState("");
   const [taraXafAmount, setTaraXafAmount] = useState<number | null>(null);
   const [taraXafLoading, setTaraXafLoading] = useState(false);
+  // Mobile money network selected at checkout. "default" is the standard Tara
+  // STK-push flow; "wave" routes the charge through Wave (same Tara gateway,
+  // network: "wave") which returns a hosted payment page URL instead.
+  const [payNetwork, setPayNetwork] = useState<"default" | "wave">("default");
+  const [waveAuthUrl, setWaveAuthUrl] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [payError, setPayError] = useState("");
@@ -469,19 +488,18 @@ export default function BookingReviewPage() {
     total: number,
     base: number,
     fee: number,
-    tax: number,
     disc: number,
     method: string,
     securityDeposit?: number,
     deliveryFee?: number,
     commissionRate?: number,
     serviceFeeRate?: number,
-    taxRate?: number,
+    maxDurationMs = 120_000,
   ) {
     if (pollRef.current) clearInterval(pollRef.current);
     const startedAt = Date.now();
     pollRef.current = setInterval(async () => {
-      if (Date.now() - startedAt > 120_000) {
+      if (Date.now() - startedAt > maxDurationMs) {
         clearInterval(pollRef.current!);
         pollRef.current = null;
         setPayError("Payment took too long. Please try again.");
@@ -509,11 +527,17 @@ export default function BookingReviewPage() {
             totalAmount: total,
             currency: ctx!.currency,
             paymentId: pmId, displayId, paymentMethod: method, transactionId: txId,
-            baseAmount: base, serviceFee: fee, taxes: tax, discount: disc,
+             baseAmount: base, serviceFee: fee, discount: disc,
             securityDeposit,
             deliveryFee,
-            commissionRate, serviceFeeRate, taxRate,
+            commissionRate, serviceFeeRate,
           });
+          // Tara locks are intentionally retained while payment is pending so
+          // a failed attempt can be retried. Release the lock once payment is
+          // confirmed; the booking now protects the dates.
+          if (ctx!.lockToken) {
+            void listingApi.delete(`/bookings/lock/${ctx!.lockToken}`).catch(() => { });
+          }
           sessionStorage.removeItem("zika:checkout");
           setStep("confirmed");
         } else if (status === "failed" || status === "timed_out") {
@@ -529,8 +553,27 @@ export default function BookingReviewPage() {
 
   async function handlePay() {
     if (!ctx || !pricing) return;
-    setSubmitting(true);
     setPayError("");
+
+    // Validate payment-specific input before creating the booking. Creating a
+    // booking consumes the reservation lock, so a typo must not turn into an
+    // unrecoverable expired checkout.
+    if (provider === "tara") {
+      if (!mobileNumber.trim()) {
+        setPayError("Please enter your mobile number.");
+        return;
+      }
+      let enteredPhoneCountry = "";
+      try {
+        enteredPhoneCountry = parsePhoneNumber(mobileNumber.trim())?.country ?? "";
+      } catch { /* handled by the validation below */ }
+      if (!enteredPhoneCountry || !isTaraCountry(enteredPhoneCountry)) {
+        setPayError("Mobile money is only available for supported African countries. Please use card payment instead.");
+        return;
+      }
+    }
+
+    setSubmitting(true);
 
     // Record the acceptance the guest just gave, once. Best-effort: a failure
     // must not cost them their reservation lock, so it is logged and the
@@ -545,46 +588,52 @@ export default function BookingReviewPage() {
     }
 
     try {
-      // Step 1: Create booking
-      const body: Record<string, any> = {
-        lockToken: ctx.lockToken,
-        listingId: ctx.listingId,
-        guestFirstName: ctx.firstName,
-        guestLastName: ctx.lastName,
-        guestEmail: ctx.email,
-        guestPhone: ctx.phone,
-        adults: ctx.adults,
-        children: ctx.children,
-        specialRequests: ctx.specialRequests,
-      };
-      if (ctx.listingCategory !== "car") {
-        body.checkIn = ctx.checkIn;
-        body.checkOut = ctx.checkOut;
-      } else {
-        body.pickupDatetime = toIsoDatetime(ctx.pickupDatetime);
-        body.returnDatetime = toIsoDatetime(ctx.returnDatetime);
-        body.driverFirstName = ctx.driverFirstName ?? ctx.firstName;
-        body.driverLastName = ctx.driverLastName ?? ctx.lastName;
-        body.driverAge = ctx.driverAge;
-        body.deliveryRequested = ctx.deliveryRequested;
-        body.deliveryAddress = ctx.deliveryAddress;
-      }
-      if (ctx.listingCategory === "hotel") {
-        body.roomTypeId = ctx.roomTypeId;
-      }
-      if (ctx.discountSource === "voucher" && ctx.voucherCode) body.voucherCode = ctx.voucherCode;
-      if (ctx.discountSource === "promotion" && ctx.promotionId) body.promotionId = ctx.promotionId;
+      // Step 1: Create the booking only once. If payment initiation fails, the
+      // existing pending booking can be retried without trying to reuse the
+      // already-consumed reservation lock.
+      let bId = bookingId;
+      let bRef = bookingRef;
+      let total = pricing.total;
+      if (!bId) {
+        const body: Record<string, any> = {
+          lockToken: ctx.lockToken,
+          listingId: ctx.listingId,
+          guestFirstName: ctx.firstName,
+          guestLastName: ctx.lastName,
+          guestEmail: ctx.email,
+          guestPhone: ctx.phone,
+          adults: ctx.adults,
+          children: ctx.children,
+          specialRequests: ctx.specialRequests,
+          paymentProvider: provider,
+        };
+        if (ctx.listingCategory !== "car") {
+          body.checkIn = ctx.checkIn;
+          body.checkOut = ctx.checkOut;
+        } else {
+          body.pickupDatetime = toIsoDatetime(ctx.pickupDatetime);
+          body.returnDatetime = toIsoDatetime(ctx.returnDatetime);
+          body.driverFirstName = ctx.driverFirstName ?? ctx.firstName;
+          body.driverLastName = ctx.driverLastName ?? ctx.lastName;
+          body.driverAge = ctx.driverAge;
+          body.deliveryRequested = ctx.deliveryRequested;
+          body.deliveryAddress = ctx.deliveryAddress;
+        }
+        if (ctx.listingCategory === "hotel") body.roomTypeId = ctx.roomTypeId;
+        if (ctx.discountSource === "voucher" && ctx.voucherCode) body.voucherCode = ctx.voucherCode;
+        if (ctx.discountSource === "promotion" && ctx.promotionId) body.promotionId = ctx.promotionId;
 
-      const bookRes = await listingApi.post<any>("/bookings", body);
-      if (!bookRes.data.success || !bookRes.data.data?.bookingId) {
-        setPayError(bookRes.data?.error?.message ?? "Booking failed. Please try again.");
-        return;
+        const bookRes = await listingApi.post<any>("/bookings", body);
+        if (!bookRes.data.success || !bookRes.data.data?.bookingId) {
+          setPayError(bookRes.data?.error?.message ?? "Booking failed. Please try again.");
+          return;
+        }
+        bId = bookRes.data.data.bookingId as string;
+        bRef = bookRes.data.data.bookingReference as string;
+        total = Number(bookRes.data.data.totalAmount) || pricing.total;
+        setBookingId(bId);
+        setBookingRef(bRef);
       }
-      const bId = bookRes.data.data.bookingId as string;
-      const bRef = bookRes.data.data.bookingReference as string;
-      const total = Number(bookRes.data.data.totalAmount) || pricing.total;
-      setBookingId(bId);
-      setBookingRef(bRef);
 
       // Step 2: Initiate payment
       let pmId: string;
@@ -607,19 +656,11 @@ export default function BookingReviewPage() {
         setStep("stripe_card");
       } else {
         // Tara M-Pesa
-        if (!mobileNumber.trim()) { setPayError("Please enter your mobile number."); return; }
-        let phoneCountry = "";
-        try {
-          phoneCountry = parsePhoneNumber(mobileNumber.trim())?.country ?? "";
-        } catch { /* handled below */ }
-        if (!phoneCountry || !isTaraCountry(phoneCountry)) {
-          setPayError("Mobile money is only available for supported African countries. Please use card payment instead.");
-          return;
-        }
         const payRes = await paymentApi.post<any>("/payments/initiate", {
           bookingId: bId,
           paymentProvider: "tara",
           mobileNumber: mobileNumber.trim(),
+          ...(payNetwork === "wave" ? { network: "wave" } : {}),
         });
         if (!payRes.data.success) {
           setPayError(payRes.data?.error?.message ?? "Payment initiation failed.");
@@ -627,12 +668,37 @@ export default function BookingReviewPage() {
         }
         pmId = payRes.data.data.paymentId as string;
         setPaymentId(pmId);
+        if (payNetwork === "wave") {
+          // Wave is a hosted-page flow: the guest completes payment on the
+          // network's page (opened via link). No STK prompt — allow a generous
+          // 10-minute polling window for them to pay and return to this tab.
+          const authUrl = getWaveAuthUrl(payRes.data.data.authUrl ?? payRes.data.data.auth_url);
+          if (!authUrl) {
+            setPayError("Wave did not return a payment page. Please try again.");
+            setStep("payment");
+            return;
+          }
+          setWaveAuthUrl(authUrl);
+        }
         setStep("polling");
-        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money", ctx.pricingPreview?.securityDeposit, ctx.pricingPreview?.deliveryFee, ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.serviceFeeRate, ctx.pricingPreview?.taxRate);
+        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.discount, payNetwork === "wave" ? "Tara-wave" : "Mobile Money", ctx.pricingPreview?.securityDeposit, ctx.pricingPreview?.deliveryFee, ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.serviceFeeRate, payNetwork === "wave" ? 10 * 60_000 : undefined);
       }
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message ?? err?.response?.data?.message ?? err?.message ?? "Something went wrong.";
       setPayError(msg);
+      // A 400 from Tara is a user-correctable error; keep the lock and allow
+      // another attempt. Provider/server/network failures are not safely
+      // retryable, so terminate this checkout immediately.
+      if (provider === "tara" && err?.response?.status !== 400) {
+        if (ctx.lockToken) {
+          await listingApi.delete(`/bookings/lock/${ctx.lockToken}`).catch(() => { });
+        }
+        if (pollRef.current) clearInterval(pollRef.current);
+        sessionStorage.removeItem("zika:checkout");
+        // Give the guest a moment to read the provider/server error before
+        // leaving the now-terminated checkout.
+        window.setTimeout(() => router.replace("/"), 1500);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -650,7 +716,7 @@ export default function BookingReviewPage() {
         setPayError(result.error.message ?? "Card payment failed. Please check your details.");
       } else {
         setStep("polling");
-        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Card", ctx!.pricingPreview?.securityDeposit, ctx!.pricingPreview?.deliveryFee, ctx!.pricingPreview?.commissionRate, ctx!.pricingPreview?.serviceFeeRate, ctx!.pricingPreview?.taxRate);
+        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.discount, "Card", ctx!.pricingPreview?.securityDeposit, ctx!.pricingPreview?.deliveryFee, ctx!.pricingPreview?.commissionRate, ctx!.pricingPreview?.serviceFeeRate);
       }
     } catch (err: any) {
       setPayError(err?.message ?? "Card payment failed.");
@@ -802,13 +868,27 @@ export default function BookingReviewPage() {
               </div>
               <div>
                 <h2 className="text-xl font-bold text-slate-800 mb-2">
-                  {provider === "tara" ? "Payment Request Sent" : "Processing Payment"}
+                  {provider === "tara"
+                    ? payNetwork === "wave" ? "Waiting for your Wave payment" : "Payment Request Sent"
+                    : "Processing Payment"}
                 </h2>
                 <p className="text-slate-500 text-sm leading-relaxed">
                   {provider === "tara"
-                    ? "A payment request has been sent to your phone. Please approve it to complete your booking."
+                    ? payNetwork === "wave"
+                      ? "Complete the payment on the Wave page. This screen will update automatically once it's confirmed."
+                      : "A payment request has been sent to your phone. Please approve it to complete your booking."
                     : "Please wait while we confirm your payment."}
                 </p>
+                {provider === "tara" && payNetwork === "wave" && waveAuthUrl && (
+                  <a
+                    href={waveAuthUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 mt-5 px-6 py-3 rounded-xl bg-[#0B1E3F] text-white text-sm font-bold hover:bg-[#0B1E3F]/90 transition"
+                  >
+                    Open Wave Payment Page ↗
+                  </a>
+                )}
                 <p className="text-slate-400 text-xs mt-3 animate-pulse">Waiting for payment confirmation…</p>
               </div>
             </div>
@@ -835,11 +915,11 @@ export default function BookingReviewPage() {
                     disabled={submitting}
                     className="mt-5 w-full py-3.5 bg-[#0B1E3F] hover:bg-[#07152B] disabled:opacity-50 text-white font-bold rounded-xl transition text-sm"
                   >
-                    {submitting ? "Processing…" : `Pay ${pricing!.platformCurrency} ${fmt(pricing!.platformAmount)}`}
+                    {submitting ? "Processing…" : `Pay ${pricing!.platformCurrency} ${fmt(pricing!.platformAmount, pricing!.platformCurrency)}`}
                   </button>
                   {pricing!.platformCurrency !== ctx.currency && (
                     <p className="text-xs text-slate-400 mt-2">
-                      Billed as approx. {ctx.currency} {fmt(pricing!.total)} · charged in {pricing!.platformCurrency}
+                      Billed as approx. {ctx.currency} {fmt(pricing!.total, ctx.currency)} · charged in {pricing!.platformCurrency}
                     </p>
                   )}
                 </SectionCard>
@@ -907,7 +987,7 @@ export default function BookingReviewPage() {
                     /* ── Voucher applied ── */
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-semibold text-emerald-700">
-                        ✓ {ctx.voucherCode} — saves {ctx.currency} {fmt(ctx.voucherDiscount ?? 0)}
+                        ✓ {ctx.voucherCode} — saves {ctx.currency} {fmt(ctx.voucherDiscount ?? 0, ctx.currency)}
                       </span>
                       <button
                         type="button"
@@ -927,7 +1007,7 @@ export default function BookingReviewPage() {
                     <div className="space-y-3">
                       <p className="text-sm text-emerald-700 font-semibold flex items-center gap-1.5">
                         <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                        Promotion applied — saves {ctx.currency} {fmt(pricing?.discount ?? 0)}
+                        Promotion applied — saves {ctx.currency} {fmt(pricing?.discount ?? 0, ctx.currency)}
                       </p>
                       <p className="text-xs text-slate-500">Have a voucher that saves more? Select or enter it below:</p>
 
@@ -1057,19 +1137,32 @@ export default function BookingReviewPage() {
 
                 {/* Payment method selector */}
                 <SectionCard title="Payment Method">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className={`grid gap-3 ${taraListingEligible ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2"}`}>
                     {(taraListingEligible ? (["tara", "stripe"] as PayProvider[]) : (["stripe"] as PayProvider[])).map((p) => (
                       <button
                         key={p}
-                        onClick={() => setProvider(p)}
-                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition text-sm font-semibold ${provider === p ? "border-[#0B1E3F] bg-[#0B1E3F]/5 text-[#0B1E3F]" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}
+                        onClick={() => { setProvider(p); if (p === "tara") setPayNetwork("default"); }}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition text-sm font-semibold ${provider === p && !(p === "tara" && payNetwork === "wave") ? "border-[#0B1E3F] bg-[#0B1E3F]/5 text-[#0B1E3F]" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}
                       >
                         <span className="text-2xl">{p === "tara" ? "📱" : "💳"}</span>
                         <span>{p === "tara" ? "Mobile Money" : "Card & Digital Wallets"}</span>
-                        {hasTara && p === "tara" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
+                        {hasTara && p === "tara" && payNetwork === "default" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
                         {!hasTara && p === "stripe" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
                       </button>
                     ))}
+                    {taraListingEligible && (
+                      <button
+                        onClick={() => { setProvider("tara"); setPayNetwork("wave"); }}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition text-sm font-semibold ${provider === "tara" && payNetwork === "wave" ? "border-[#0B1E3F] bg-[#0B1E3F]/5 text-[#0B1E3F]" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}
+                      >
+                        <img
+                          src="/images/wave-mobile-money.png"
+                          alt="Wave"
+                          className="h-8 w-8 rounded-lg object-cover"
+                        />
+                        <span>Wave</span>
+                      </button>
+                    )}
                   </div>
                 </SectionCard>
 
@@ -1097,7 +1190,11 @@ export default function BookingReviewPage() {
                         Mobile money is only available for supported African countries. Please use card payment instead.
                       </p>
                     )}
-                    <p className="text-xs text-slate-400 mt-2">You will receive a payment prompt on this number.</p>
+                    <p className="text-xs text-slate-400 mt-2">
+                      {payNetwork === "wave"
+                        ? "You'll complete the payment on the Wave payment page after you confirm."
+                        : "You will receive a payment prompt on this number."}
+                    </p>
                     {ctx && (ctx.currency ?? "").toUpperCase() !== "XAF" && (
                       <p className="text-xs text-slate-500 mt-1">
                         {taraXafLoading
@@ -1152,11 +1249,11 @@ export default function BookingReviewPage() {
                   disabled={submitting || (needsTermsAcceptance && !payTermsAccepted)}
                   className="w-full py-3.5 bg-[#0B1E3F] hover:bg-[#07152B] disabled:opacity-50 text-white font-bold rounded-xl transition text-sm"
                 >
-                  {submitting ? "Please wait…" : provider === "tara" ? "Send Payment Request" : `Pay ${pricing!.platformCurrency} ${fmt(pricing!.platformAmount)}`}
+                  {submitting ? "Please wait…" : provider === "tara" ? "Send Payment Request" : `Pay ${pricing!.platformCurrency} ${fmt(pricing!.platformAmount, pricing!.platformCurrency)}`}
                 </button>
                 {provider === "stripe" && pricing!.platformCurrency !== ctx.currency && (
                   <p className="text-xs text-slate-400 mt-2 text-center">
-                    Billed as approx. {ctx.currency} {fmt(pricing!.total)} · charged in {pricing!.platformCurrency}
+                    Billed as approx. {ctx.currency} {fmt(pricing!.total, ctx.currency)} · charged in {pricing!.platformCurrency}
                   </p>
                 )}
               </div>
@@ -1298,46 +1395,40 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: NonNullable
             otherwise the listing's own. The amount charged is always the platform total. */}
         <div className="space-y-2.5 text-sm">
           <div className="flex justify-between text-slate-600">
-            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedNightlyRate, ctx.pricingPreview?.nightlyRate ?? ctx.pricePerNight))} × {ctx.pricingPreview?.units ?? ctx.nightsOrDays} {isCar ? "day" : "night"}{(ctx.pricingPreview?.units ?? ctx.nightsOrDays) !== 1 ? "s" : ""}</span>
-            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedBaseAmount, pricing.base))}</span>
+            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedNightlyRate, ctx.pricingPreview?.nightlyRate ?? ctx.pricePerNight), pricing.dispCurrency)} × {ctx.pricingPreview?.units ?? ctx.nightsOrDays} {isCar ? "day" : "night"}{(ctx.pricingPreview?.units ?? ctx.nightsOrDays) !== 1 ? "s" : ""}</span>
+            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedBaseAmount, pricing.base), pricing.dispCurrency)}</span>
           </div>
           {pricing.discount > 0 && (
             <div className="flex justify-between text-emerald-600">
               <span>{ctx.discountSource === "promotion" ? "Promotional discount" : "Voucher discount"}</span>
-              <span>{pricing.dispPrefix}−{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedPromotionDiscount, pricing.discount))}</span>
+              <span>{pricing.dispPrefix}−{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedPromotionDiscount, pricing.discount), pricing.dispCurrency)}</span>
             </div>
           )}
           <div className="flex justify-between text-slate-600 border-t border-slate-100 pt-2">
             <span>Subtotal</span>
-            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispSubtotal)}</span>
+            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispSubtotal, pricing.dispCurrency)}</span>
           </div>
           <div className="flex justify-between text-slate-600">
             <span>Service fee{ctx.pricingPreview?.serviceFeeRate ? ` (${Math.round(ctx.pricingPreview.serviceFeeRate * 100)}%)` : ''}</span>
-            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedServiceFee, pricing.serviceFee))}</span>
+            <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedServiceFee, pricing.serviceFee), pricing.dispCurrency)}</span>
           </div>
-          {pricing.taxes > 0 && (
-            <div className="flex justify-between text-slate-600">
-              <span>Taxes{ctx.pricingPreview?.taxRate ? ` (${Math.round(ctx.pricingPreview.taxRate * 100)}%)` : ''}</span>
-              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedTaxAmount, pricing.taxes))}</span>
-            </div>
-          )}
           {pricing.deliveryFee > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Delivery fee</span>
-              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedDeliveryFee, pricing.deliveryFee))}</span>
+              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedDeliveryFee, pricing.deliveryFee), pricing.dispCurrency)}</span>
             </div>
           )}
           {isCar && securityDeposit > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Security deposit</span>
-              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedSecurityDeposit, securityDeposit))}</span>
+              <span>{pricing.dispPrefix}{pricing.dispCurrency} {fmt(pricing.dispAmt(ctx.pricingPreview?.localizedSecurityDeposit, securityDeposit), pricing.dispCurrency)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
             <span>Total</span>
             {pricing.showLocalized ? (
               <span className="text-right">
-                <div>~{pricing.dispCurrency} {fmt(pricing.dispTotal)}</div>
+                <div>~{pricing.dispCurrency} {fmt(pricing.dispTotal, pricing.dispCurrency)}</div>
                 <div className="text-xs font-medium text-slate-500 mt-0.5">Exact {fmtMoney(pricing.total, pricing.listingCurrency)}</div>
                 <div className="text-xs font-semibold text-slate-700">Charged {fmtMoney(pricing.platformAmount, pricing.platformCurrency)}</div>
               </span>
@@ -1444,34 +1535,28 @@ function ConfirmedView({
         <div className="space-y-2 text-sm">
           <div className="flex justify-between text-slate-600">
             <span>Base amount</span>
-            <span>{confirmed.currency} {fmt(confirmed.baseAmount)}</span>
+            <span>{confirmed.currency} {fmt(confirmed.baseAmount, confirmed.currency)}</span>
           </div>
           {confirmed.discount > 0 && (
             <div className="flex justify-between text-emerald-600">
               <span>{ctx.discountSource === "promotion" ? "Promotional discount" : "Voucher discount"}</span>
-              <span>−{confirmed.currency} {fmt(confirmed.discount)}</span>
+              <span>−{confirmed.currency} {fmt(confirmed.discount, confirmed.currency)}</span>
             </div>
           )}
           <div className="flex justify-between text-slate-600">
             <span>Service fee{confirmed.serviceFeeRate ? ` (${Math.round(confirmed.serviceFeeRate * 100)}%)` : ''}</span>
-            <span>{confirmed.currency} {fmt(confirmed.serviceFee)}</span>
+            <span>{confirmed.currency} {fmt(confirmed.serviceFee, confirmed.currency)}</span>
           </div>
-          {confirmed.taxes > 0 && (
-            <div className="flex justify-between text-slate-600">
-              <span>Taxes{confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}</span>
-              <span>{confirmed.currency} {fmt(confirmed.taxes)}</span>
-            </div>
-          )}
           {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Security deposit</span>
-              <span>{confirmed.currency} {fmt(confirmed.securityDeposit)}</span>
+              <span>{confirmed.currency} {fmt(confirmed.securityDeposit, confirmed.currency)}</span>
             </div>
           )}
           {confirmed.deliveryFee != null && confirmed.deliveryFee > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Delivery fee</span>
-              <span>{confirmed.currency} {fmt(confirmed.deliveryFee)}</span>
+              <span>{confirmed.currency} {fmt(confirmed.deliveryFee, confirmed.currency)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
@@ -1540,7 +1625,7 @@ function VoucherLayout({
   const info = derivePlatform(ctx.pricingPreview, confirmed.currency, confirmed.totalAmount);
   const platformCurrency = info.platformCurrency;
   const platformAmount = info.platformAmount;
-  const lv = (value: number) => `${confirmed.currency} ${fmt(value)}`;
+  const lv = (value: number) => `${confirmed.currency} ${fmt(value, confirmed.currency)}`;
   const totalDisplay = platformCurrency === confirmed.currency
     ? lv(platformAmount)
     : `${fmtMoney(platformAmount, platformCurrency)}  (Billed as approx. ${lv(confirmed.totalAmount)})`;
@@ -1590,7 +1675,6 @@ function VoucherLayout({
         <VoucherRow label="Base amount" value={lv(confirmed.baseAmount)} />
         {confirmed.discount > 0 && <VoucherRow label="Discount" value={`−${lv(confirmed.discount)}`} />}
         <VoucherRow label={`Service fee${confirmed.serviceFeeRate ? ` (${Math.round(confirmed.serviceFeeRate * 100)}%)` : ''}`} value={lv(confirmed.serviceFee)} />
-        {confirmed.taxes > 0 && <VoucherRow label={`Taxes${confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}`} value={lv(confirmed.taxes)} />}
         {isCar && confirmed.securityDeposit != null && confirmed.securityDeposit > 0 && <VoucherRow label="Security deposit" value={lv(confirmed.securityDeposit)} />}
         <VoucherRow label="Total Paid" value={totalDisplay} bold />
       </VoucherSection>

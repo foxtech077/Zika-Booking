@@ -2,6 +2,17 @@ import { prisma } from "../lib/prisma.js";
 
 const DEFAULT_GLOBAL_RATE = 5.00; // 5.00%
 
+/** Listing states that represent a live provider listing by category. */
+export function liveProviderListingWhere(countryCode?: string) {
+  return {
+    ...(countryCode ? { country: countryCode } : {}),
+    OR: [
+      { category: "hotel" as const, status: "approved" as const },
+      { category: { in: ["apartment", "car"] as ("apartment" | "car")[] }, status: "active" as const },
+    ],
+  };
+}
+
 /**
  * Resolves the effective commission rate for a booking.
  * Resolution order:

@@ -77,7 +77,9 @@ export async function computeTaraCharge(opts: {
         "Could not convert your booking total to XAF right now. Please use card payment instead.",
       );
     }
-    amountXaf = Number(json.data.converted);
+    // The converted amount is already ceiling-rounded to a whole XAF — charge
+    // it exactly, with no buffer.
+    amountXaf = Math.ceil(Number(json.data.converted));
     rate = json.data.rate != null ? Number(json.data.rate) : 1;
   }
 

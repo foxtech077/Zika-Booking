@@ -9,13 +9,22 @@ import { QueueName, AuthJob } from "@zika/types";
 
 // Dedicated connection for BullMQ — must use maxRetriesPerRequest: null
 // (Worker's blocking commands conflict with non-null retry settings).
-const connection = new Redis(process.env["REDIS_URL"] ?? "redis://localhost:6379", {
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-  lazyConnect: false,
-});
+const connection = new Redis(
+  process.env["REDIS_URL"] ?? "redis://localhost:6379",
+  {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    lazyConnect: false,
+  },
+);
 
 const queue = new Queue(QueueName.Auth, { connection });
+const defaultJobOptions = {
+  attempts: 5,
+  backoff: { type: "exponential" as const, delay: 30_000 },
+  removeOnComplete: { age: 24 * 60 * 60, count: 1000 },
+  removeOnFail: { age: 7 * 24 * 60 * 60 },
+};
 
 const worker = new Worker(
   QueueName.Auth,
@@ -51,12 +60,16 @@ export function registerBullBoard(app: any) {
 }
 
 export async function startJobs() {
-  await queue.add(AuthJob.TokenPurger, {}, { repeat: { every: 60 * 60 * 1000 } });
+  await queue.add(
+    AuthJob.TokenPurger,
+    {},
+    { ...defaultJobOptions, repeat: { every: 60 * 60 * 1000 } },
+  );
 
   await queue.add(
     AuthJob.AuditLogPurger,
     {},
-    { repeat: { every: 24 * 60 * 60 * 1000 } },
+    { ...defaultJobOptions, repeat: { every: 24 * 60 * 60 * 1000 } },
   );
 }
 

@@ -15,8 +15,11 @@ import { useLocalSearchParams, useRouter, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useReceipt, usePaymentDisplayId } from "../../../hooks/booking";
 import type { Receipt, ReceiptLineItem } from "../../../lib/types/booking";
+import { ZERO_DECIMAL_CURRENCIES } from "@zika/types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+const ZERO_DEC = ZERO_DECIMAL_CURRENCIES;
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -39,7 +42,11 @@ function fmtDateTime(iso: string | null | undefined): string {
 
 function fmtMoney(amount: number | null | undefined, currency: string): string {
   if (amount == null) return `${currency} —`;
-  return `${currency} ${Math.abs(amount).toLocaleString()}`;
+  const abs = Math.abs(amount);
+  if (ZERO_DEC.has(currency.toUpperCase())) {
+    return `${currency} ${Math.round(abs).toLocaleString()}`;
+  }
+  return `${currency} ${abs.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function statusLabel(s: string): string {

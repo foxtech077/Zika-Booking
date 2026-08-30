@@ -180,8 +180,9 @@ export function PlaceAutocomplete({
 
       const address = place.formattedAddress ?? suggestion.primary;
       onChange(address);
-      onResolved({
-        lat: loc.lat(),
+       onResolved({
+          placeId: suggestion.placeId,
+          lat: loc.lat(),
         lng: loc.lng(),
         address,
         ...extractAddressParts(

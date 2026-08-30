@@ -26,6 +26,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { getAllPayouts, type Payout, type PayoutStatus } from "@/lib/payment-api";
+import { useEurRates, toEur, type EurRates } from "@/lib/eurRates";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -83,12 +84,11 @@ function bucketFor(
   }
 }
 
-function buildDashboardSummary(payouts: Payout[]): DashboardSummary {
-  const currency = payouts[0]?.currency ?? "USD";
+function buildDashboardSummary(payouts: Payout[], rates: EurRates): DashboardSummary {
   const emptyBucket = (): StatusBucket => ({ amount: 0, count: 0 });
 
   const summary: DashboardSummary = {
-    currency,
+    currency: "EUR",
     total: emptyBucket(),
     paid: emptyBucket(),
     pending: emptyBucket(),
@@ -103,7 +103,10 @@ function buildDashboardSummary(payouts: Payout[]): DashboardSummary {
   const monthly = new Map<string, number>();
 
   for (const payout of payouts) {
-    const amount = payoutAmount(payout);
+    // Convert each payout to EUR before summing — payouts may be recorded in
+    // different currencies (paid Stripe payouts are EUR, pending ones are the
+    // listing currency), so they must never be summed raw.
+    const amount = toEur(payoutAmount(payout), payout.currency, rates) ?? 0;
     summary.total.amount += amount;
     summary.total.count += 1;
 
@@ -217,7 +220,8 @@ export default function PaymentDashboardPage() {
     refetchOnWindowFocus: false,
   });
 
-  const summary = useMemo(() => buildDashboardSummary(payouts), [payouts]);
+  const eurRates = useEurRates(payouts.map((p) => p.currency));
+  const summary = useMemo(() => buildDashboardSummary(payouts, eurRates), [payouts, eurRates]);
 
   const chartData = useMemo(
     () =>

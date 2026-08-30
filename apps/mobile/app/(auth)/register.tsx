@@ -50,7 +50,6 @@ interface FieldErrors {
 
 export default function RegisterScreen() {
   const setAuth = useAuthStore((s) => s.setAuth);
-  const setLocalCurrency = useAuthStore((s) => s.setLocalCurrency);
   const isKeyboardOpen = useKeyboard();
 
   // There is no account type at signup. Everyone registers the same way; a
@@ -123,11 +122,13 @@ export default function RegisterScreen() {
   });
 
   // ── Country ──────────────────────────────────────────────────────────────────
+  // Selecting a country used to also set the display currency to match it —
+  // removed along with the rest of the automatic country-based currency
+  // detection. Currency now only ever changes via the explicit header picker.
   const handleSelectCountry = (c: CountryData) => {
     setSelectedCountry(c);
     set("country")(c.code);
     clearErr("country");
-    void setLocalCurrency(c.currency);
     setCountryModalVisible(false);
     setCountrySearch("");
   };

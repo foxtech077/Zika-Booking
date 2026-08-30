@@ -1413,3 +1413,147 @@ export const fs = StyleSheet.create({
   footerNextInner: { flexDirection: "row", alignItems: "center", gap: 8 },
   footerNextText: { color: "#fff", fontWeight: "700", fontSize: K.font.base },
 });
+
+// ── SelectField ───────────────────────────────────────────────────────────────
+//
+// Native equivalent of the web forms' <Select>: a control showing the current
+// value that opens a bottom-sheet option list. Used everywhere the web wizard
+// uses a dropdown, so both clients present the same choices the same way.
+
+export function SelectField({
+  label,
+  required,
+  hint,
+  options,
+  selected,
+  onSelect,
+  placeholder = "Select…",
+  error,
+}: {
+  label: string;
+  required?: boolean;
+  hint?: string;
+  options: ReadonlyArray<{ value: string; label: string }>;
+  selected: string;
+  onSelect: (value: string) => void;
+  placeholder?: string;
+  error?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = options.find((o) => o.value === selected);
+
+  return (
+    <View style={selStyles.wrap}>
+      <Text style={selStyles.label}>
+        {label}
+        {required ? <Text style={selStyles.req}> *</Text> : null}
+      </Text>
+      {hint ? <Text style={selStyles.hint}>{hint}</Text> : null}
+
+      <TouchableOpacity
+        style={[selStyles.control, !!error && selStyles.controlError]}
+        onPress={() => setOpen(true)}
+        activeOpacity={0.75}
+      >
+        <Text style={current ? selStyles.value : selStyles.placeholder} numberOfLines={1}>
+          {current?.label ?? placeholder}
+        </Text>
+        <Feather name="chevron-down" size={18} color={K.colors.textMuted} />
+      </TouchableOpacity>
+
+      {error ? <Text style={selStyles.error}>{error}</Text> : null}
+
+      <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
+        <View style={selStyles.overlay}>
+          <View style={selStyles.sheet}>
+            <View style={selStyles.sheetHeader}>
+              <Text style={selStyles.sheetTitle}>{label}</Text>
+              <TouchableOpacity
+                onPress={() => setOpen(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 12, right: 12 }}
+              >
+                <Feather name="x" size={20} color={K.colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+              {options.map((opt) => {
+                const active = opt.value === selected;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[selStyles.option, active && selStyles.optionActive]}
+                    onPress={() => {
+                      onSelect(opt.value);
+                      setOpen(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[selStyles.optionText, active && selStyles.optionTextActive]}>
+                      {opt.label}
+                    </Text>
+                    {active ? (
+                      <Feather name="check" size={17} color={K.colors.darkGreen} />
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <View style={{ height: 20 }} />
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const selStyles = StyleSheet.create({
+  wrap: { marginBottom: 16 },
+  label: { fontSize: 14, fontWeight: "600", color: K.colors.textDark, marginBottom: 4 },
+  req: { color: "#DC2626" },
+  hint: { fontSize: 12, color: K.colors.textMuted, marginBottom: 6 },
+  control: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: K.colors.border,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  controlError: { borderColor: "#DC2626" },
+  value: { flex: 1, fontSize: 15, color: K.colors.textDark, fontWeight: "600" },
+  placeholder: { flex: 1, fontSize: 15, color: K.colors.textMuted },
+  error: { fontSize: 12, color: "#DC2626", marginTop: 4 },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  sheet: {
+    backgroundColor: K.colors.bgApp,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingBottom: 8,
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: K.colors.border,
+  },
+  sheetTitle: { fontSize: 16, fontWeight: "800", color: K.colors.textDark },
+  option: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: K.colors.border,
+  },
+  optionActive: { backgroundColor: K.colors.bgTint },
+  optionText: { fontSize: 15, color: K.colors.textDark },
+  optionTextActive: { fontWeight: "700", color: K.colors.darkGreen },
+});

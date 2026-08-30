@@ -24,7 +24,7 @@ import { useRouter } from "next/navigation";
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 const fetchQueue = (params: Record<string, string>) =>
-  listingApi.get(`/admin/listings/review-queue?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
+  listingApi.get(`/admin/listings/review-queue?${new URLSearchParams({ queue: "moderation", ...params })}`).then((r) => r.data.data ?? r.data);
 
 const fetchDetail = (id: string) =>
   listingApi.get(`/admin/listings/${id}/review`).then((r) => r.data.data ?? r.data);
@@ -228,8 +228,9 @@ export default function ModerationPage() {
   });
 
   const rawTasks: ListingReviewTask[] = data?.tasks ?? [];
-  // Client-side category filtering to ensure only non-hotels (Apartments & Cars) are rendered
-  const tasks = rawTasks.filter((t) => t.listing.category !== "hotel" && (!isCM || userCountryScope.includes(t.listing.country ?? "")));
+  // Moderation queue is filtered server-side to auto-suspended listings only
+  // (consecutive negative reviews & compliance triggers).
+  const tasks = rawTasks.filter((t) => !isCM || userCountryScope.includes(t.listing.country ?? ""));
   const total = data?.total ?? tasks.length;
 
   const { data: detail, isLoading: loadingDetail } = useQuery<ListingDetail>({

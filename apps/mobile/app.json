@@ -24,7 +24,10 @@
           "fetch",
           "remote-notification"
         ],
-        "NSLocationWhenInUseUsageDescription": "Kainook uses your location to place your listing's map pin accurately when you are at the property."
+        "NSLocationWhenInUseUsageDescription": "Kainook uses your location to place your listing's map pin accurately when you are at the property.",
+        "NSCameraUsageDescription": "Kainook requires camera access to allow you to take and upload a profile picture, as well as take photos of your property or vehicle when creating a listing.",
+        "NSPhotoLibraryUsageDescription": "Kainook requires access to your photo library to allow you to select and upload your profile picture, as well as upload property or vehicle photos for your listings.",
+        "NSPhotoLibraryAddUsageDescription": "Kainook requires permission to save photos to your photo library."
       },
       "entitlements": {
         "aps-environment": "development",
@@ -116,6 +119,13 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Kainook uses your location to place your listing's map pin accurately when you are at the property."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Kainook requires access to your photo library to allow you to select and upload your profile picture, as well as upload property or vehicle photos for your listings.",
+          "cameraPermission": "Kainook requires camera access to allow you to take and upload a profile picture, as well as take photos of your property or vehicle when creating a listing."
         }
       ]
     ],

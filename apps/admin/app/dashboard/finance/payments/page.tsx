@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { useEurRates, EurValue } from "@/lib/eur";
 import { useQuery } from "@tanstack/react-query";
 import { paymentPayoutApi } from "@/lib/payment-api";
 import { roleScopePolicy, AdminScope } from "@/permissions/rbac";
@@ -29,6 +30,17 @@ const COUNTRY_OPTIONS = [
   { value: "IN", label: "IN" },
   { value: "CA", label: "CA" },
 ];
+
+// Tara payments show the mobile-money network so Wave charges are
+// distinguishable from other Tara networks (which display generically).
+function getGatewayLabel(paymentProvider?: string | null, network?: string | null): string {
+  if (paymentProvider === "tara") {
+    if (!network) return "Tara";
+    return network.toLowerCase() === "wave" ? "Tara (Wave)" : "Tara (Mobile Money)";
+  }
+  if (paymentProvider) return paymentProvider.charAt(0).toUpperCase() + paymentProvider.slice(1);
+  return "—";
+}
 
 export default function BookingPaymentsPage() {
   const searchParams = useSearchParams();
@@ -62,6 +74,8 @@ export default function BookingPaymentsPage() {
   });
 
   const payments = data?.data ?? [];
+
+  const eurRates = useEurRates(payments.map((p: any) => p.currency));
 
   // Country scope (country_manager / sales): only show records in assigned countries.
   const isCountryScoped = roleScopePolicy(user?.role as AdminRole) === AdminScope.CountryScoped;
@@ -100,6 +114,25 @@ export default function BookingPaymentsPage() {
 
   const total = filteredPayments.length;
 
+  // Convert a payment status to the badge colour used across the table/drawer.
+  function paymentBadgeStatus(status: string): string {
+    switch (status) {
+      case "captured":
+        return "confirmed";
+      case "initiated":
+      case "pending":
+        return "pending_payment";
+      case "failed":
+      case "timed_out":
+        return "cancelled_by_system";
+      case "refunded":
+      case "partially_refunded":
+        return "suspended";
+      default:
+        return "pending_payment";
+    }
+  }
+
   const columns: Column<any>[] = [
     {
       key: "displayId",
@@ -120,8 +153,8 @@ export default function BookingPaymentsPage() {
       label: "Gateway & Provider ID",
       render: (t) => (
         <div>
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 capitalize">
-            {t.paymentProvider}
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
+            {getGatewayLabel(t.paymentProvider, t.network)}
           </span>
           {t.providerPaymentId && (
             <p className="text-[11px] font-mono text-slate-400 mt-1 truncate max-w-[150px]" title={t.providerPaymentId}>
@@ -137,7 +170,16 @@ export default function BookingPaymentsPage() {
       align: "right",
       render: (t) => (
         <div className="text-right">
-          <p className="font-bold text-sm tabular">{formatCurrency(Number(t.amount), t.currency)}</p>
+          <p className="font-bold text-sm tabular">
+            {/* Gross amount actually captured — money-of-record EUR/XAF. Fall back
+                to the listing-currency amount for legacy rows without a charge. */}
+            <EurValue amount={t.chargedAmount ?? t.amount} currency={t.chargedCurrency ?? t.currency} rates={eurRates} />
+          </p>
+          {t.chargedAmount != null && t.chargedCurrency && t.chargedCurrency.toUpperCase() !== (t.currency || "").toUpperCase() && (
+            <p className="text-[11px] text-slate-400 tabular">
+              Listing: {t.amount} {t.currency}
+            </p>
+          )}
         </div>
       ),
     },
@@ -149,17 +191,7 @@ export default function BookingPaymentsPage() {
     {
       key: "status",
       label: "Status",
-      render: (t) => {
-        const badgeStatus =
-          t.status === "captured"
-            ? "confirmed"
-            : t.status === "refunded"
-            ? "suspended"
-            : t.status === "failed"
-            ? "cancelled_by_system"
-            : "pending_payment";
-        return <Badge label={t.status} status={badgeStatus} />;
-      },
+      render: (t) => <Badge label={t.status} status={paymentBadgeStatus(t.status)} />,
     },
     {
       key: "actions",
@@ -182,9 +214,9 @@ export default function BookingPaymentsPage() {
 
   // Helper step mapping for display drawer
   const getActiveStep = (status: string) => {
-    if (status === "captured" || status === "refunded") return 3;
+    if (status === "captured" || status === "refunded" || status === "partially_refunded") return 3;
     if (status === "pending" || status === "initiated") return 2;
-    if (status === "failed") return 2;
+    if (status === "failed" || status === "timed_out") return 2;
     return 1;
   };
 
@@ -242,10 +274,13 @@ export default function BookingPaymentsPage() {
               value: status,
               onChange: (v) => { setStatus(v); setPage(1); },
               options: [
-                { value: "captured", label: "Captured" },
+                { value: "initiated", label: "Initiated" },
                 { value: "pending", label: "Pending" },
+                { value: "captured", label: "Captured" },
+                { value: "partially_refunded", label: "Partially Refunded" },
                 { value: "refunded", label: "Refunded" },
                 { value: "failed", label: "Failed" },
+                { value: "timed_out", label: "Timed Out" },
               ],
             },
           ]}
@@ -291,7 +326,7 @@ export default function BookingPaymentsPage() {
               </div>
               <Badge 
                 label={selectedTx.status} 
-                status={selectedTx.status === "captured" ? "confirmed" : selectedTx.status === "failed" ? "cancelled_by_system" : selectedTx.status === "refunded" ? "suspended" : "pending_payment"} 
+                status={paymentBadgeStatus(selectedTx.status)} 
               />
             </div>
 
@@ -307,7 +342,13 @@ export default function BookingPaymentsPage() {
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Gateway Provider</dt>
-                <dd className="font-semibold text-slate-900 mt-0.5 capitalize">{selectedTx.paymentProvider}</dd>
+                <dd className="font-semibold text-slate-900 mt-0.5">{getGatewayLabel(selectedTx.paymentProvider, selectedTx.network)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">Network</dt>
+                <dd className="font-semibold text-slate-900 mt-0.5 capitalize">
+                  {selectedTx.paymentProvider === "tara" && selectedTx.network ? selectedTx.network : "—"}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Payment ID</dt>
@@ -344,8 +385,32 @@ export default function BookingPaymentsPage() {
               <p className="font-semibold text-slate-900 text-sm">Financial Capture</p>
               <div className="flex justify-between">
                 <span className="text-slate-500">Gross Paid By Guest</span>
-                <span className="font-bold text-slate-900 tabular">{formatCurrency(Number(selectedTx.amount), selectedTx.currency)}</span>
+                <span className="font-bold text-slate-900 tabular">
+                  {/* The amount actually captured — EUR (Stripe) or XAF (Tara),
+                      fallback to the listing-currency amount for legacy rows. */}
+                  <EurValue
+                    amount={selectedTx.chargedAmount ?? selectedTx.amount}
+                    currency={selectedTx.chargedCurrency ?? selectedTx.currency}
+                    rates={eurRates}
+                  />
+                </span>
               </div>
+              {(selectedTx.chargedAmount != null || selectedTx.chargedCurrency != null) && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Listing Amount</span>
+                    <span className="font-semibold text-slate-900 tabular">
+                      {formatCurrency(Number(selectedTx.amount), selectedTx.currency)}
+                    </span>
+                  </div>
+                  {selectedTx.chargedRate != null && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Charged Rate (FX + buffer)</span>
+                      <span className="font-semibold text-slate-900 tabular">{Number(selectedTx.chargedRate)}</span>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         )}

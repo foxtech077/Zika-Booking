@@ -113,24 +113,12 @@ async function goToMessageHost(booking: BookingSummary, router: ReturnType<typeo
   }
 }
 
-// Fetch the first photo cdnUrl from the public listing endpoint.
-// Called inside each card — React Query caches per listingId so no duplicate requests.
+// GET /guests/me/bookings already returns listingPrimaryPhotoUrl (the same
+// stable, permanent listing_photos.cdn_url — not a signed/expiring URL) — this
+// used to re-fetch it per booking via GET /listings/:id/public for data
+// already in hand.
 function useListingPhoto(booking: BookingSummary): string | null {
-  const listingId = extractListingId(booking);
-  const { data } = useQuery<string | null>({
-    queryKey: ["listing-photo", listingId ?? ""],
-    queryFn: async () => {
-      const res = await listingApi.get<{
-        data: { photos: { cdnUrl: string; position: number }[] };
-      }>(`/listings/${listingId}/public`);
-      const sorted = [...(res.data.data.photos ?? [])].sort((a, b) => a.position - b.position);
-      return sorted[0]?.cdnUrl ?? null;
-    },
-    enabled: !!listingId,
-    staleTime: 10 * 60_000,
-    retry: 1,
-  });
-  return data ?? null;
+  return booking.listingPrimaryPhotoUrl ?? null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

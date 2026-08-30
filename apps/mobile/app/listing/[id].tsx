@@ -69,9 +69,9 @@ interface PublicListing {
   localizedDeliveryFee?: number | null; localizedSecurityDeposit?: number | null;
   cancellationPolicy: string | null; minStayNights: number | null;
   /** Flat service-fee rate charged to guests (0.04 = 4%). Served by GET /listings/:id/public.
-   *  The provider commission is *not* part of this — the backend bakes it into the
-   *  nightly/daily rate this endpoint returns (rate × (1 + commissionRate)), so the
-   *  rates below are already commission-inclusive and the fee sits on top at 4%. */
+   *  This is a pass-through transaction fee covering payment-gateway costs — the
+   *  provider commission is deducted from the provider's payout and is NOT baked
+   *  into the nightly/daily rate, so the rates below are the raw list prices. */
   serviceFeeRate?: number | null;
   checkinTime: string | null; checkoutTime: string | null;
   smokingAllowed: boolean | null; petsAllowed: boolean | null;
@@ -612,9 +612,6 @@ export default function ListingDetailScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [localStart, setLocalStart] = useState<string | null>(null);
   const [localEnd, setLocalEnd] = useState<string | null>(null);
-  const [showMsgModal, setShowMsgModal] = useState(false);
-  const [msgDraft, setMsgDraft] = useState("");
-  const [msgSending, setMsgSending] = useState(false);
 
   // Room type selection state
   const [selectedRoomTypeId, setSelectedRoomTypeId] = useState<string | null>(null);
@@ -1036,27 +1033,6 @@ export default function ListingDetailScreen() {
     goToBooking();
   }
 
-  async function handleMessageHost() {
-    if (!msgDraft.trim() || !id) return;
-    setMsgSending(true);
-    try {
-      const r1 = await listingApi.post<{ data: { conversationId: string; isNew: boolean } }>(
-        "/conversations",
-        { listingId: id }
-      );
-      const convId = r1.data.data.conversationId;
-      await listingApi.post(`/conversations/${convId}/messages`, { body: msgDraft.trim() });
-      setShowMsgModal(false);
-      setMsgDraft("");
-      router.push(`/conversation/${convId}` as any);
-    } catch (e: any) {
-      const msg = e?.response?.data?.error?.message ?? "Could not send message. Please try again.";
-      Alert.alert("Error", msg);
-    } finally {
-      setMsgSending(false);
-    }
-  }
-
   const curr = listing.localizedCurrency ?? listing.currency ?? "XAF";
   const pricePrefix = approxPrefix(listing.localizedCurrency, listing.currency);
 
@@ -1370,45 +1346,12 @@ export default function ListingDetailScreen() {
               <Ionicons name="person" size={24} color={GREEN} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.hostName}>Verified Property Partner</Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-                  <Ionicons name="star" size={12} color="#F59E0B" />
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: TEXT }}>4.9</Text>
-                </View>
-                <Text style={{ fontSize: 12, color: MUTED }}>· Response within 1h</Text>
-              </View>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
-                <View style={s.verifiedBadge}>
-                  <Ionicons name="shield-checkmark" size={10} color={GREEN} />
-                  <Text style={s.verifiedText}>Verified</Text>
-                </View>
-              </View>
+              <Text style={s.hostName}>Property Host</Text>
+              <Text style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>
+                After booking, you can message the host from your booking page.
+              </Text>
             </View>
           </View>
-          {!isOwnListing && listing.providerId && (
-            <TouchableOpacity
-              style={s.msgHostBtn}
-              onPress={() => {
-                if (!user) {
-                  Alert.alert(
-                    "Sign in required",
-                    "Please sign in to message the host.",
-                    [
-                      { text: "Cancel", style: "cancel" },
-                      { text: "Sign In", onPress: () => router.push("/(auth)/login" as any) },
-                    ]
-                  );
-                  return;
-                }
-                setShowMsgModal(true);
-              }}
-              activeOpacity={0.82}
-            >
-              <Ionicons name="chatbubble-ellipses-outline" size={18} color={GREEN} />
-              <Text style={s.msgHostBtnText}>Message Host</Text>
-            </TouchableOpacity>
-          )}
         </View>
 
         {/* ── Cancellation ── */}
@@ -1521,60 +1464,6 @@ export default function ListingDetailScreen() {
           ) : null}
         </View>
       </ScrollView>
-
-      {/* ══ MESSAGE HOST MODAL ══ */}
-      <Modal
-        visible={showMsgModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => { setShowMsgModal(false); setMsgDraft(""); }}
-      >
-        <View style={s.msgBackdrop}>
-          <View style={s.msgCard}>
-            <View style={s.msgCardHeader}>
-              <Text style={s.msgCardTitle}>Message Host</Text>
-              <TouchableOpacity
-                onPress={() => { setShowMsgModal(false); setMsgDraft(""); }}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons name="close" size={22} color={TEXT} />
-              </TouchableOpacity>
-            </View>
-            <Text style={s.msgCardSub} numberOfLines={1}>
-              About: {listing.title ?? listing.name ?? "this listing"}
-            </Text>
-            <TextInput
-              style={s.msgCardInput}
-              value={msgDraft}
-              onChangeText={setMsgDraft}
-              placeholder="Hi! I'm interested in your listing…"
-              placeholderTextColor={MUTED}
-              multiline
-              maxLength={500}
-              autoFocus
-              textAlignVertical="top"
-            />
-            <TouchableOpacity
-              style={[
-                s.msgSendBtn,
-                (!msgDraft.trim() || msgSending) && s.msgSendBtnOff,
-              ]}
-              onPress={handleMessageHost}
-              disabled={!msgDraft.trim() || msgSending}
-              activeOpacity={0.88}
-            >
-              {msgSending ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <>
-                  <Ionicons name="send" size={16} color="#fff" />
-                  <Text style={s.msgSendText}>Send Message</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       {/* ══ FULLSCREEN GALLERY MODAL ══ */}
       <Modal visible={galleryOpen} transparent={false} animationType="fade" onRequestClose={() => setGalleryOpen(false)}>
@@ -1724,8 +1613,6 @@ const s = StyleSheet.create({
   hostCard: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: BG, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: BORDER },
   hostAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: GREEN_LIGHT, alignItems: "center", justifyContent: "center" },
   hostName: { fontSize: 15, fontWeight: "700", color: TEXT },
-  verifiedBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: GREEN_LIGHT, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  verifiedText: { fontSize: 11, fontWeight: "700", color: GREEN },
 
   cancelCard: { backgroundColor: BG, borderRadius: 14, padding: 16, borderLeftWidth: 4, borderWidth: 1, borderColor: BORDER },
   cancelDot: { width: 10, height: 10, borderRadius: 5 },
@@ -1786,36 +1673,6 @@ const s = StyleSheet.create({
     color: GREEN,
   },
 
-  msgHostBtn: {
-    flexDirection: "row", alignItems: "center", gap: 8, marginTop: 14,
-    backgroundColor: GREEN_LIGHT, borderRadius: 14, paddingHorizontal: 18, paddingVertical: 12,
-    borderWidth: 1, borderColor: "#BBF7D0", alignSelf: "flex-start",
-  },
-  msgHostBtnText: { fontSize: 14, fontWeight: "700", color: GREEN },
-
-  msgBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.52)", justifyContent: "flex-end" },
-  msgCard: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: Platform.OS === "ios" ? 40 : 24,
-  },
-  msgCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
-  msgCardTitle: { fontSize: 18, fontWeight: "800", color: TEXT },
-  msgCardSub: { fontSize: 13, color: MUTED, marginBottom: 16 },
-  msgCardInput: {
-    backgroundColor: BG, borderRadius: 14, borderWidth: 1, borderColor: BORDER,
-    paddingHorizontal: 16, paddingVertical: 14,
-    fontSize: 14, color: TEXT,
-    minHeight: 100, maxHeight: 180,
-    marginBottom: 16,
-  },
-  msgSendBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: GREEN, borderRadius: 14, paddingVertical: 15,
-  },
-  msgSendBtnOff: { backgroundColor: "#D1D5DB" },
-  msgSendText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 });
 
 const pr = StyleSheet.create({

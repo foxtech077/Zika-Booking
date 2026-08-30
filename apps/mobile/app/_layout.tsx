@@ -17,13 +17,12 @@ if (SafeAreaView.defaultProps) {
 }
 import { QueryClientProvider } from "@tanstack/react-query";
 import { StripeProvider } from "@stripe/stripe-react-native";
-import axios from "axios";
 import { getEnvStripePublishableKey } from "../lib/stripe-config";
 import { useAuthStore } from "../store/auth";
 import { useLocationBootstrap } from "../hooks/useLocation";
 import { queryClient } from "../lib/query-client";
 import { useFcmNotifications } from "../hooks/useFcmNotifications";
-import { getAuthBaseUrl } from "../lib/config";
+import { refreshAccessToken } from "../lib/token-refresh";
 
 const screenOptionsByName: Record<string, object> = {
   "pending-approval": { headerShown: false },
@@ -89,16 +88,6 @@ const screenOptionsByName: Record<string, object> = {
   help: { headerShown: false },
 };
 
-// Error codes from the auth service that mean "this account can't continue"
-const REVOKED_CODES = new Set([
-  "ACCOUNT_BANNED",
-  "ACCOUNT_SUSPENDED",
-  "ACCOUNT_INACTIVE",
-  "INVALID_SESSION",
-  "SESSION_EXPIRED",
-  "NO_TOKEN",
-]);
-
 function isTokenExpired(token: string | null): boolean {
   if (!token) return true;
   try {
@@ -120,40 +109,24 @@ function isTokenExpired(token: string | null): boolean {
   }
 }
 
-async function verifySession(): Promise<"ok" | "revoked" | "network_error"> {
+async function verifySession(): Promise<void> {
   const { accessToken, user } = useAuthStore.getState();
-  if (!accessToken || !user) return "ok"; // not logged in — nothing to check
+  if (!accessToken || !user) return; // not logged in — nothing to check
 
-  // Only call refresh API if access token is actually expired
-  if (!isTokenExpired(accessToken)) {
-    return "ok";
-  }
+  // Only refresh if the access token is actually expired
+  if (!isTokenExpired(accessToken)) return;
 
-  const apiUrl = getAuthBaseUrl().replace(/\/$/, "");
-  try {
-    const res = await axios.post(
-      `${apiUrl}/auth/refresh`,
-      {},
-      { withCredentials: true, timeout: 8_000 },
-    );
-    const newToken = (res.data as any)?.data?.tokens?.accessToken;
-    if (newToken) {
-      await useAuthStore.getState().setAuth(user, newToken);
-    }
-    return "ok";
-  } catch (err: unknown) {
-    const res = (err as any)?.response;
-    if (!res) return "network_error"; // network issue — don't log out
-
-    const status: number = res.status;
-    const code: string = res.data?.error?.code ?? "";
-
-    if (status === 401 || (status === 403 && REVOKED_CODES.has(code))) {
-      return "revoked";
-    }
-    // Any other server error (500 etc.) — don't log out
-    return "network_error";
-  }
+  // Must go through the shared singleton. This used to POST /auth/refresh with
+  // its own axios call, which made it a fourth refresh path racing the three
+  // API clients: on resume it fired at the same moment as the screens' refetches
+  // (staleTime is 0, so every remount refetches). Refresh ROTATES — whichever
+  // call lost presented an already-revoked token, got 401, and logged the user
+  // out. Sharing the in-flight promise makes resume a single refresh.
+  //
+  // The singleton also owns the clear-on-failure decision, so this no longer
+  // reports a verdict for the caller to act on: a network error or 5xx leaves
+  // the session alone, and only a definitive rejection ends it.
+  await refreshAccessToken();
 }
 
 export default function RootLayout() {
@@ -180,10 +153,7 @@ function RootLayoutContent() {
 
   useEffect(() => {
     async function checkSession() {
-      const result = await verifySession();
-      if (result === "revoked") {
-        await useAuthStore.getState().clearAuth();
-      }
+      await verifySession();
     }
 
     // Check on mount

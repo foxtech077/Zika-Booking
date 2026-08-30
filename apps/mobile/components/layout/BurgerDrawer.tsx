@@ -9,7 +9,6 @@ import {
   ScrollView,
   StyleSheet,
   Dimensions,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -28,10 +27,6 @@ interface Props {
 interface DashboardCache {
   unreadMessages?: number;
   pendingReviews?: number;
-}
-
-function comingSoon(feature: string) {
-  Alert.alert(feature, "This feature is coming soon!", [{ text: "Got it" }]);
 }
 
 function DrawerRow({
@@ -156,7 +151,7 @@ export function BurgerDrawer({ open, onClose }: Props) {
                 label="Messages"
                 sub="Guest conversations"
                 badge={unread}
-                onPress={() => comingSoon("Messages")}
+                onPress={() => navigate("/(provider)/messages")}
               />
               <SectionDivider />
               <DrawerRow
@@ -184,25 +179,11 @@ export function BurgerDrawer({ open, onClose }: Props) {
                 sub="Scheduled & processed payouts"
                 onPress={() => navigate("/(provider)/payouts")}
               />
-              <SectionDivider />
-              <DrawerRow
-                icon="receipt-outline"
-                label="Tax Information"
-                sub="Tax ID & certificates"
-                onPress={() => comingSoon("Tax Information")}
-              />
             </View>
 
             {/* Tools */}
             <SectionLabel title="TOOLS" />
             <View style={d.card}>
-              <DrawerRow
-                icon="document-text-outline"
-                label="Verification Docs"
-                sub="Upload required documents"
-                onPress={() => comingSoon("Verification Documents")}
-              />
-              <SectionDivider />
               <DrawerRow
                 icon="help-circle-outline"
                 label="Help & Support"

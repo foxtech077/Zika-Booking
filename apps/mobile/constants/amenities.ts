@@ -20,14 +20,14 @@ export const AMENITY_CONFIG: Record<AmenityCategory, AmenityItem[]> = {
   ],
   "Food & Drink": [
     { key: "breakfast",      label: "Breakfast Included",  emoji: "🍳" },
-    { key: "restaurant",     label: "Restaurant",          emoji: "🍽️" },
+    { key: "restaurant_on_site", label: "Restaurant On-Site",  emoji: "🍽️" },
     { key: "coffee_machine", label: "Coffee Machine",      emoji: "☕" },
     { key: "minibar",        label: "Minibar",             emoji: "🧊" },
     { key: "kitchen",        label: "Kitchen/Kitchenette", emoji: "🥘" },
   ],
   Wellness: [
     { key: "pool",    label: "Swimming Pool",  emoji: "🏊" },
-    { key: "gym",     label: "Fitness Centre", emoji: "🏋️" },
+    { key: "fitness_centre", label: "Fitness Centre", emoji: "🏋️" },
     { key: "spa",     label: "Spa",            emoji: "💆" },
     { key: "sauna",   label: "Sauna",          emoji: "🛁" },
     { key: "hot_tub", label: "Hot Tub",        emoji: "♨️" },
@@ -41,11 +41,11 @@ export const AMENITY_CONFIG: Record<AmenityCategory, AmenityItem[]> = {
     { key: "accessible", label: "Accessible",       emoji: "♿" },
   ],
   Services: [
-    { key: "24h_reception",  label: "24h Reception",      emoji: "🔔" },
-    { key: "housekeeping",   label: "Daily Housekeeping", emoji: "🧹" },
+    { key: "reception_24h",  label: "24h Reception",      emoji: "🔔" },
+    { key: "housekeeping_daily", label: "Daily Housekeeping", emoji: "🧹" },
     { key: "airport_shuttle",label: "Airport Shuttle",    emoji: "✈️" },
-    { key: "security",       label: "24h Security",       emoji: "🔐" },
-    { key: "shop",           label: "Shop On-site",       emoji: "🏪" },
+    { key: "security_24h",   label: "24h Security",       emoji: "🔐" },
+    { key: "shop_on_site",   label: "Shop On-Site",       emoji: "🏪" },
     { key: "pet_friendly",   label: "Pet-friendly",       emoji: "🐾" },
   ],
 };

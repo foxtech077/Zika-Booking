@@ -151,7 +151,7 @@ export default function ListingReviewPage() {
 
   const approveMutation = useMutation({
     mutationFn: () => listingApi.post(`/admin/listings/${id}/approve`, { starRating: assignedStar, adminNote }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["review-queue"] }); router.replace("/dashboard/listings"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["accreditation-queue"] }); qc.invalidateQueries({ queryKey: ["moderation-queue"] }); router.replace("/dashboard/listings"); },
     onError: (e: any) => setActionError(e?.response?.data?.error?.message ?? "Approval failed."),
   });
 
@@ -159,7 +159,7 @@ export default function ListingReviewPage() {
     mutationFn: () => listingApi.post(`/admin/listings/${id}/reject`, {
       reasons: selectedReasons, providerNote, adminNote: rejectAdminNote,
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["review-queue"] }); router.replace("/dashboard/listings"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["accreditation-queue"] }); qc.invalidateQueries({ queryKey: ["moderation-queue"] }); router.replace("/dashboard/listings"); },
     onError: (e: any) => setActionError(e?.response?.data?.error?.message ?? "Rejection failed."),
   });
 
