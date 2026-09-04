@@ -88,6 +88,36 @@ export interface Payout {
 
 // ── Flow-state helpers ─────────────────────────────────────────────────────────
 
+function shortId(id?: string | null): string {
+  if (!id) return "—";
+  return id.length > 8 ? `${id.slice(0, 8)}…` : id;
+}
+
+function CopyableId({ value, tone = "muted" }: { value?: string | null; tone?: "muted" | "primary" }) {
+  const [copied, setCopied] = useState(false);
+  if (!value) return <span className="text-slate-300">—</span>;
+  const short = shortId(value);
+  return (
+    <button
+      type="button"
+      title={`${value}${copied ? " — copied" : " — click to copy"}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        void navigator.clipboard?.writeText(value).catch(() => undefined);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1200);
+      }}
+      className={cn(
+        "font-mono text-xs font-medium tabular-nums hover:underline underline-offset-2 cursor-pointer",
+        tone === "primary" ? "text-primary" : "text-slate-500",
+        copied && "text-emerald-600"
+      )}
+    >
+      {copied ? "copied ✓" : short}
+    </button>
+  );
+}
+
 const FLOW_STATE_OPTIONS: { value: PayoutFlowState; label: string }[] = [
   { value: "awaiting_checkout", label: "Awaiting stay completion" },
   { value: "awaiting_merchant_setup", label: "Awaiting merchant payout setup" },
@@ -98,21 +128,26 @@ const FLOW_STATE_OPTIONS: { value: PayoutFlowState; label: string }[] = [
   { value: "ready_for_payout", label: "Ready for payout" },
 ];
 
-function FlowStateChip({ state, label }: { state?: PayoutFlowState; label?: string }) {
+function FlowStateChip({ state, label, reason }: { state?: PayoutFlowState; label?: string; reason?: string }) {
   if (!state) return null;
   const colorClass = getStatusColor(state);
   const display = label || slugToLabel(state);
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
+        "inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold",
         colorClass
       )}
-      title={display}
+      title={reason ? `${display} — ${reason}` : display}
     >
       {display}
     </span>
   );
+}
+
+function methodLabel(method?: string | null): string {
+  if (!method) return "manual";
+  return method.replace(/_/g, " ");
 }
 
 export default function PayoutManagementPage() {
@@ -248,12 +283,14 @@ export default function PayoutManagementPage() {
   const columns: Column<Payout>[] = [
     {
       key: "id",
-      label: "Payout ID",
-      render: (p) => <span className="font-mono text-xs text-slate-400 font-semibold">{p.id}</span>,
+      label: "Payout",
+      width: "110px",
+      render: (p) => <CopyableId value={p.id} />,
     },
     {
       key: "ref",
-      label: "Booking ID",
+      label: "Booking",
+      width: "130px",
       render: (p) => {
         const countryCode = p.merchant?.country;
         const countryObj = countryCode
@@ -263,14 +300,14 @@ export default function PayoutManagementPage() {
           ? `${countryObj.flag} ${countryObj.name} (${countryObj.code})`
           : (countryCode ?? "");
         return (
-          <div>
-            <span className="font-mono text-sm font-semibold text-primary">{p.bookingId}</span>
+          <div className="flex items-center gap-1.5">
+            <CopyableId value={p.bookingId} tone="primary" />
             {countryCode && (
-              <span 
-                className="text-[10px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded ml-2"
+              <span
+                className="text-[10px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded whitespace-nowrap"
                 title={countryLabel}
               >
-                {countryLabel}
+                {countryObj ? `${countryObj.flag} ${countryObj.code}` : countryCode}
               </span>
             )}
           </div>
@@ -279,45 +316,44 @@ export default function PayoutManagementPage() {
     },
     {
       key: "provider",
-      label: "Provider & Method",
+      label: "Provider",
+      width: "170px",
       render: (p) => (
-        <div>
-          <p className="font-medium text-sm text-slate-900">
-            {p.merchant?.businessName || p.merchant?.bankAccountName || `Provider (${p.providerId.slice(0, 8)})`}
+        <div className="min-w-0">
+          <p className="font-medium text-sm text-slate-900 truncate" title={p.merchant?.businessName || p.merchant?.bankAccountName || p.providerId}>
+            {p.merchant?.businessName || p.merchant?.bankAccountName || `Provider ••${p.providerId.slice(-4)}`}
           </p>
-          <p className="text-xs text-slate-500 capitalize">{p.merchant?.payoutMethod?.replace("_", " ") || "manual"}</p>
+          <span className="mt-0.5 inline-block rounded bg-slate-100 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-slate-500 capitalize">
+            {methodLabel(p.merchant?.payoutMethod)}
+          </span>
         </div>
       ),
     },
     {
       key: "flowState",
       label: "Current State",
+      width: "190px",
       render: (p) => (
-        <div className="max-w-[200px]">
-          <FlowStateChip state={p.flowState} label={p.flowLabel} />
-          {p.flowState === "awaiting_merchant_setup" || p.flowState === "awaiting_merchant_verification" || p.flowState === "merchant_inactive" ? (
-            <p className="text-[10px] text-slate-400 mt-1 leading-snug line-clamp-2">
-              {p.flowReason}
-            </p>
-          ) : p.flowState === "awaiting_checkout" ? (
-            <p className="text-[10px] text-slate-400 mt-1 leading-snug line-clamp-2">
-              {p.flowReason}
-            </p>
-          ) : null}
-        </div>
+        <FlowStateChip state={p.flowState} label={p.flowLabel} reason={p.flowReason} />
       ),
     },
     {
       key: "amount",
       label: "Amount",
       align: "right",
-      render: (p) => <span className="font-bold text-sm tabular"><EurValue amount={p.amount} currency={p.currency} rates={eurRates} /></span>,
+      width: "150px",
+      render: (p) => (
+        <div className="text-right tabular-nums">
+          <EurValue amount={p.amount} currency={p.currency} rates={eurRates} />
+        </div>
+      ),
     },
     {
       key: "date",
-      label: activeTab === "paid" ? "Processed Date" : activeTab === "pending" ? "Created Date" : "Scheduled Date",
+      label: activeTab === "paid" ? "Processed" : activeTab === "pending" ? "Created" : "Scheduled",
+      width: "110px",
       render: (p) => (
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-slate-500 whitespace-nowrap tabular-nums">
           {p.status === "paid"
             ? formatDate(p.processedAt || p.scheduledAt)
             : p.status === "pending"
@@ -331,8 +367,9 @@ export default function PayoutManagementPage() {
       key: "actions",
       label: "",
       align: "right",
+      width: "190px",
       render: (p) => (
-        <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-end items-center gap-1.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
           <Button
             variant="secondary"
             size="sm"
@@ -351,10 +388,11 @@ export default function PayoutManagementPage() {
               target="_blank"
               rel="noreferrer"
               onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 rounded-lg border border-primary/30 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/5 transition-colors"
+              title={p.flowReason}
             >
-              <Button variant="outline" size="sm" leftIcon={<ExternalLink className="h-3 w-3" />}>
-                Review Merchant
-              </Button>
+              <ExternalLink className="h-3 w-3" />
+              Merchant
             </a>
           )}
 
