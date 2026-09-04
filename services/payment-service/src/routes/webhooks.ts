@@ -2,7 +2,8 @@
   import { prisma } from "../lib/prisma.js";
   import { stripe } from "../lib/stripe.js";
   import { sendError } from "../lib/errors.js";
-  import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
+  import { bookingConfirmedHandler, ensurePendingPayout } from "../handler/bookingConfirmed.handler.js";
+  import { fetchInternalBooking } from "../services/confirmation.service.js";
   import { PaymentStatus, RefundStatus } from "../generated/index.js";
   import { notifyBookingServiceOfRefund, queueFailedRefundNotification, calculateAlreadyRefunded, handleConfirmFailure } from "../services/refund.service.js";
 
@@ -90,7 +91,9 @@
         });
       }
 
-      //  DEDUPLICATE WEBHOOK DELIVERY AT DATABASE LEVEL
+      // Record deliveries for observability. Processing remains idempotent, so
+      // a redelivery can recover side effects from an earlier failed attempt.
+      let duplicateEvent = false;
       try {
         await prisma.stripeWebhookEvent.create({
           data: {
@@ -100,11 +103,16 @@
         });
       } catch (dbErr: any) {
         if (dbErr.code === "P2002") {
-          app.log.info(`[stripe-webhook] Duplicate webhook event ${event.id} detected and skipped.`);
-          return reply.send({ received: true });
+          app.log.info(`[stripe-webhook] Duplicate webhook event ${event.id} detected.`);
+          duplicateEvent = true;
+        } else {
+          req.log.error(dbErr, `[stripe-webhook] Database error verifying event ${event.id}`);
+          return reply.code(500).send({ error: "Database error verifying webhook event." });
         }
-        req.log.error(dbErr, `[stripe-webhook] Database error checking event ${event.id}`);
-        return reply.code(500).send({ error: "Database error verifying webhook event." });
+      }
+
+      if (duplicateEvent && event.type !== "payment_intent.succeeded") {
+        return reply.send({ received: true });
       }
 
       console.log("Event:", event.type);
@@ -144,9 +152,22 @@
 
           //  IDEMPOTENCY CHECK — must be FIRST, before any side effects
           if (payment.status === "captured") {
-            console.log("Already captured, skipping duplicate webhook");
+            console.log("Already captured, running missing-side-effect recovery");
+            try {
+              const rawBooking = await fetchInternalBooking(payment.bookingId);
+              await ensurePendingPayout(rawBooking);
+            } catch (err) {
+              req.log.error(err, "Failed to recover payout for captured payment");
+              return reply.code(500).send({ error: "Captured payment recovery failed" });
+            }
             return reply.send({ received: true });
           }
+
+          // A duplicate delivery can only continue through the full flow when
+          // the original attempt did not reach the captured state. For a
+          // successful payment, the status update below is the concurrency
+          // guard that prevents two deliveries from running confirmation and
+          // email side effects simultaneously.
 
           const chargeId = intent.latest_charge as string | null;
 
@@ -159,8 +180,8 @@
             pmType = charge.payment_method_details?.type ?? null;
           }
 
-          await prisma.payment.update({
-            where: { id: payment.id },
+          const claimed = await prisma.payment.updateMany({
+            where: { id: payment.id, status: { in: ["initiated", "pending"] } },
             data: {
               status: "captured",
               capturedAt: new Date(),
@@ -169,6 +190,18 @@
               cardLast4: cardDetails?.last4 ?? null,
             },
           });
+
+          if (claimed.count === 0) {
+            const current = await prisma.payment.findUnique({
+              where: { id: payment.id },
+              select: { status: true, bookingId: true },
+            });
+            if (current?.status === "captured") {
+              const rawBooking = await fetchInternalBooking(current.bookingId);
+              await ensurePendingPayout(rawBooking);
+            }
+            return reply.send({ received: true });
+          }
 
           //  emails + PDF + confirm booking — runs only once
           try {
