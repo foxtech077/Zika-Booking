@@ -17,7 +17,9 @@ const JWT_SECRET = new TextEncoder().encode(process.env["JWT_SECRET"] ?? "");
 const ADMIN_JWT_SECRET = new TextEncoder().encode(process.env["ADMIN_JWT_SECRET"] ?? "");
 const AUTH_SERVICE_URL = process.env["AUTH_SERVICE_URL"] ?? "http://localhost:3001";
 const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
-const DEV_BYPASS_AUTH = process.env["DEV_BYPASS_AUTH"] === "true";
+const DEV_BYPASS_AUTH =
+  process.env["DEV_BYPASS_AUTH"] === "true" &&
+  process.env["NODE_ENV"] !== "production";
 const DEV_ADMIN_ID = process.env["DEV_ADMIN_ID"] ?? "dev-admin-id";
 
 export interface GuestRequest extends FastifyRequest {
