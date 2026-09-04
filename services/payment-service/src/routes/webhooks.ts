@@ -262,7 +262,10 @@
                 where: { id: refund.paymentId },
               });
               const totalRefunded = await calculateAlreadyRefunded(refund.paymentId);
-              const isFullyRefunded = payment ? (totalRefunded >= Number(payment.amount)) : false;
+              // Refunds are stored in the platform charge currency — compare
+              // against the charged amount, not the listing-currency payment.amount.
+              const chargeTotal = payment ? Number(payment.chargedAmount ?? payment.amount) : NaN;
+              const isFullyRefunded = payment ? (totalRefunded >= chargeTotal) : false;
 
               await prisma.payment.update({
                 where: { id: refund.paymentId },
@@ -411,7 +414,7 @@
         summary: "Tara webhook — receive payment status events",
         description:
           "Called by Tara when a mobile money payment succeeds or fails. " +
-          "Validates HMAC-SHA256 signature in the `x-tara-signature` header.\n\n" +
+          "Tara sends no webhook signature — treat payload as a hint and verify via GET status before capturing.\n\n" +
           "The payload contains `status` field — `SUCCESS` means payment succeeded.",
         response: {
           200: {

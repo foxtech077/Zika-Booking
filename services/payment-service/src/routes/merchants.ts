@@ -216,12 +216,16 @@ export async function merchantRoutes(app: FastifyInstance) {
     let stripeAccountId = merchant.stripeConnectAccountId;
 
     if (!stripeAccountId) {
+      // Fresh idempotency key per attempt: Stripe replays a cached 4xx for
+      // ~24h on a fixed key, so a retry after enabling Connect on the
+      // platform account would keep returning the old failure. The
+      // stripeConnectAccountId column is the real dedup guard.
       const account = await stripe.accounts.create(
         {
           type: "express",
           metadata: { userId },
         },
-        { idempotencyKey: `stripe-connect-acc-${merchant.id}` }
+        { idempotencyKey: `stripe-connect-acc-${merchant.id}-${Date.now()}` }
       );
       stripeAccountId = account.id;
 

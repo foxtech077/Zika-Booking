@@ -26,33 +26,53 @@ export async function triggerPaymentRefund(
   reason: string,
   idempotencyKey: string
 ): Promise<void> {
-  try {
-    const res = await fetch(`${PAYMENT_SERVICE_URL}/payments/refunds`, {
+  const res = await fetch(`${PAYMENT_SERVICE_URL}/payments/refunds`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-service-key": INTERNAL_SERVICE_KEY,
+      "idempotency-key": idempotencyKey,
+    },
+    body: JSON.stringify({
+      bookingId,
+      refundAmount,
+      reason,
+    }),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    const message =
+      `[refund-trigger] Booking=${bookingId}, Status=${res.status}, Response=${txt}`;
+    console.error(message);
+    throw new Error(message);
+  }
+  console.log(`[refund-trigger] Refund triggered successfully via API for booking ${bookingId}`);
+}
+
+// Settle the payout row on cancellation: cancel in full when nothing is kept,
+// otherwise adjust the pending/scheduled row down to the kept share.
+// Throws on transport failure so callers can fail loud instead of stranding money.
+export async function settlePayoutOnCancel(
+  bookingId: string,
+  keptAmount: number | null,
+): Promise<void> {
+  const res = await fetch(
+    `${PAYMENT_SERVICE_URL}/payments/internal/bookings/${bookingId}/settle-payout-on-cancel`,
+    {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-service-key": INTERNAL_SERVICE_KEY,
-        "idempotency-key": idempotencyKey,
       },
-      body: JSON.stringify({
-        bookingId,
-        refundAmount,
-        reason,
-      }),
-    });
-
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      console.error(
-        `[refund-trigger] Booking=${bookingId}, Status=${res.status}, Response=${txt}`
-      );
-    } else {
-      console.log(`[refund-trigger] Refund triggered successfully via API for booking ${bookingId}`);
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(
-      `[refund-trigger] Network error calling refund trigger for booking ${bookingId}: ${message}`
-    );
+      body: JSON.stringify({ keptAmount }),
+    },
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    const message =
+      `[payout-settle] Booking=${bookingId}, Status=${res.status}, Response=${txt}`;
+    console.error(message);
+    throw new Error(message);
   }
 }

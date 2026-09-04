@@ -24,10 +24,12 @@ import { getPricing } from "../services/pricing.services.js";
 import {
   getPaymentProvider,
   triggerPaymentRefund,
+  settlePayoutOnCancel,
   generateRefundIdempotencyKey,
 } from "../services/payment.services.js";
 import {
   calculateBilling,
+  calcKeptPayout,
   SERVICE_FEE_RATE,
 } from "../services/billing.service.js";
 import { VoucherDiscountType } from "../generated/index.js";
@@ -248,6 +250,9 @@ async function checkAvailability(
 // }
 
 // ── Refund calculator ─────────────────────────────────────────────────────────
+// Listing-currency refund owed to the guest under the booking's policy.
+// The remainder (kept share) stays earned by the provider: deposit returns to
+// the guest, delivery is refunded, commission applies to the kept base.
 
 function calcRefund(booking: any): number {
   const total = Number(booking.totalAmount);
@@ -324,39 +329,6 @@ export async function bookingRoutes(app: FastifyInstance) {
       return false;
     }
     return true;
-  }
-
-  const PAYMENT_SERVICE_URL =
-    process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3004";
-
-  async function notifyPayoutCancellation(bookingId: string) {
-    if (!PAYMENT_SERVICE_URL) return;
-    try {
-      const res = await fetch(
-        `${PAYMENT_SERVICE_URL}/payments/internal/bookings/${bookingId}/cancel-payout`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-service-key": INTERNAL_SERVICE_KEY,
-          },
-        },
-      );
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        app.log.error(
-          `[payout-cancel] Failed to cancel payout for booking ${bookingId}: status ${res.status}. Response: ${txt}`,
-        );
-      } else {
-        app.log.info(
-          `[payout-cancel] Payout cancelled successfully via API for booking ${bookingId}`,
-        );
-      }
-    } catch (err: any) {
-      app.log.error(
-        `[payout-cancel] Network error calling payout cancellation for booking ${bookingId}: ${err.message}`,
-      );
-    }
   }
 
   app.get(
@@ -628,6 +600,65 @@ export async function bookingRoutes(app: FastifyInstance) {
           500,
           "INTERNAL_ERROR",
           "Failed to verify booking ownership.",
+        );
+      }
+    },
+  );
+
+  // ── POST /bookings/internal/statuses ───────────────────────────────────────
+  // Internal: batch-fetch booking status/completion metadata for a set of
+  // booking ids. Used by the payment service to classify pending payouts
+  // (awaiting checkout vs awaiting merchant payout setup).
+  app.post(
+    "/bookings/internal/statuses",
+    {
+      schema: {
+        tags: ["Bookings"],
+        summary:
+          "Internal: batch-fetch booking status metadata (service-to-service only)",
+        body: {
+          type: "object",
+          required: ["bookingIds"],
+          properties: {
+            bookingIds: { type: "array", items: { type: "string" } },
+          },
+        },
+      },
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      if (!validateServiceToken(req, reply)) return;
+
+      const { bookingIds } = req.body as { bookingIds?: string[] };
+      const ids = [
+        ...new Set((bookingIds ?? []).filter(Boolean).slice(0, 500)),
+      ];
+      if (ids.length === 0) {
+        return sendSuccess(reply, 200, []);
+      }
+
+      try {
+        const rows = await prisma.booking.findMany({
+          where: { id: { in: ids } },
+          select: {
+            id: true,
+            status: true,
+            completedAt: true,
+            listingType: true,
+            checkIn: true,
+            checkOut: true,
+            pickupDatetime: true,
+            returnDatetime: true,
+            cancelledAt: true,
+          },
+        });
+        return sendSuccess(reply, 200, rows);
+      } catch (err) {
+        req.log.error({ err }, "Failed to batch-fetch booking statuses");
+        return sendError(
+          reply,
+          500,
+          "INTERNAL_ERROR",
+          "Failed to batch-fetch booking statuses.",
         );
       }
     },
@@ -3304,28 +3335,39 @@ export async function bookingRoutes(app: FastifyInstance) {
       app.log.error({ err }, "Background voucher release failed");
     });
 
-    // Trigger payout cancellation on payment-service
-    notifyPayoutCancellation(booking.id).catch((err) => {
-      app.log.error(
-        { err },
-        "Background payout cancellation notification failed",
-      );
-    });
+    // Provider kept-share: recompute the payout instead of blindly cancelling.
+    // Deposit returns to the guest and delivery is refunded; the provider
+    // keeps the remainder minus commission. Full refunds cancel the payout.
+    const keptPayout = calcKeptPayout(booking, refundAmount);
+    if (keptPayout <= 0) {
+      await settlePayoutOnCancel(booking.id, null);
+    } else {
+      await settlePayoutOnCancel(booking.id, keptPayout);
+    }
 
-    // Trigger refund on payment-service if there is a refund amount
+    // Trigger refund on payment-service if there is a refund amount.
+    // Awaited: the guest response must not claim a refund that was never
+    // issued. Failures surface as 502 with payoutAction pending so the
+    // cancel can be retried without losing money.
     if (refundAmount > 0) {
       const idempotencyKey = generateRefundIdempotencyKey(
         booking.id,
         "guest_cancel",
       );
-      triggerPaymentRefund(
-        booking.id,
-        refundAmount,
-        reason || "Cancelled by guest",
-        idempotencyKey,
-      ).catch((err) => {
-        app.log.error({ err }, "Background refund trigger failed");
-      });
+      try {
+        await triggerPaymentRefund(
+          booking.id,
+          refundAmount,
+          reason || "Cancelled by guest",
+          idempotencyKey,
+        );
+      } catch (err) {
+        app.log.error({ err }, "Refund trigger failed during guest cancel");
+        throw Object.assign(
+          new Error("Booking cancelled but refund could not be issued. Please retry — the payout is held."),
+          { code: "REFUND_TRIGGER_FAILED" },
+        );
+      }
     }
 
     await prisma.bookingStatusLog.create({
@@ -3589,8 +3631,11 @@ export async function bookingRoutes(app: FastifyInstance) {
 
         const data = await performGuestCancellation(booking, guestId, reason);
         return sendSuccess(reply, 200, data);
-      } catch (err) {
+      } catch (err: any) {
         req.log.error({ err }, "Failed to cancel booking by guest");
+        if (err?.code === "REFUND_TRIGGER_FAILED") {
+          return sendError(reply, 502, "REFUND_TRIGGER_FAILED", err.message);
+        }
         return sendError(
           reply,
           500,
@@ -3852,13 +3897,10 @@ export async function bookingRoutes(app: FastifyInstance) {
           },
         });
 
-        // Trigger payout cancellation on payment-service
-        notifyPayoutCancellation(id).catch((err) => {
-          app.log.error(
-            { err },
-            "Background payout cancellation notification failed",
-          );
-        });
+        // Provider cancel is always a full refund: nothing is kept, so the
+        // payout is cancelled in full. Awaited — fail loud on transport
+        // errors instead of stranding money with only a log line.
+        await settlePayoutOnCancel(id, null);
 
         // Release the voucher consumed at confirmation
         releaseVoucher(booking).catch((err) => {
@@ -3871,14 +3913,22 @@ export async function bookingRoutes(app: FastifyInstance) {
             id,
             "provider_cancel",
           );
-          triggerPaymentRefund(
-            id,
-            refundAmount,
-            reasonText ?? reasonCode ?? "Cancelled by provider",
-            idempotencyKey,
-          ).catch((err) => {
-            app.log.error({ err }, "Background refund trigger failed");
-          });
+          try {
+            await triggerPaymentRefund(
+              id,
+              refundAmount,
+              reasonText ?? reasonCode ?? "Cancelled by provider",
+              idempotencyKey,
+            );
+          } catch (err) {
+            app.log.error({ err }, "Refund trigger failed during provider cancel");
+            return sendError(
+              reply,
+              502,
+              "REFUND_TRIGGER_FAILED",
+              "Booking cancelled but refund could not be issued. Please retry — the payout is held.",
+            );
+          }
         }
 
         await prisma.bookingStatusLog.create({

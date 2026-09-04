@@ -128,3 +128,25 @@ export function calculateBilling(input: BillingInput): BillingResult {
     providerPayout,
   };
 }
+
+// Provider kept-share on guest cancellation (listing currency): the part of
+// the guest total NOT refunded, minus deposit (returned to guest) and
+// delivery (refunded), minus commission on the kept base. Never negative.
+export function calcKeptPayout(
+  booking: {
+    totalAmount: number | string;
+    securityDeposit?: number | string | null;
+    deliveryFee?: number | string | null;
+    commissionRate?: number | string | null;
+  },
+  refundAmount: number,
+): number {
+  const kept = Number(booking.totalAmount) - Number(refundAmount);
+  if (kept <= 0) return 0;
+  const deposit = Number(booking.securityDeposit ?? 0);
+  const delivery = Number(booking.deliveryFee ?? 0);
+  const keptBase = Math.max(0, kept - deposit - delivery);
+  const commissionRate = Number(booking.commissionRate ?? 0);
+  const commission = Number((keptBase * commissionRate).toFixed(2));
+  return Number(Math.max(0, keptBase - commission).toFixed(2));
+}

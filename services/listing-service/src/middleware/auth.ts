@@ -54,7 +54,7 @@ export async function optionalAuth(req: FastifyRequest, _reply: FastifyReply) {
  * adopt-by-email claim use this; anonymous checkout must remain possible.
  */
 export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
-  if (process.env["DEV_BYPASS_AUTH"] === "true") {
+  if (process.env["DEV_BYPASS_AUTH"] === "true" && process.env["NODE_ENV"] !== "production") {
     (req as AuthRequest).authId = process.env["DEV_USER_ID"] ?? "cmos7y8zp0009j9kc5o4ed3c0";
     (req as AuthRequest).authType = "user";
     return;
@@ -81,7 +81,7 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply) {
 
 // Verify admin session token (HS256, ADMIN_JWT_SECRET)
 export async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
-  if (process.env["DEV_BYPASS_AUTH"] === "true") {
+  if (process.env["DEV_BYPASS_AUTH"] === "true" && process.env["NODE_ENV"] !== "production") {
     (req as AdminRequest).adminId = process.env["DEV_ADMIN_ID"] ?? "dev-admin-id";
     (req as AdminRequest).adminRole = "super_admin";
     (req as AdminRequest).countryScope = [];
