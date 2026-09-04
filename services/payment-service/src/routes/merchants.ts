@@ -5,6 +5,7 @@ import { requireAccount, requireAdminPermission, assertResourceCountryScope, cou
 import { sendError } from "../lib/errors.js";
 import { AdminPermission } from "@zika/types";
 import { writeAdminAudit } from "../lib/audit.js";
+import { fetchBookingsStatusBatch } from "../services/payoutFlowState.js";
 
 const PROVIDER_BASE_URL = process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005";
 
@@ -132,7 +133,17 @@ export async function merchantRoutes(app: FastifyInstance) {
     });
     if (!merchant) return sendError(reply, 404, "NOT_FOUND", "Merchant not found.");
     if (!assertResourceCountryScope(req, reply, merchant.country)) return;
-    reply.send({ success: true, data: merchant });
+    const bookingMap = await fetchBookingsStatusBatch(merchant.payouts.map((p) => p.bookingId));
+    reply.send({
+      success: true,
+      data: {
+        ...merchant,
+        payouts: merchant.payouts.map((p) => ({
+          ...p,
+          bookingReference: bookingMap.get(p.bookingId)?.reference ?? null,
+        })),
+      },
+    });
   });
 
   // ── PATCH /admin/merchants/:id/verify ──────────────────────────────────────

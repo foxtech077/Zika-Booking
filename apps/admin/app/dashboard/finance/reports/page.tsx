@@ -90,7 +90,8 @@ export default function FinancialReportsPage() {
     return payoutList.map((p: any) => ({
       id: p.id,
       bookingId: p.bookingId,
-      bookingReference: p.bookingReference ?? p.bookingId,
+      bookingReference: p.bookingReference ?? "—",
+      paymentDisplayId: p.paymentDisplayId ?? null,
       providerId: p.providerId,
       providerName: p.merchant?.businessName ?? p.providerId,
       amount: Number(p.amount),
@@ -117,7 +118,8 @@ export default function FinancialReportsPage() {
     return refundsList.map((r: any) => ({
       id: r.id,
       bookingId: r.bookingId,
-      bookingReference: r.bookingId,
+      bookingReference: r.bookingReference ?? "—",
+      paymentDisplayId: r.paymentDisplayId ?? null,
       travellerName: "Guest",
       travellerEmail: "guest@test.com",
       originalAmount: Number(r.payment?.amount ?? 0),
@@ -260,7 +262,7 @@ export default function FinancialReportsPage() {
           reference: t.reference,
           traveller: t.travellerName,
           gateway: t.paymentGateway ?? "Unknown",
-          transactionId: t.displayId ?? t.id,
+           transactionId: t.paymentDisplayId ?? "—",
           voucherCode: t.voucherCode,
           voucherDiscount: t.voucherDiscount,
           amount: t.amount,
@@ -291,7 +293,7 @@ export default function FinancialReportsPage() {
       case "refund":
         // List individual refunds
         return filteredRefunds.map((r: any) => ({
-          id: r.id,
+           id: r.paymentDisplayId ?? "—",
           reference: r.bookingReference,
           traveller: r.travellerName,
           originalAmount: r.originalAmount,

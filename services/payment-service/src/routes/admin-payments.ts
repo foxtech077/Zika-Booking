@@ -6,6 +6,7 @@ import { AdminPermission } from "@zika/types";
 import { PaymentStatus, RefundStatus } from "../generated/index.js";
 import { notifyBookingServiceOfRefund, queueFailedRefundNotification, calculateAlreadyRefunded } from "../services/refund.service.js";
 import { writeAdminAudit } from "../lib/audit.js";
+import { fetchBookingsStatusBatch } from "../services/payoutFlowState.js";
 
 export async function adminPaymentRoutes(app: FastifyInstance) {
   // ── GET /admin/payments ─────────────────────────────────────────────────────
@@ -41,7 +42,14 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
           where: { ...scope, bookingId: { in: bookingIds } },
           orderBy: { createdAt: "desc" },
         });
-        return reply.send({ success: true, data: payments });
+        const bookingMap = await fetchBookingsStatusBatch(payments.map((p) => p.bookingId));
+        return reply.send({
+          success: true,
+          data: payments.map((p) => ({
+            ...p,
+            bookingReference: bookingMap.get(p.bookingId)?.reference ?? null,
+          })),
+        });
       }
 
       const page = Math.max(1, parseInt(query.page || "1", 10));
@@ -60,9 +68,13 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
         prisma.payment.count({ where: scope }),
       ]);
 
+      const bookingMap = await fetchBookingsStatusBatch(payments.map((p) => p.bookingId));
       reply.send({
         success: true,
-        data: payments,
+        data: payments.map((p) => ({
+          ...p,
+          bookingReference: bookingMap.get(p.bookingId)?.reference ?? null,
+        })),
         meta: {
           total,
           page,
@@ -94,9 +106,14 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
         orderBy: { createdAt: "desc" },
       });
 
-      reply.send({
-        success: true,
-        data: refunds,
+       const bookingMap = await fetchBookingsStatusBatch(refunds.map((r) => r.bookingId));
+       reply.send({
+         success: true,
+         data: refunds.map((r) => ({
+           ...r,
+           bookingReference: bookingMap.get(r.bookingId)?.reference ?? null,
+           paymentDisplayId: r.payment.displayId ?? null,
+         })),
       });
     } catch (err) {
       return sendError(reply, 400, "GET_PENDING_REFUNDS_FAILED", (err as Error).message);
@@ -137,6 +154,7 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
                 countryCode: true,
                 paymentProvider: true,
                 providerPaymentId: true,
+                displayId: true,
                 paymentMethodType: true,
                 mobileNumberMasked: true,
                 amount: true,
@@ -152,7 +170,16 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
         }),
         prisma.manualRefund.count({ where }),
       ]);
-      return reply.send({ success: true, data: refunds, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } });
+      const bookingMap = await fetchBookingsStatusBatch(refunds.map((r) => r.bookingId));
+      return reply.send({
+        success: true,
+        data: refunds.map((r) => ({
+          ...r,
+          bookingReference: bookingMap.get(r.bookingId)?.reference ?? null,
+          paymentDisplayId: r.payment.displayId ?? null,
+        })),
+        meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+      });
     } catch (err) {
       return sendError(reply, 400, "GET_MANUAL_REFUNDS_FAILED", (err as Error).message);
     }

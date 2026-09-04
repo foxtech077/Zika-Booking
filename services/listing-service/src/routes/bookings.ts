@@ -641,6 +641,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           where: { id: { in: ids } },
           select: {
             id: true,
+            reference: true,
             status: true,
             completedAt: true,
             listingType: true,

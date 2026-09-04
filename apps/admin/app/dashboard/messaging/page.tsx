@@ -65,9 +65,9 @@ export default function MessagingPage() {
       render: (c) => (
         <div>
           <p className="font-mono text-xs text-slate-500">{c.id.slice(0, 8)}…</p>
-          {c.bookingId && (
-            <p className="text-xs text-primary">Booking: {c.bookingId.slice(0, 8)}…</p>
-          )}
+           {c.bookingReference && (
+             <p className="text-xs text-primary">Booking: {c.bookingReference}</p>
+           )}
         </div>
       ),
     },

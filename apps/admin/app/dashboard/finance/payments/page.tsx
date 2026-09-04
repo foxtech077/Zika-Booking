@@ -95,7 +95,7 @@ export default function BookingPaymentsPage() {
       // 2. Search Text Query (Match bookingId, id)
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const matchesBooking = p.bookingId.toLowerCase().includes(q);
+        const matchesBooking = (p.bookingReference ?? p.bookingId).toLowerCase().includes(q) || p.bookingId.toLowerCase().includes(q);
         const matchesId = p.id.toLowerCase().includes(q);
         if (!matchesBooking && !matchesId) {
           return false;
@@ -137,14 +137,14 @@ export default function BookingPaymentsPage() {
     {
       key: "displayId",
       label: "Payment ID",
-      render: (t) => <span className="font-mono text-xs text-slate-400 font-semibold">{t.displayId ?? t.id}</span>,
+      render: (t) => <span className="font-mono text-xs text-slate-400 font-semibold">{t.displayId ?? "—"}</span>,
     },
     {
       key: "bookingId",
       label: "Booking ID",
       render: (t) => (
         <div>
-          <span className="font-mono text-sm font-semibold text-primary">{t.bookingId}</span>
+          <span className="font-mono text-sm font-semibold text-primary">{t.bookingReference ?? "—"}</span>
         </div>
       ),
     },
@@ -310,7 +310,7 @@ export default function BookingPaymentsPage() {
       <SlideDrawer
         open={!!selectedTx}
         onClose={() => setSelectedTx(null)}
-        title={`Transaction Details: ${selectedTx?.id}`}
+        title={`Transaction Details: ${selectedTx?.displayId ?? "—"}`}
         description={`Payment gateway records and status summary.`}
         width="md"
       >
@@ -338,7 +338,7 @@ export default function BookingPaymentsPage() {
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Associated Booking</dt>
-                <dd className="font-semibold text-primary font-mono mt-0.5">ID: {selectedTx.bookingId}</dd>
+                <dd className="font-semibold text-primary font-mono mt-0.5">{selectedTx.bookingReference ?? "—"}</dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Gateway Provider</dt>
@@ -352,14 +352,8 @@ export default function BookingPaymentsPage() {
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Payment ID</dt>
-                <dd className="font-semibold text-slate-900 mt-0.5 font-mono truncate max-w-[170px]" title={selectedTx.displayId ?? selectedTx.id}>
-                  {selectedTx.displayId ?? selectedTx.id}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-slate-400">Internal ID</dt>
-                <dd className="font-semibold text-slate-900 mt-0.5 font-mono truncate max-w-[170px]" title={selectedTx.id}>
-                  {selectedTx.id}
+                <dd className="font-semibold text-slate-900 mt-0.5 font-mono truncate max-w-[170px]" title={selectedTx.displayId ?? "—"}>
+                  {selectedTx.displayId ?? "—"}
                 </dd>
               </div>
               <div>
