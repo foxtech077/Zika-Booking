@@ -71,8 +71,8 @@ export async function createPendingPayout(
   }
 }
 
-export async function cancelPayout(bookingId: string): Promise<void> {
-  await prisma.payout.updateMany({
+export async function cancelPayout(bookingId: string): Promise<number> {
+  const res = await prisma.payout.updateMany({
     where: {
       bookingId,
       status: { in: ["pending", "scheduled"] },
@@ -82,7 +82,52 @@ export async function cancelPayout(bookingId: string): Promise<void> {
       updatedAt: new Date(),
     },
   });
-  console.log(`[payout] Cancelled payout for booking ${bookingId}`);
+  console.log(`[payout] Cancelled payout for booking ${bookingId} (matched ${res.count})`);
+  return res.count;
+}
+
+// Cancel-time settlement for a booking cancellation. keptAmount null/<=0
+// cancels the payout in full; otherwise the row is adjusted down to the
+// provider kept-share (listing currency) and held pending/scheduled for
+// normal disbursement. Rows stuck in processing (claim raced the cancel)
+// are reverted first so the cancel is never a silent no-op.
+export async function settlePayoutOnCancel(
+  bookingId: string,
+  keptAmount: number | null,
+): Promise<{ action: "cancelled" | "adjusted" | "none"; matched: number }> {
+  if (keptAmount == null || Number(keptAmount) <= 0) {
+    // Revert stuck processing rows so a claim that raced the cancel cannot
+    // leave the payout disbursing after the booking died.
+    await prisma.payout.updateMany({
+      where: { bookingId, status: "processing" },
+      data: { status: "pending", updatedAt: new Date() },
+    });
+    const matched = await cancelPayout(bookingId);
+    return { action: matched > 0 ? "cancelled" : "none", matched };
+  }
+
+  const kept = Number(Number(keptAmount).toFixed(2));
+  // Adjust pending/scheduled rows; also reclaim processing rows stuck by a
+  // raced claim (they revert to pending at the kept amount).
+  const res = await prisma.payout.updateMany({
+    where: {
+      bookingId,
+      status: { in: ["pending", "scheduled", "processing"] },
+    },
+    data: {
+      amount: kept,
+      failureReason: null,
+      updatedAt: new Date(),
+    },
+  });
+  // Anything reclaimed from processing goes back to pending (not scheduled:
+  // no scheduledAt exists on these rows).
+  await prisma.payout.updateMany({
+    where: { bookingId, status: "processing" },
+    data: { status: "pending", updatedAt: new Date() },
+  });
+  console.log(`[payout] Adjusted payout for booking ${bookingId} to kept share ${kept} (matched ${res.count})`);
+  return { action: res.count > 0 ? "adjusted" : "none", matched: res.count };
 }
 
 export async function processEligiblePayouts(): Promise<void> {

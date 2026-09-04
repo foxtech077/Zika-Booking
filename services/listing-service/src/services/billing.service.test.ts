@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { calculateBilling, SERVICE_FEE_RATE } from "./billing.service.js";
+import { calculateBilling, calcKeptPayout, SERVICE_FEE_RATE } from "./billing.service.js";
 
 /** Hotel/apartment night-stay billing input helper. */
 function stay(overrides: Record<string, unknown> = {}) {
@@ -113,4 +113,23 @@ test("discount is clamped so the guest subtotal never goes negative", () => {
   // Provider is still paid on the full list price.
   assert.equal(b.providerPayout, 180);
   assert.equal(b.totalAmount, b.serviceFee);
+});
+
+test("kept-share on cancel: full refund keeps nothing, deposit and delivery excluded", () => {
+  const booking = { totalAmount: 208, securityDeposit: 0, deliveryFee: 0, commissionRate: 0.1 };
+  // Full refund → nothing kept.
+  assert.equal(calcKeptPayout(booking, 208), 0);
+  // 50% refund of a 200 base: kept 104 − commission 10.4 → 93.6.
+  assert.equal(calcKeptPayout(booking, 104), 93.6);
+  // Zero refund: kept 208 − commission 20.8 → 187.2.
+  assert.equal(calcKeptPayout(booking, 0), 187.2);
+});
+
+test("kept-share excludes deposit (guest) and delivery (refunded)", () => {
+  const booking = { totalAmount: 400, securityDeposit: 200, deliveryFee: 25, commissionRate: 0.15 };
+  // Guest paid 400, refunded 100 → kept 300; minus 200 deposit, 25 delivery
+  // → kept base 75; commission 11.25 → payout 63.75.
+  assert.equal(calcKeptPayout(booking, 100), 63.75);
+  // Refund exceeding the non-deposit share leaves nothing to pay out.
+  assert.equal(calcKeptPayout(booking, 350), 0);
 });
