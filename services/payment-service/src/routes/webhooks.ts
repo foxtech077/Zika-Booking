@@ -411,7 +411,7 @@
         summary: "Tara webhook — receive payment status events",
         description:
           "Called by Tara when a mobile money payment succeeds or fails. " +
-          "Validates HMAC-SHA256 signature in the `x-tara-signature` header.\n\n" +
+          "Tara sends no webhook signature — treat payload as a hint and verify via GET status before capturing.\n\n" +
           "The payload contains `status` field — `SUCCESS` means payment succeeded.",
         response: {
           200: {

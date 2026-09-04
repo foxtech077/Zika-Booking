@@ -98,7 +98,7 @@ const FLOW_STATE_OPTIONS: { value: PayoutFlowState; label: string }[] = [
   { value: "ready_for_payout", label: "Ready for payout" },
 ];
 
-export function FlowStateChip({ state, label }: { state?: PayoutFlowState; label?: string }) {
+function FlowStateChip({ state, label }: { state?: PayoutFlowState; label?: string }) {
   if (!state) return null;
   const colorClass = getStatusColor(state);
   const display = label || slugToLabel(state);
