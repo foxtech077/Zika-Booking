@@ -7,7 +7,7 @@ import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { createPresignedDownloadUrl } from "../lib/s3.js";
 import { fireNotification } from "../lib/notifications.js";
 import { patchListingSchema } from "./listings.js";
-import { triggerPaymentRefund, generateRefundIdempotencyKey } from "../services/payment.services.js";
+import { triggerPaymentRefund, settlePayoutOnCancel, generateRefundIdempotencyKey } from "../services/payment.services.js";
 import { sendListingReinstatedWithWarningEmail } from "../lib/email.js";
 import { ReviewTaskStatus, ListingStatus, ListingCategory } from "../generated/index.js";
 import {
@@ -3153,11 +3153,18 @@ export async function adminListingRoutes(app: FastifyInstance) {
         }).catch(() => {});
       }
 
+      // Admin cancel is always a full refund: nothing is kept, so the payout
+      // is cancelled in full. Awaited — fail loud so money cannot strand.
+      await settlePayoutOnCancel(id, null);
+
       if (refundAmount > 0) {
         const idempotencyKey = generateRefundIdempotencyKey(id, "admin_cancel");
-        triggerPaymentRefund(id, refundAmount, reason || "Cancelled by admin", idempotencyKey).catch((err) => {
+        try {
+          await triggerPaymentRefund(id, refundAmount, reason || "Cancelled by admin", idempotencyKey);
+        } catch (err) {
           req.log.error({ err }, "Background refund trigger failed");
-        });
+          return sendError(reply, 502, "REFUND_TRIGGER_FAILED", "Booking cancelled but refund could not be issued. Please retry — the payout is held.");
+        }
       }
 
       await prisma.bookingStatusLog.create({

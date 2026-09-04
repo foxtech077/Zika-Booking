@@ -262,7 +262,10 @@
                 where: { id: refund.paymentId },
               });
               const totalRefunded = await calculateAlreadyRefunded(refund.paymentId);
-              const isFullyRefunded = payment ? (totalRefunded >= Number(payment.amount)) : false;
+              // Refunds are stored in the platform charge currency — compare
+              // against the charged amount, not the listing-currency payment.amount.
+              const chargeTotal = payment ? Number(payment.chargedAmount ?? payment.amount) : NaN;
+              const isFullyRefunded = payment ? (totalRefunded >= chargeTotal) : false;
 
               await prisma.payment.update({
                 where: { id: refund.paymentId },

@@ -1038,15 +1038,33 @@ export async function paymentRoutes(app: FastifyInstance) {
       return sendError(reply, 404, "PAYMENT_NOT_FOUND", "No payment found for this booking.");
     }
 
+    // refundAmount arrives in the booking's listing currency. Provider
+    // refunds move in the platform charge currency (EUR for Stripe, XAF for
+    // Tara) — convert before issuing so non-EUR partials don't over/under
+    // refund. The payment row carries the charge-time pair.
+    const chargeCurrency = (payment.chargedCurrency ?? payment.currency).toUpperCase();
+    const listingCurrency = payment.currency.toUpperCase();
+    const chargedAmount = Number(payment.chargedAmount ?? payment.amount);
+    const listingAmount = Number(payment.amount);
+    let chargeRefundAmount = refundAmount;
+    if (chargeCurrency !== listingCurrency) {
+      const ratio =
+        listingAmount > 0 && chargedAmount > 0 ? chargedAmount / listingAmount : NaN;
+      if (!Number.isFinite(ratio) || ratio <= 0) {
+        return sendError(reply, 502, "REFUND_FX_UNAVAILABLE", "Cannot convert refund to charge currency (missing charge snapshot).");
+      }
+      chargeRefundAmount = Math.round(refundAmount * ratio * 100) / 100;
+    }
+
     // 2. Idempotency via idempotency-key header + atomic issue (shared logic).
     const idempotencyKey = (req.headers["idempotency-key"] as string) ?? null;
     try {
       if (payment.paymentProvider === "tara") {
         const { createManualRefund } = await import("../services/refund.service.js");
         const manual = await createManualRefund(payment, {
-          amount: refundAmount,
+          amount: chargeRefundAmount,
           reason: reason ?? null,
-          idempotencyKey: idempotencyKey ?? `manual-refund:${payment.id}:${refundAmount}`,
+          idempotencyKey: idempotencyKey ?? `manual-refund:${payment.id}:${chargeRefundAmount}`,
         });
         return sendSuccess(reply, 202, {
           refundId: manual.id,
@@ -1056,7 +1074,7 @@ export async function paymentRoutes(app: FastifyInstance) {
       }
 
       const refund = await issueRefund(payment, {
-        amount: refundAmount,
+        amount: chargeRefundAmount,
         reason: reason ?? null,
         idempotencyKey,
       });
@@ -1082,6 +1100,8 @@ export async function paymentRoutes(app: FastifyInstance) {
   });
 
   // ── POST /payments/internal/bookings/:bookingId/cancel-payout ─────────────────
+  // Legacy full-cancel path. Prefer settle-payout-on-cancel below, which
+  // adjusts the payout to the provider kept-share instead of cancelling blind.
   app.post("/payments/internal/bookings/:bookingId/cancel-payout", {
     preHandler: [requireInternalService],
     schema: {
@@ -1096,8 +1116,44 @@ export async function paymentRoutes(app: FastifyInstance) {
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { bookingId } = req.params as { bookingId: string };
     try {
-      await cancelPayout(bookingId);
-      return sendSuccess(reply, 200, { message: "Payout cancelled successfully." });
+      const matched = await cancelPayout(bookingId);
+      return sendSuccess(reply, 200, { message: "Payout cancelled successfully.", matched });
+    } catch (err: any) {
+      return sendError(reply, 500, "DATABASE_ERROR", err.message);
+    }
+  });
+
+  // ── POST /payments/internal/bookings/:bookingId/settle-payout-on-cancel ─────
+  // Cancel-time settlement: keptAmount null/<=0 cancels the payout in full;
+  // otherwise the pending/scheduled (or stuck processing) row is adjusted
+  // down to the provider kept-share and held for normal disbursement.
+  app.post("/payments/internal/bookings/:bookingId/settle-payout-on-cancel", {
+    preHandler: [requireInternalService],
+    schema: {
+      tags: ["Payments"],
+      summary: "Internal: settle payout on booking cancellation (cancel or adjust to kept share)",
+      params: {
+        type: "object",
+        required: ["bookingId"],
+        properties: { bookingId: { type: "string", format: "uuid" } },
+      },
+      body: {
+        type: "object",
+        properties: {
+          keptAmount: { type: ["number", "null"] },
+        },
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { bookingId } = req.params as { bookingId: string };
+    const { keptAmount } = (req.body ?? {}) as { keptAmount?: number | null };
+    try {
+      const { settlePayoutOnCancel } = await import("../services/payout.service.js");
+      const result = await settlePayoutOnCancel(
+        bookingId,
+        keptAmount == null ? null : Number(keptAmount),
+      );
+      return sendSuccess(reply, 200, result);
     } catch (err: any) {
       return sendError(reply, 500, "DATABASE_ERROR", err.message);
     }
