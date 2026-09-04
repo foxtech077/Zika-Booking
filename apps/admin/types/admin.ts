@@ -329,6 +329,7 @@ export interface FinancialTransaction {
   chargedAt: string | null;
   paymentStatus: string | null;
   paymentGateway: string | null;
+  paymentDisplayId: string | null;
   date: string;
   country: string | null;
 }
@@ -378,6 +379,7 @@ export interface Conversation {
   id: string;
   listingId: string;
   bookingId: string | null;
+  bookingReference?: string | null;
   guestId: string;
   providerId: string;
   status: "open" | "closed";

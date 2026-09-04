@@ -102,7 +102,7 @@ export default function RefundManagementPage() {
       // 1. Search Filter (match bookingId, reason, refund ID)
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const matchesBooking = ref.bookingId.toLowerCase().includes(q);
+        const matchesBooking = (ref.bookingReference ?? ref.bookingId).toLowerCase().includes(q) || ref.bookingId.toLowerCase().includes(q);
         const matchesReason = ref.reason?.toLowerCase().includes(q);
         const matchesId = ref.id.toLowerCase().includes(q);
         if (!matchesBooking && !matchesReason && !matchesId) return false;
@@ -171,14 +171,14 @@ export default function RefundManagementPage() {
     {
       key: "id",
       label: "Refund ID",
-      render: (r) => <span className="font-mono text-xs text-slate-400 font-semibold">{r.id}</span>,
+      render: (r) => <span className="font-mono text-xs text-slate-400 font-semibold">{r.paymentDisplayId ?? "—"}</span>,
     },
     {
       key: "ref",
       label: "Booking ID",
       render: (r) => (
         <div>
-          <span className="font-mono text-sm font-semibold text-primary">{r.bookingId}</span>
+          <span className="font-mono text-sm font-semibold text-primary">{r.bookingReference ?? "—"}</span>
         </div>
       ),
     },
@@ -337,7 +337,7 @@ export default function RefundManagementPage() {
               <tbody className="divide-y border-border">
                 {manualRefunds.map((refund: any) => (
                   <tr key={refund.id}>
-                    <td className="px-5 py-3 font-mono text-xs text-primary">{refund.bookingId}</td>
+                    <td className="px-5 py-3 font-mono text-xs text-primary">{refund.bookingReference ?? "—"}</td>
                     <td className="px-5 py-3">
                       <span className="font-semibold uppercase">{refund.payment?.paymentProvider ?? "mobile money"}</span>
                       <span className="block text-xs text-slate-500">{refund.payment?.providerPaymentId ?? "No provider reference"}</span>
@@ -376,7 +376,7 @@ export default function RefundManagementPage() {
       <SlideDrawer
         open={!!selectedRefund}
         onClose={() => setSelectedRefund(null)}
-        title={`Refund Request: ${selectedRefund?.id}`}
+        title={`Refund Request: ${selectedRefund?.paymentDisplayId ?? selectedRefund?.bookingReference ?? "—"}`}
         description="Verify booking logs, dispute reasons, and trigger bank clearance."
         width="md"
       >
@@ -400,11 +400,11 @@ export default function RefundManagementPage() {
               <div>
                 <dt className="text-xs text-slate-400">Traveller / Claimant</dt>
                 <dd className="font-semibold text-slate-900 mt-0.5">Guest</dd>
-                <dd className="text-xs text-slate-500 font-mono">Payment ID: {selectedRefund.displayId ?? selectedRefund.paymentId}</dd>
+                <dd className="text-xs text-slate-500 font-mono">Payment ID: {selectedRefund.paymentDisplayId ?? selectedRefund.displayId ?? "—"}</dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-400">Linked Booking ID</dt>
-                <dd className="font-semibold text-primary font-mono mt-0.5">{selectedRefund.bookingId}</dd>
+                <dt className="text-xs text-slate-400">Linked Booking</dt>
+                <dd className="font-semibold text-primary font-mono mt-0.5">{selectedRefund.bookingReference ?? "—"}</dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Refund Type</dt>

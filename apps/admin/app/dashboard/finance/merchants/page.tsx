@@ -54,10 +54,11 @@ export interface Merchant {
 export interface MerchantPayout {
   id: string;
   bookingId: string;
+  bookingReference?: string | null;
   amount: number | string;
   currency: string;
   status: "pending" | "scheduled" | "processing" | "paid" | "failed" | "cancelled";
-  scheduledAt: string;
+  scheduledAt: string | null;
   processedAt?: string;
   createdAt: string;
 }
@@ -260,7 +261,7 @@ function MerchantDetailDrawer({
                         <Hash className="h-4 w-4 text-primary/60" />
                       </div>
                       <div>
-                        <p className="font-mono text-xs font-semibold text-slate-700">{p.bookingId}</p>
+                        <p className="font-mono text-xs font-semibold text-slate-700">{p.bookingReference ?? "—"}</p>
                         <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
                           <Calendar className="h-2.5 w-2.5" />
                           {formatDate(p.scheduledAt)}
