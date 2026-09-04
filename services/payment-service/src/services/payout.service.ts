@@ -66,6 +66,14 @@ export async function createPendingPayout(
     });
     console.log("[PAYOUT TRACE] pending payout row created successfully");
   } catch (err) {
+    const target = (err as any)?.meta?.target;
+    if (
+      (err as any)?.code === "P2002" &&
+      (Array.isArray(target) ? target : [target]).includes("bookingId")
+    ) {
+      // Another webhook or recovery worker won the unique bookingId race.
+      return;
+    }
     console.error("[PAYOUT TRACE] createPendingPayout fatal error", err);
     throw err;
   }
@@ -131,6 +139,8 @@ export async function settlePayoutOnCancel(
 }
 
 export async function processEligiblePayouts(): Promise<void> {
+  await recoverMissingPayouts();
+
   const now = new Date();
 
   const eligible = await prisma.payout.findMany({
@@ -148,6 +158,54 @@ export async function processEligiblePayouts(): Promise<void> {
   console.log(`[payout-job] ${eligible.length} eligible payout(s) to process`);
 
   await Promise.allSettled(eligible.map(processSinglePayout));
+}
+
+/**
+ * Repair captured payments whose confirmation flow completed without creating
+ * the payout row. This is intentionally run by the existing payout job so a
+ * deployment repairs historical rows without relying on Stripe to redeliver
+ * an old webhook.
+ */
+async function recoverMissingPayouts(): Promise<void> {
+  const candidates = await prisma.$queryRaw<Array<{ id: string; bookingId: string }>>`
+    SELECT p."id", p."bookingId"
+    FROM "payments"."Payment" p
+    LEFT JOIN "payments"."Payout" po ON po."bookingId" = p."bookingId"
+    WHERE p."status" = 'captured'
+      AND po."id" IS NULL
+    ORDER BY p."updatedAt" ASC, p."id" ASC
+    LIMIT 100
+  `;
+
+  const results = await Promise.allSettled(candidates.map(async (payment) => {
+    const response = await fetch(
+      `${process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003"}/bookings/internal/${payment.bookingId}`,
+      { headers: { "x-service-key": process.env["INTERNAL_SERVICE_KEY"] ?? "" } },
+    );
+    if (!response.ok) {
+      throw new Error(`Booking lookup failed with status ${response.status}`);
+    }
+
+    const body = await response.json() as { data?: any };
+    const booking = body.data ?? body;
+    if (!["confirmed", "checked_in", "completed"].includes(booking.status)) return;
+    if (!booking.providerId || Number(booking.providerPayout) <= 0) return;
+
+    await createPendingPayout({
+      bookingId: booking.id,
+      providerId: booking.providerId,
+      amount: Number(booking.providerPayout),
+      currency: booking.currency,
+      countryCode: booking.listing?.country ?? null,
+    });
+    console.log(`[payout-recovery] Recreated missing payout for booking ${booking.id}`);
+  }));
+
+  for (const result of results) {
+    if (result.status === "rejected") {
+      console.error("[payout-recovery] Failed to repair missing payout", result.reason);
+    }
+  }
 }
 
 async function processSinglePayout(payout: any): Promise<void> {

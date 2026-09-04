@@ -70,19 +70,12 @@ export async function bookingConfirmedHandler(payment: any) {
   // record so the first guest-email attempt matches retry-generated documents.
   booking.transactionId = dbPayment.displayId ?? dbPayment.id;
 
-  // Create pending payout (idempotent, does not schedule yet)
-  if (rawBooking.providerId && Number(rawBooking.providerPayout) > 0) {
-    try {
-      await createPendingPayout({
-        bookingId: rawBooking.id,
-        providerId: rawBooking.providerId,
-        amount: Number(rawBooking.providerPayout),
-        currency: rawBooking.currency,
-        countryCode: rawBooking.listing?.country ?? null,
-      });
-    } catch (err) {
-      console.error("[PAYOUT TRACE] createPendingPayout() failed", err);
-    }
+  // Payout creation is idempotent and independently recoverable. Do not block
+  // booking confirmation if this side effect has a transient failure.
+  try {
+    await ensurePendingPayout(rawBooking);
+  } catch (err) {
+    console.error("[PAYOUT TRACE] createPendingPayout() failed", err);
   }
 
   // Smart Idempotency:
@@ -137,5 +130,27 @@ export async function bookingConfirmedHandler(payment: any) {
       console.error(`[email] Host email sending failed for booking ${booking.code}:`, err);
       await enqueueEmailJob(payment.id, "host");
     }
+  }
+}
+
+/**
+ * Creates the payout side effect independently from confirmation and email
+ * generation. This is also used when Stripe redelivers a payment that was
+ * already marked captured but whose earlier side effects failed.
+ */
+export async function ensurePendingPayout(rawBooking: any): Promise<void> {
+  if (!rawBooking.providerId || Number(rawBooking.providerPayout) <= 0) return;
+
+  try {
+    await createPendingPayout({
+      bookingId: rawBooking.id,
+      providerId: rawBooking.providerId,
+      amount: Number(rawBooking.providerPayout),
+      currency: rawBooking.currency,
+      countryCode: rawBooking.listing?.country ?? null,
+    });
+  } catch (err) {
+    console.error("[PAYOUT TRACE] createPendingPayout() failed", err);
+    throw err;
   }
 }
