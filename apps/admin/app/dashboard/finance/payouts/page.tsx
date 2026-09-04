@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   Coins, Clock, Calendar, CheckCircle2, XCircle, 
-  Search, Eye, Check, RefreshCw, AlertTriangle, Info, X, Play
+  Eye, Check, RefreshCw, AlertTriangle, Info, X, Play, Hourglass, ExternalLink
 } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
@@ -15,7 +15,7 @@ import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ConfirmModal } from "@/components/modals/Modals";
 import { Input } from "@/components/ui/Input";
 import { useAuthStore } from "@/stores/auth";
-import { formatDate, formatCurrency } from "@/lib/utils";
+import { formatDate, formatCurrency, cn, getStatusColor, slugToLabel } from "@/lib/utils";
 import { useEurRates, EurValue, formatEur } from "@/lib/eur";
 import { SYSTEM_COUNTRIES } from "@/lib/countries";
 import { roleHasPermission, roleScopePolicy, AdminPermission, AdminScope } from "@/permissions/rbac";
@@ -25,6 +25,30 @@ const COUNTRY_OPTIONS = SYSTEM_COUNTRIES.map((c) => ({
   value: c.code,
   label: `${c.flag} ${c.name} (${c.code})`,
 }));
+
+export type PayoutStatus =
+  | "pending"
+  | "scheduled"
+  | "processing"
+  | "paid"
+  | "failed"
+  | "cancelled";
+
+export type PayoutFlowState =
+  | "awaiting_checkout"
+  | "awaiting_merchant_setup"
+  | "awaiting_merchant_verification"
+  | "merchant_inactive"
+  | "booking_cancelled_or_refunded"
+  | "manual_disbursement_required"
+  | "ready_for_payout"
+  | "paid"
+  | "processing"
+  | "failed"
+  | "cancelled"
+  | "unknown";
+
+type PayoutTabKey = PayoutStatus;
 
 export interface Merchant {
   id: string;
@@ -48,7 +72,7 @@ export interface Payout {
   providerId: string;
   amount: number | string;
   currency: string;
-  status: "scheduled" | "processing" | "paid" | "failed" | "cancelled";
+  status: PayoutStatus;
   scheduledAt: string;
   processedAt?: string;
   providerPayoutId?: string;
@@ -56,6 +80,39 @@ export interface Payout {
   createdAt: string;
   updatedAt: string;
   merchant?: Merchant;
+  // Server-enriched transparent state (payment-service flow classification)
+  flowState?: PayoutFlowState;
+  flowLabel?: string;
+  flowReason?: string;
+}
+
+// ── Flow-state helpers ─────────────────────────────────────────────────────────
+
+const FLOW_STATE_OPTIONS: { value: PayoutFlowState; label: string }[] = [
+  { value: "awaiting_checkout", label: "Awaiting stay completion" },
+  { value: "awaiting_merchant_setup", label: "Awaiting merchant payout setup" },
+  { value: "awaiting_merchant_verification", label: "Awaiting merchant verification" },
+  { value: "merchant_inactive", label: "Merchant inactive" },
+  { value: "booking_cancelled_or_refunded", label: "Booking cancelled / refunded" },
+  { value: "manual_disbursement_required", label: "Manual disbursement required" },
+  { value: "ready_for_payout", label: "Ready for payout" },
+];
+
+export function FlowStateChip({ state, label }: { state?: PayoutFlowState; label?: string }) {
+  if (!state) return null;
+  const colorClass = getStatusColor(state);
+  const display = label || slugToLabel(state);
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
+        colorClass
+      )}
+      title={display}
+    >
+      {display}
+    </span>
+  );
 }
 
 export default function PayoutManagementPage() {
@@ -63,10 +120,11 @@ export default function PayoutManagementPage() {
   const qc = useQueryClient();
 
   const [mounted, setMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState<Payout["status"]>("scheduled");
+  const [activeTab, setActiveTab] = useState<PayoutTabKey>("pending");
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
+  const [flowFilter, setFlowFilter] = useState("");
   const [selectedPayout, setSelectedPayout] = useState<Payout | null>(null);
   
   // Modals state
@@ -79,13 +137,16 @@ export default function PayoutManagementPage() {
     setMounted(true);
   }, []);
 
-  // Query all payouts (limit=1000) so we can do accurate tab counts & local filters
-  const { data, isLoading } = useQuery({
+  // Fetch the most recent payouts (the API caps the page at 100 rows) so we
+  // can show tab counts and local filters. The payment service enriches each
+  // row with a live flowState/flowLabel/flowReason.
+  const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["admin-payouts"],
     queryFn: () =>
       listingApi.get("/admin/payouts", { params: { limit: "100" } }).then((r) => {
         return r.data?.data ?? r.data ?? [];
       }),
+    staleTime: 15_000,
   });
 
   const payouts: Payout[] = Array.isArray(data) ? data : [];
@@ -109,7 +170,10 @@ export default function PayoutManagementPage() {
       // 3. Country Filter
       if (countryFilter && p.merchant?.country !== countryFilter) return false;
 
-      // 4. Search Filter (match bookingId, merchant name, providerId, payout ID)
+      // 4. Flow-state filter (only surfaced on the pending tab)
+      if (flowFilter && p.flowState !== flowFilter) return false;
+
+      // 5. Search Filter (match bookingId, merchant name, providerId, payout ID)
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const matchesBooking = p.bookingId.toLowerCase().includes(q);
@@ -121,7 +185,7 @@ export default function PayoutManagementPage() {
 
       return true;
     });
-  }, [payouts, activeTab, user, countryFilter, searchQuery, isCountryScoped]);
+  }, [payouts, activeTab, user, countryFilter, searchQuery, flowFilter, isCountryScoped]);
 
   const [limit, setLimit] = useState(10);
   const paginatedPayouts = useMemo(() => {
@@ -131,7 +195,7 @@ export default function PayoutManagementPage() {
 
   // Total summary by status for badge counts
   const tabCounts = useMemo(() => {
-    const counts = { scheduled: 0, processing: 0, paid: 0, failed: 0, cancelled: 0 };
+    const counts = { pending: 0, scheduled: 0, processing: 0, paid: 0, failed: 0, cancelled: 0 };
     payouts.forEach((p) => {
       if (isCountryScoped) {
         const hasScope = user?.countryScope?.includes(p.merchant?.country ?? "");
@@ -226,6 +290,24 @@ export default function PayoutManagementPage() {
       ),
     },
     {
+      key: "flowState",
+      label: "Current State",
+      render: (p) => (
+        <div className="max-w-[200px]">
+          <FlowStateChip state={p.flowState} label={p.flowLabel} />
+          {p.flowState === "awaiting_merchant_setup" || p.flowState === "awaiting_merchant_verification" || p.flowState === "merchant_inactive" ? (
+            <p className="text-[10px] text-slate-400 mt-1 leading-snug line-clamp-2">
+              {p.flowReason}
+            </p>
+          ) : p.flowState === "awaiting_checkout" ? (
+            <p className="text-[10px] text-slate-400 mt-1 leading-snug line-clamp-2">
+              {p.flowReason}
+            </p>
+          ) : null}
+        </div>
+      ),
+    },
+    {
       key: "amount",
       label: "Amount",
       align: "right",
@@ -233,12 +315,14 @@ export default function PayoutManagementPage() {
     },
     {
       key: "date",
-      label: activeTab === "paid" ? "Processed Date" : "Scheduled Date",
+      label: activeTab === "paid" ? "Processed Date" : activeTab === "pending" ? "Created Date" : "Scheduled Date",
       render: (p) => (
         <span className="text-xs text-slate-500">
-          {p.status === "paid" 
+          {p.status === "paid"
             ? formatDate(p.processedAt || p.scheduledAt)
-            : formatDate(p.scheduledAt)
+            : p.status === "pending"
+              ? formatDate(p.createdAt)
+              : formatDate(p.scheduledAt)
           }
         </span>
       ),
@@ -257,6 +341,22 @@ export default function PayoutManagementPage() {
           >
             Details
           </Button>
+
+          {/* Link to Merchant Management when the blocker is merchant-side */}
+          {(p.flowState === "awaiting_merchant_setup" ||
+            p.flowState === "awaiting_merchant_verification" ||
+            p.flowState === "merchant_inactive") && (
+            <a
+              href={`/dashboard/finance/merchants`}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Button variant="outline" size="sm" leftIcon={<ExternalLink className="h-3 w-3" />}>
+                Review Merchant
+              </Button>
+            </a>
+          )}
 
           {(p.status === "scheduled" || p.status === "processing" || p.status === "failed") && (
             <Button
@@ -317,7 +417,7 @@ export default function PayoutManagementPage() {
     <div className="space-y-5 max-w-screen-2xl">
       <SectionHeader
         title="Payout Management"
-        description="Verify, schedule, approve and retry payouts to accommodation and vehicle rental providers."
+        description="Track every payout transparently — from booking confirmation to settlement — and unblock stuck payouts by resolving the current state."
         action={
           canModifyPayouts && activeTab === "scheduled" && (
             <Button
@@ -336,8 +436,9 @@ export default function PayoutManagementPage() {
       {/* Tabs list */}
       <div className="flex border-b border-border bg-white rounded-t-xl px-4 pt-3 gap-2 overflow-x-auto">
         {([
+          { key: "pending", label: "Pending Payouts", icon: Hourglass, count: tabCounts.pending, color: "text-amber-500" },
           { key: "scheduled", label: "Scheduled Payouts", icon: Calendar, count: tabCounts.scheduled, color: "text-blue-500" },
-          { key: "processing", label: "Processing Payouts", icon: Clock, count: tabCounts.processing, color: "text-amber-500" },
+          { key: "processing", label: "Processing Payouts", icon: Clock, count: tabCounts.processing, color: "text-sky-500" },
           { key: "paid", label: "Completed Payouts", icon: CheckCircle2, count: tabCounts.paid, color: "text-emerald-500" },
           { key: "failed", label: "Failed Payouts", icon: XCircle, count: tabCounts.failed, color: "text-red-500" },
           { key: "cancelled", label: "Cancelled Payouts", icon: XCircle, count: tabCounts.cancelled, color: "text-slate-400" },
@@ -347,7 +448,7 @@ export default function PayoutManagementPage() {
           return (
             <button
               key={tab.key}
-              onClick={() => { setActiveTab(tab.key); setPage(1); }}
+              onClick={() => { setActiveTab(tab.key); setPage(1); setFlowFilter(""); }}
               className={`flex items-center gap-2 pb-3 px-3 text-xs font-semibold uppercase tracking-wider border-b-2 transition-all leading-none ${
                 isActive 
                   ? "border-primary text-primary" 
@@ -381,9 +482,29 @@ export default function PayoutManagementPage() {
               onChange: (v) => { setCountryFilter(v); setPage(1); },
               options: CM_OPTIONS,
             },
+            ...(activeTab === "pending"
+              ? [{
+                  key: "flowState",
+                  label: "All Pending States",
+                  value: flowFilter,
+                  onChange: (v: string) => { setFlowFilter(v as PayoutFlowState); setPage(1); },
+                  options: FLOW_STATE_OPTIONS,
+                }]
+              : []),
           ]}
           limit={limit}
           onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
+          actions={
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetch()}
+              loading={isFetching}
+              leftIcon={<RefreshCw className="h-3 w-3" />}
+            >
+              Refresh
+            </Button>
+          }
         />
 
         <DataTable
@@ -421,11 +542,27 @@ export default function PayoutManagementPage() {
                   <EurValue amount={selectedPayout.amount} currency={selectedPayout.currency} rates={eurRates} />
                 </span>
               </div>
-              <Badge 
-                label={selectedPayout.status} 
-                status={selectedPayout.status === "paid" ? "confirmed" : selectedPayout.status === "failed" ? "cancelled_by_system" : selectedPayout.status === "scheduled" ? "confirmed" : "pending_payment"} 
-              />
+              <div className="flex flex-col items-end gap-2">
+                <Badge 
+                  label={selectedPayout.status} 
+                  status={selectedPayout.status === "paid" ? "confirmed" : selectedPayout.status === "failed" ? "cancelled_by_system" : selectedPayout.status === "pending" ? "pending" : selectedPayout.status === "scheduled" ? "confirmed" : "pending_payment"} 
+                />
+                {selectedPayout.flowState && (
+                  <FlowStateChip state={selectedPayout.flowState} label={selectedPayout.flowLabel} />
+                )}
+              </div>
             </div>
+
+            {/* Current-status explanation banner */}
+            {selectedPayout.flowState && selectedPayout.flowReason && (
+              <div className="flex items-start gap-2.5 bg-slate-50 border border-slate-200 rounded-xl p-4">
+                <Info className="h-4.5 w-4.5 text-slate-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h6 className="font-bold text-xs uppercase tracking-wider text-slate-700">Why is this payout here?</h6>
+                  <p className="text-xs mt-1 text-slate-600 leading-relaxed">{selectedPayout.flowReason}</p>
+                </div>
+              </div>
+            )}
 
             {/* Core details */}
             <div className="grid grid-cols-2 gap-4 text-sm">
@@ -448,8 +585,15 @@ export default function PayoutManagementPage() {
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-400">Scheduled Date</dt>
-                <dd className="font-medium text-slate-800 mt-0.5">{formatDate(selectedPayout.scheduledAt)}</dd>
+                <dt className="text-xs text-slate-400">{selectedPayout.status === "pending" ? "Created Date" : selectedPayout.status === "paid" ? "Settled Date" : "Scheduled Date"}</dt>
+                <dd className="font-medium text-slate-800 mt-0.5">
+                  {selectedPayout.status === "pending"
+                    ? formatDate(selectedPayout.createdAt)
+                    : selectedPayout.status === "paid"
+                      ? formatDate(selectedPayout.processedAt || selectedPayout.scheduledAt)
+                      : formatDate(selectedPayout.scheduledAt)
+                  }
+                </dd>
               </div>
               {selectedPayout.processedAt && (
                 <div>
@@ -516,54 +660,78 @@ export default function PayoutManagementPage() {
               </div>
             )}
 
-            {/* Escrow note */}
+            {/* Lifecycle note */}
             <div className="bg-purple-50/50 border border-purple-100 rounded-xl p-4 space-y-2 text-xs text-purple-800">
               <div className="flex gap-2 items-start">
                 <Info className="h-4.5 w-4.5 text-purple-600 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-semibold text-sm">Escrow Hold T+24 Period Guard</p>
+                  <p className="font-semibold text-sm">Payout lifecycle</p>
                   <p className="mt-1 leading-relaxed text-[11px] text-purple-700">
-                    Payouts are locked in escrow for 24 hours post guest check-in. The platform reserves these funds to handle property disputes or cancellations. Manual override releases the hold immediately.
+                    Payouts are created when a guest payment is confirmed. They disburse once the stay has completed (booking status
+                    &quot;completed&quot;) and the merchant has a verified, configured payout method. Offline methods (bank transfer / mobile
+                    money / manual) require an admin to execute the transfer and mark the payout paid. Until then, the current state
+                    above explains exactly why this payout is where it is.
                   </p>
                 </div>
               </div>
             </div>
 
             {/* Drawer Actions */}
-            <div className="flex gap-2 pt-4 border-t border-slate-100">
-              {(selectedPayout.status === "scheduled" || selectedPayout.status === "processing" || selectedPayout.status === "failed") && (
-                <Button
-                  className="flex-1"
-                  variant="primary"
-                  disabled={!canModifyPayouts}
-                  onClick={() => { setMarkPaidConfirm(selectedPayout); setSelectedPayout(null); }}
-                  leftIcon={<Check className="h-4 w-4" />}
+            <div className="flex flex-col gap-2 pt-4 border-t border-slate-100">
+              {(selectedPayout.flowState === "awaiting_merchant_setup" ||
+                selectedPayout.flowState === "awaiting_merchant_verification" ||
+                selectedPayout.flowState === "merchant_inactive") && (
+                <a
+                  href={`/dashboard/finance/merchants`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full"
                 >
-                  Mark as Paid
-                </Button>
+                  <Button className="w-full" variant="primary" leftIcon={<ExternalLink className="h-4 w-4" />}>
+                    Review Merchant in Merchant Management
+                  </Button>
+                </a>
               )}
-              {(selectedPayout.status === "scheduled" || selectedPayout.status === "processing" || selectedPayout.status === "failed") && (
-                <Button
-                  className="flex-1"
-                  variant="danger"
-                  disabled={!canModifyPayouts}
-                  onClick={() => { setCancelConfirm(selectedPayout); setSelectedPayout(null); }}
-                  leftIcon={<X className="h-4 w-4" />}
-                >
-                  Cancel Payout
-                </Button>
-              )}
-              {selectedPayout.status === "failed" && (
-                <Button
-                  className="flex-1"
-                  variant="secondary"
-                  disabled={!canModifyPayouts}
-                  onClick={() => { setRetryConfirm(selectedPayout); setSelectedPayout(null); }}
-                  leftIcon={<RefreshCw className="h-4 w-4" />}
-                >
-                  Retry Payout
-                </Button>
-              )}
+              <div className="flex gap-2">
+                {(selectedPayout.status === "scheduled" || selectedPayout.status === "processing" || selectedPayout.status === "failed") && (
+                  <Button
+                    className="flex-1"
+                    variant="primary"
+                    disabled={!canModifyPayouts}
+                    onClick={() => { setMarkPaidConfirm(selectedPayout); setSelectedPayout(null); }}
+                    leftIcon={<Check className="h-4 w-4" />}
+                  >
+                    Mark as Paid
+                  </Button>
+                )}
+                {(selectedPayout.status === "scheduled" || selectedPayout.status === "processing" || selectedPayout.status === "failed") && (
+                  <Button
+                    className="flex-1"
+                    variant="danger"
+                    disabled={!canModifyPayouts}
+                    onClick={() => { setCancelConfirm(selectedPayout); setSelectedPayout(null); }}
+                    leftIcon={<X className="h-4 w-4" />}
+                  >
+                    Cancel Payout
+                  </Button>
+                )}
+                {selectedPayout.status === "failed" && (
+                  <Button
+                    className="flex-1"
+                    variant="secondary"
+                    disabled={!canModifyPayouts}
+                    onClick={() => { setRetryConfirm(selectedPayout); setSelectedPayout(null); }}
+                    leftIcon={<RefreshCw className="h-4 w-4" />}
+                  >
+                    Retry Payout
+                  </Button>
+                )}
+                {selectedPayout.status === "pending" && (
+                  <p className="text-xs text-slate-500 italic py-2">
+                    This payout will disburse automatically once the state above is resolved. No manual action is required here.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         )}

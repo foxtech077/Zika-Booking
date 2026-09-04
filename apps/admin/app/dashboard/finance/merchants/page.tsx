@@ -56,7 +56,7 @@ export interface MerchantPayout {
   bookingId: string;
   amount: number | string;
   currency: string;
-  status: "scheduled" | "processing" | "paid" | "failed" | "cancelled";
+  status: "pending" | "scheduled" | "processing" | "paid" | "failed" | "cancelled";
   scheduledAt: string;
   processedAt?: string;
   createdAt: string;
@@ -85,8 +85,9 @@ function getPayoutMethodIcon(method: Merchant["payoutMethod"] | null | undefined
 function payoutStatusColor(status: MerchantPayout["status"]): string {
   switch (status) {
     case "paid":       return "text-emerald-700 bg-emerald-50 border border-emerald-100";
+    case "pending":    return "text-amber-700 bg-amber-50 border border-amber-100";
     case "scheduled":  return "text-blue-700 bg-blue-50 border border-blue-100";
-    case "processing": return "text-amber-700 bg-amber-50 border border-amber-100";
+    case "processing": return "text-sky-700 bg-sky-50 border border-sky-100";
     case "failed":     return "text-red-700 bg-red-50 border border-red-100";
     case "cancelled":  return "text-slate-500 bg-slate-50 border border-slate-100";
     default:           return "text-slate-500 bg-slate-50";
