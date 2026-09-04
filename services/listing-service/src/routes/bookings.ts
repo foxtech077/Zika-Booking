@@ -633,6 +633,65 @@ export async function bookingRoutes(app: FastifyInstance) {
     },
   );
 
+  // ── POST /bookings/internal/statuses ───────────────────────────────────────
+  // Internal: batch-fetch booking status/completion metadata for a set of
+  // booking ids. Used by the payment service to classify pending payouts
+  // (awaiting checkout vs awaiting merchant payout setup).
+  app.post(
+    "/bookings/internal/statuses",
+    {
+      schema: {
+        tags: ["Bookings"],
+        summary:
+          "Internal: batch-fetch booking status metadata (service-to-service only)",
+        body: {
+          type: "object",
+          required: ["bookingIds"],
+          properties: {
+            bookingIds: { type: "array", items: { type: "string" } },
+          },
+        },
+      },
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      if (!validateServiceToken(req, reply)) return;
+
+      const { bookingIds } = req.body as { bookingIds?: string[] };
+      const ids = [
+        ...new Set((bookingIds ?? []).filter(Boolean).slice(0, 500)),
+      ];
+      if (ids.length === 0) {
+        return sendSuccess(reply, 200, []);
+      }
+
+      try {
+        const rows = await prisma.booking.findMany({
+          where: { id: { in: ids } },
+          select: {
+            id: true,
+            status: true,
+            completedAt: true,
+            listingType: true,
+            checkIn: true,
+            checkOut: true,
+            pickupDatetime: true,
+            returnDatetime: true,
+            cancelledAt: true,
+          },
+        });
+        return sendSuccess(reply, 200, rows);
+      } catch (err) {
+        req.log.error({ err }, "Failed to batch-fetch booking statuses");
+        return sendError(
+          reply,
+          500,
+          "INTERNAL_ERROR",
+          "Failed to batch-fetch booking statuses.",
+        );
+      }
+    },
+  );
+
   // ── PATCH /bookings/internal/:id/status ────────────────────────────────────
   app.patch(
     "/bookings/internal/:id/status",

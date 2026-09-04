@@ -5,6 +5,7 @@ import { sendError } from "../lib/errors.js";
 import { AdminPermission } from "@zika/types";
 import { processEligiblePayouts } from "../services/payout.service.js";
 import { writeAdminAudit } from "../lib/audit.js";
+import { enrichPayoutsWithFlowState } from "../services/payoutFlowState.js";
 
 export async function payoutRoutes(app: FastifyInstance) {
   // ── GET /provider/me/payouts ────────────────────────────────────────────────
@@ -118,9 +119,11 @@ export async function payoutRoutes(app: FastifyInstance) {
       prisma.payout.count({ where }),
     ]);
 
+    const enriched = await enrichPayoutsWithFlowState(payouts as never[]);
+
     reply.send({
       success: true,
-      data: payouts,
+      data: enriched,
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   });
@@ -146,7 +149,9 @@ export async function payoutRoutes(app: FastifyInstance) {
     });
     if (!payout) return sendError(reply, 404, "NOT_FOUND", "Payout not found.");
     if (!assertResourceCountryScope(req, reply, payout.countryCode)) return;
-    reply.send({ success: true, data: payout });
+
+    const enriched = await enrichPayoutsWithFlowState([payout as never]);
+    reply.send({ success: true, data: enriched[0] });
   });
 
   // ── POST /admin/payouts/:id/mark-paid ──────────────────────────────────────

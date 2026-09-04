@@ -228,6 +228,7 @@ const PAGE_SIZE = 10;
 
 const statusOptions: Array<{ value: "all" | PayoutStatus; label: string }> = [
   { value: "all", label: "All Statuses" },
+  { value: "pending", label: "Pending" },
   { value: "scheduled", label: "Scheduled" },
   { value: "processing", label: "Processing" },
   { value: "paid", label: "Paid" },

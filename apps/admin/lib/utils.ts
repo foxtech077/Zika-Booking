@@ -151,6 +151,20 @@ export const STATUS_COLORS: Record<string, string> = {
   paused:             "bg-amber-100 text-amber-700",
   expired:            "bg-danger-light text-danger-dark",
   superseded:         "bg-purple-100 text-purple-700",
+  // Payout statuses / flow states
+  pending:            "bg-amber-100 text-amber-700",
+  awaiting_checkout:  "bg-sky-100 text-sky-700",
+  awaiting_merchant_setup: "bg-orange-100 text-orange-700",
+  awaiting_merchant_verification: "bg-amber-100 text-amber-700",
+  merchant_inactive:  "bg-slate-200 text-slate-700",
+  booking_cancelled_or_refunded: "bg-red-100 text-red-700",
+  manual_disbursement_required: "bg-violet-100 text-violet-700",
+  ready_for_payout:   "bg-emerald-100 text-emerald-700",
+  processing:         "bg-sky-100 text-sky-700",
+  paid:               "bg-success-light text-success-dark",
+  failed:             "bg-danger-light text-danger-dark",
+  cancelled:          "bg-slate-100 text-slate-600",
+  unknown:            "bg-slate-100 text-slate-600",
 };
 
 export function getStatusColor(status: string): string {
