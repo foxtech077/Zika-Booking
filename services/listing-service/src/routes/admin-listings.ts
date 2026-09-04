@@ -2453,6 +2453,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
                   createdAt: { type: "string", format: "date-time" },
                   paymentStatus: { type: "string", nullable: true },
                   paymentGateway: { type: "string", nullable: true },
+                  paymentDisplayId: { type: "string", nullable: true },
                   paymentNetwork: { type: "string", nullable: true },
                   listing: {
                     type: "object",
@@ -2719,7 +2720,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
       // Fetch payment data for these bookings
       const bookingIds = bookings.map((b) => b.id);
-      let paymentMap = new Map<string, { status: string; paymentProvider: string }>();
+      let paymentMap = new Map<string, { status: string; paymentProvider: string; displayId: string | null }>();
       
       if (bookingIds.length > 0) {
         try {
@@ -2739,6 +2740,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
                 paymentMap.set(p.bookingId, {
                   status: p.status,
                   paymentProvider: p.paymentProvider,
+                  displayId: p.displayId ?? null,
                 });
               }
             }
@@ -2780,6 +2782,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
           chargedAt: b.chargedAt?.toISOString() ?? null,
           paymentStatus: payment?.status ?? null,
           paymentGateway: payment?.paymentProvider ?? null,
+          paymentDisplayId: payment?.displayId ?? null,
           date: b.createdAt.toISOString(),
           country: b.listing?.country ?? null,
         };

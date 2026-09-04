@@ -69,6 +69,8 @@ export interface Payout {
   id: string;
   merchantId: string;
   bookingId: string;
+  bookingReference?: string | null;
+  paymentDisplayId?: string | null;
   providerId: string;
   amount: number | string;
   currency: string;
@@ -211,7 +213,7 @@ export default function PayoutManagementPage() {
       // 5. Search Filter (match bookingId, merchant name, providerId, payout ID)
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const matchesBooking = p.bookingId.toLowerCase().includes(q);
+        const matchesBooking = (p.bookingReference ?? p.bookingId).toLowerCase().includes(q) || p.bookingId.toLowerCase().includes(q);
         const matchesMerchantName = (p.merchant?.businessName ?? "").toLowerCase().includes(q) || (p.merchant?.bankAccountName ?? "").toLowerCase().includes(q);
         const matchesProvider = p.providerId.toLowerCase().includes(q);
         const matchesId = p.id.toLowerCase().includes(q);
@@ -283,9 +285,9 @@ export default function PayoutManagementPage() {
   const columns: Column<Payout>[] = [
     {
       key: "id",
-      label: "Payout",
+      label: "Payment",
       width: "110px",
-      render: (p) => <CopyableId value={p.id} />,
+      render: (p) => <CopyableId value={p.paymentDisplayId} />,
     },
     {
       key: "ref",
@@ -301,7 +303,7 @@ export default function PayoutManagementPage() {
           : (countryCode ?? "");
         return (
           <div className="flex items-center gap-1.5">
-            <CopyableId value={p.bookingId} tone="primary" />
+            <CopyableId value={p.bookingReference} tone="primary" />
             {countryCode && (
               <span
                 className="text-[10px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded whitespace-nowrap"
@@ -567,7 +569,7 @@ export default function PayoutManagementPage() {
       <SlideDrawer
         open={!!selectedPayout}
         onClose={() => setSelectedPayout(null)}
-        title={`Payout Details: ${selectedPayout?.id}`}
+        title={`Payout Details: ${selectedPayout?.paymentDisplayId ?? selectedPayout?.bookingReference ?? "—"}`}
         description="Detailed bank transfer credentials and hold logs."
         width="md"
       >
@@ -613,8 +615,12 @@ export default function PayoutManagementPage() {
                 <dd className="text-xs text-slate-500 font-mono">Merchant ID: {selectedPayout.merchantId}</dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-400">Linked Booking ID</dt>
-                <dd className="font-semibold text-primary font-mono mt-0.5">{selectedPayout.bookingId}</dd>
+                <dt className="text-xs text-slate-400">Linked Booking</dt>
+                <dd className="font-semibold text-primary font-mono mt-0.5">{selectedPayout.bookingReference ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">Payment ID</dt>
+                <dd className="font-semibold text-slate-900 font-mono mt-0.5">{selectedPayout.paymentDisplayId ?? "—"}</dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Settlement Method</dt>

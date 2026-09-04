@@ -447,7 +447,7 @@ export default function DashboardPage() {
                               <CreditCard className="h-3.5 w-3.5 text-slate-400" />
                               <span>Refund Amount: <strong>{formatCurrency(item.metadata.amount)}</strong></span>
                               {item.metadata.paymentId && (
-                                <span className="text-slate-400">· Payment: {item.metadata.displayId ?? item.metadata.paymentId}</span>
+                                 <span className="text-slate-400">· Payment: {item.metadata.displayId ?? "—"}</span>
                               )}
                             </div>
                           )}
@@ -485,4 +485,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

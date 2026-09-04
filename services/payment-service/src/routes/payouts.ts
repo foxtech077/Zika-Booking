@@ -5,7 +5,20 @@ import { sendError } from "../lib/errors.js";
 import { AdminPermission } from "@zika/types";
 import { processEligiblePayouts } from "../services/payout.service.js";
 import { writeAdminAudit } from "../lib/audit.js";
-import { enrichPayoutsWithFlowState } from "../services/payoutFlowState.js";
+import { enrichPayoutsWithFlowState, fetchBookingsStatusBatch } from "../services/payoutFlowState.js";
+
+async function findPaymentDisplayId(bookingId: string): Promise<string | null> {
+  const payments = await prisma.payment.findMany({
+    where: { bookingId },
+    orderBy: { createdAt: "desc" },
+    select: { displayId: true, status: true },
+  });
+  const payment = payments.sort((a, b) => {
+    const priority = (status: string) => status === "captured" ? 0 : status === "pending" ? 1 : 2;
+    return priority(a.status) - priority(b.status);
+  })[0];
+  return payment?.displayId ?? null;
+}
 
 export async function payoutRoutes(app: FastifyInstance) {
   // ── GET /provider/me/payouts ────────────────────────────────────────────────
@@ -119,11 +132,29 @@ export async function payoutRoutes(app: FastifyInstance) {
       prisma.payout.count({ where }),
     ]);
 
-    const enriched = await enrichPayoutsWithFlowState(payouts as never[]);
+    const enriched = await enrichPayoutsWithFlowState(payouts);
+    const bookingMap = await fetchBookingsStatusBatch(payouts.map((p) => p.bookingId));
+    const paymentMap = new Map<string, { displayId: string | null; priority: number }>();
+    const payments = await prisma.payment.findMany({
+        where: { bookingId: { in: payouts.map((p) => p.bookingId) } },
+        orderBy: { createdAt: "desc" },
+        select: { bookingId: true, displayId: true, status: true },
+    });
+    for (const payment of payments) {
+      const priority = payment.status === "captured" ? 0 : payment.status === "pending" ? 1 : 2;
+      const existing = paymentMap.get(payment.bookingId);
+      if (!existing || priority < existing.priority) {
+        paymentMap.set(payment.bookingId, { displayId: payment.displayId, priority });
+      }
+    }
 
     reply.send({
       success: true,
-      data: enriched,
+      data: enriched.map((p) => ({
+        ...p,
+        bookingReference: bookingMap.get(p.bookingId)?.reference ?? null,
+        paymentDisplayId: paymentMap.get(p.bookingId)?.displayId ?? null,
+      })),
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   });
@@ -150,8 +181,17 @@ export async function payoutRoutes(app: FastifyInstance) {
     if (!payout) return sendError(reply, 404, "NOT_FOUND", "Payout not found.");
     if (!assertResourceCountryScope(req, reply, payout.countryCode)) return;
 
-    const enriched = await enrichPayoutsWithFlowState([payout as never]);
-    reply.send({ success: true, data: enriched[0] });
+    const enriched = await enrichPayoutsWithFlowState([payout]);
+    const bookingMap = await fetchBookingsStatusBatch([payout.bookingId]);
+    const paymentDisplayId = await findPaymentDisplayId(payout.bookingId);
+    reply.send({
+      success: true,
+      data: {
+        ...enriched[0],
+        bookingReference: bookingMap.get(payout.bookingId)?.reference ?? null,
+        paymentDisplayId,
+      },
+    });
   });
 
   // ── POST /admin/payouts/:id/mark-paid ──────────────────────────────────────
