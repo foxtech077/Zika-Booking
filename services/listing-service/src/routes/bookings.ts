@@ -11,6 +11,7 @@ import {
   requireUser,
   type AuthRequest,
 } from "../middleware/auth.js";
+import { primaryPhotoFields } from "../lib/photoUrls.js";
 import { getRedis } from "../lib/redis.js";
 import { enqueueReservationTimerWarning } from "../jobs.js";
 import { randomUUID, randomBytes } from "crypto";
@@ -3482,7 +3483,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         town: booking.listing.town,
         neighborhood: booking.listing.neighborhood,
         country: booking.listing.country,
-        primaryPhotoUrl: booking.listing.photos[0]?.cdnUrl ?? null,
+        ...primaryPhotoFields(booking.listing.photos[0]),
       },
       checkIn: booking.checkIn?.toISOString().slice(0, 10) ?? null,
       checkOut: booking.checkOut?.toISOString().slice(0, 10) ?? null,
@@ -4353,6 +4354,8 @@ export async function bookingRoutes(app: FastifyInstance) {
             listingType: b.listingType,
             listingTitle: b.listing.name,
             listingPrimaryPhotoUrl: b.listing.photos[0]?.cdnUrl ?? null,
+            listingPrimaryPhotoThumbUrl:
+              b.listing.photos[0]?.thumbUrl ?? b.listing.photos[0]?.cdnUrl ?? null,
             checkIn: b.checkIn?.toISOString().slice(0, 10) ?? null,
             checkOut: b.checkOut?.toISOString().slice(0, 10) ?? null,
             pickupDatetime: b.pickupDatetime?.toISOString() ?? null,
