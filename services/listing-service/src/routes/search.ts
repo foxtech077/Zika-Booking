@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
+import { primaryPhotoFields, withPhotoVariants } from "../lib/photoUrls.js";
 import { requireUser, optionalAuth, type AuthRequest } from "../middleware/auth.js";
 import { getCommissionRate, getCommissionRateBatch } from "./bookings.js";
 import { SERVICE_FEE_RATE } from "../services/billing.service.js";
@@ -511,7 +512,7 @@ export async function searchRoutes(app: FastifyInstance) {
         distanceKm: Math.round(l.distanceKm * 10) / 10,
         lat: (l as any).lat ?? null,
         lng: (l as any).lng ?? null,
-        primaryPhotoUrl: l.photos[0]?.cdnUrl ?? null,
+        ...primaryPhotoFields(l.photos[0]),
         nightlyRate,
         dailyRate,
         currency: l.currency,
@@ -777,7 +778,7 @@ export async function searchRoutes(app: FastifyInstance) {
         ...listing,
         commissionRate,
         serviceFeeRate: SERVICE_FEE_RATE,
-        photos: listingPhotos,
+        photos: withPhotoVariants(listingPhotos),
         licencePlate: undefined,
         isFavourited: guestId ? isFavourited : undefined,
         // Add basic information aliases to match /listings/search
@@ -786,7 +787,7 @@ export async function searchRoutes(app: FastifyInstance) {
         city: listing.town,
         neighborhood: listing.neighborhood,
         countryCode: listing.country,
-        primaryPhotoUrl: listingPhotos[0]?.cdnUrl ?? null,
+        ...primaryPhotoFields(listingPhotos[0]),
         lat: coords[0]?.lat ?? null,
         lng: coords[0]?.lng ?? null,
         // Raw list-price rates (guests pay listPrice + service fee).
@@ -1121,7 +1122,7 @@ export async function searchRoutes(app: FastifyInstance) {
           localizedCurrency: ctx.currency,
           commissionRate,
           serviceFeeRate: SERVICE_FEE_RATE,
-          primaryPhotoUrl: l.photos[0]?.cdnUrl ?? null,
+          ...primaryPhotoFields(l.photos[0]),
         };
       }));
 
@@ -1269,7 +1270,7 @@ export async function searchRoutes(app: FastifyInstance) {
               localizedCurrency: ctx.currency,
               commissionRate,
               serviceFeeRate: SERVICE_FEE_RATE,
-              primaryPhotoUrl: f.listing.photos[0]?.cdnUrl ?? null,
+              ...primaryPhotoFields(f.listing.photos[0]),
             },
           };
         })),
@@ -1392,7 +1393,7 @@ export async function searchRoutes(app: FastifyInstance) {
               localizedCurrency: ctx.currency,
               commissionRate,
               serviceFeeRate: SERVICE_FEE_RATE,
-              primaryPhotoUrl: v.listing.photos[0]?.cdnUrl ?? null,
+              ...primaryPhotoFields(v.listing.photos[0]),
             },
           };
         })),
