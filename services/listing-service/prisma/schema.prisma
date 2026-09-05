@@ -330,6 +330,7 @@ model ListingPhoto {
   listingId   String    @map("listing_id")
   s3Key       String    @map("s3_key") @db.VarChar(500)
   cdnUrl      String    @map("cdn_url") @db.VarChar(500)
+  thumbUrl    String?   @map("thumb_url") @db.VarChar(500)
   position    Int
   uploadedAt  DateTime  @default(now()) @map("uploaded_at")
   deletedAt   DateTime? @map("deleted_at")

@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
+import { randomBytes } from "crypto";
 import { prisma } from "../lib/prisma.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireUser, type AuthRequest } from "../middleware/auth.js";
@@ -8,6 +9,7 @@ import {
   createPresignedDownloadUrl,
   deleteObject,
   photoS3Key,
+  thumbnailS3Key,
   documentS3Key,
   cdnUrl,
   isValidPhotoType,
@@ -19,6 +21,7 @@ import { geocodePlaceId, geocodeAddress, reverseGeocode } from "../lib/geocoding
 import { sendListingSubmittedEmail, sendListingActivatedEmail } from "../lib/email.js";
 import { ceilingForCurrency, getConvertedAmounts, getLocalizedContext } from "../services/exchangeRate.services.js";
 
+const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
 const MAX_PHOTOS = 30;
 
 // All valid DocumentType enum values (mirrors schema.prisma DocumentType enum).
@@ -1388,7 +1391,8 @@ export async function listingRoutes(app: FastifyInstance) {
         properties: {
           contentType: { type: "string" },
           filename: { type: "string" },
-          fileSize: { type: "number" }
+          fileSize: { type: "number" },
+          variant: { type: "string", enum: ["photo", "thumbnail"], description: "Thumbnails are stored under listings/:id/thumbnails/." }
         }
       },
       response: {
@@ -1413,10 +1417,15 @@ export async function listingRoutes(app: FastifyInstance) {
     try {
       const { authId: providerId } = req as AuthRequest;
       const { id } = req.params as { id: string };
-      const { contentType, filename, fileSize } = req.body as { contentType: string; filename: string; fileSize?: number };
+      const { contentType, fileSize, variant } = req.body as {
+        contentType: string; filename: string; fileSize?: number; variant?: "photo" | "thumbnail";
+      };
 
-      if (fileSize !== undefined && fileSize > 5 * 1024 * 1024) {
-        return sendError(reply, 422, "FILE_TOO_LARGE", "Image size cannot exceed 5 MB.");
+      // Clients downscale before uploading, so anything arriving here should be
+      // well under a megabyte. 3 MB is headroom, not a target — it exists to
+      // stop a client that skipped downscaling from filling the bucket.
+      if (fileSize !== undefined && fileSize > MAX_UPLOAD_BYTES) {
+        return sendError(reply, 422, "FILE_TOO_LARGE", "Image size cannot exceed 3 MB.");
       }
 
       if (!isValidPhotoType(contentType)) {
@@ -1431,7 +1440,11 @@ export async function listingRoutes(app: FastifyInstance) {
         return sendError(reply, 422, "PHOTO_LIMIT", `Maximum ${MAX_PHOTOS} photos allowed.`);
       }
 
-      const s3Key = photoS3Key(id, `${Date.now()}.${fileExtFromContentType(contentType)}`);
+      // Random suffix, not just a timestamp: the client presigns several photos
+      // (and each photo's thumbnail) in parallel, and same-millisecond calls
+      // would otherwise return the same key and overwrite each other.
+      const name = `${Date.now()}-${randomBytes(4).toString("hex")}.${fileExtFromContentType(contentType)}`;
+      const s3Key = variant === "thumbnail" ? thumbnailS3Key(id, name) : photoS3Key(id, name);
       const uploadUrl = await createPresignedUploadUrl(s3Key, contentType);
 
       return sendSuccess(reply, 200, { uploadUrl, s3Key });
@@ -1457,7 +1470,8 @@ export async function listingRoutes(app: FastifyInstance) {
         type: "object",
         required: ["s3Key"],
         properties: {
-          s3Key: { type: "string" }
+          s3Key: { type: "string" },
+          thumbS3Key: { type: "string", description: "Key of the small preview the client uploaded alongside the full image." }
         }
       },
       response: {
@@ -1470,6 +1484,7 @@ export async function listingRoutes(app: FastifyInstance) {
               properties: {
                 id: { type: "string" },
                 cdnUrl: { type: "string" },
+                thumbUrl: { type: "string", nullable: true },
                 position: { type: "integer" }
               },
               required: ["id", "cdnUrl", "position"]
@@ -1483,10 +1498,21 @@ export async function listingRoutes(app: FastifyInstance) {
     try {
       const { authId: providerId } = req as AuthRequest;
       const { id } = req.params as { id: string };
-      const { s3Key } = req.body as { s3Key: string };
+      const { s3Key, thumbS3Key } = req.body as { s3Key: string; thumbS3Key?: string };
 
       const listing = await assertOwner(id, providerId, reply);
       if (!listing) return;
+
+      // Keys are echoed straight back from presign, so confine them to this
+      // listing's own prefixes rather than trusting whatever the client sends.
+      const wellFormed = (key: string, prefix: string) =>
+        key.startsWith(prefix) && !key.includes("..");
+      if (
+        !wellFormed(s3Key, `listings/${id}/photos/`) ||
+        (thumbS3Key && !wellFormed(thumbS3Key, `listings/${id}/thumbnails/`))
+      ) {
+        return sendError(reply, 422, "INVALID_S3_KEY", "Photo key does not belong to this listing.");
+      }
 
       const currentCount = await prisma.listingPhoto.count({ where: { listingId: id, deletedAt: null } });
       if (currentCount >= MAX_PHOTOS) {
@@ -1498,12 +1524,18 @@ export async function listingRoutes(app: FastifyInstance) {
           listingId: id,
           s3Key,
           cdnUrl: cdnUrl(s3Key),
+          thumbUrl: thumbS3Key ? cdnUrl(thumbS3Key) : null,
           position: currentCount + 1,
         },
       });
 
       const signedUrl = await createPresignedDownloadUrl(photo.s3Key);
-      return sendSuccess(reply, 201, { id: photo.id, cdnUrl: signedUrl, position: photo.position });
+      return sendSuccess(reply, 201, {
+        id: photo.id,
+        cdnUrl: signedUrl,
+        thumbUrl: photo.thumbUrl,
+        position: photo.position,
+      });
     } catch (err) {
       req.log.error({ err }, "Failed to confirm photo upload");
       return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while confirming photo.");
