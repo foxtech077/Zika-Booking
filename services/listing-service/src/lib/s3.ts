@@ -50,6 +50,7 @@ export async function uploadBuffer(
   s3Key: string,
   body: Buffer,
   contentType: string,
+  cacheControl?: string,
 ): Promise<void> {
   await s3.send(
     new PutObjectCommand({
@@ -57,8 +58,36 @@ export async function uploadBuffer(
       Key: s3Key,
       Body: body,
       ContentType: contentType,
+      ...(cacheControl ? { CacheControl: cacheControl } : {}),
     }),
   );
+}
+
+// Photo keys embed an upload timestamp and are never rewritten, so everything
+// under them is safe to cache permanently.
+export const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
+
+const MAX_DOWNLOAD_BYTES = 30 * 1024 * 1024;
+
+/** Whole object into memory — callers must expect it to be held in the heap. */
+export async function getObjectBuffer(s3Key: string): Promise<Buffer> {
+  const res = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: s3Key }));
+  if (!res.Body) throw new Error(`S3 object ${s3Key} has no body`);
+  if ((res.ContentLength ?? 0) > MAX_DOWNLOAD_BYTES) {
+    throw new Error(`S3 object ${s3Key} is ${res.ContentLength} bytes — too large to process`);
+  }
+  const chunks: Buffer[] = [];
+  for await (const chunk of res.Body as AsyncIterable<Uint8Array>) {
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+/** `foo.jpg` + "card" -> `foo__card.webp`, beside the original. Deterministic,
+ *  so re-running the job overwrites rather than accumulating. */
+export function derivativeS3Key(originalKey: string, variant: string): string {
+  const base = originalKey.replace(/\.[^./]+$/, "");
+  return `${base}__${variant}.webp`;
 }
 
 export async function deleteObject(s3Key: string): Promise<void> {
