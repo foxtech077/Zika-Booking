@@ -334,8 +334,21 @@ model ListingPhoto {
   uploadedAt  DateTime  @default(now()) @map("uploaded_at")
   deletedAt   DateTime? @map("deleted_at")
 
+  // Resized WebP renditions produced off the original by the PhotoDerivatives
+  // job. All nullable: a photo is usable the moment it is confirmed, and every
+  // consumer falls back to `cdnUrl` until the job lands (or if it never does).
+  thumbUrl    String?   @map("thumb_url") @db.VarChar(500)
+  cardUrl     String?   @map("card_url") @db.VarChar(500)
+  fullUrl     String?   @map("full_url") @db.VarChar(500)
+  // Intrinsic size of the original, so clients can reserve the right aspect
+  // ratio before any bytes arrive and avoid layout shift.
+  width       Int?
+  height      Int?
+  derivedAt   DateTime? @map("derived_at")
+
   listing Listing @relation(fields: [listingId], references: [id])
 
+  @@index([derivedAt], map: "listing_photos_derived_at_idx")
   @@map("listing_photos")
   @@schema("listing")
 }
