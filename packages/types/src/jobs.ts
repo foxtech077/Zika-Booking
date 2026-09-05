@@ -1,6 +1,8 @@
 export enum QueueName {
   Auth = "auth-jobs",
   Listing = "listing-jobs",
+  /** CPU-bound media work, kept off the Listing queue. */
+  ListingMedia = "listing-media-jobs",
   Payment = "payment-jobs",
 }
 
@@ -22,6 +24,7 @@ export enum ListingJob {
   DeviceTokenCleanup = "device-token-cleanup",
   DeviceTokenCleanupBatch = "device-token-cleanup-batch",
   NotificationPushBatch = "notification-push-batch",
+  PhotoDerivatives = "photo-derivatives",
 }
 
 export enum PaymentJob {
