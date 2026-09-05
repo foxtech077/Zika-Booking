@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireUser, type AuthRequest } from "../middleware/auth.js";
+import { enqueuePhotoDerivatives } from "../lib/photoDerivatives.js";
 import {
   createPresignedUploadUrl,
   createPresignedDownloadUrl,
@@ -1501,6 +1502,9 @@ export async function listingRoutes(app: FastifyInstance) {
           position: currentCount + 1,
         },
       });
+
+      // Off-thread: the provider gets the photo back now, variants follow.
+      await enqueuePhotoDerivatives(photo.id);
 
       const signedUrl = await createPresignedDownloadUrl(photo.s3Key);
       return sendSuccess(reply, 201, { id: photo.id, cdnUrl: signedUrl, position: photo.position });
