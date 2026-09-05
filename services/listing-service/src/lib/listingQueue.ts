@@ -12,6 +12,12 @@ export const listingQueue = new Queue(QueueName.Listing, {
   connection: listingQueueConnection,
 });
 
+// CPU-bound media work. Shares the Redis connection but not the worker, so a
+// backfill saturating the encoder cannot delay payments, iCal or push delivery.
+export const mediaQueue = new Queue(QueueName.ListingMedia, {
+  connection: listingQueueConnection,
+});
+
 export const listingJobOptions = {
   attempts: 5,
   backoff: { type: "exponential" as const, delay: 30_000 },
