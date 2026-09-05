@@ -14,9 +14,11 @@ import { cleanDeviceTokenBatch, enqueueDeviceTokenCleanupBatches } from "./lib/d
 import {
   deliverNotificationPushBatch,
 } from "./lib/notifications.js";
+import { generatePhotoDerivatives } from "./lib/photoDerivatives.js";
 import {
   listingJobOptions as defaultJobOptions,
   listingQueue as queue,
+  mediaQueue,
   listingQueueConnection as connection,
 } from "./lib/listingQueue.js";
 import { QueueName, ListingJob } from "@zika/types";
@@ -94,10 +96,33 @@ worker.on("failed", (job, err) => {
   console.error(`[Job] ${job?.name} (id: ${job?.id}) failed:`, err.message);
 });
 
+/**
+ * Image encoding only, on its own queue so a bulk backfill cannot delay the
+ * business jobs above. Concurrency stays small: each job holds a full-resolution
+ * photo in memory, and the API shares the box.
+ */
+const MEDIA_CONCURRENCY = Number(process.env["MEDIA_WORKER_CONCURRENCY"] ?? 3);
+
+const mediaWorker = new Worker(
+  QueueName.ListingMedia,
+  async (job) => {
+    switch (job.name as ListingJob) {
+      case ListingJob.PhotoDerivatives:
+        await generatePhotoDerivatives((job.data as { photoId: string }).photoId);
+        break;
+    }
+  },
+  { connection, concurrency: MEDIA_CONCURRENCY },
+);
+
+mediaWorker.on("failed", (job, err) => {
+  console.error(`[MediaJob] ${job?.name} (id: ${job?.id}) failed:`, err.message);
+});
+
 export function registerBullBoard(app: any) {
   const serverAdapter = new FastifyAdapter();
   createBullBoard({
-    queues: [new BullMQAdapter(queue)],
+    queues: [new BullMQAdapter(queue), new BullMQAdapter(mediaQueue)],
     serverAdapter,
   });
   serverAdapter.setBasePath("/admin/queues");

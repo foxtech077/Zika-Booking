@@ -12,7 +12,8 @@
 		"db:generate": "prisma generate",
 		"db:migrate": "prisma migrate dev",
 		"db:migrate:deploy": "prisma migrate deploy",
-		"db:studio": "prisma studio"
+		"db:studio": "prisma studio",
+		"backfill:photos": "tsx src/scripts/backfillPhotoDerivatives.ts"
 	},
 	"dependencies": {
 		"@aws-sdk/client-s3": "^3.750.0",
@@ -41,6 +42,7 @@
 		"pdfkit": "^0.19.0",
 		"prisma": "^6.3.1",
 		"qrcode": "^1.5.4",
+		"sharp": "^0.35.4",
 		"web-push": "^3.6.7",
 		"zod": "^3.24.1"
 	},
