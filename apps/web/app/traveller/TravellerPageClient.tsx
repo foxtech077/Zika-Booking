@@ -624,6 +624,7 @@ export default function TravellerDashboard() {
           pricePerNight: v.listing.nightlyRate ?? 0,
           currency: v.listing.currency ?? "KES",
           primaryPhotoUrl: v.listing.primaryPhotoUrl ?? null,
+          primaryPhotoThumbUrl: v.listing.primaryPhotoThumbUrl ?? null,
           photos: [],
           amenities: [],
           customAmenities: [],
@@ -2019,6 +2020,9 @@ export default function TravellerDashboard() {
             primaryPhotoUrl:
               b.primaryPhotoUrl ?? b.listingPrimaryPhotoUrl ?? b.listing_primary_photo_url ??
               b.listing?.primaryPhotoUrl ?? b.listing?.photos?.[0]?.cdnUrl ?? null,
+            primaryPhotoThumbUrl:
+              b.primaryPhotoThumbUrl ?? b.listingPrimaryPhotoThumbUrl ??
+              b.listing?.primaryPhotoThumbUrl ?? b.listing?.photos?.[0]?.thumbUrl ?? null,
             checkIn: b.checkIn ?? b.check_in ?? null,
             checkOut: b.checkOut ?? b.check_out ?? null,
             pickupDatetime: b.pickupDatetime ?? b.pickup_datetime ?? null,
@@ -2138,6 +2142,7 @@ export default function TravellerDashboard() {
           listingTitle: b.listingTitle ?? b.listingName ?? b.listing?.name ?? "",
           listingCategory: b.listingCategory ?? b.listing?.category ?? "hotel",
           primaryPhotoUrl: b.primaryPhotoUrl ?? b.listing?.primaryPhotoUrl ?? null,
+          primaryPhotoThumbUrl: b.primaryPhotoThumbUrl ?? b.listing?.primaryPhotoThumbUrl ?? null,
           totalAmount: b.totalAmount ?? 0,
           nightsOrDays: b.nightsOrDays ?? 1,
           canCancel: true,
@@ -2926,7 +2931,7 @@ export default function TravellerDashboard() {
                                 <div className="flex gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
                                   <ListingImage
                                     listingId={detailListing.id}
-                                    src={detailListing.primaryPhotoUrl || detailListing.photos?.[0]?.cdnUrl || undefined}
+                                    src={detailListing.primaryPhotoThumbUrl || detailListing.primaryPhotoUrl || detailListing.photos?.[0]?.cdnUrl || undefined}
                                     alt={detailListing.name}
                                     className="w-16 h-16 rounded-lg object-cover shrink-0"
                                   />
@@ -3834,7 +3839,7 @@ export default function TravellerDashboard() {
                       className="group flex items-center gap-3 bg-white border border-slate-100 rounded-2xl p-3 hover:shadow-md hover:border-slate-200 transition text-left w-full"
                     >
                       <div className="w-16 h-16 bg-slate-100 rounded-xl overflow-hidden shrink-0">
-                        <ListingImage listingId={item.id} src={item.primaryPhotoUrl || item.photos?.[0]?.cdnUrl || undefined} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                        <ListingImage listingId={item.id} src={item.primaryPhotoThumbUrl || item.primaryPhotoUrl || item.photos?.[0]?.cdnUrl || undefined} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-[#1D8D2B] uppercase tracking-wider">{item.category}</p>

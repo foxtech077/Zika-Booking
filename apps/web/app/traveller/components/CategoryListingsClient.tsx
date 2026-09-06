@@ -190,6 +190,7 @@ function mapListing(l: any): PublicListingDetail {
     deliveryFee: l.deliveryFee != null ? Number(l.deliveryFee) : null,
     deliveryRadiusKm: l.deliveryRadiusKm != null ? Number(l.deliveryRadiusKm) : null,
     primaryPhotoUrl: l.primaryPhotoUrl || l.photos?.[0]?.cdnUrl || null,
+    primaryPhotoThumbUrl: l.primaryPhotoThumbUrl || l.photos?.[0]?.thumbUrl || null,
     photos: l.photos || (l.primaryPhotoUrl ? [{ id: "ph", cdnUrl: l.primaryPhotoUrl, position: 1 }] : []),
     amenities: l.amenities || [],
     customAmenities: l.customAmenities || [],

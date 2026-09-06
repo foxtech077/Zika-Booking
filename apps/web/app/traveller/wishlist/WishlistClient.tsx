@@ -73,6 +73,7 @@ function mapListing(item: any): PublicListingDetail | null {
     seats: raw.seats,
     mileagePolicy: raw.mileagePolicy,
     primaryPhotoUrl: raw.primaryPhotoUrl || raw.photos?.[0]?.cdnUrl || null,
+    primaryPhotoThumbUrl: raw.primaryPhotoThumbUrl || raw.photos?.[0]?.thumbUrl || null,
     photos: raw.photos || (raw.primaryPhotoUrl ? [{ id: "ph", cdnUrl: raw.primaryPhotoUrl, position: 1 }] : []),
     amenities: raw.amenities || [],
     customAmenities: raw.customAmenities || [],

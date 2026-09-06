@@ -272,6 +272,7 @@ export interface FavouriteListing {
     localizedNightlyRate?: number | null;
     localizedCurrency?: string | null;
     primaryPhotoUrl: string | null;
+    primaryPhotoThumbUrl?: string | null;
   };
 }
 
@@ -311,6 +312,7 @@ export interface RecentlyViewedItem {
     localizedNightlyRate?: number | null;
     localizedCurrency?: string | null;
     primaryPhotoUrl: string | null;
+    primaryPhotoThumbUrl?: string | null;
   };
 }
 
