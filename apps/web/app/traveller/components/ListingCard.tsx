@@ -132,7 +132,8 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         <div className="aspect-[3/2] w-full overflow-hidden relative">
           <ListingImage
             listingId={listing.id}
-            src={listing.primaryPhotoUrl || listing.photos?.[0]?.cdnUrl || undefined}
+            src={listing.primaryPhotoThumbUrl || listing.photos?.[0]?.thumbUrl ||
+                 listing.primaryPhotoUrl || listing.photos?.[0]?.cdnUrl || undefined}
             alt={listing.name}
             className="w-full h-full object-cover group-hover:scale-105 transition duration-700"
             fallbackNode={<NoImage category={listing.category} />}
@@ -260,7 +261,8 @@ export const ListingCard: React.FC<ListingCardProps> = ({
       <div className="relative w-[38%] max-w-[320px] shrink-0 overflow-hidden">
         <ListingImage
           listingId={listing.id}
-          src={listing.primaryPhotoUrl || listing.photos?.[0]?.cdnUrl || undefined}
+          src={listing.primaryPhotoThumbUrl || listing.photos?.[0]?.thumbUrl ||
+                 listing.primaryPhotoUrl || listing.photos?.[0]?.cdnUrl || undefined}
           alt={listing.name}
           className="w-full h-full object-cover group-hover:scale-105 transition duration-700"
           fallbackNode={<NoImage category={listing.category} />}

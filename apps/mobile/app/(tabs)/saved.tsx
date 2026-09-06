@@ -36,6 +36,8 @@ interface FavouriteListing {
   localizedNightlyRate?: number | null;
   localizedCurrency?: string | null;
   primaryPhotoUrl: string | null;
+  /** Small preview; null on photos uploaded before previews existed. */
+  primaryPhotoThumbUrl?: string | null;
 }
 
 interface Favourite {
@@ -284,7 +286,7 @@ export default function SavedScreen() {
             item={item}
             onRemove={handleRemove}
             removePending={removeMutation.isPending}
-            signedPhotoUrl={item.listing.primaryPhotoUrl}
+            signedPhotoUrl={item.listing.primaryPhotoThumbUrl ?? item.listing.primaryPhotoUrl}
             promotion={
               item.listing.category === "hotel" ? hotelPromo
               : item.listing.category === "apartment" ? aptPromo

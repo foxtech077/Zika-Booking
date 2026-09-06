@@ -460,7 +460,7 @@ export default function ProviderHomeScreen() {
           status: l.status,
           town: l.town,
           country: l.country,
-          primaryPhotoUrl: l.photos?.[0]?.cdnUrl ?? null,
+          primaryPhotoUrl: l.photos?.[0]?.thumbUrl ?? l.photos?.[0]?.cdnUrl ?? null,
           totalBookings: sum?.bookingCount,
           averageRating: sum?.averageRating ?? null,
         } as ProviderListing;

@@ -24,10 +24,13 @@ import Modal from "./ui/Modal";
 import { listingsService } from "@/services/listings";
 import { uploadToS3 } from "@/lib/listing-api";
 import { useAuthStore } from "@/stores/auth";
+import { downscaleForUpload } from "@/lib/image-downscale";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const ACCEPTED_EXTENSIONS = ".jpg,.jpeg,.png,.webp";
-const MAX_SIZE_MB = 5;
+// Largest source a provider may pick. What actually reaches S3 is a few hundred
+// KB after downscaling, and is capped separately server-side.
+const MAX_SIZE_MB = 3;
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
 const TOKEN_KEY = "zika:access_token";
 
@@ -84,6 +87,7 @@ interface UploadItem {
 export interface ExistingPhoto {
   id: string;
   cdnUrl: string;
+  thumbUrl?: string | null;
   position: number;
 }
 
@@ -158,17 +162,31 @@ export function MediaUploader({
       await Promise.allSettled(
         items.map(async (item) => {
           try {
-            // Presign the photo with the listing service
-            const { uploadUrl, s3Key } = await withTokenRefresh(() =>
-              listingsService.presignPhoto(listingId, item.file.type, item.file.name)
+            // Downscale in the browser first: a camera original is ~4000px and
+            // several MB, which no surface displays at full size.
+            const { full, thumb } = await downscaleForUpload(item.file);
+
+            setUploads((prev) =>
+              prev.map((u) => (u.uid === item.uid ? { ...u, progress: 25 } : u)),
             );
+
+            const [fullPresign, thumbPresign] = await Promise.all([
+              withTokenRefresh(() =>
+                listingsService.presignPhoto(listingId, full.type, full.name, "photo", full.size)
+              ),
+              withTokenRefresh(() =>
+                listingsService.presignPhoto(listingId, thumb.type, thumb.name, "thumbnail", thumb.size)
+              ),
+            ]);
 
             setUploads((prev) =>
               prev.map((u) => (u.uid === item.uid ? { ...u, progress: 50 } : u)),
             );
 
-            // Upload to S3 directly
-            await uploadToS3(uploadUrl, item.file);
+            await Promise.all([
+              uploadToS3(fullPresign.uploadUrl, full),
+              uploadToS3(thumbPresign.uploadUrl, thumb),
+            ]);
 
             setUploads((prev) =>
               prev.map((u) => (u.uid === item.uid ? { ...u, progress: 90 } : u)),
@@ -176,7 +194,7 @@ export function MediaUploader({
 
             // Confirm the upload with the listing service
             await withTokenRefresh(() =>
-              listingsService.confirmPhoto(listingId, s3Key)
+              listingsService.confirmPhoto(listingId, fullPresign.s3Key, thumbPresign.s3Key)
             );
 
             setUploads((prev) =>
@@ -187,10 +205,10 @@ export function MediaUploader({
 
             onRefresh();
 
-            setTimeout(
-              () => setUploads((prev) => prev.filter((u) => u.uid !== item.uid)),
-              1500,
-            );
+            setTimeout(() => {
+              setUploads((prev) => prev.filter((u) => u.uid !== item.uid));
+              URL.revokeObjectURL(item.preview);
+            }, 1500);
           } catch (err: any) {
             const message = err?.message ?? "Upload failed. Retry?";
             setUploads((prev) =>
@@ -232,6 +250,8 @@ export function MediaUploader({
 
   const retryItem = (item: UploadItem) => {
     setUploads((prev) => prev.filter((u) => u.uid !== item.uid));
+    // processFiles creates a fresh preview for the retry; drop the old one.
+    URL.revokeObjectURL(item.preview);
     void processFiles([item.file]);
   };
 
@@ -331,8 +351,10 @@ export function MediaUploader({
                 className="group relative aspect-video rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shadow-card"
               >
                 <img
-                  src={photo.cdnUrl}
+                  src={photo.thumbUrl ?? photo.cdnUrl}
                   alt={`Photo ${photo.position}`}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover"
                 />
                 {photo.position === 1 && (

@@ -38,7 +38,7 @@ interface ListingItem {
   currency: string | null;
   claimedStarRating: number | null;
   rejectionNote: string | null;
-  photos: Array<{ cdnUrl: string }>;
+  photos: Array<{ cdnUrl: string; thumbUrl?: string | null }>;
   temporaryActivation?: boolean;
   geoVerificationDueAt?: string | null;
 }
@@ -115,7 +115,7 @@ interface CardProps {
 
 const ListingCard = memo(function ListingCard({ item, summary, maxBookings, minRoomPrice, onEdit, onMore, columns = 1 }: CardProps) {
   const cfg = STATUS_CFG[item.status] ?? { label: item.status, bg: "#64748B", text: "#fff" };
-  const coverUrl = item.photos[0]?.cdnUrl ?? null;
+  const coverUrl = item.photos[0]?.thumbUrl ?? item.photos[0]?.cdnUrl ?? null;
   const bookings  = summary?.bookingCount ?? 0;
   const barPct    = maxBookings > 0 ? Math.min(100, Math.round((bookings / maxBookings) * 100)) : 0;
   const barColor  = barPct >= 70 ? K.colors.accent : barPct >= 30 ? "#F59E0B" : "#E5E7EB";

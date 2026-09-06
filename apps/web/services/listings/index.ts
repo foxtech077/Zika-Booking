@@ -11,6 +11,7 @@ export interface PresignedUploadResult {
 export interface PhotoResult {
   id: string;
   cdnUrl: string;
+  thumbUrl?: string | null;
   position: number;
 }
 
@@ -89,14 +90,20 @@ export const listingsService = {
     listingId: string,
     contentType: string,
     filename: string,
+    variant: "photo" | "thumbnail" = "photo",
+    fileSize?: number,
   ): Promise<PresignedUploadResult> =>
     listingApi
-      .post(`/listings/${listingId}/photos/presign`, { contentType, filename })
+      .post(`/listings/${listingId}/photos/presign`, { contentType, filename, variant, fileSize })
       .then((r) => r.data.data ?? r.data),
 
-  confirmPhoto: (listingId: string, s3Key: string): Promise<PhotoResult> =>
+  confirmPhoto: (
+    listingId: string,
+    s3Key: string,
+    thumbS3Key?: string,
+  ): Promise<PhotoResult> =>
     listingApi
-      .post(`/listings/${listingId}/photos/confirm`, { s3Key })
+      .post(`/listings/${listingId}/photos/confirm`, { s3Key, thumbS3Key })
       .then((r) => r.data.data ?? r.data),
 
   deletePhoto: (listingId: string, photoId: string) =>

@@ -66,7 +66,13 @@ export async function deleteObject(s3Key: string): Promise<void> {
 }
 
 export function photoS3Key(listingId: string, filename: string): string {
-  return `listings/${listingId}/photos/${Date.now()}-${filename}`;
+  return `listings/${listingId}/photos/${filename}`;
+}
+
+/** Thumbnails live under their own prefix so they can be listed, lifecycled and
+ *  migrated independently of the full-size photos. */
+export function thumbnailS3Key(listingId: string, filename: string): string {
+  return `listings/${listingId}/thumbnails/${filename}`;
 }
 
 export function documentS3Key(listingId: string, docType: string, filename: string): string {

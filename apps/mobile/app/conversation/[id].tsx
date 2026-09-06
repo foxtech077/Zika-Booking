@@ -175,7 +175,7 @@ function BookingCard({ bookingId }: { bookingId: string }) {
       <View style={bc.row}>
         <View style={bc.photo}>
           <ListingImage
-            uri={booking.listing?.primaryPhotoUrl ?? null}
+            uri={booking.listing?.primaryPhotoThumbUrl ?? booking.listing?.primaryPhotoUrl ?? null}
             style={StyleSheet.absoluteFill}
           />
         </View>

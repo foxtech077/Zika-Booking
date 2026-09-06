@@ -10,6 +10,13 @@ interface PhotoGalleryProps {
   photos?: ListingPhoto[];
 }
 
+interface Slide {
+  /** The full-size image, and the identity used to de-duplicate. */
+  full: string;
+  /** Small preview uploaded with it; falls back to the full image. */
+  thumb: string;
+}
+
 function PlaceholderArt({ size = "w-6 h-6" }: { size?: string }) {
   return (
     <svg className={`${size} text-slate-300`} fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
@@ -18,9 +25,29 @@ function PlaceholderArt({ size = "w-6 h-6" }: { size?: string }) {
   );
 }
 
-/** Grid tile that degrades to a placeholder when its own URL fails to load. */
-function Tile({ url, alt, onOpen }: { url: string; alt: string; onOpen: () => void }) {
+/** Grid tile: skeleton until loaded, placeholder if the URL fails. */
+function Tile({
+  url,
+  alt,
+  onOpen,
+  eager = false,
+}: {
+  url: string;
+  alt: string;
+  onOpen: () => void;
+  eager?: boolean;
+}) {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  // A cached image may already be decoded and will not fire onLoad again, so
+  // the reset and that check must share one effect or the skeleton never clears.
+  useEffect(() => {
+    setFailed(false);
+    setLoaded(imgRef.current?.complete === true);
+  }, [url]);
+
   if (failed) {
     return (
       <div className="w-full h-full bg-slate-100 flex items-center justify-center">
@@ -29,13 +56,17 @@ function Tile({ url, alt, onOpen }: { url: string; alt: string; onOpen: () => vo
     );
   }
   return (
-    <button type="button" onClick={onOpen} className="group/tile w-full h-full block overflow-hidden relative" aria-label={alt}>
+    <button type="button" onClick={onOpen} className="group/tile w-full h-full block overflow-hidden relative bg-slate-100" aria-label={alt}>
+      {!loaded && <div className="absolute inset-0 animate-pulse bg-slate-200" aria-hidden />}
       <img
+        ref={imgRef}
         src={url}
         alt={alt}
-        loading="lazy"
+        loading={eager ? "eager" : "lazy"}
+        decoding="async"
+        onLoad={() => setLoaded(true)}
         onError={() => setFailed(true)}
-        className="w-full h-full object-cover transition-transform duration-[600ms] ease-out group-hover/tile:scale-[1.04]"
+        className={`w-full h-full object-cover transition-[transform,opacity] duration-[600ms] ease-out group-hover/tile:scale-[1.04] ${loaded ? "opacity-100" : "opacity-0"}`}
       />
       <span className="absolute inset-0 bg-slate-900/0 group-hover/tile:bg-slate-900/10 transition-colors duration-300" />
     </button>
@@ -43,20 +74,25 @@ function Tile({ url, alt, onOpen }: { url: string; alt: string; onOpen: () => vo
 }
 
 const PhotoGallery: React.FC<PhotoGalleryProps> = ({ listingId, name = "", imageUrl, photos = [] }) => {
-  // One ordered list of URLs drives the grid, the mobile carousel and the
-  // lightbox, so an index means the same photo in all three.
-  const urls = useMemo(() => {
+  // One ordered list drives the grid, the mobile carousel and the lightbox, so
+  // an index means the same photo in all three.
+  const slides = useMemo<Slide[]>(() => {
     const list = [...photos]
       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-      .map((p) => p.cdnUrl)
-      .filter(Boolean);
-    if (imageUrl && !list.includes(imageUrl)) list.unshift(imageUrl);
+      .filter((p) => p.cdnUrl)
+      .map((p) => ({ full: p.cdnUrl, thumb: p.thumbUrl ?? p.cdnUrl }));
+    if (imageUrl && !list.some((s) => s.full === imageUrl)) {
+      list.unshift({ full: imageUrl, thumb: imageUrl });
+    }
     return list;
   }, [photos, imageUrl]);
 
-  const total = urls.length;
-  /** Indexed read narrowed to string — every call site is already bounded by `total`. */
-  const at = useCallback((i: number) => urls[i] ?? "", [urls]);
+  const total = slides.length;
+  /** Indexed read narrowed to a Slide — every call site is bounded by `total`. */
+  const at = useCallback(
+    (i: number): Slide => slides[i] ?? { full: "", thumb: "" },
+    [slides],
+  );
   const [openIdx, setOpenIdx] = useState<number | null>(null);
   const [slide, setSlide] = useState(0);
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -84,6 +120,18 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ listingId, name = "", image
       document.body.style.overflow = prevOverflow;
     };
   }, [openIdx, step]);
+
+  // Warm both neighbours so stepping through the lightbox is instant.
+  useEffect(() => {
+    if (openIdx === null || total < 2) return;
+    for (const i of [(openIdx + 1) % total, (openIdx - 1 + total) % total]) {
+      const url = at(i).full;
+      if (!url) continue;
+      const img = new window.Image();
+      img.decoding = "async";
+      img.src = url;
+    }
+  }, [openIdx, total, at]);
 
   // Which slide the mobile carousel is on, derived from scroll position rather
   // than tracked on tap, so native swipe momentum keeps the dots in sync.
@@ -126,7 +174,7 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ listingId, name = "", image
         : total === 3 ? { grid: "grid-cols-3 grid-rows-2", hero: "col-span-2 row-span-2", count: 2 }
           : total === 4 ? { grid: "grid-cols-3 grid-rows-3", hero: "col-span-2 row-span-3", count: 3 }
             : { grid: "grid-cols-4 grid-rows-2", hero: "col-span-2 row-span-2", count: 4 };
-  const tiles = urls.slice(1, layout.count + 1);
+  const tiles = slides.slice(1, layout.count + 1);
   const hiddenCount = total - 1 - tiles.length;
 
   return (
@@ -138,9 +186,10 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ listingId, name = "", image
           onScroll={onTrackScroll}
           className="flex overflow-x-auto snap-x snap-mandatory scroll-smooth h-[300px] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
-          {urls.map((url, i) => (
+          {slides.map((s, i) => (
             <div key={i} className="snap-center shrink-0 w-full h-full bg-slate-100">
-              <Tile url={url} alt={`${name} photo ${i + 1}`} onOpen={() => setOpenIdx(i)} />
+              {/* Only the first slide is eager; the rest are off-screen. */}
+              <Tile url={s.full} alt={`${name} photo ${i + 1}`} onOpen={() => setOpenIdx(i)} eager={i === 0} />
             </div>
           ))}
         </div>
@@ -148,7 +197,7 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ listingId, name = "", image
         {total > 1 && (
           <>
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5">
-              {urls.map((_, i) => (
+              {slides.map((_, i) => (
                 <button
                   key={i}
                   type="button"
@@ -168,12 +217,14 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ listingId, name = "", image
       {/* ── Desktop: mosaic grid, every tile opens the lightbox ──────────── */}
       <div className={`hidden md:grid ${layout.grid} gap-1.5 h-[420px] lg:h-[520px] rounded-2xl overflow-hidden relative`}>
         <div className={`${layout.hero} overflow-hidden bg-slate-100`}>
-          <Tile url={at(0)} alt={`${name} photo 1`} onOpen={() => setOpenIdx(0)} />
+          {/* The LCP element: largest rendition, loaded eagerly. */}
+          <Tile url={at(0).full} alt={`${name} photo 1`} onOpen={() => setOpenIdx(0)} eager />
         </div>
 
-        {tiles.map((url, i) => (
+        {tiles.map((s, i) => (
           <div key={i} className="overflow-hidden bg-slate-100 relative">
-            <Tile url={url} alt={`${name} photo ${i + 2}`} onOpen={() => setOpenIdx(i + 1)} />
+            {/* A quarter of the hero's size, so the small preview suffices. */}
+            <Tile url={s.thumb} alt={`${name} photo ${i + 2}`} onOpen={() => setOpenIdx(i + 1)} />
             {/* Remaining photos are surfaced on the last tile rather than as an
                 extra cell, so the mosaic keeps its exact track count. */}
             {hiddenCount > 0 && i === tiles.length - 1 && (
@@ -253,9 +304,13 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ listingId, name = "", image
               </button>
             )}
 
+            {/* Keyed so React swaps the element instead of reusing one that
+                still shows the previous photo. */}
             <img
-              src={at(openIdx)}
+              key={openIdx}
+              src={at(openIdx).full}
               alt={`${name} photo ${openIdx + 1}`}
+              decoding="async"
               className="max-h-full max-w-full object-contain select-none"
             />
 
@@ -278,15 +333,16 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ listingId, name = "", image
               className="shrink-0 flex gap-2 overflow-x-auto px-4 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              {urls.map((url, i) => (
+              {slides.map((s, i) => (
                 <button
                   key={i}
                   type="button"
                   onClick={() => setOpenIdx(i)}
                   aria-label={`View photo ${i + 1}`}
-                  className={`shrink-0 w-16 h-12 rounded-md overflow-hidden border-2 transition ${i === openIdx ? "border-white" : "border-transparent opacity-60 hover:opacity-100"}`}
+                  className={`shrink-0 w-16 h-12 rounded-md overflow-hidden border-2 bg-slate-800 transition ${i === openIdx ? "border-white" : "border-transparent opacity-60 hover:opacity-100"}`}
                 >
-                  <img src={url} alt="" className="w-full h-full object-cover" />
+                  {/* 64×48 on screen — these were loading full originals. */}
+                  <img src={s.thumb} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>

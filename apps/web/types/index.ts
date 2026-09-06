@@ -1,6 +1,8 @@
 export interface ListingPhoto {
   id: string;
   cdnUrl: string;
+  /** Small preview uploaded alongside the full image; null on older photos. */
+  thumbUrl?: string | null;
   position: number;
 }
 
@@ -81,6 +83,7 @@ export interface PublicListingDetail {
   deliveryFee?: number | null;
   deliveryRadiusKm?: number | null;
   primaryPhotoUrl?: string | null;
+  primaryPhotoThumbUrl?: string | null;
   photos: ListingPhoto[];
   amenities: ListingAmenity[];
   customAmenities: CustomAmenity[];
