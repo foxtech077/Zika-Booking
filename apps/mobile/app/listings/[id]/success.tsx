@@ -30,7 +30,7 @@ export default function ListingSuccessScreen() {
 
   const category: "hotel" | "apartment" | "car" = listing.category ?? "hotel";
   const isHotel = category === "hotel";
-  const coverUrl = listing.photos?.[0]?.cdnUrl ?? null;
+  const coverUrl = listing.photos?.[0]?.thumbUrl ?? listing.photos?.[0]?.cdnUrl ?? null;
   const shortId = typeof listing.id === "string" ? listing.id.slice(0, 8).toUpperCase() : "";
 
   return (

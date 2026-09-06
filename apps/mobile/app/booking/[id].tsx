@@ -41,6 +41,7 @@ interface BookingListing {
   town: string;
   country: string;
   primaryPhotoUrl: string | null;
+  primaryPhotoThumbUrl?: string | null;
 }
 
 interface BookingDetail {
@@ -368,7 +369,8 @@ export default function BookingDetailScreen() {
   // same stable, permanent listing_photos.cdn_url — not a signed/expiring
   // URL) — this used to re-fetch it via GET /listings/:id/public for data
   // already in hand.
-  const signedCoverPhoto = booking?.listing?.primaryPhotoUrl ?? null;
+  const signedCoverPhoto =
+    booking?.listing?.primaryPhotoThumbUrl ?? booking?.listing?.primaryPhotoUrl ?? null;
 
   // Stop auto-refresh once the status moves away from pending_payment
   useEffect(() => {
