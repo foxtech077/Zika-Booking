@@ -16,6 +16,7 @@ interface ManageListing {
   neighborhood: string | null;
   country: string | null;
   primaryPhotoUrl: string | null;
+  primaryPhotoThumbUrl?: string | null;
 }
 
 interface ManageBooking {
@@ -320,7 +321,7 @@ export default function BookingManageView() {
             <div className="w-28 h-28 shrink-0 bg-slate-100 overflow-hidden">
               <ListingImage
                 listingId={booking.listing.id}
-                src={booking.listing.primaryPhotoUrl ?? undefined}
+                src={booking.listing.primaryPhotoThumbUrl ?? booking.listing.primaryPhotoUrl ?? undefined}
                 alt={booking.listing.title}
                 className="w-full h-full object-cover"
                 fallbackNode={

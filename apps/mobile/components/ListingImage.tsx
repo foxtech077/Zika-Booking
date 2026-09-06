@@ -40,15 +40,27 @@ function ListingImageInner({
   style,
   resizeMode = "cover",
   onError,
+  priority = "normal",
+  recyclingKey,
 }: {
   uri: string | null | undefined;
   style: any;
   resizeMode?: "cover" | "contain" | "stretch" | "center";
   onError?: () => void;
+  priority?: "low" | "normal" | "high";
+  /** Stable per-photo id inside recycled lists — without it a reused view keeps
+   *  painting the previous row's photo until the new one decodes. */
+  recyclingKey?: string;
 }) {
   const token = useAuthStore((s) => s.accessToken);
   const { signedUrl } = useSignedPhoto(uri);
   const [loaded, setLoaded] = useState(false);
+
+  // A recycled view gets a new `uri` without unmounting, so this has to reset
+  // explicitly or the shimmer is skipped and the previous photo shows through.
+  useEffect(() => {
+    setLoaded(false);
+  }, [signedUrl]);
 
   if (!signedUrl) {
     return <View style={[style, imgStyles.placeholder]} />;
@@ -71,6 +83,8 @@ function ListingImageInner({
         style={StyleSheet.absoluteFill}
         contentFit={CONTENT_FIT[resizeMode] ?? "cover"}
         cachePolicy="memory-disk"
+        priority={priority}
+        recyclingKey={recyclingKey ?? signedUrl}
         transition={300}
         onLoad={() => setLoaded(true)}
         onError={() => {

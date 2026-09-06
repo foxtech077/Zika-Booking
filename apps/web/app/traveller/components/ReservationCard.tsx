@@ -18,6 +18,7 @@ interface Booking {
   currency: string;
   nightsOrDays: number;
   primaryPhotoUrl?: string | null;
+  primaryPhotoThumbUrl?: string | null;
   canCancel: boolean;
   adults?: number | null;
   children?: number | null;
@@ -97,7 +98,7 @@ export default function ReservationCard({ booking, onCancel, cancellingId, highl
         <div className="w-24 h-24 shrink-0 bg-slate-100 overflow-hidden">
           <ListingImage
             listingId={booking.listingId}
-            src={booking.primaryPhotoUrl ?? undefined}
+            src={booking.primaryPhotoThumbUrl ?? booking.primaryPhotoUrl ?? undefined}
             alt={booking.listingTitle}
             className="w-full h-full object-cover"
             fallbackNode={

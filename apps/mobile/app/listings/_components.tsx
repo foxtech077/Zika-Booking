@@ -548,7 +548,7 @@ export function PhotosSection({
   maxPhotos = 30,
   error,
 }: {
-  photos: Array<{ id: string; cdnUrl: string; position: number }>;
+  photos: Array<{ id: string; cdnUrl: string; thumbUrl?: string | null; position: number }>;
   uploading: boolean;
   uploadProgress?: { current: number; total: number };
   onAdd: () => void;
@@ -655,7 +655,7 @@ export function PhotosSection({
         <View style={fs.photoGrid}>
           {photos.map((p, i) => (
             <View key={p.id} style={fs.photoItem}>
-              <ListingImage uri={p.cdnUrl} style={fs.photoThumb} resizeMode="cover" />
+              <ListingImage uri={p.thumbUrl ?? p.cdnUrl} style={fs.photoThumb} resizeMode="cover" />
               {i === 0 && (
                 <View style={fs.coverBadge}>
                   <Text style={fs.coverBadgeText}>COVER</Text>

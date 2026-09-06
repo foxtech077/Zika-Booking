@@ -26,6 +26,7 @@ export interface BookingSummary {
   listingType: ListingType;
   listingTitle: string;
   listingPrimaryPhotoUrl: string | null;
+  listingPrimaryPhotoThumbUrl?: string | null;
   checkIn?: string;
   checkOut?: string;
   pickupDatetime?: string;
@@ -51,6 +52,7 @@ export interface BookingListing {
   town: string;
   country: string;
   primaryPhotoUrl: string | null;
+  primaryPhotoThumbUrl?: string | null;
 }
 
 export interface BookingDetail {

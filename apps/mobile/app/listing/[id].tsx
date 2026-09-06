@@ -282,9 +282,19 @@ function GalleryModal({ photos, photoIdx, setPhotoIdx, onClose }: GalleryModalPr
         getItemLayout={(_, index) => ({ length: W, offset: W * index, index })}
         onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => setPhotoIdx(Math.round(e.nativeEvent.contentOffset.x / W))}
         scrollEventThrottle={16}
+        // As the hero carousel: one slide on screen, one neighbour warm.
+        initialNumToRender={1}
+        maxToRenderPerBatch={2}
+        windowSize={3}
+        removeClippedSubviews={Platform.OS === "android"}
         renderItem={({ item }) => (
           <View style={{ width: W, flex: 1, justifyContent: "center", alignItems: "center" }}>
-            <ListingImage uri={item.cdnUrl} style={{ width: W, height: H * 0.7 }} resizeMode="contain" />
+            <ListingImage
+              uri={item.cdnUrl}
+              style={{ width: W, height: H * 0.7 }}
+              resizeMode="contain"
+              recyclingKey={item.id}
+            />
           </View>
         )}
       />
@@ -1085,12 +1095,26 @@ export default function ListingDetailScreen() {
                 horizontal pagingEnabled
                 showsHorizontalScrollIndicator={false}
                 scrollEventThrottle={16}
+                // FlatList defaults to rendering 10 slides, so the visible
+                // photo waited behind 9 downloads it would never show.
+                initialNumToRender={1}
+                maxToRenderPerBatch={2}
+                windowSize={3}
+                getItemLayout={(_, index) => ({ length: W, offset: W * index, index })}
+                // Not on iOS: clipping horizontal rows there causes blank cells.
+                removeClippedSubviews={Platform.OS === "android"}
                 onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
                   setPhotoIdx(Math.round(e.nativeEvent.contentOffset.x / W));
                 }}
-                renderItem={({ item }) => (
+                renderItem={({ item, index }) => (
                   <TouchableOpacity activeOpacity={0.95} onPress={() => setGalleryOpen(true)}>
-                    <ListingImage uri={item.cdnUrl} style={{ width: W, height: PHOTO_H }} resizeMode="cover" />
+                    <ListingImage
+                      uri={item.cdnUrl}
+                      style={{ width: W, height: PHOTO_H }}
+                      resizeMode="cover"
+                      recyclingKey={item.id}
+                      priority={index === 0 ? "high" : "normal"}
+                    />
                   </TouchableOpacity>
                 )}
               />

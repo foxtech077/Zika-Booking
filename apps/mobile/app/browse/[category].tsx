@@ -43,6 +43,8 @@ interface Listing {
   countryCode: string;
   distanceKm: number;
   primaryPhotoUrl: string | null;
+  /** Small preview; null on photos uploaded before previews existed. */
+  primaryPhotoThumbUrl?: string | null;
   nightlyRate: number | null;
   dailyRate: number | null;
   // Localized by the API when a currency is requested; display-only.
@@ -499,7 +501,7 @@ export default function BrowseCategoryScreen() {
               item={item}
               apiCategory={apiCategory}
               onPress={() => navToListing(item.id)}
-              signedPhotoUrl={item.primaryPhotoUrl}
+              signedPhotoUrl={item.primaryPhotoThumbUrl ?? item.primaryPhotoUrl}
               promotion={browsePromo}
               columns={columns}
             />

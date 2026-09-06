@@ -3,6 +3,7 @@ import { Alert } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import { listingApi, uploadToS3 } from "../../lib/listing-api";
+import { downscaleFull, downscaleThumb, outputExtension } from "../../lib/image-downscale";
 
 /**
  * Photo + compliance-document uploads for a listing, shared by all three
@@ -14,6 +15,7 @@ import { listingApi, uploadToS3 } from "../../lib/listing-api";
 export interface ListingPhoto {
   id: string;
   cdnUrl: string;
+  thumbUrl?: string | null;
   position: number;
 }
 
@@ -53,11 +55,13 @@ export function useListingMedia(listingId: string) {
             Alert.alert("Camera Permission Needed", "Please allow camera access to take a photo.");
             return;
           }
-          result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"] as any, quality: 0.85 });
+          result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"] as any, quality: 1 });
         } else {
           result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ["images"] as any,
-            quality: 0.85,
+            // Take the picker's output uncompressed: downscaleFull/Thumb
+            // compress once, so compressing here too stacks generational loss.
+            quality: 1,
             allowsMultipleSelection: true,
             selectionLimit: MAX_PHOTOS - photos.length,
           });
@@ -68,16 +72,37 @@ export function useListingMedia(listingId: string) {
         for (let i = 0; i < total; i++) {
           const asset = result.assets[i]!;
           setUploadProgress({ current: i + 1, total });
-          const contentType = asset.mimeType ?? "image/jpeg";
-          const presignRes = await listingApi.post<{ data: { uploadUrl: string; s3Key: string } }>(
-            `/listings/${listingId}/photos/presign`,
-            { contentType, filename: asset.fileName ?? "photo.jpg" }
+
+          // Downscale on-device first: a camera original is ~4000px and several
+          // MB, which no surface displays at full size. Sequential, because each
+          // manipulateAsync decodes the source independently and running both at
+          // once doubles peak bitmap memory.
+          const full = await downscaleFull(
+            asset.uri, asset.width, asset.height, asset.mimeType, asset.fileSize,
           );
-          const { uploadUrl, s3Key } = presignRes.data.data;
-          await uploadToS3(uploadUrl, asset.uri, contentType);
+          const thumb = await downscaleThumb(asset.uri, asset.width, asset.height);
+
+          const base = (asset.fileName ?? "photo").replace(/\.[^.]+$/, "");
+          const ext = outputExtension();
+          const [fullPresign, thumbPresign] = await Promise.all([
+            listingApi.post<{ data: { uploadUrl: string; s3Key: string } }>(
+              `/listings/${listingId}/photos/presign`,
+              { contentType: full.contentType, filename: `${base}.${ext}`, fileSize: full.size }
+            ),
+            listingApi.post<{ data: { uploadUrl: string; s3Key: string } }>(
+              `/listings/${listingId}/photos/presign`,
+              { contentType: thumb.contentType, filename: `${base}-thumb.${ext}`, variant: "thumbnail", fileSize: thumb.size }
+            ),
+          ]);
+
+          await Promise.all([
+            uploadToS3(fullPresign.data.data.uploadUrl, full.uri, full.contentType),
+            uploadToS3(thumbPresign.data.data.uploadUrl, thumb.uri, thumb.contentType),
+          ]);
+
           const confirmRes = await listingApi.post<{ data: ListingPhoto }>(
             `/listings/${listingId}/photos/confirm`,
-            { s3Key }
+            { s3Key: fullPresign.data.data.s3Key, thumbS3Key: thumbPresign.data.data.s3Key }
           );
           setPhotos((p) => [...p, confirmRes.data.data]);
         }

@@ -51,6 +51,7 @@ interface BookingSummary {
   listingType: string;
   listingTitle: string;
   listingPrimaryPhotoUrl: string | null;
+  listingPrimaryPhotoThumbUrl?: string | null;
   checkIn?: string;
   checkOut?: string;
   pickupDatetime?: string;
@@ -118,7 +119,7 @@ async function goToMessageHost(booking: BookingSummary, router: ReturnType<typeo
 // used to re-fetch it per booking via GET /listings/:id/public for data
 // already in hand.
 function useListingPhoto(booking: BookingSummary): string | null {
-  return booking.listingPrimaryPhotoUrl ?? null;
+  return booking.listingPrimaryPhotoThumbUrl ?? booking.listingPrimaryPhotoUrl ?? null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

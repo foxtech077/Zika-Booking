@@ -38,6 +38,8 @@ const RECENT_CARD_W = Math.min(W * 0.72, 340);
 interface SearchResult {
   id: string; listingType: string; title: string; city: string; countryCode: string;
   distanceKm: number; primaryPhotoUrl: string | null; nightlyRate: number | null;
+  /** Small preview; null on photos uploaded before previews existed. */
+  primaryPhotoThumbUrl?: string | null;
   dailyRate: number | null; currency: string; starRating: number | null;
   lat?: number | null; lng?: number | null;
   // Localized by the API when a currency is requested; display-only.
@@ -947,6 +949,7 @@ export default function HomeScreen() {
           countryCode: "",
           distanceKm: 0,
           primaryPhotoUrl: (l.primaryPhotoUrl as string | null) ?? null,
+          primaryPhotoThumbUrl: (l.primaryPhotoThumbUrl as string | null) ?? null,
           nightlyRate: (l.nightlyRate as number | null) ?? null,
           // Not returned by this endpoint yet — a car shows no price here
           // rather than a wrong one borrowed from nightlyRate.
@@ -1029,7 +1032,7 @@ export default function HomeScreen() {
   // this used to re-fetch it per listing via GET /listings/:id/public, firing
   // one request per card (30+ on this screen alone) for data already in hand.
   function photo(item: SearchResult): string | null {
-    return item.primaryPhotoUrl ?? null;
+    return item.primaryPhotoThumbUrl ?? item.primaryPhotoUrl ?? null;
   }
 
   // ── Navigation ─────────────────────────────────────────────────────────────

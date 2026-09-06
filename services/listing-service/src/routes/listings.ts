@@ -21,7 +21,7 @@ import { geocodePlaceId, geocodeAddress, reverseGeocode } from "../lib/geocoding
 import { sendListingSubmittedEmail, sendListingActivatedEmail } from "../lib/email.js";
 import { ceilingForCurrency, getConvertedAmounts, getLocalizedContext } from "../services/exchangeRate.services.js";
 
-const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 500 * 1024;
 const MAX_PHOTOS = 30;
 
 // All valid DocumentType enum values (mirrors schema.prisma DocumentType enum).
@@ -1421,11 +1421,10 @@ export async function listingRoutes(app: FastifyInstance) {
         contentType: string; filename: string; fileSize?: number; variant?: "photo" | "thumbnail";
       };
 
-      // Clients downscale before uploading, so anything arriving here should be
-      // well under a megabyte. 3 MB is headroom, not a target — it exists to
-      // stop a client that skipped downscaling from filling the bucket.
+      // Clients downscale to a 480 KB budget before uploading, so this is a
+      // backstop against a client that skipped downscaling — not a target.
       if (fileSize !== undefined && fileSize > MAX_UPLOAD_BYTES) {
-        return sendError(reply, 422, "FILE_TOO_LARGE", "Image size cannot exceed 3 MB.");
+        return sendError(reply, 422, "FILE_TOO_LARGE", "Image size cannot exceed 500 KB.");
       }
 
       if (!isValidPhotoType(contentType)) {
