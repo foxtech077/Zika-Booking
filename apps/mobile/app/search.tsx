@@ -137,6 +137,8 @@ interface SearchResult {
   lat?: number | null;
   lng?: number | null;
   primaryPhotoUrl: string | null;
+  /** Small preview; null on photos uploaded before previews existed. */
+  primaryPhotoThumbUrl?: string | null;
   nightlyRate: number | null;
   dailyRate: number | null;
   currency: string;
@@ -1870,7 +1872,7 @@ export default function SearchScreen() {
                   returnDatetime={returnDatetime}
                   onFavouriteToggle={handleFavouriteToggle}
                   favouriteLoading={favouriteLoading}
-                  signedPhotoUrl={selectedListing.primaryPhotoUrl}
+                  signedPhotoUrl={selectedListing.primaryPhotoThumbUrl ?? selectedListing.primaryPhotoUrl}
                   promotion={
                     activePromotion as unknown as ActivePromotion | null
                   }
@@ -1922,7 +1924,7 @@ export default function SearchScreen() {
                 returnDatetime={returnDatetime}
                 onFavouriteToggle={handleFavouriteToggle}
                 favouriteLoading={favouriteLoading}
-                signedPhotoUrl={item.primaryPhotoUrl}
+                signedPhotoUrl={item.primaryPhotoThumbUrl ?? item.primaryPhotoUrl}
                 promotion={activePromotion as unknown as ActivePromotion | null}
                 columns={columns}
               />
