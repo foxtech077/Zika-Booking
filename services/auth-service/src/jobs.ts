@@ -18,12 +18,18 @@ const connection = new Redis(
   },
 );
 
-const queue = new Queue(QueueName.Auth, { connection });
+const queue = new Queue(QueueName.Auth, {
+  connection,
+  defaultJobOptions: {
+    removeOnComplete: { count: 1000, age: 24 * 60 * 60 },
+    removeOnFail: { count: 5000, age: 7 * 24 * 60 * 60 },
+  },
+});
 const defaultJobOptions = {
   attempts: 5,
   backoff: { type: "exponential" as const, delay: 30_000 },
   removeOnComplete: { age: 24 * 60 * 60, count: 1000 },
-  removeOnFail: { age: 7 * 24 * 60 * 60 },
+  removeOnFail: { age: 7 * 24 * 60 * 60, count: 5000 },
 };
 
 const worker = new Worker(

@@ -15,7 +15,13 @@ const connection = new Redis(
 
 // Shares the Payment queue (QueueName.Payment) so the existing worker in
 // jobs.ts processes these jobs alongside payouts / refund-retries.
-export const emailQueue = new Queue(QueueName.Payment, { connection });
+export const emailQueue = new Queue(QueueName.Payment, {
+  connection,
+  defaultJobOptions: {
+    removeOnComplete: { count: 1000, age: 24 * 60 * 60 },
+    removeOnFail: { count: 5000, age: 7 * 24 * 60 * 60 },
+  },
+});
 
 export async function closeEmailQueue(): Promise<void> {
   await emailQueue.close();
@@ -35,17 +41,33 @@ export async function enqueueEmailJob(
   paymentId: string,
   kind: EmailKind,
 ): Promise<void> {
+  const jobId = `email-${kind}-${paymentId}`;
+  // Retention keeps terminal jobs around, which would block a re-add under the
+  // same deterministic job id. Clear a terminal predecessor so the
+  // reconciliation sweep can re-enqueue after a permanent failure.
+  const existing = await emailQueue.getJob(jobId);
+  if (existing) {
+    const state = await existing.getState();
+    if (["completed", "failed"].includes(state)) {
+      try {
+        await existing.remove();
+      } catch {
+        return;
+      }
+    } else {
+      return;
+    }
+  }
   await emailQueue.add(
     PaymentJob.EmailRetryJob,
     { paymentId, kind },
     {
-      jobId: `email-${kind}-${paymentId}`,
+      jobId,
       attempts: 5,
       backoff: { type: "exponential", delay: 60_000 },
-      removeOnComplete: true,
-      // NOTE: no `removeOnFail` — a permanently-failed job is eventually
-      // cleared so the reconciliation sweep can re-enqueue it. The worker's
-      // `failed` handler alerts admins on final attempt (see jobs.ts).
+      removeOnComplete: { count: 1000, age: 24 * 60 * 60 },
+      removeOnFail: { count: 5000, age: 7 * 24 * 60 * 60 },
+      // The worker's `failed` handler alerts admins on final attempt (see jobs.ts).
     },
   );
 }
