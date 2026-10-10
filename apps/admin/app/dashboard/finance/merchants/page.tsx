@@ -36,6 +36,7 @@ import type { AdminRole } from "@/types/admin";
 export interface Merchant {
   id: string;
   userId: string;
+  userName?: string | null;
   businessName: string | null;
   country: string | null;
   payoutMethod: "stripe_connect" | "mobile_money" | "bank_transfer" | "manual";
@@ -95,6 +96,10 @@ function payoutStatusColor(status: MerchantPayout["status"]): string {
   }
 }
 
+function getMerchantDisplayName(merchant: Merchant): string {
+  return merchant.userName || merchant.businessName || merchant.bankAccountName || `Merchant (${merchant.id.slice(0, 8)})`;
+}
+
 // -- Merchant Detail Drawer ----------------------------------------------------
 
 function MerchantDetailDrawer({
@@ -145,7 +150,7 @@ function MerchantDetailDrawer({
               </div>
               <div>
                 <p className="font-bold text-slate-900 text-base leading-tight">
-                  {merchant.businessName || merchant.bankAccountName || `Merchant ${merchant.id.slice(0, 8)}`}
+                  {getMerchantDisplayName(merchant)}
                 </p>
                 <p className="text-xs text-slate-500 font-mono mt-0.5">{merchant.id}</p>
                 {merchant.country && (
@@ -344,7 +349,8 @@ export default function MerchantManagementPage() {
       }
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase();
-      return (m.businessName ?? "").toLowerCase().includes(q) ||
+      return (m.userName ?? "").toLowerCase().includes(q) ||
+        (m.businessName ?? "").toLowerCase().includes(q) ||
         (m.bankAccountName ?? "").toLowerCase().includes(q) ||
         (m.country ?? "").toLowerCase().includes(q) ||
         m.id.toLowerCase().includes(q) ||
@@ -382,7 +388,7 @@ export default function MerchantManagementPage() {
           </div>
           <div>
             <p className="font-semibold text-sm text-slate-900">
-              {m.businessName || m.bankAccountName || `Merchant (${m.id.slice(0, 8)})`}
+              {getMerchantDisplayName(m)}
             </p>
             <p className="text-[10px] text-slate-400 font-mono">{m.id.slice(0, 16)}…</p>
           </div>
@@ -560,8 +566,8 @@ export default function MerchantManagementPage() {
           title={verifyTarget.isVerified ? "Unverify Merchant" : "Verify Merchant"}
           description={
             verifyTarget.isVerified
-              ? `Unverifying "${verifyTarget.businessName || verifyTarget.id}" will disable automated payouts. Any scheduled payouts will need to be processed manually.`
-              : `Verifying "${verifyTarget.businessName || verifyTarget.id}" will enable automated payouts for this merchant. Ensure their payment credentials have been reviewed and confirmed.`
+              ? `Unverifying "${getMerchantDisplayName(verifyTarget)}" will disable automated payouts. Any scheduled payouts will need to be processed manually.`
+              : `Verifying "${getMerchantDisplayName(verifyTarget)}" will enable automated payouts for this merchant. Ensure their payment credentials have been reviewed and confirmed.`
           }
           confirmLabel={verifyTarget.isVerified ? "Unverify" : "Verify & Enable Payouts"}
           variant={verifyTarget.isVerified ? "danger" : "info"}

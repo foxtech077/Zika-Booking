@@ -47,9 +47,11 @@ export type BillingResult = {
   securityDeposit: number;
   /** Guest-facing total: subtotal + serviceFee + delivery + deposit. */
   totalAmount: number;
-  /** Platform commission on the list price only: baseAmount × commissionRate. */
+  /** Effective platform commission after funding the guest discount. */
   commissionAmount: number;
-  /** Provider payout: base + delivery + deposit − commission. Never reduced by guest discounts. */
+  /** Gross commission before funding the guest discount. */
+  grossCommissionAmount: number;
+  /** Provider payout: base + delivery + deposit − gross commission. */
   providerPayout: number;
 };
 
@@ -107,8 +109,9 @@ export function calculateBilling(input: BillingInput): BillingResult {
   // minus commission. The provider never receives the payment-processing fee.
   // Discounts are absorbed by the platform's commission and never reduce this
   // payout.
-  const commissionAmount = Number((baseAmount * input.commissionRate).toFixed(2));
-  const providerPayout = Number(Math.max(0, baseAmount + deliveryFee + securityDeposit - commissionAmount).toFixed(2));
+  const grossCommissionAmount = Number((baseAmount * input.commissionRate).toFixed(2));
+  const commissionAmount = Number(Math.max(0, grossCommissionAmount - discount).toFixed(2));
+  const providerPayout = Number(Math.max(0, baseAmount + deliveryFee + securityDeposit - grossCommissionAmount).toFixed(2));
 
   const totalAmount = Number(Math.max(0, subtotal + serviceFee + deliveryFee + securityDeposit).toFixed(2));
 
@@ -125,6 +128,7 @@ export function calculateBilling(input: BillingInput): BillingResult {
     securityDeposit,
     totalAmount,
     commissionAmount,
+    grossCommissionAmount,
     providerPayout,
   };
 }

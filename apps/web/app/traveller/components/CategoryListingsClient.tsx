@@ -9,6 +9,7 @@ import { useFavourites } from "@/hooks/useFavourites";
 import { logoutUser } from "@/lib/api";
 import dynamic from "next/dynamic";
 import ListingCard from "./ListingCard";
+import NearbyResultsBanner from "./NearbyResultsBanner";
 import DateRangePicker from "./DateRangePicker";
 import PriceRangeFields from "./PriceRangeFields";
 import type { PublicListingDetail } from "@/types";
@@ -827,6 +828,9 @@ export default function CategoryListingsClient({ category }: Props) {
   // Airbnb-style area note: set when the backend had to widen the search
   // radius because the local area was too sparse.
   const [areaExpanded, setAreaExpanded] = useState(false);
+  const [nearbyPlace, setNearbyPlace] = useState<string | null>(null);
+  const listingsRequestRef = useRef(0);
+  const lastListingParamsRef = useRef<Record<string, any> | null>(null);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -884,9 +888,14 @@ export default function CategoryListingsClient({ category }: Props) {
   /* Fetch listings                                              */
   /* ─────────────────────────────────────────────────────────── */
   async function fetchListings(newOffset: number, append: boolean, destOverride?: string) {
+    const requestId = ++listingsRequestRef.current;
     if (newOffset === 0) {
       setLoading(true);
+      setLoadingMore(false);
       setError(null);
+      setNearbyPlace(null);
+      setAreaExpanded(false);
+      lastListingParamsRef.current = null;
       setListings([]); // Clear previous results immediately — never show stale data during a new search
     } else {
       setLoadingMore(true);
@@ -899,6 +908,7 @@ export default function CategoryListingsClient({ category }: Props) {
     // text search; only an empty destination uses visitor-origin browsing.
     const isPlaceSearch = !!dest && !!selectedPlace && dest === destination.trim();
     const origin = !dest ? await getSearchOrigin() : null;
+    if (requestId !== listingsRequestRef.current) return;
 
     const params: Record<string, any> = {
       category,
@@ -958,7 +968,12 @@ export default function CategoryListingsClient({ category }: Props) {
     console.log("[Search] Request payload:", params);
 
     try {
-      const res = await listingApi.get<any>("/search", { params });
+      const requestParams = append && lastListingParamsRef.current
+        ? { ...lastListingParamsRef.current, cursor: newOffset }
+        : params;
+      if (!append) lastListingParamsRef.current = { ...params };
+      const res = await listingApi.get<any>("/search", { params: requestParams });
+      if (requestId !== listingsRequestRef.current) return;
       const data = res.data?.data ?? {};
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
 
@@ -970,14 +985,22 @@ export default function CategoryListingsClient({ category }: Props) {
 
       const total = data.totalCount ?? data.availableCount ?? mapped.length + newOffset;
       setTotalCount(total);
-      setAreaExpanded(!!data.searchArea?.expanded);
+      if (!append) {
+        setAreaExpanded(!!data.searchArea?.expanded);
+        setNearbyPlace(data.searchArea?.resultType === "nearby" && mapped.length > 0 && isPlaceSearch ? dest : null);
+      }
       setListings((prev) => (append ? [...prev, ...mapped] : mapped));
       setOffset(newOffset);
     } catch (err: any) {
+      if (requestId !== listingsRequestRef.current) return;
       setError(err?.response?.data?.error?.message ?? err?.message ?? "Failed to load listings.");
+      setNearbyPlace(null);
+      setAreaExpanded(false);
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (requestId === listingsRequestRef.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
   }
 
@@ -1420,7 +1443,7 @@ export default function CategoryListingsClient({ category }: Props) {
                   ? "Loading…"
                   : `${totalCount > 0 ? totalCount.toLocaleString() : listings.length} ${meta.label} Found`}
               </h1>
-              {!loading && areaExpanded && listings.length > 0 && (
+              {!loading && areaExpanded && !nearbyPlace && listings.length > 0 && (
                 <p className="mt-1 text-sm text-slate-500">
                   {destination.trim()
                     ? `Not many places right in ${destination.trim()} — showing the nearest options further out.`
@@ -1460,6 +1483,10 @@ export default function CategoryListingsClient({ category }: Props) {
               </div>
             </div>
           </div>
+
+          {nearbyPlace && !loading && listings.length > 0 && (
+            <div className="mx-6 lg:mx-8 mb-4"><NearbyResultsBanner placeName={nearbyPlace} /></div>
+          )}
 
           {/* Promotion banner */}
           {activePromo && activePromo.activity === category && isPromotionValid(activePromo) && !loading && (

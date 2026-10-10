@@ -27,7 +27,7 @@ test("guest pays listPrice × units + 4% transaction fee; commission and payout 
   assert.equal(b.serviceFee, 8);         // ceil(200 × 4%)
   assert.equal(b.discount, 0);
   // Commission on the list price only — NOT on service fee / delivery.
-  assert.equal(b.commissionAmount, 20);  // 200 × 10%
+  assert.equal(b.commissionAmount, 20);  // 200 × 10%, no discount
   assert.equal(b.providerPayout, 180);   // 200 − 20
   assert.equal(b.totalAmount, 208);      // 200 + 8
 });
@@ -42,9 +42,31 @@ test("admin discount reduces the guest bill but never the provider payout (funde
   assert.equal(b.discount, 15);
   // Provider is paid on the full list price — the discount comes off the
   // platform's commission, not the provider.
-  assert.equal(b.commissionAmount, 20);
+  assert.equal(b.commissionAmount, 5);   // 20 gross commission − 15 discount
+  assert.equal(b.grossCommissionAmount, 20);
   assert.equal(b.providerPayout, 180);
   assert.equal(b.totalAmount, 192.4);    // 185 + 7.4
+});
+
+test("platform discount leaves only the residual commission as platform revenue", () => {
+  const b = calculateBilling({
+    listingCategory: "hotel",
+    checkIn: "2026-01-01",
+    checkOut: "2026-01-02",
+    rate: 1000,
+    promotionDiscount: 100,
+    voucherAmount: 0,
+    pointsDiscount: 0,
+    commissionRate: 0.16,
+  });
+
+  assert.equal(b.baseAmount, 1000);
+  assert.equal(b.subtotal, 900);
+  assert.equal(b.serviceFee, 36);
+  assert.equal(b.totalAmount, 936);
+  assert.equal(b.grossCommissionAmount, 160);
+  assert.equal(b.commissionAmount, 60);
+  assert.equal(b.providerPayout, 840);
 });
 
 test("only the best of promotion vs voucher is counted as the discount", () => {
@@ -61,7 +83,7 @@ test("points redemption is an additional guest discount on top of promo/voucher"
   const b = calculateBilling(stay({ promotionDiscount: 10, pointsDiscount: 5 }));
   assert.equal(b.discount, 15);
   assert.equal(b.subtotal, 185);
-  assert.equal(b.commissionAmount, 20);  // payout still untouched
+  assert.equal(b.commissionAmount, 5);   // payout still untouched
   assert.equal(b.providerPayout, 180);
 });
 
@@ -84,7 +106,7 @@ test("car bookings use rental days, apply the deposit, and only charge delivery 
   assert.equal(b.serviceFee, 6);         // ceil(150 × 4%) to 2dp — fee is on the subtotal, not delivery
   assert.equal(b.deliveryFee, 25);
   assert.equal(b.securityDeposit, 200);
-  assert.equal(b.commissionAmount, 22.5);    // 150 × 15%
+  assert.equal(b.commissionAmount, 22.5);    // 150 × 15%, no discount
   assert.equal(b.providerPayout, 352.5);     // 150 base + 25 delivery + 200 deposit − 22.5 commission
    assert.equal(b.totalAmount, 381);          // 150 + 6 + 25 + 200
 });

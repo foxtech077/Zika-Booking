@@ -40,6 +40,7 @@ import {
   getConvertedAmounts,
   buildPlatformSnapshot,
 } from "../services/exchangeRate.services.js";
+import { getActivePromotion, promotionAmount } from "../services/promotion.service.js";
 
 const LOCK_TTL_MS = 300_000; // 5 minutes
 
@@ -967,26 +968,8 @@ export async function bookingRoutes(app: FastifyInstance) {
     const baseAmount = Number((baseRate * units).toFixed(2));
     const displayedNightlyRate = baseRate;
 
-    const now = new Date();
-    const activePromo = await (prisma as any).activityPromotion.findFirst({
-      where: {
-        activity: listing.category,
-        status: "active",
-        validFrom: { lte: now },
-        validUntil: { gte: now },
-        applyToBooking: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    let promotionDiscount = 0;
-    if (activePromo) {
-      promotionDiscount =
-        activePromo.discountType === "percentage"
-          ? baseAmount * (Number(activePromo.discountValue) / 100)
-          : Number(activePromo.discountValue);
-    }
-    promotionDiscount = Number(promotionDiscount.toFixed(2));
+    const activePromo = await getActivePromotion(listing.category, listing.country, true);
+    const promotionDiscount = promotionAmount(baseAmount, activePromo);
 
     const billing = calculateBilling({
       listingCategory: listing.category,
@@ -1247,28 +1230,8 @@ export async function bookingRoutes(app: FastifyInstance) {
         // List-price base (commission-exclusive) — the base price the guest pays.
         const baseAmount = Number((baseRate * units).toFixed(2));
 
-        const now = new Date();
-        const activePromo = await (prisma as any).activityPromotion.findFirst({
-          where: {
-            activity: listing.category,
-            status: "active",
-            validFrom: { lte: now },
-            validUntil: { gte: now },
-            applyToBooking: true,
-          },
-          orderBy: { createdAt: "desc" },
-        });
-
-        let promotionDiscount = 0;
-        if (activePromo) {
-          if (activePromo.discountType === "percentage") {
-            promotionDiscount =
-              baseAmount * (Number(activePromo.discountValue) / 100);
-          } else if (activePromo.discountType === "fixed") {
-            promotionDiscount = Number(activePromo.discountValue);
-          }
-        }
-        promotionDiscount = Number(promotionDiscount.toFixed(2));
+        const activePromo = await getActivePromotion(listing.category, listing.country, true);
+        const promotionDiscount = promotionAmount(baseAmount, activePromo);
 
         // ── 2. STATUS CHECK ─────────────────────────
         const validStatuses =
@@ -2059,28 +2022,8 @@ export async function bookingRoutes(app: FastifyInstance) {
 
         // 1c. PROMOTION LOGIC
         const now = new Date();
-        const activePromo = await (prisma as any).activityPromotion.findFirst({
-          where: {
-            activity: listing.category,
-            status: "active",
-            validFrom: { lte: now },
-            validUntil: { gte: now },
-            applyToBooking: true,
-          },
-          orderBy: { createdAt: "desc" },
-        });
-
-        let promotionDiscount = 0;
-        if (activePromo) {
-          if (activePromo.discountType === "percentage") {
-            promotionDiscount =
-              baseBilling.baseAmount *
-              (Number(activePromo.discountValue) / 100);
-          } else if (activePromo.discountType === "fixed") {
-            promotionDiscount = Number(activePromo.discountValue);
-          }
-        }
-        promotionDiscount = Number(promotionDiscount.toFixed(2));
+        const activePromo = await getActivePromotion(listing.category, listing.country, true);
+        let promotionDiscount = promotionAmount(baseBilling.baseAmount, activePromo);
 
         let voucherDiscount = 0;
         let appliedVoucher: { id: string; code: string } | null = null;
@@ -2286,7 +2229,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         );
 
         // Explicitly-applied voucher: reject the booking so nothing wrong is charged.
-        if (appliedVoucher && voucherDiscount > adminCommissionRef) {
+        if (appliedVoucher && voucherDiscount >= adminCommissionRef) {
           return sendError(
             reply,
             400,
@@ -2297,12 +2240,24 @@ export async function bookingRoutes(app: FastifyInstance) {
 
         // Auto-applied category promotion: skip it for this booking (a promo-wide
         // misconfiguration must not block guest bookings) and surface it in the logs.
-        if (promotionDiscount > adminCommissionRef) {
+        if (promotionDiscount >= adminCommissionRef) {
           app.log.warn(
             { listingId: listing.id, promotionDiscount, adminCommissionRef },
             "[promo] Category promotion discount exceeds commission — skipped for this booking",
           );
           promotionDiscount = 0;
+        }
+
+        const effectiveRequestedDiscount = Number(
+          (Math.max(promotionDiscount, voucherDiscount) + pointsDiscount).toFixed(2),
+        );
+        if (effectiveRequestedDiscount >= adminCommissionRef) {
+          return sendError(
+            reply,
+            400,
+            "DISCOUNT_EXCEEDS_COMMISSION",
+            "The combined discount exceeds the allowable commission for this booking.",
+          );
         }
 
         // 3. FINAL RECALCULATION
@@ -2332,9 +2287,11 @@ export async function bookingRoutes(app: FastifyInstance) {
         const commissionAmount = finalBilling.commissionAmount;
         const providerPayout = finalBilling.providerPayout;
         const deliveryFee = finalBilling.deliveryFee;
-        const discountAmount = finalBilling.discount;
-        const appliedVoucherDiscount =
-          voucherDiscount >= promotionDiscount ? voucherDiscount : 0;
+        const appliedVoucherDiscount = voucherDiscount >= promotionDiscount ? voucherDiscount : 0;
+        const appliedPromotionDiscount = promotionDiscount > voucherDiscount ? promotionDiscount : 0;
+        const discountAmount = Number(
+          (appliedPromotionDiscount + appliedVoucherDiscount + pointsDiscount).toFixed(2),
+        );
 
         // Build the persistence-ready price breakdown snapshot (display only —
         // the actual platform-currency charge is captured on the payment at
@@ -2347,7 +2304,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           // and commission basis.
           baseAmount: finalBilling.baseAmount,
           subtotal,
-          promotionDiscount,
+          promotionDiscount: appliedPromotionDiscount,
           voucherDiscount: appliedVoucherDiscount,
           pointsDiscount,
           serviceFee: finalBilling.serviceFee,
@@ -2357,6 +2314,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           discountAmount,
           totalAmount,
           commissionAmount,
+          grossCommissionAmount: finalBilling.grossCommissionAmount,
           providerPayout,
         };
         const displayCurrency = (listing.currency ?? "USD").toUpperCase();

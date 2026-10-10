@@ -10,7 +10,7 @@ import { liveProviderListingWhere } from "../services/commission.service.js";
 
 function isSuperAdmin(role: string) { return role === "super_admin"; }
 function canWriteCommission(role: string) { return role === "super_admin" || role === "admin"; }
-function canExport(role: string) { return role === "super_admin" || role === "finance_agent"; }
+function canExport(role: string) { return role === "super_admin" || role === "finance"; }
 
 // ── Rate validation ────────────────────────────────────────────────────────────
 // PRD 15.5: 0–50%. The admin API accepts percentage values (12.5 = 12.5%);
@@ -315,7 +315,7 @@ export async function commissionRoutes(app: FastifyInstance) {
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     
-    const whereClause = isSuperAdmin(admin.adminRole) || admin.adminRole === "admin" || admin.adminRole === "finance_agent" 
+    const whereClause = isSuperAdmin(admin.adminRole) || admin.adminRole === "admin" || admin.adminRole === "finance"
       ? {} 
       : { country: { in: admin.countryScope } };
 
@@ -750,7 +750,7 @@ export async function commissionRoutes(app: FastifyInstance) {
 
       const where: Record<string, unknown> = {};
 
-      if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "admin" && admin.adminRole !== "finance_agent") {
+      if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "admin" && admin.adminRole !== "finance") {
         where["OR"] = [
           { scope: "global" },
           { countryCode: { in: admin.countryScope } }
@@ -759,7 +759,7 @@ export async function commissionRoutes(app: FastifyInstance) {
 
       if (q.country) {
         const c = q.country.toUpperCase();
-        if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "admin" && admin.adminRole !== "finance_agent" && !admin.countryScope.includes(c)) {
+        if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "admin" && admin.adminRole !== "finance" && !admin.countryScope.includes(c)) {
           return sendError(reply, 403, "FORBIDDEN", "You do not have permission to view this country.");
         }
         where["countryCode"] = c;
@@ -811,7 +811,7 @@ export async function commissionRoutes(app: FastifyInstance) {
   app.get("/admin/commission-rates/history/export", {
     schema: {
       tags: ["Admin Commission"],
-      summary: "Export commission history as CSV (Super Admin & Finance Agent)",
+      summary: "Export commission history as CSV (Super Admin & Finance)",
       security: [{ bearerAuth: [] }],
       querystring: {
         type: "object",
@@ -827,7 +827,7 @@ export async function commissionRoutes(app: FastifyInstance) {
     try {
       const admin = req as AdminRequest;
       if (!canExport(admin.adminRole)) {
-        return sendError(reply, 403, "FORBIDDEN", "Only Super Admins and Finance Agents can export commission history.");
+        return sendError(reply, 403, "FORBIDDEN", "Only Super Admins and Finance admins can export commission history.");
       }
 
       const q = req.query as { country?: string; from?: string; to?: string };

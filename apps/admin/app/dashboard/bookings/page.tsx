@@ -847,6 +847,7 @@ export default function BookingsPage() {
             <div className="bg-surface-subtle rounded-xl p-4 space-y-2 text-sm border border-border">
               <p className="font-semibold text-slate-900 mb-2">Financial Breakdown</p>
               {[["Subtotal", <EurValue key="s" amount={detailData.subtotal} currency={detailData.currency} rates={eurRates} />],
+                ["Platform Discount", <span key="pd" className="text-danger">- <EurValue amount={Math.max(0, Number(detailData.discountAmount ?? 0) - Number(detailData.voucherDiscount ?? 0))} currency={detailData.currency} rates={eurRates} /></span>],
                 ["Voucher Discount", <span key="v" className="text-danger">- <EurValue amount={detailData.voucherDiscount} currency={detailData.currency} rates={eurRates} /></span>],
                 ["Service Fee", <EurValue key="f" amount={detailData.serviceFee} currency={detailData.currency} rates={eurRates} />],
                 ["Delivery Fee", <EurValue key="d" amount={detailData.deliveryFee} currency={detailData.currency} rates={eurRates} />],

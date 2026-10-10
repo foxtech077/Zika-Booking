@@ -215,6 +215,7 @@ export interface Booking {
   providerPayout: string;
   voucherCode: string | null;
   voucherDiscount: string;
+  priceBreakdownJson?: Record<string, unknown> | null;
   cancellationPolicy: string | null;
   refundAmount: string | null;
   cancelledAt: string | null;
@@ -313,6 +314,7 @@ export interface FinancialTransaction {
   providerId: string;
   subtotal: number;
   discount: number;
+  platformDiscount?: number;
   voucherCode: string | null;
   voucherDiscount: number;
   amount: number;

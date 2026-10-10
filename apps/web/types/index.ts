@@ -50,6 +50,22 @@ export interface PublicListingDetail {
    *  the listing's real currency; never substitute these into that math. */
   localizedPricePerNight?: number | null;
   localizedCurrency?: string | null;
+  originalNightlyRate?: number | null;
+  discountedNightlyRate?: number | null;
+  originalDailyRate?: number | null;
+  discountedDailyRate?: number | null;
+  localizedOriginalNightlyRate?: number | null;
+  localizedDiscountedNightlyRate?: number | null;
+  localizedOriginalDailyRate?: number | null;
+  localizedDiscountedDailyRate?: number | null;
+  promotionDiscount?: number;
+  promotion?: {
+    id: string;
+    discountType: string;
+    discountValue: number | null;
+    labelText: string;
+    labelColour?: string;
+  } | null;
   minStayNights: number;
   /** Service-fee rate for this listing's country, as a decimal fraction
    *  (0.05 = 5%). Served by GET /listings/:id/public — the same value the
@@ -103,4 +119,3 @@ export interface PublicListingDetail {
   instantBooking?: boolean;
   roomTypes?: HotelRoomType[];
 }
-

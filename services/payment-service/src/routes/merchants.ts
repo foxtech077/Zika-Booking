@@ -9,6 +9,30 @@ import { fetchBookingsStatusBatch } from "../services/payoutFlowState.js";
 
 const PROVIDER_BASE_URL = process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005";
 
+type MerchantUserName = {
+  id: string;
+  firstName: string;
+  lastName: string;
+};
+
+async function addMerchantUserNames<T extends { userId: string }>(merchants: T[]) {
+  if (merchants.length === 0) return merchants.map((merchant) => ({ ...merchant, userName: null }));
+
+  const userIds = [...new Set(merchants.map((merchant) => merchant.userId))];
+  const users = await prisma.$queryRawUnsafe<MerchantUserName[]>(
+    `SELECT id, "firstName", "lastName" FROM auth."User" WHERE id = ANY($1)`,
+    userIds,
+  );
+  const userNames = new Map(
+    users.map((user) => [user.id, `${user.firstName} ${user.lastName}`.trim() || null]),
+  );
+
+  return merchants.map((merchant) => ({
+    ...merchant,
+    userName: userNames.get(merchant.userId) ?? null,
+  }));
+}
+
 export async function merchantRoutes(app: FastifyInstance) {
   // ── GET /merchant/me ────────────────────────────────────────────────────────
   // Returns the authenticated provider's merchant profile (creates a bare one if missing)
@@ -104,10 +128,11 @@ export async function merchantRoutes(app: FastifyInstance) {
       prisma.merchant.findMany({ where, orderBy: { createdAt: "desc" }, skip, take: limit }),
       prisma.merchant.count({ where }),
     ]);
+    const merchantsWithNames = await addMerchantUserNames(merchants);
 
     reply.send({
       success: true,
-      data: merchants,
+      data: merchantsWithNames,
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   });
@@ -134,10 +159,11 @@ export async function merchantRoutes(app: FastifyInstance) {
     if (!merchant) return sendError(reply, 404, "NOT_FOUND", "Merchant not found.");
     if (!assertResourceCountryScope(req, reply, merchant.country)) return;
     const bookingMap = await fetchBookingsStatusBatch(merchant.payouts.map((p) => p.bookingId));
+    const [merchantWithName] = await addMerchantUserNames([merchant]);
     reply.send({
       success: true,
       data: {
-        ...merchant,
+        ...merchantWithName,
         payouts: merchant.payouts.map((p) => ({
           ...p,
           bookingReference: bookingMap.get(p.bookingId)?.reference ?? null,

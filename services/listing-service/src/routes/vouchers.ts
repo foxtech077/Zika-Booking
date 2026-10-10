@@ -605,7 +605,7 @@ export async function voucherRoutes(app: FastifyInstance) {
         const voucherCommissionRate = body.countryScope
           ? await getCommissionRate(body.countryScope)
           : await getGlobalCommissionRate();
-        if (body.discountValue / 100 > voucherCommissionRate) {
+        if (body.discountValue / 100 >= voucherCommissionRate) {
           return sendError(
             reply,
             400,
@@ -735,7 +735,7 @@ export async function voucherRoutes(app: FastifyInstance) {
           const commissionRate = body.countryScope
             ? await getCommissionRate(body.countryScope)
             : await getGlobalCommissionRate();
-          if (Number(body.discountValue) / 100 > commissionRate) {
+          if (Number(body.discountValue) / 100 >= commissionRate) {
             return sendError(
               reply,
               400,

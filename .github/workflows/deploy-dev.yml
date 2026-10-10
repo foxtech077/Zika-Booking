@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - dev
+  workflow_dispatch:
 env:
   AWS_REGION: af-south-1
   ECR_REGISTRY: 891924441446.dkr.ecr.af-south-1.amazonaws.com
@@ -74,14 +75,8 @@ jobs:
           tags: |
             ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:dev-latest
             ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:dev-${{ github.sha }}
-          # gha backend caches ALL stages (incl. the builder's pnpm install) in
-          # GitHub's cache service between runs, so unchanged lockfiles skip the
-          # store download entirely. Inline (default, mode=min) only cached the
-          # final-stage layers, which is why installs rebuilt every run.
-          cache-from: |
-            type=gha,scope=${{ matrix.image }}
-            type=registry,ref=${{ env.ECR_REGISTRY }}/${{ matrix.image }}:dev-latest
-          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+          # Force a clean rebuild while diagnosing stale image/runtime issues.
+          no-cache: true
           build-args: ${{ matrix.build_args }}
   deploy:
     name: "Deploy to Development"

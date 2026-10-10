@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { History, Search, Globe, Calendar, Info, Download } from "lucide-react";
+import { History, Globe, Download } from "lucide-react";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -62,15 +62,15 @@ export default function CommissionHistoryPage() {
         limit: String(limit),
       };
       if (countryFilter) params.country = countryFilter;
-      if (startDate) params.startDate = startDate;
-      if (endDate) params.endDate = endDate;
+      if (startDate) params.from = startDate;
+      if (endDate) params.to = endDate;
       const res = await listingApi.get(`/admin/commission-rates/history?${new URLSearchParams(params)}`);
       return res.data.data;
     },
   });
 
-  const commissionHistory: CommissionHistoryEntry[] = historyData?.history ?? [];
-  const total = historyData?.pagination?.total ?? 0;
+  const commissionHistory: CommissionHistoryEntry[] = historyData?.rows ?? [];
+  const total = historyData?.total ?? 0;
 
   // Client-side search filtering (server does date/country filtering)
   const filteredHistory = useMemo(() => {
@@ -85,28 +85,25 @@ export default function CommissionHistoryPage() {
     });
   }, [commissionHistory, searchQuery]);
 
-  const canExport = user?.role === "super_admin" || user?.role === "finance" || user?.role === "support";
+  const canExport = user?.role === "super_admin" || user?.role === "finance";
 
-  const handleExport = () => {
-    const headers = ["Scope", "Previous Rate (%)", "New Rate (%)", "Effective Date", "Authorized By", "Reason", "Logged At"];
-    const rows = filteredHistory.map(h => [
-      h.countryCode ?? h.scope,
-      h.oldRate,
-      h.newRate,
-      h.effectiveFrom,
-      h.changedBy,
-      `"${(h.reason ?? "").replace(/"/g, '""')}"`,
-      h.createdAt
-    ]);
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
+  const handleExport = async () => {
+    const params = new URLSearchParams();
+    if (countryFilter) params.set("country", countryFilter);
+    if (startDate) params.set("from", startDate);
+    if (endDate) params.set("to", endDate);
+
+    const response = await listingApi.get(`/admin/commission-rates/history/export?${params}`, {
+      responseType: "blob",
+    });
+    const url = URL.createObjectURL(response.data);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "commission_history.csv");
+    link.href = url;
+    link.download = "commission_history.csv";
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   const columns: Column<CommissionHistoryEntry>[] = [

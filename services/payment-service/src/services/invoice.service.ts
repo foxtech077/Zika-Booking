@@ -28,13 +28,21 @@ export function buildInvoice(booking: any, charge?: InvoiceCharge | null) {
   // the snapshot only applies when BOTH booking-level fields are zero/missing
   // (e.g. very old bookings).
   const bookingDiscount = Number(booking.discountAmount || 0);
-  const voucherDiscount = Number(booking.voucherDiscount || 0);
-  const hasBookingDiscount = bookingDiscount > 0 || voucherDiscount > 0;
-  const discount = hasBookingDiscount
-    ? bookingDiscount + voucherDiscount
-    : breakdown.discountAmount != null
-      ? Number(breakdown.discountAmount)
-      : 0;
+  const snapshotDiscount = breakdown.discountAmount != null ? Number(breakdown.discountAmount) : 0;
+  // discountAmount is the total discount, not an additional amount on top of
+  // voucherDiscount. Prefer the persisted split snapshot when available so a
+  // voucher is never counted twice on receipts.
+  const splitDiscount = ["promotionDiscount", "voucherDiscount", "pointsDiscount"]
+    .some((key) => breakdown[key] != null)
+    ? Number(breakdown.promotionDiscount ?? 0) +
+      Number(breakdown.voucherDiscount ?? 0) +
+      Number(breakdown.pointsDiscount ?? 0)
+    : 0;
+  const discount = splitDiscount > 0
+    ? splitDiscount
+    : snapshotDiscount > 0
+      ? snapshotDiscount
+      : bookingDiscount;
   const grossBase =
     breakdown.baseAmount != null
       ? Number(breakdown.baseAmount)

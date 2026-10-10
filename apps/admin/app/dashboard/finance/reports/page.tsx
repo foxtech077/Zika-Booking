@@ -216,6 +216,7 @@ export default function FinancialReportsPage() {
           period: string; 
           gross: number; 
           voucherDiscounts: number;
+          platformDiscounts: number;
           payout: number;
           netRevenue: number;
           bookingsCount: number; 
@@ -231,6 +232,7 @@ export default function FinancialReportsPage() {
               period: key, 
               gross: 0, 
               voucherDiscounts: 0,
+              platformDiscounts: 0,
               payout: 0,
               netRevenue: 0,
               bookingsCount: 0, 
@@ -245,6 +247,7 @@ export default function FinancialReportsPage() {
           revMap[key].gross += chargedToEur(tx.chargedAmount, tx.chargedCurrency, eurRates)
             ?? eur(tx.amount, tx.currency);
           revMap[key].voucherDiscounts += eur(tx.voucherDiscount, tx.currency);
+          revMap[key].platformDiscounts += eur(tx.platformDiscount ?? Math.max(0, tx.discount - tx.voucherDiscount), tx.currency);
           revMap[key].payout += toEurAtCharge(tx.providerPayout, tx.currency, tx.chargedCurrency, tx.chargedRate, eurRates) ?? 0;
           revMap[key].netRevenue += (chargedToEur(tx.chargedAmount, tx.chargedCurrency, eurRates) ?? eur(tx.amount, tx.currency))
             - (toEurAtCharge(tx.providerPayout, tx.currency, tx.chargedCurrency, tx.chargedRate, eurRates) ?? 0);
@@ -335,6 +338,11 @@ export default function FinancialReportsPage() {
           { key: "period", label: "Month/Year", render: (r) => <span className="font-semibold text-slate-800">{r.period}</span> },
           { key: "bookingsCount", label: "Bookings", render: (r) => <span>{r.bookingsCount}</span> },
           { key: "gross", label: "Gross Revenue", align: "right", render: (r) => <span className="tabular font-medium">{formatCurrency(r.gross, "EUR")}</span> },
+          { key: "platformDiscounts", label: "Platform Discounts", align: "right", render: (r) => (
+            <span className="tabular font-medium text-amber-600">
+              {r.platformDiscounts > 0 ? `- ${formatCurrency(r.platformDiscounts, "EUR")}` : "—"}
+            </span>
+          )},
           { key: "voucherDiscounts", label: "Voucher Discounts", align: "right", render: (r) => (
             <span className="tabular font-medium text-amber-600">
               {r.voucherDiscounts > 0 ? `- ${formatCurrency(r.voucherDiscounts, "EUR")}` : "—"}
@@ -405,8 +413,8 @@ export default function FinancialReportsPage() {
     const fileName = `financial-${activeReport}-report-${new Date().toISOString().split("T")[0]}`;
 
     if (activeReport === "revenue") {
-      headers = ["Period", "Bookings", "Gross Revenue", "Voucher Discounts", "Provider Payout", "Platform Net Revenue", "Avg Booking Value"];
-      rows = reportTableData.map((r: any) => [r.period, r.bookingsCount, r.gross, r.voucherDiscounts, r.payout, r.netRevenue, r.avgValue]);
+      headers = ["Period", "Bookings", "Gross Revenue", "Platform Discounts", "Voucher Discounts", "Provider Payout", "Platform Net Revenue", "Avg Booking Value"];
+      rows = reportTableData.map((r: any) => [r.period, r.bookingsCount, r.gross, r.platformDiscounts, r.voucherDiscounts, r.payout, r.netRevenue, r.avgValue]);
     } else if (activeReport === "payment") {
       headers = ["Booking Ref", "Traveller", "Gateway", "Voucher Code", "Discount", "Amount", "Currency", "Date", "Status"];
       rows = reportTableData.map((r: any) => [r.reference, r.traveller, r.gateway, r.voucherCode ?? "", r.voucherDiscount, r.amount, r.currency, r.date, r.status]);

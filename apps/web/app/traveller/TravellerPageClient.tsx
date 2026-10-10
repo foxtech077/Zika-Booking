@@ -19,6 +19,7 @@ import { useCurrencyStore } from "@/stores/currency";
 import { approxPrefix } from "@/lib/currency";
 import { useFavourites } from "@/hooks/useFavourites";
 import ListingCard from "./components/ListingCard";
+import NearbyResultsBanner from "./components/NearbyResultsBanner";
 import { ActivityPromoBanner, PersonalVoucherBanner } from "./components/PromoBanner";
 import { isPromotionValid } from "./utils/promo-utils";
 import PhotoGallery from "./components/PhotoGallery";
@@ -173,6 +174,14 @@ interface ActivePromotion {
   bannerSubtitle?: string;
   validUntil?: string;
   applyToBooking?: boolean;
+}
+
+function promotionLabel(promotion: ActivePromotion): string {
+  return promotion.labelText?.trim()
+    || promotion.bannerTitle?.trim()
+    || (promotion.discountType === "percentage"
+      ? `${promotion.discountValue}% off`
+      : "Special offer");
 }
 
 interface ApplicableVoucher {
@@ -371,6 +380,8 @@ export default function TravellerDashboard() {
 
   // Search Results + pagination
   const [listings, setListings] = useState<PublicListingDetail[]>([]);
+  const [nearbyPlace, setNearbyPlace] = useState<string | null>(null);
+  const searchRequestRef = useRef(0);
   const [totalCount, setTotalCount] = useState(0);
   const [searchOffset, setSearchOffset] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -1402,8 +1413,10 @@ export default function TravellerDashboard() {
       }
     }
 
+    const requestId = ++searchRequestRef.current;
     setSearching(true);
     setSearchError(null);
+    setNearbyPlace(null);
     setShowQuickDrop(false);
     setActiveTab("search");
     // Clear stale listings immediately so the grid never shows results from a previous search
@@ -1461,8 +1474,10 @@ export default function TravellerDashboard() {
 
       // Snapshot the params before the request so load more can replay
       // this exact query with only the cursor advanced.
+      if (requestId !== searchRequestRef.current) return;
       lastSearchBaseRef.current = { ...params };
       const res = await listingApi.get<any>("/search", { params });
+      if (requestId !== searchRequestRef.current) return;
       const data = res.data?.data ?? {};
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
       const mapped = results.map(mapSearchResult);
@@ -1471,6 +1486,7 @@ export default function TravellerDashboard() {
 
       setSearchOffset(data.nextCursor ?? null);
       setTotalCount(data.totalCount ?? data.availableCount ?? displayListings.length);
+      setNearbyPlace(data.searchArea?.resultType === "nearby" && displayListings.length > 0 && isPlaceSearch ? queryText : null);
       if (displayListings.length > 0) {
         setListings(displayListings);
         fetchActivePromotion(activeCategory);
@@ -1479,12 +1495,14 @@ export default function TravellerDashboard() {
         setActivePromotion(null);
       }
     } catch (err: any) {
+      if (requestId !== searchRequestRef.current) return;
       const errMsg = err?.response?.data?.error?.message ?? err?.message ?? "Unknown error";
       console.error("[ZikaSearch] Search API error:", err?.response?.data ?? err?.message ?? err);
       setSearchError(`Search failed: ${errMsg}`);
       setListings([]);
+      setNearbyPlace(null);
     } finally {
-      setSearching(false);
+      if (requestId === searchRequestRef.current) setSearching(false);
     }
   }
 
@@ -1495,11 +1513,13 @@ export default function TravellerDashboard() {
   async function loadMoreListings() {
     if (loadingMore) return;
     if (!searchOffset || !lastSearchBaseRef.current) return;
+    const requestId = searchRequestRef.current;
     setLoadingMore(true);
     try {
       const res = await listingApi.get<any>("/search", {
         params: { ...lastSearchBaseRef.current, cursor: searchOffset },
       });
+      if (requestId !== searchRequestRef.current) return;
       const data = res.data?.data ?? {};
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
       const mapped = results.map(mapSearchResult);
@@ -2047,7 +2067,7 @@ export default function TravellerDashboard() {
         // Promotion stacking guard — reject voucher if an active promotion gives more
         if (activePromotion && serverPromotionDiscount > vDiscount) {
           console.log("[ZikaSearch] Voucher rejected: active promotion gives better discount", { promotionDiscount: serverPromotionDiscount, voucherDiscount: vDiscount });
-          setVoucherError(`A better promotion (${activePromotion.name || "Category Discount"}) is active. Vouchers cannot be stacked with active promotions.`);
+          setVoucherError(`A better promotion (${promotionLabel(activePromotion)}) is active. Vouchers cannot be stacked with active promotions.`);
           return;
         }
 
@@ -2875,7 +2895,7 @@ export default function TravellerDashboard() {
                           <span className="text-base shrink-0">🏷️</span>
                           <div className="min-w-0 flex-1">
                             <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Best Offer</p>
-                            <p className="text-xs font-semibold text-emerald-800 truncate">{activePromotion.name}</p>
+                            <p className="text-xs font-semibold text-emerald-800 truncate">{promotionLabel(activePromotion)}</p>
                           </div>
                           <span className="shrink-0 text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full whitespace-nowrap">
                             {activePromotion.discountType === "percentage"
@@ -3447,7 +3467,7 @@ export default function TravellerDashboard() {
                                 <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
                                   <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
                                     <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                    {activePromotion.name}
+                                    {promotionLabel(activePromotion)}
                                   </span>
                                   <span className="text-xs font-bold text-emerald-700">−{detailListing.currency} {serverPromotionDiscount.toLocaleString()}</span>
                                 </div>
@@ -4579,12 +4599,16 @@ export default function TravellerDashboard() {
                     <h1 className="text-2xl font-bold text-slate-900">
                       {searching
                         ? "Searching..."
+                        : nearbyPlace && displayedListings.length > 0
+                          ? `${totalCount > 0 ? totalCount : displayedListings.length} nearby result${(totalCount > 0 ? totalCount : displayedListings.length) !== 1 ? "s" : ""}`
                         : searchDestination.trim()
                           ? `${totalCount > 0 ? totalCount : displayedListings.length} result${(totalCount > 0 ? totalCount : displayedListings.length) !== 1 ? "s" : ""} for "${searchDestination.trim()}"`
                           : `Found ${totalCount > 0 ? totalCount : displayedListings.length} Properties`}
                     </h1>
                     <p className="text-sm text-slate-500 mt-0.5">
-                      {searchDestination.trim()
+                      {nearbyPlace && displayedListings.length > 0
+                        ? "Nearest available options"
+                        : searchDestination.trim()
                         ? `${searchCategory === "car" ? "Car rentals" : searchCategory === "hotel" ? "Hotels" : "Homes"} matching your search`
                         : `Browse ${searchCategory === "car" ? "car rentals" : searchCategory + "s"} worldwide`}
                     </p>
@@ -4608,6 +4632,9 @@ export default function TravellerDashboard() {
 
               {/* Listings content */}
               <div className="px-6 lg:px-8 pb-10">
+                {nearbyPlace && !searching && displayedListings.length > 0 && (
+                  <div className="mb-5"><NearbyResultsBanner placeName={nearbyPlace} /></div>
+                )}
                 {searching ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
                     {/* Same grid and card shape as the results, so nothing
